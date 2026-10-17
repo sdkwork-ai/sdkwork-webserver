@@ -1,8 +1,17 @@
 # Compose for a release-tarball deployment of sdkwork-webserver.
 #
-# Every knob an operator normally changes lives in the .env file referenced by
-# `--env-file`; this file only consumes them. Changing a port, a database, or
-# Redis must not require editing this compose file.
+# Every knob an operator normally changes lives either in the .env file
+# referenced by `--env-file` or in the mounted config.toml; this file only
+# consumes them. Changing a port, a database, or Redis must not require editing
+# this compose file.
+#
+#   sudo install -d -m 0700 /opt/sdkwork/etc/webserver/secrets
+#   echo -n 'a strong db password' | sudo tee \
+#     /opt/sdkwork/etc/webserver/secrets/database.secret > /dev/null
+#   echo -n 'a strong redis password' | sudo tee \
+#     /opt/sdkwork/etc/webserver/secrets/redis.secret > /dev/null
+#   sudo chown -R 10001:10001 /opt/sdkwork/etc/webserver
+#   sudo chmod 0600 /opt/sdkwork/etc/webserver/secrets/*.secret
 #
 #   cat > .env <<'ENV'
 #   SDKWORK_VERSION=0.1.9
@@ -10,10 +19,13 @@
 #   CONTAINER_HTTP_PORT=8080
 #   POSTGRES_DB=sdkwork_ai_prod
 #   POSTGRES_USER=sdkwork_app
-#   POSTGRES_PASSWORD=change-me
-#   REDIS_PASSWORD=change-me
 #   ENV
 #   docker compose -f docker-compose.release.yml --env-file .env up -d
+#
+# Passwords deliberately do NOT appear in .env. The db service reads the same
+# `database.secret` file that config.toml's `password_file` points at, so the
+# role and the application cannot drift onto different credentials, and the
+# value never lands in `docker inspect` output or a shell history.
 #
 # `config.toml` is read from /opt/sdkwork/etc/webserver/config.toml on the host.
 # Its [ingress].bind port MUST equal CONTAINER_HTTP_PORT, because the right-hand
@@ -26,10 +38,12 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sdkwork_ai_prod}
       POSTGRES_USER: ${POSTGRES_USER:-sdkwork_app}
-      # Read from the environment rather than a file: the compose .env already
-      # holds the value, and a second copy on disk would only add a leak surface.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # File, not an inline value: this is the same file config.toml reads, so a
+      # rotated password takes effect on both sides from one edit.
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
       PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - database_password
     volumes:
       - db-data:/var/lib/postgresql/data
     # Not published by default: only the webserver container needs this socket.
@@ -44,16 +58,20 @@ services:
   cache:
     image: redis:7
     restart: unless-stopped
-    command:
-      - redis-server
-      - --requirepass
-      - ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    # redis-server cannot read a password file, so the wrapper turns the secret
+    # into argv. `$$` keeps Compose from interpolating the inner shell.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - exec redis-server --requirepass "$$(cat /run/secrets/redis_password)"
+    secrets:
+      - redis_password
     volumes:
       - cache-data:/data
     expose:
       - "6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 30
@@ -74,14 +92,15 @@ services:
       # [ingress].bind in config.toml.
       - "${HOST_HTTP_PORT:-8080}:${CONTAINER_HTTP_PORT:-8080}"
     environment:
-      # The resolver cache reads this over [resolution_cache.redis].url in
-      # config.toml, so the connection stays in one place when Redis is
-      # managed outside the image.
-      SDKWORK_WEBSERVER_REDIS_URL: redis://:${REDIS_PASSWORD}@cache:6379
-      SDKWORK_DATABASE_HOST: db
-      SDKWORK_DATABASE_PORT: "5432"
-      SDKWORK_DATABASE_NAME: ${POSTGRES_DB:-sdkwork_ai_prod}
-      SDKWORK_DATABASE_USERNAME: ${POSTGRES_USER:-sdkwork_app}
+      # config.toml is authoritative for the database: at startup the gateway
+      # materialises [database] into these very variables and overwrites
+      # anything set here. Injecting them from .env would look like a knob and
+      # silently do nothing, so they are deliberately absent.
+      #
+      # The redis url IS honoured, because [resolution_cache.redis].url has no
+      # env contract of its own; the entrypoint builds it from redis.secret.
+      SDKWORK_WEBSERVER_REDIS_HOST: cache
+      SDKWORK_WEBSERVER_REDIS_PORT: "6379"
     volumes:
       - ${SDKWORK_CONFIG_DIR:-/opt/sdkwork/etc/webserver}:/etc/sdkwork/webserver:ro
       - deploy-state:/opt/deploy
@@ -91,6 +110,13 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+
+secrets:
+  # Sourced from the host so one file feeds both the role and the application.
+  database_password:
+    file: ${SDKWORK_CONFIG_DIR:-/opt/sdkwork/etc/webserver}/secrets/database.secret
+  redis_password:
+    file: ${SDKWORK_CONFIG_DIR:-/opt/sdkwork/etc/webserver}/secrets/redis.secret
 
 volumes:
   db-data:

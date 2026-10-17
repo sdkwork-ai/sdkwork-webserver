@@ -3,10 +3,14 @@
 # Build context = the directory the release tarball unpacks into:
 #   bin/  etc/  share/sdkwork/
 #
-# The release archive intentionally carries no container entrypoint, so this
-# file ships its own. The repository's deployments/docker/Dockerfile.standalone
-# consumes a staged context produced by scripts/docker/build-standalone-image.mjs
-# and is not usable from a tarball alone.
+# The runtime config is never baked in: the operator mounts
+# /etc/sdkwork/etc/webserver (config.toml plus secrets/*.secret) and the
+# entrypoint refuses to start without it, so the image carries no credential
+# and no port binding of its own.
+#
+# The repository's deployments/docker/Dockerfile.standalone consumes a staged
+# context produced by scripts/docker/build-standalone-image.mjs and is not
+# usable from a tarball alone.
 FROM debian:bookworm-slim
 
 # curl for health checks, util-linux for ss, tini as PID 1 so the gateway

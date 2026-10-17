@@ -280,6 +280,13 @@ operationTimeoutMs = 250
 SDKWORK_WEBSERVER_REDIS_URL=redis://cache.example.com:6379
 ```
 
+> **容器内的优先级**：`docker/entrypoint-release.sh` 只在 `SDKWORK_WEBSERVER_REDIS_URL`
+> **未被显式设置**时，才用 `${CONFIG_ROOT}/secrets/redis.secret` 的内容拼出 URL
+> （主机/端口取 `SDKWORK_WEBSERVER_REDIS_HOST` / `_PORT`，默认 `cache:6379`）。
+> secret 文件缺失或为空时**不报错**，只打一条 WARNING 并降级到内存层——
+> 解析缓存是可选层，缺 Redis 不该阻断启动。
+> 显式设置的 URL 优先，因此外部托管 Redis 时直接设该变量即可。
+
 ---
 
 ## 3. 启动
@@ -304,30 +311,27 @@ docker run -d \
 docker compose -f docker-compose.release.yml up -d
 ```
 
-编排文件默认自带 `postgres:16` 与 `redis:7` 两个服务，
-并把 `POSTGRES_*` / Redis URL 写进 webserver 的 `config.toml`：
+编排文件自带 `postgres:16` 与 `redis:7` 两个服务。**密码不进 `.env`**，而是和
+`config.toml` 的 `password_file` 读同一个文件，因此角色与应用不会各自拿一份密码而连不上：
 
-```yaml
-services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: sdkwork_ai_prod
-      POSTGRES_USER: sdkwork_app
-      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
-    secrets: [database_password]
-
-  cache:
-    image: redis:7
-    command: ["redis-server", "--requirepass", "$(cat /run/secrets/redis_password)"]
-
-  webserver:
-    image: sdkwork-webserver:0.1.9
-    depends_on: [db, cache]
-    ports: ["8080:8080"]
+```bash
+sudo install -d -m 0700 -o 10001 -g 10001 /opt/sdkwork/etc/webserver/secrets
+echo -n '换成一个强数据库密码' | sudo tee \
+  /opt/sdkwork/etc/webserver/secrets/database.secret >/dev/null
+echo -n '换成一个强 Redis 密码' | sudo tee \
+  /opt/sdkwork/etc/webserver/secrets/redis.secret >/dev/null
+sudo chmod 0600 /opt/sdkwork/etc/webserver/secrets/*.secret
 ```
 
-改端口 / 数据库 / Redis 时**只改本文件顶部的变量**：
+| 凭据 | 文件 | 消费方 |
+| --- | --- | --- |
+| 数据库密码 | `secrets/database.secret` | `config.toml` 的 `password_file` + compose `POSTGRES_PASSWORD_FILE` |
+| Redis 密码 | `secrets/redis.secret` | compose `redis-server --requirepass` + entrypoint 拼出的 `SDKWORK_WEBSERVER_REDIS_URL` |
+
+> `database.secret` 与 `redis.secret` 都由 compose 的 `secrets:` 段挂载。
+> 轮换密码只需改这一个文件，两侧同时生效，值也不会出现在 `docker inspect` 或 shell 历史里。
+
+改端口 / 数据库名 / 数据库账号时**只改 `.env`**（密码除外，它在 secret 文件里）：
 
 ```bash
 cat > .env <<'ENV'
@@ -335,16 +339,21 @@ SDKWORK_VERSION=0.1.9
 # 自定义宿主端口（左）与容器内端口（右，必须与 config.toml 的 bind 一致）
 HOST_HTTP_PORT=8080
 CONTAINER_HTTP_PORT=8080
-# 自定义数据库
+# 自定义数据库名 / 账号（须与 config.toml 的 [database].name / .username 一致）
 POSTGRES_DB=sdkwork_ai_prod
 POSTGRES_USER=sdkwork_app
-POSTGRES_PASSWORD=换成一个强密码
-# 自定义 Redis
-REDIS_PASSWORD=换成一个强密码
+# 配置文件所在目录（默认 /opt/sdkwork/etc/webserver）
+SDKWORK_CONFIG_DIR=/opt/sdkwork/etc/webserver
 ENV
 
 docker compose -f docker-compose.release.yml --env-file .env up -d
 ```
+
+> **`.env` 里的 `POSTGRES_DB` / `POSTGRES_USER` 只决定数据库角色侧建什么**，
+> 应用侧读的是 `config.toml` 的 `[database].name` / `.username`——两者必须改成同一个值。
+> 这不是重复，是两个必须对齐的独立配置面：`config.toml` 在启动时被物化成
+> `SDKWORK_DATABASE_*` 覆盖环境变量，所以**在 compose 里注入 `SDKWORK_DATABASE_*` 是无效旋钮**，
+> 本编排刻意不提供。
 
 ### 3.3 连接外部数据库 / Redis
 

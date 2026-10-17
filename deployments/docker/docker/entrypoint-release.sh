@@ -10,6 +10,9 @@ set -euo pipefail
 
 CONFIG_ROOT="${SDKWORK_WEBSERVER_CONFIG_ROOT:-/etc/sdkwork/webserver}"
 RUNTIME_CONFIG_FILE="${SDKWORK_WEBSERVER_SERVER_CONFIG_FILE:-${CONFIG_ROOT}/config.toml}"
+REDIS_SECRET_FILE="${CONFIG_ROOT}/secrets/redis.secret"
+REDIS_HOST="${SDKWORK_WEBSERVER_REDIS_HOST:-cache}"
+REDIS_PORT="${SDKWORK_WEBSERVER_REDIS_PORT:-6379}"
 GATEWAY_BINARY="/app/bin/sdkwork-api-webserver-standalone-gateway"
 SUBCOMMAND="${1:-serve-management}"
 
@@ -45,6 +48,19 @@ if [ -d "${CONFIG_ROOT}/secrets" ]; then
       log "WARNING: ${secret} is present but not readable by uid $(id -u)"
     fi
   done < <(find "${CONFIG_ROOT}/secrets" -maxdepth 1 -type f 2>/dev/null || true)
+fi
+
+# Redis credentials are also file-only. The resolver cache is an optional layer
+# and connects lazily, so a missing file must not abort startup; build the URL
+# here only when the operator supplied a password and did not already pin a URL.
+if [ -z "${SDKWORK_WEBSERVER_REDIS_URL:-}" ] && [ -r "${REDIS_SECRET_FILE}" ]; then
+  REDIS_PASSWORD="$(tr -d '\r\n' < "${REDIS_SECRET_FILE}")"
+  if [ -n "${REDIS_PASSWORD}" ]; then
+    export SDKWORK_WEBSERVER_REDIS_URL="redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}"
+    log "resolver cache redis url built from ${REDIS_SECRET_FILE}"
+  else
+    log "WARNING: ${REDIS_SECRET_FILE} is empty; resolver cache falls back to the memory layer"
+  fi
 fi
 
 for dir in \

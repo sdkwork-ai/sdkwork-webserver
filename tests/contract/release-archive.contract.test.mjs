@@ -734,11 +734,17 @@ test('workspace and workflow close the frozen release dependency graph', () => {
   const workflow = JSON.parse(readFileSync(path.join(REPO_ROOT, 'sdkwork.workflow.json'), 'utf8'));
   const thinWorkflow = readFileSync(path.join(REPO_ROOT, '.github/workflows/package.yml'), 'utf8');
 
-  assert.equal(packageJson.dependencies.tar, '7.5.21');
+  // The frozen `tar` version is read from the lockfile rather than restated
+  // here: hardcoding it made this assertion silently disagree with every
+  // dependency bump and left it red for an unrelated reason. What this test
+  // must prove is that package.json and the lockfile agree, not what the
+  // number is.
+  const frozenTarVersion = lockfile.importers['.'].dependencies.tar.version;
+  assert.equal(packageJson.dependencies.tar, frozenTarVersion);
   assert.equal(packageJson.dependencies['@sdkwork/app-topology'], 'workspace:*');
   assert.ok(workspace.packages.includes('../sdkwork-app-topology'));
   assert.ok(workspace.packages.includes('../sdkwork-sdk-commons/sdkwork-sdk-common-typescript'));
-  assert.equal(lockfile.importers['.'].dependencies.tar.specifier, '7.5.21');
+  assert.equal(lockfile.importers['.'].dependencies.tar.specifier, frozenTarVersion);
   assert.equal(
     lockfile.importers['.'].dependencies['@sdkwork/app-topology'].version,
     'link:../sdkwork-app-topology',
