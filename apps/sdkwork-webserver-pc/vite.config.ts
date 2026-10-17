@@ -184,7 +184,11 @@ export default defineConfig(({ command, mode }) => {
     build: {
       outDir: resolveBrowserDistOutDir(runtimeProfile.environment, runtimeProfile.deploymentProfile),
       emptyOutDir: true,
-      sourcemap: true,
+      // PACKAGING_SPEC §5.4 allows source maps in a web/static package only
+      // as a declared opt-in artifact. Emitting one .map per chunk doubled the
+      // file count (production 305 entries against a 256 limit) and shipped
+      // readable sources inside the installer, so maps stay development-only.
+      sourcemap: runtimeProfile.environment === "development",
       target: "es2022",
     },
     test: {
