@@ -177,12 +177,12 @@
       {
         "name": "Package Ubuntu installers (test and production)",
         "shell": "pwsh",
-        "run": "node scripts/webserver-deb.mjs package --environment test --architecture x64 && node scripts/webserver-deb.mjs package --environment production --architecture x64"
+        "run": "if ($env:SDKWORK_PACKAGE_ARCHITECTURE -ne 'x64') { Write-Host \"[sdkwork-webserver-deb] skipped: target architecture is $env:SDKWORK_PACKAGE_ARCHITECTURE\"; exit 0 }; node scripts/webserver-deb.mjs package --environment test --architecture x64 && node scripts/webserver-deb.mjs package --environment production --architecture x64"
       },
       {
         "name": "Package RHEL installers (test and production)",
         "shell": "pwsh",
-        "run": "node scripts/webserver-rpm.mjs package --environment test --architecture x64 && node scripts/webserver-rpm.mjs package --environment production --architecture x64"
+        "run": "if ($env:SDKWORK_PACKAGE_ARCHITECTURE -ne 'x64') { Write-Host \"[sdkwork-webserver-rpm] skipped: target architecture is $env:SDKWORK_PACKAGE_ARCHITECTURE\"; exit 0 }; node scripts/webserver-rpm.mjs package --environment test --architecture x64 && node scripts/webserver-rpm.mjs package --environment production --architecture x64"
       }
     ],
     "sign": [

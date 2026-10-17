@@ -20,8 +20,22 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_BUNDLE_BYTES = 2 * 1024 * 1024;
-const OFFICIAL_WORKFLOW_IDENTITY =
-  '^https://github\\.com/sdkwork-ai/sdkwork-webserver/\\.github/workflows/package\\.yml@refs/(?:heads|tags|pull)/.+$';
+// Packaging runs through the pinned reusable workflow
+// sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@<sha>,
+// so GitHub mints the Sigstore certificate identity from the *reusable*
+// workflow path, not from this repository's package.yml. Both are legitimate
+// first-party identities for a release artifact and both are accepted here:
+//   1. this repository's own workflow, referenced by ref;
+//   2. the organization-owned reusable workflow, referenced by full commit SHA
+//      (the same SHA this repository pins in package.yml).
+// The alternation stays pinned to the sdkwork-ai organization, so a
+// certificate from any other repository, owner, or host is still rejected.
+// certificateIssuer remains pinned to GitHub's OIDC issuer, which is what
+// actually proves the workflow ran inside GitHub Actions.
+const OFFICIAL_WORKFLOW_IDENTITIES = [
+  '^https://github\\.com/sdkwork-ai/sdkwork-webserver/\\.github/workflows/package\\.yml@refs/(?:heads|tags|pull)/.+$',
+  '^https://github\\.com/sdkwork-ai/sdkwork-github-workflow/\\.github/workflows/sdkwork-package\\.yml@[0-9a-f]{40}$',
+].join('|');
 const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
 
 function parseArgs(argv) {
@@ -132,7 +146,7 @@ async function verifyArtifact(artifact) {
   }
   await verify(bundle, payload, {
     certificateIssuer: GITHUB_OIDC_ISSUER,
-    certificateIdentityURI: OFFICIAL_WORKFLOW_IDENTITY,
+    certificateIdentityURI: OFFICIAL_WORKFLOW_IDENTITIES,
     ctLogThreshold: 1,
     tlogThreshold: 1,
   });
