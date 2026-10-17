@@ -382,7 +382,7 @@ function captureBounded(stream) {
   let head = Buffer.alloc(0);
   let tail = Buffer.alloc(0);
   stream.on('data', (chunk) => {
-    const incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    let incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     if (head.length < PROCESS_OUTPUT_HEAD_BYTES) {
       const room = PROCESS_OUTPUT_HEAD_BYTES - head.length;
       head = Buffer.concat([head, incoming.subarray(0, room)]);
