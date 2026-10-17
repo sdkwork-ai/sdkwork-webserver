@@ -38,6 +38,11 @@ const PACKAGE_FILES = new Map([
   ['etc/data-plane/website.cloud.config.json', '{}\n'],
   ['etc/node-daemon/development.env.example', 'SDKWORK_WEBSERVER_NODE_TOKEN=\n'],
   ['database/README.md', '# Database\n'],
+  ['Dockerfile.release', 'FROM debian:bookworm-slim\n'],
+  ['docker/entrypoint-release.sh', '#!/usr/bin/env bash\n'],
+  ['docker-compose.release.yml', 'services: {}\n'],
+  ['etc/examples/docker-release.config.toml', '[profile]\n'],
+  ['etc/examples/docker-release-deploy.md', '# Docker release deploy\n'],
   ['database/database.manifest.json', '{}\n'],
   ['database/contract/prefix-registry.json', '{}\n'],
   ['database/contract/schema.yaml', 'schemaVersion: 1\n'],
@@ -1034,6 +1039,63 @@ test('release validator requires executable Linux server binaries', async () => 
     assert.match(result.stderr, /archive binary .* must be executable/u);
   } finally {
     fixture.cleanup();
+  }
+});
+
+test('the archive carries the container deployment assets the release guide needs', () => {
+  // The release archive deliberately ships no container entrypoint of its own,
+  // so the container deployment path in
+  // docs/guides/operator/docker-release-deploy.md can only be followed if the
+  // archive carries its own Dockerfile, entrypoint, compose file, and config
+  // sample. Without them `docker build -f Dockerfile.release .` fails on the
+  // COPY of docker/entrypoint-release.sh.
+  const releaseScript = readFileSync(
+    path.join(REPO_ROOT, 'scripts', 'webserver-release.mjs'),
+    'utf8',
+  );
+  const assetsBlock = releaseScript.slice(
+    releaseScript.indexOf('const PACKAGE_ASSETS = ['),
+    releaseScript.indexOf('const EXPECTED_FIXED_CONTENT_PATHS'),
+  );
+  for (const [source, target] of [
+    ['deployments/docker/Dockerfile.release', 'Dockerfile.release'],
+    ['deployments/docker/docker/entrypoint-release.sh', 'docker/entrypoint-release.sh'],
+    ['deployments/docker/docker-compose.release.yml', 'docker-compose.release.yml'],
+    [
+      'deployments/docker/config/docker-release.config.toml',
+      'etc/examples/docker-release.config.toml',
+    ],
+    ['docs/guides/operator/docker-release-deploy.md', 'etc/examples/docker-release-deploy.md'],
+  ]) {
+    assert.ok(
+      existsSync(path.join(REPO_ROOT, source)),
+      `${source} must exist or packaging reads a missing path at release time`,
+    );
+    assert.ok(
+      assetsBlock.includes(`'${source}'`) && assetsBlock.includes(`'${target}'`),
+      `the archive must package ${source} as ${target}`,
+    );
+  }
+
+  // The validator's allow-list is derived from the same table, so an asset that
+  // is packaged is also accepted; assert the derivation rather than restating.
+  assert.match(
+    releaseScript,
+    /const EXPECTED_FIXED_CONTENT_PATHS = \[\s*\.\.\.BINARIES[\s\S]*?\.\.\.PACKAGE_ASSETS\.map\(\(asset\) => asset\.target\),/u,
+    'the validator allow-list must keep deriving from PACKAGE_ASSETS',
+  );
+
+  // And the archive fixture must carry the same paths, so the validator tests
+  // exercise a real release layout rather than a permissive one.
+  const packaged = new Set(PACKAGE_FILES.keys());
+  for (const target of [
+    'Dockerfile.release',
+    'docker/entrypoint-release.sh',
+    'docker-compose.release.yml',
+    'etc/examples/docker-release.config.toml',
+    'etc/examples/docker-release-deploy.md',
+  ]) {
+    assert.ok(packaged.has(target), `the archive fixture must contain ${target}`);
   }
 });
 

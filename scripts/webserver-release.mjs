@@ -176,6 +176,30 @@ const PACKAGE_ASSETS = [
     target: 'etc/node-daemon/development.env.example',
   },
   { source: 'database/README.md', target: 'database/README.md' },
+  // Container deployment assets. The archive deliberately ships no container
+  // entrypoint of its own (bin/container/entrypoint-standalone.sh stays in the
+  // repository), so a release-tarball deployment has to bring its own. Without
+  // these three files `docker build -f Dockerfile.release .` fails on the
+  // COPY of docker/entrypoint-release.sh, and the documented release
+  // deployment path in docs/guides/operator/docker-release-deploy.md cannot be
+  // followed from the archive alone.
+  { source: 'deployments/docker/Dockerfile.release', target: 'Dockerfile.release' },
+  {
+    source: 'deployments/docker/docker/entrypoint-release.sh',
+    target: 'docker/entrypoint-release.sh',
+  },
+  {
+    source: 'deployments/docker/docker-compose.release.yml',
+    target: 'docker-compose.release.yml',
+  },
+  {
+    source: 'deployments/docker/config/docker-release.config.toml',
+    target: 'etc/examples/docker-release.config.toml',
+  },
+  {
+    source: 'docs/guides/operator/docker-release-deploy.md',
+    target: 'etc/examples/docker-release-deploy.md',
+  },
   {
     source: 'database/database.manifest.json',
     target: 'database/database.manifest.json',

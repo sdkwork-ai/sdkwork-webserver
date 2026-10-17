@@ -20,9 +20,12 @@ curl -fsSL -o sdkwork.tar.gz \
 mkdir -p /opt/sdkwork && tar -xzf sdkwork.tar.gz -C /opt/sdkwork --strip-components=1
 
 # 3. 写配置（端口 / 数据库 / Redis 全部可改，见 §2）
+#    归档自带完整样例，改端口/库地址时从它复制最省事
+cp /opt/sdkwork/etc/examples/docker-release.config.toml \
+   /opt/sdkwork/etc/webserver/config.toml
 vi /opt/sdkwork/etc/webserver/config.toml
 
-# 4. 构建镜像
+# 4. 构建镜像（Dockerfile.release 与 docker/ 入口都在归档里）
 cd /opt/sdkwork && docker build -f Dockerfile.release -t sdkwork-webserver:${VERSION} .
 
 # 5. 运行
@@ -95,24 +98,31 @@ sha256sum --check "sdkwork-webserver-linux-x64-standalone-server-${VERSION}.tar.
 │   ├── webserver/web/h5       # H5 静态产物
 │   └── <module>/database/database.manifest.json
 ├── etc/                       # 配置模板与清单（不含任何真实凭据）
+│   ├── examples/docker-release.config.toml   # 本部署方式的完整配置样例
+│   └── examples/docker-release-deploy.md     # 本文档副本
 ├── specs/                     # app 清单与配置 JSON Schema
+├── Dockerfile.release         # 容器镜像定义
+├── docker-compose.release.yml # 编排（含自带 PG/Redis 的选项）
+├── docker/entrypoint-release.sh # 容器入口
 └── sdkwork.app.config.json
 ```
 
 > **凭据不入包**：`etc/` 下只有模板与 schema，真实密码一律通过运行时挂载的
 > `secrets/*.secret` 注入（见 §2.3）。
 >
-> **release 包不含容器 entrypoint**：`bin/container/entrypoint-standalone.sh` 只存在于仓库内，
-> 不进发布产物。所以从 release 部署时用本文配套的
-> [`deployments/docker/Dockerfile.release`](../../deployments/docker/Dockerfile.release)
-> 与 `docker/entrypoint-release.sh`，二者已随本文提供。
+> **容器部署件随包发布**：release 归档**故意不带**仓库内的
+> `bin/container/entrypoint-standalone.sh`（它只在源码树里），所以归档自带一套
+> release 专用容器件：`Dockerfile.release`、`docker/entrypoint-release.sh`、
+> `docker-compose.release.yml`。因此下面第 4 步的 `docker build` 直接在解压目录里
+> 执行即可，不需要额外下载或克隆仓库。
 
-配套资产位置（本文与下列文件是一套，请一并取用）：
+配套资产（本文与下列文件是一套，**已包含在 release 归档内**）：
 
 ```
-deployments/docker/Dockerfile.release          # 镜像定义
-deployments/docker/docker/entrypoint-release.sh # 容器入口
-deployments/docker/docker-compose.release.yml  # 编排（含自带 PG/Redis 的选项）
+Dockerfile.release             # 镜像定义
+docker/entrypoint-release.sh   # 容器入口
+docker-compose.release.yml     # 编排（含自带 PG/Redis 的选项）
+etc/examples/docker-release.config.toml  # 配置样例
 ```
 
 
@@ -128,6 +138,14 @@ deployments/docker/docker-compose.release.yml  # 编排（含自带 PG/Redis 的
 sudo mkdir -p /opt/sdkwork/etc/webserver/secrets
 sudo chmod 0750 /opt/sdkwork/etc/webserver
 sudo chmod 0700 /opt/sdkwork/etc/webserver/secrets
+```
+
+镜像内以非特权用户 `sdkwork`(uid 10001) 运行，因此宿主机上的配置与密钥文件
+必须对该 uid 可读：
+
+```bash
+sudo chown -R 10001:10001 /opt/sdkwork/etc/webserver
+sudo chmod 0640 /opt/sdkwork/etc/webserver/config.toml
 ```
 
 ### 2.2 自定义端口
