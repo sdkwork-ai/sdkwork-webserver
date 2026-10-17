@@ -141,7 +141,7 @@
       {
         "name": "Ensure rust toolchain on PATH",
         "shell": "bash",
-        "run": "set -x; export PATH=\"$HOME/.cargo/bin:/usr/local/cargo/bin:$PATH\"; if ! command -v cargo >/dev/null 2>&1 || [ \"$(cargo --version | awk '{print $2}')\" != \"1.98.0\" ]; then curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0; fi; CARGO_BIN=$(dirname \"$(command -v cargo)\"); echo \"$CARGO_BIN\" >> \"$GITHUB_PATH\"; echo \"cargo bin: $CARGO_BIN\"; cargo --version; rustc --version"
+        "run": "set -euxo pipefail; export PATH=\"$HOME/.cargo/bin:/usr/local/cargo/bin:$PATH\"; TOOLCHAIN=1.98.0; if ! command -v cargo >/dev/null 2>&1 || [ \"$(cargo --version | awk '{print $2}')\" != \"${TOOLCHAIN}\" ]; then curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default --default-toolchain \"${TOOLCHAIN}\"; fi; rustup component add rustfmt clippy --toolchain \"${TOOLCHAIN}\" || rustup component add rustfmt clippy || true; CARGO_BIN=$(dirname \"$(command -v cargo)\"); echo \"$CARGO_BIN\" >> \"$GITHUB_PATH\"; echo \"cargo bin: $CARGO_BIN\"; cargo --version; rustc --version; cargo fmt --version; cargo clippy --version"
       }
     ],
     "install": [
