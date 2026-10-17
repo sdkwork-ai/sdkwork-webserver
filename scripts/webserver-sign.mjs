@@ -59,6 +59,68 @@ const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
 // makes the client fetch the existing entry by UUID and reuse it, which is the
 // correct outcome: the existing tlog entry already attests this exact digest.
 const REKOR_FETCH_ON_CONFLICT = true;
+// `fetchOnConflict` only settles the 409 "an equivalent entry already exists"
+// case, which is deterministic for a reproducible archive. It says nothing
+// about Rekor being briefly unavailable: a 502/503/504 from the transparency
+// log or the Fulcio CA surfaces as a plain rejection and fails the whole
+// platform job, even though nothing about the artifact is wrong. Retry the
+// transient classes with exponential backoff and let everything else —
+// including the 409, which the witness already handles — fail immediately so a
+// real rejection is never masked by six minutes of waiting.
+const SIGN_RETRY_ATTEMPTS = 5;
+const SIGN_RETRY_BASE_DELAY_MS = 4_000;
+const SIGN_RETRY_MAX_DELAY_MS = 60_000;
+const TRANSIENT_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+// Matches the status code out of whatever the client library wrapped the
+// failure in: `fetch` surfaces "502 Bad Gateway" in the message while a
+// structured error keeps `status`/`statusCode`/`code`.
+function transientStatusOf(error) {
+  const candidates = [error?.status, error?.statusCode, error?.code, error?.response?.status];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && TRANSIENT_STATUS_CODES.has(candidate)) {
+      return candidate;
+    }
+    if (typeof candidate === 'string') {
+      const parsed = Number.parseInt(candidate, 10);
+      if (Number.isInteger(parsed) && TRANSIENT_STATUS_CODES.has(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const match = /\b(408|425|429|500|502|503|504)\b/u.exec(message);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+async function withTransientRetry(operation, describe) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const status = transientStatusOf(error);
+      if (status === null || attempt >= SIGN_RETRY_ATTEMPTS) {
+        throw error;
+      }
+      const delay = Math.min(
+        SIGN_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+        SIGN_RETRY_MAX_DELAY_MS,
+      );
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[sdkwork-webserver-sign] ${describe} hit a transient ${status} `
+        + `(${attempt}/${SIGN_RETRY_ATTEMPTS}); retrying in ${delay}ms: ${message}`,
+      );
+      await sleep(delay);
+    }
+  }
+}
 
 function parseArgs(argv) {
   const settings = {
@@ -164,7 +226,12 @@ async function signArtifact(artifact) {
       }),
     ],
   });
-  const bundle = bundleToJSON(await builder.create({ data: payload }));
+  const bundle = bundleToJSON(
+    await withTransientRetry(
+      () => builder.create({ data: payload }),
+      'sigstore signing',
+    ),
+  );
   writeAtomic(artifact.bundle, `${JSON.stringify(bundle)}\n`);
   console.log(`[sdkwork-webserver-sign] signed ${path.basename(artifact.archive)}`);
 }
@@ -178,12 +245,15 @@ async function verifyArtifact(artifact) {
   } catch (error) {
     throw new Error(`Sigstore bundle is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
-  await verify(bundle, payload, {
-    certificateIssuer: GITHUB_OIDC_ISSUER,
-    certificateIdentityURI: OFFICIAL_WORKFLOW_IDENTITIES,
-    ctLogThreshold: 1,
-    tlogThreshold: 1,
-  });
+  await withTransientRetry(
+    () => verify(bundle, payload, {
+      certificateIssuer: GITHUB_OIDC_ISSUER,
+      certificateIdentityURI: OFFICIAL_WORKFLOW_IDENTITIES,
+      ctLogThreshold: 1,
+      tlogThreshold: 1,
+    }),
+    'sigstore verification',
+  );
   console.log(`[sdkwork-webserver-sign] verified ${path.basename(artifact.archive)}`);
 }
 

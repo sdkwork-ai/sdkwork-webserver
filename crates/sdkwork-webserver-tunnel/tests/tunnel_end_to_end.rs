@@ -3899,7 +3899,7 @@ async fn tcp_route_can_relay_to_a_unix_socket_target() {
     let mut visitor = tokio::net::TcpStream::connect(("127.0.0.1", public_port))
         .await
         .expect("visitor connect");
-    let mut banner = [0_u8; 9];
+    let mut banner = [0_u8; 8];
     tokio::time::timeout(Duration::from_secs(5), visitor.read_exact(&mut banner))
         .await
         .expect("the unix socket's banner must arrive")
