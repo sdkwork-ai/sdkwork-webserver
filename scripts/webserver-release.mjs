@@ -259,6 +259,50 @@ function archiveDirectoriesFor(contentPaths) {
   ).sort();
 }
 
+/// The entry order `tar --sort=name` produces for a staged tree: depth-first,
+/// each directory emitted right before its contents, siblings ordered by name.
+/// The archive's single top-level directory is emitted first, as tar does when
+/// it is handed that directory name.
+function archiveEntryWalkOrder(files, directories) {
+  const directorySet = new Set(directories);
+  const childrenOf = new Map();
+  const remember = (parent, entry) => {
+    const siblings = childrenOf.get(parent) ?? [];
+    siblings.push(entry);
+    childrenOf.set(parent, siblings);
+  };
+  for (const file of files) {
+    remember(file.slice(0, file.lastIndexOf('/')), file);
+  }
+  for (const directory of directories) {
+    remember(directory.slice(0, directory.lastIndexOf('/')), directory);
+  }
+  for (const siblings of childrenOf.values()) {
+    siblings.sort();
+  }
+  // The top-level directory is the only child of the virtual parent, and tar
+  // emits it before descending. Derive it from the data instead of hardcoding a
+  // name so the helper stays honest if the archive prefix ever changes.
+  // The top-level directory is the only child of the virtual parent, and tar
+  // emits it before descending. Derive it from the data instead of hardcoding a
+  // name so the helper stays honest if the archive prefix ever changes.
+  const tops = [...new Set([...files, ...directories].map((entry) => entry.split('/')[0]))].sort();
+  const ordered = [];
+  const walk = (entry) => {
+    for (const child of childrenOf.get(entry) ?? []) {
+      ordered.push(child);
+      if (directorySet.has(child)) {
+        walk(child);
+      }
+    }
+  };
+  for (const top of tops) {
+    ordered.push(top);
+    walk(top);
+  }
+  return ordered;
+}
+
 function parseArgs(argv) {
   const settings = {
     operation: argv[0],
@@ -1204,7 +1248,14 @@ function validatePackageManifest(manifestBuffer, records, order, capturedBuffers
   if (JSON.stringify(actualDirectories) !== JSON.stringify(expectedDirectories)) {
     throw new Error('archive directory inventory does not match the package contract');
   }
-  const expectedOrder = [...expectedFiles, ...expectedDirectories].sort();
+  // `tar --sort=name` walks the tree depth-first, emitting each directory
+  // immediately before its own contents, with the entries of one level ordered
+  // by name. It does NOT emit every file first and every directory afterwards.
+  // Concatenating the two sorted lists happened to agree with the walk for the
+  // original asset set, so the mismatch only surfaced once an asset introduced a
+  // directory whose name sorts between two file names (`docker/` between
+  // `Dockerfile.release` and `docker-compose.release.yml`).
+  const expectedOrder = archiveEntryWalkOrder(expectedFiles, expectedDirectories);
   if (JSON.stringify(order) !== JSON.stringify(expectedOrder)) {
     throw new Error('archive entries are not in deterministic path order');
   }

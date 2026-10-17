@@ -16,6 +16,7 @@ import path from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { create } from 'tar';
 import { parse as parseYaml, parseAllDocuments } from 'yaml';
 
@@ -132,6 +133,25 @@ function packageFilesFor(options = {}) {
   }
   return files;
 }
+
+/// Load the real entry-order helper out of the release script with `vm`.
+/// Re-implementing it here would test the copy: the copy can be right while the
+/// script is wrong, which is exactly how a broken ordering check survived until
+/// the archive gained a directory whose name sorts between two file names.
+function loadArchiveEntryWalkOrder() {
+  const source = readFileSync(
+    path.join(REPO_ROOT, 'scripts', 'webserver-release.mjs'),
+    'utf8',
+  ).replace(/\r\n/gu, '\n');
+  const start = source.indexOf('function archiveEntryWalkOrder(');
+  const end = source.indexOf('\n}\n', start);
+  assert.ok(start !== -1 && end !== -1, 'the release script must declare archiveEntryWalkOrder');
+  const context = vm.createContext({});
+  vm.runInContext(`${source.slice(start, end + 3)}\nglobalThis.__helper = archiveEntryWalkOrder;`, context);
+  return context.__helper;
+}
+
+const archiveEntryWalkOrder = loadArchiveEntryWalkOrder();
 
 function archiveDirectoriesFor(packageFiles) {
   return Array.from(
@@ -646,12 +666,24 @@ async function createFixture(options) {
     symlinkSync('../sdkwork.app.config.json', linkPath, 'file');
     additionalEntries.push('sdkwork-webserver/etc/unsafe-link');
   }
-  const entries = [
-    ...archiveDirectories,
+  const additionalFiles = additionalEntries.map((entry) => entry);
+  // The archive must be written in the same order `tar --sort=name` produces,
+  // because that is what the validator compares against. Sorting the merged
+  // list instead produced a different sequence as soon as the archive carried a
+  // directory whose name sorts between two file names.
+  const orderedFiles = [
     'sdkwork-webserver/package.manifest.json',
     ...content.map((item) => `sdkwork-webserver/${item.path}`),
-    ...additionalEntries,
-  ].sort();
+    ...additionalFiles,
+  ];
+  const orderedDirectories = new Set(archiveDirectories);
+  for (const file of orderedFiles) {
+    const segments = file.split('/');
+    for (let index = 1; index < segments.length; index += 1) {
+      orderedDirectories.add(segments.slice(0, index).join('/'));
+    }
+  }
+  const entries = archiveEntryWalkOrder(orderedFiles, [...orderedDirectories]);
   if (options.duplicateEntry) {
     entries.push('sdkwork-webserver/sdkwork.app.config.json');
   }
