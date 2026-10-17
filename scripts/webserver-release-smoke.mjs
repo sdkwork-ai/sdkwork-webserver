@@ -601,6 +601,20 @@ function assertUnauthenticatedOwnerRoute(response, expected, label) {
 function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseUrl) {
   const iamRoot = path.join(packageRoot, ...STANDALONE_IAM_ROOT.split('/'));
   const driveRoot = path.join(packageRoot, ...STANDALONE_DRIVE_ROOT.split('/'));
+  // The hermetic profile runs `environment = "production"`, and the gateway
+  // fails closed there without an explicit CORS allowlist:
+  //
+  //   Web Framework security configuration is invalid: production-like Web HTTP
+  //   runtime requires SDKWORK_CORS_ALLOWED_ORIGINS
+  //
+  // That guard is deliberate — a production runtime must not guess which browser
+  // origins it serves — so the smoke supplies one rather than relaxing it. The
+  // smoke drives the gateway same-origin (it asserts `browserOriginMode` is
+  // `same-origin` and that every API base URL is `/`), so the gateway's own
+  // loopback origin is the only legitimate entry. It is an exact origin, which
+  // is what the guard demands: it rejects wildcards in production.
+  const origins = process.env.SDKWORK_CORS_ALLOWED_ORIGINS
+    ?? `http://127.0.0.1:${port}`;
   // A smoke-owned database URL wins over the workspace `.env.postgres` value:
   // the disposable PostgreSQL this smoke started is the one the packaged
   // gateway must actually migrate and serve against.
@@ -618,6 +632,7 @@ function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseU
     ...databaseEnv,
     ...IAM_APPLICATION_BOOTSTRAP_ENV,
     [CURSOR_HMAC_KEY_ENV]: resolveSmokeCursorHmacKey(),
+    SDKWORK_CORS_ALLOWED_ORIGINS: origins,
     SDKWORK_WEBSERVER_CONFIG_FILE: runtimeConfigFile,
     RUST_LOG: 'info',
     SDKWORK_APP_ROOT: packageRoot,
