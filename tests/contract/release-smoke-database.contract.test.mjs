@@ -57,6 +57,49 @@ test('release smoke prefers an externally configured database', () => {
   );
 });
 
+test('release smoke does not mistake the derived fallback URL for a real database', () => {
+  const source = readSmokeSource();
+  // `resolveIamDevEnv` synthesises a hard-coded URL when `.env.postgres` is
+  // absent, so a non-empty check alone reports a database with nothing listening
+  // on it. That regressed the smoke into skipping its own PostgreSQL and failing
+  // with a pool timeout, so the derived URL has to survive a TCP probe.
+  assert.match(
+    source,
+    /function probeReachableDatabase\(databaseUrl\)/u,
+    'the derived database URL must be probed before it is trusted',
+  );
+  assert.match(
+    source,
+    /net\.connect\(\{ host, port \}\)/u,
+    'the probe must open a TCP connection to the database endpoint',
+  );
+  const resolve = source.slice(source.indexOf('async function resolveSmokeDatabaseUrl'));
+  assert.match(
+    resolve,
+    /await probeReachableDatabase\(derived\.trim\(\)\)/u,
+    'the derived URL must be probed for reachability',
+  );
+  const explicitResolver = source.slice(
+    source.indexOf('function resolveExplicitSmokeDatabaseUrl'),
+    source.indexOf('function probeReachableDatabase'),
+  );
+  assert.match(
+    explicitResolver,
+    /const explicit = process\.env\.SDKWORK_DATABASE_TEST_POSTGRES_URL[\s\S]*\|\|[\s\S]*process\.env\.SDKWORK_SMOKE_POSTGRES_URL/u,
+    'the explicit resolver must read both exported URL variables',
+  );
+  assert.match(
+    source.slice(source.indexOf('async function resolveSmokeDatabaseUrl')),
+    /const explicit = resolveExplicitSmokeDatabaseUrl\(\);\s*if \(explicit\) \{\s*return explicit;/u,
+    'an exported URL must be returned without a probe',
+  );
+  assert.match(
+    resolve,
+    /return undefined;/u,
+    'an unreachable derived URL must fall through to the disposable database',
+  );
+});
+
 test('release smoke points the packaged gateway at the provisioned database', () => {
   const source = readSmokeSource();
   // A provisioned database that is not handed to the gateway is useless: the

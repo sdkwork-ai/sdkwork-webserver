@@ -165,11 +165,57 @@ const SMOKE_POSTGRES_READY_INTERVAL_MS = 1_000;
 const SMOKE_POSTGRES_INIT_COMPLETE =
   'PostgreSQL init process complete; ready for start up.';
 
-function resolveSmokeDatabaseUrl() {
-  const configured = process.env.SDKWORK_DATABASE_TEST_POSTGRES_URL
-    || process.env.SDKWORK_SMOKE_POSTGRES_URL
-    || resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' }).SDKWORK_DATABASE_URL;
-  return typeof configured === 'string' && configured.trim() ? configured.trim() : undefined;
+/**
+ * An explicitly exported URL is trusted as-is. The workspace `.env.postgres`
+ * value is not: `resolveIamDevEnv` synthesises a hard-coded fallback URL
+ * ("...change-me-local-dev-only") when that file is absent, so testing for a
+ * non-empty string there reports a database that nothing is listening on. That
+ * mistake made the smoke skip its own PostgreSQL and fail with a pool timeout,
+ * so the derived URL is only accepted once a TCP probe reaches it.
+ */
+function resolveExplicitSmokeDatabaseUrl() {
+  const explicit = process.env.SDKWORK_DATABASE_TEST_POSTGRES_URL
+    || process.env.SDKWORK_SMOKE_POSTGRES_URL;
+  return typeof explicit === 'string' && explicit.trim() ? explicit.trim() : undefined;
+}
+
+function probeReachableDatabase(databaseUrl) {
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    return false;
+  }
+  const host = parsed.hostname || '127.0.0.1';
+  const port = Number(parsed.port || 5432);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    return false;
+  }
+  const socket = net.connect({ host, port });
+  const reachable = new Promise((resolve) => {
+    const finish = (value) => {
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(2_000);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+  });
+  return reachable;
+}
+
+async function resolveSmokeDatabaseUrl() {
+  const explicit = resolveExplicitSmokeDatabaseUrl();
+  if (explicit) {
+    return explicit;
+  }
+  const derived = resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' })
+    .SDKWORK_DATABASE_URL;
+  if (typeof derived === 'string' && derived.trim() && await probeReachableDatabase(derived.trim())) {
+    return derived.trim();
+  }
+  return undefined;
 }
 
 function waitForSmokePostgres(containerName) {
@@ -214,9 +260,10 @@ async function bindSmokeDatabase() {
   if (activeSmokeDatabase) {
     return activeSmokeDatabase;
   }
-  const existing = resolveSmokeDatabaseUrl();
+  const existing = await resolveSmokeDatabaseUrl();
   if (existing) {
-    console.log('[sdkwork-webserver-release-smoke] using the configured PostgreSQL');
+    const source = resolveExplicitSmokeDatabaseUrl() ? 'the exported' : 'a reachable workspace';
+    console.log(`[sdkwork-webserver-release-smoke] using PostgreSQL from ${source} configuration`);
     activeSmokeDatabase = existing;
     return activeSmokeDatabase;
   }
