@@ -74,7 +74,23 @@ test('workflow contract makes PostgreSQL verification a PR and release gate', ()
     'sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@bfe420b79d3c584d246f9691c8374b24534c3365',
   );
   assert.equal(workflow.jobs.package.with.config_path, 'sdkwork.workflow.json');
-  assert.equal(Object.keys(workflow.jobs).length, 1);
+  // `resolve-version` reads release.currentVersion from the application manifest
+  // so a branch push cannot have its name resolved as the version. What matters
+  // is that exactly one job packages, that it consumes the resolved version, and
+  // that it is the job gated on PostgreSQL verification — not the job count.
+  const packagingJobs = Object.entries(workflow.jobs).filter(
+    ([, job]) => typeof job.uses === 'string' && job.uses.includes('sdkwork-package.yml'),
+  );
+  assert.equal(packagingJobs.length, 1, 'exactly one job may reuse the packaging workflow');
+  assert.deepEqual(packagingJobs[0][0], 'package');
+  assert.equal(workflow.jobs.package.needs, 'resolve-version');
+  assert.deepEqual(workflow.jobs['resolve-version'].outputs, {
+    package_version: '${{ steps.resolve.outputs.package_version }}',
+  });
+  assert.equal(
+    workflow.jobs.package.with.package_version,
+    "${{ github.event.inputs.package_version || needs.resolve-version.outputs.package_version }}",
+  );
   assert.ok(
     manifest.lifecycle.validate.some((step) => step.run === 'git diff --exit-code -- .'),
   );
