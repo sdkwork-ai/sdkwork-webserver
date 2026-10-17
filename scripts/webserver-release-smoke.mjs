@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -166,6 +167,32 @@ const SMOKE_POSTGRES_IMAGE =
 const SMOKE_POSTGRES_DATABASE = 'sdkwork_ai_test_release_smoke';
 const SMOKE_POSTGRES_USER = 'sdkwork_ai_test';
 const SMOKE_POSTGRES_PASSWORD = 'sdkwork-smoke-only-password';
+// The gateway refuses to serve a production-like environment without a dedicated
+// cursor signing key, because deriving one from the (widely shared) database URL
+// turns the URL into a forgery primitive for keyset cursors. That guard is
+// correct, so the smoke satisfies it instead of relaxing it: a fresh random key
+// per run. Cursors minted during the smoke die with the smoke's database, and no
+// fixed value is ever committed for an operator to copy into production.
+const SMOKE_CURSOR_HMAC_KEY_BYTES = 32;
+const CURSOR_HMAC_KEY_ENV = 'SDKWORK_WEBSERVER_CURSOR_HMAC_KEY';
+
+// Resolved once per process. The management gateway and the data-plane children
+// must sign cursors with the same key, and `hermeticEnv` inherits `process.env`,
+// so a fresh value per call would hand the two sides different material.
+let smokeCursorHmacKey;
+
+function resolveSmokeCursorHmacKey() {
+  if (smokeCursorHmacKey !== undefined) {
+    return smokeCursorHmacKey;
+  }
+  const inherited = process.env[CURSOR_HMAC_KEY_ENV];
+  smokeCursorHmacKey =
+    inherited && inherited.trim() !== ''
+      ? inherited
+      : randomBytes(SMOKE_CURSOR_HMAC_KEY_BYTES).toString('base64');
+  process.env[CURSOR_HMAC_KEY_ENV] = smokeCursorHmacKey;
+  return smokeCursorHmacKey;
+}
 const SMOKE_POSTGRES_READY_ATTEMPTS = 60;
 const SMOKE_POSTGRES_READY_INTERVAL_MS = 1_000;
 const SMOKE_POSTGRES_INIT_COMPLETE =
@@ -565,6 +592,7 @@ function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseU
   return {
     ...databaseEnv,
     ...IAM_APPLICATION_BOOTSTRAP_ENV,
+    [CURSOR_HMAC_KEY_ENV]: resolveSmokeCursorHmacKey(),
     SDKWORK_WEBSERVER_CONFIG_FILE: runtimeConfigFile,
     RUST_LOG: 'info',
     SDKWORK_APP_ROOT: packageRoot,
@@ -890,6 +918,11 @@ async function smoke(settings) {
     // the gateway boot below migrates and serves against that instance.
     const databaseUrl = await bindSmokeDatabase();
     publishSmokeDatabaseEnv(databaseUrl);
+    // Publish the cursor key before the first packaged binary starts. The
+    // management gateway receives it explicitly through
+    // `standaloneManagementEnv`; the data-plane children inherit it because
+    // `hermeticEnv` spreads `process.env`.
+    resolveSmokeCursorHmacKey();
     await extractTar({
       file: resolved.archive,
       cwd: temporaryRoot,
