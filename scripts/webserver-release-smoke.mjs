@@ -145,6 +145,122 @@ function run(command, args, options = {}) {
   return result;
 }
 
+// The smoke test boots the packaged gateway with SDKWORK_DATABASE_AUTO_MIGRATE
+// enabled, so it needs a reachable PostgreSQL. On a developer machine
+// `.env.postgres` supplies one, but CI has no such file: the only PostgreSQL the
+// workflow starts belongs to `test:postgres:required`, which runs as a later
+// validate step and tears its container down when it finishes. Without a
+// database the smoke failed with "serve-time database lifecycle bootstrap failed:
+// ... pool timed out while waiting for an open connection".
+// When no database URL is configured, start a disposable PostgreSQL for the
+// lifetime of this smoke and remove it afterwards, so the step is self-contained
+// and does not depend on validate-step ordering.
+const SMOKE_POSTGRES_IMAGE =
+  'postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7';
+const SMOKE_POSTGRES_DATABASE = 'sdkwork_release_smoke';
+const SMOKE_POSTGRES_USER = 'sdkwork_smoke';
+const SMOKE_POSTGRES_PASSWORD = 'sdkwork-smoke-only-password';
+const SMOKE_POSTGRES_READY_ATTEMPTS = 60;
+const SMOKE_POSTGRES_READY_INTERVAL_MS = 1_000;
+const SMOKE_POSTGRES_INIT_COMPLETE =
+  'PostgreSQL init process complete; ready for start up.';
+
+function resolveSmokeDatabaseUrl() {
+  const configured = process.env.SDKWORK_DATABASE_TEST_POSTGRES_URL
+    || process.env.SDKWORK_SMOKE_POSTGRES_URL
+    || resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' }).SDKWORK_DATABASE_URL;
+  return typeof configured === 'string' && configured.trim() ? configured.trim() : undefined;
+}
+
+function waitForSmokePostgres(containerName) {
+  for (let attempt = 1; attempt <= SMOKE_POSTGRES_READY_ATTEMPTS; attempt += 1) {
+    const probe = spawnSync(
+      'docker',
+      ['exec', containerName, 'pg_isready', '--username', SMOKE_POSTGRES_USER, '--dbname', SMOKE_POSTGRES_DATABASE],
+      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024, stdio: 'pipe', timeout: 10_000, windowsHide: true },
+    );
+    const logs = spawnSync('docker', ['logs', containerName], {
+      cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 256 * 1024, stdio: 'pipe', timeout: 10_000, windowsHide: true,
+    });
+    if (probe.status === 0 && `${logs.stdout || ''}\n${logs.stderr || ''}`.includes(SMOKE_POSTGRES_INIT_COMPLETE)) {
+      return;
+    }
+    if (attempt < SMOKE_POSTGRES_READY_ATTEMPTS) {
+      spawnSync('node', ['-e', `setTimeout(() => {}, ${SMOKE_POSTGRES_READY_INTERVAL_MS})`], { stdio: 'ignore' });
+    }
+  }
+  throw new Error('disposable PostgreSQL did not become ready for the release smoke test');
+}
+
+function resolveSmokePostgresPort(containerName) {
+  const result = run('docker', ['port', containerName, '5432/tcp'], { timeoutMs: 30_000 });
+  const match = /:(?<port>[0-9]{1,5})\s*$/u.exec(String(result.stdout).trim());
+  const port = Number(match?.groups?.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`cannot resolve bounded PostgreSQL host port: ${String(result.stdout).trim()}`);
+  }
+  return port;
+}
+
+/**
+ * Ensures a database is available for this smoke and returns its URL. When no
+ * database URL is configured, a disposable PostgreSQL is started first and torn
+ * down once the smoke finishes. Re-entering this function joins the already
+ * running instance instead of starting a second container.
+ */
+let activeSmokeDatabase;
+let activeSmokeContainer;
+async function bindSmokeDatabase() {
+  if (activeSmokeDatabase) {
+    return activeSmokeDatabase;
+  }
+  const existing = resolveSmokeDatabaseUrl();
+  if (existing) {
+    console.log('[sdkwork-webserver-release-smoke] using the configured PostgreSQL');
+    activeSmokeDatabase = existing;
+    return activeSmokeDatabase;
+  }
+  const containerName = `sdkwork-webserver-release-smoke-${process.pid}-${Date.now()}`;
+  run('docker', ['version', '--format', '{{.Server.Version}}'], { timeoutMs: 30_000 });
+  run(
+    'docker',
+    [
+      'run', '--detach', '--rm', '--name', containerName,
+      '--env', `POSTGRES_DB=${SMOKE_POSTGRES_DATABASE}`,
+      '--env', `POSTGRES_USER=${SMOKE_POSTGRES_USER}`,
+      '--env', `POSTGRES_PASSWORD=${SMOKE_POSTGRES_PASSWORD}`,
+      '--publish', '127.0.0.1::5432',
+      SMOKE_POSTGRES_IMAGE,
+    ],
+    { timeoutMs: 5 * 60 * 1000 },
+  );
+  activeSmokeContainer = containerName;
+  try {
+    waitForSmokePostgres(containerName);
+    const port = resolveSmokePostgresPort(containerName);
+    activeSmokeDatabase =
+      `postgresql://${SMOKE_POSTGRES_USER}:${SMOKE_POSTGRES_PASSWORD}@127.0.0.1:${port}/${SMOKE_POSTGRES_DATABASE}`
+      + '?sslmode=disable&application_name=sdkwork_release_smoke';
+    console.log('[sdkwork-webserver-release-smoke] started a disposable PostgreSQL for this smoke');
+    return activeSmokeDatabase;
+  } catch (error) {
+    removeSmokePostgres();
+    throw error;
+  }
+}
+
+function removeSmokePostgres() {
+  if (!activeSmokeContainer) {
+    return;
+  }
+  const containerName = activeSmokeContainer;
+  activeSmokeContainer = undefined;
+  activeSmokeDatabase = undefined;
+  spawnSync('docker', ['rm', '--force', containerName], {
+    cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024, stdio: 'pipe', timeout: 60_000, windowsHide: true,
+  });
+}
+
 function captureBounded(stream) {
   const chunks = [];
   let retainedBytes = 0;
@@ -347,12 +463,17 @@ function assertUnauthenticatedOwnerRoute(response, expected, label) {
   }
 }
 
-function standaloneManagementEnv(packageRoot, port, runtimeConfigFile) {
+function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseUrl) {
   const iamRoot = path.join(packageRoot, ...STANDALONE_IAM_ROOT.split('/'));
   const driveRoot = path.join(packageRoot, ...STANDALONE_DRIVE_ROOT.split('/'));
-  const databaseEnv = canonicalizeWorkspaceDatabaseEnv(
-    resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' }),
-  );
+  // A smoke-owned database URL wins over the workspace `.env.postgres` value:
+  // the disposable PostgreSQL this smoke started is the one the packaged
+  // gateway must actually migrate and serve against.
+  const databaseEnv = databaseUrl
+    ? { SDKWORK_DATABASE_URL: databaseUrl }
+    : canonicalizeWorkspaceDatabaseEnv(
+      resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' }),
+    );
   return {
     ...databaseEnv,
     ...IAM_APPLICATION_BOOTSTRAP_ENV,
@@ -398,11 +519,12 @@ async function verifyStandaloneSameOriginIngress({
   packageRoot,
   temporaryRoot,
   runtimeConfigFile,
+  databaseUrl,
 }) {
   const port = await reservePort();
   const child = spawn(gateway, ['serve-management'], {
     cwd: temporaryRoot,
-    env: standaloneManagementEnv(packageRoot, port, runtimeConfigFile),
+    env: standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseUrl),
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -528,6 +650,15 @@ async function verifyStandaloneSameOriginIngress({
 
 function hermeticEnv(runtimeConfigFile) {
   return { ...process.env, SDKWORK_WEBSERVER_CONFIG_FILE: runtimeConfigFile };
+}
+
+// The data-plane child runs with `hermeticEnv`, which inherits process.env. When
+// this smoke owns the database, publish its URL so every packaged binary in the
+// smoke resolves the same instance instead of the developer's `.env.postgres`.
+function publishSmokeDatabaseEnv(databaseUrl) {
+  if (databaseUrl && !process.env.SDKWORK_DATABASE_URL) {
+    process.env.SDKWORK_DATABASE_URL = databaseUrl;
+  }
 }
 
 function writeHermeticRuntimeConfig(temporaryRoot) {
@@ -659,6 +790,10 @@ async function smoke(settings) {
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'sdkwork-webserver-release-smoke-'));
   let child;
   try {
+    // The disposable PostgreSQL, when one had to be started, is bound here so
+    // the gateway boot below migrates and serves against that instance.
+    const databaseUrl = await bindSmokeDatabase();
+    publishSmokeDatabaseEnv(databaseUrl);
     await extractTar({
       file: resolved.archive,
       cwd: temporaryRoot,
@@ -738,6 +873,7 @@ async function smoke(settings) {
         packageRoot,
         temporaryRoot,
         runtimeConfigFile,
+        databaseUrl,
       });
     } else {
       throw new Error('--deployment-profile must be standalone (sdkwork-webserver is standalone-only)');
@@ -831,6 +967,7 @@ async function smoke(settings) {
       child.kill('SIGKILL');
       await waitForExit(child, 5_000).catch(() => {});
     }
+    removeSmokePostgres();
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
 }
