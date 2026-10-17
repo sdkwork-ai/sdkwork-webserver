@@ -130,12 +130,39 @@ permissions:
   artifact-metadata: write
 
 jobs:
+  # The reusable packaging job takes the package version as an explicit input.
+  # A branch push supplies none, and its internal fallback then resolves the
+  # branch name ("main") as if it were a version, which every packager rejects
+  # with "release version must be an explicit semantic version". Reading
+  # release.currentVersion from the application manifest keeps the version
+  # single-sourced, so packaging can never drift from the release notes.
+  resolve-version:
+    name: Resolve release version
+    runs-on: ubuntu-24.04
+    outputs:
+      package_version: ${{ steps.resolve.outputs.package_version }}
+    steps:
+      - name: Checkout application source
+        uses: actions/checkout@v4
+      - id: resolve
+        name: Read release version from the application manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -e "process.stdout.write(String(require('./sdkwork.app.config.json').release.currentVersion ?? ''))")"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::release.currentVersion is not an explicit semantic version: '$version'"
+            exit 1
+          fi
+          echo "package_version=$version" >> "$GITHUB_OUTPUT"
+
   package:
+    needs: resolve-version
     uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@bfe420b79d3c584d246f9691c8374b24534c3365
     with:
       config_path: sdkwork.workflow.json
       tag: ${{ github.event.inputs.tag || github.event.release.tag_name || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.ref_name }}
-      package_version: ${{ github.event.inputs.package_version || '' }}
+      package_version: ${{ github.event.inputs.package_version || needs.resolve-version.outputs.package_version }}
       platform: ${{ github.event.inputs.platform || 'all' }}
       architecture: ${{ github.event.inputs.architecture || 'all' }}
       profile: ${{ github.event.inputs.profile || 'all' }}
