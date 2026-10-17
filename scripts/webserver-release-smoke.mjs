@@ -29,7 +29,14 @@ import {
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
+// A packaged gateway emits one `sqlx::postgres::notice` line per migration
+// statement, so a failing boot easily overruns this budget before it prints the
+// reason it died. Retention therefore keeps the head (what it was doing) and the
+// tail (why it stopped), dropping only the middle. Keeping the head alone hid
+// the actual cause behind a wall of "already exists, skipping" notices.
 const MAX_PROCESS_OUTPUT_BYTES = 256 * 1024;
+const PROCESS_OUTPUT_HEAD_BYTES = 64 * 1024;
+const PROCESS_OUTPUT_TAIL_BYTES = MAX_PROCESS_OUTPUT_BYTES - PROCESS_OUTPUT_HEAD_BYTES;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const COMMAND_TIMEOUT_MS = 30 * 1000;
 const START_TIMEOUT_MS = 15 * 1000;
@@ -372,17 +379,35 @@ function removeSmokePostgres() {
 }
 
 function captureBounded(stream) {
-  const chunks = [];
-  let retainedBytes = 0;
+  let head = Buffer.alloc(0);
+  let tail = Buffer.alloc(0);
   stream.on('data', (chunk) => {
-    if (retainedBytes >= MAX_PROCESS_OUTPUT_BYTES) {
+    const incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (head.length < PROCESS_OUTPUT_HEAD_BYTES) {
+      const room = PROCESS_OUTPUT_HEAD_BYTES - head.length;
+      head = Buffer.concat([head, incoming.subarray(0, room)]);
+      incoming = incoming.subarray(room);
+    }
+    if (incoming.length === 0) {
       return;
     }
-    const retained = Buffer.from(chunk).subarray(0, MAX_PROCESS_OUTPUT_BYTES - retainedBytes);
-    chunks.push(retained);
-    retainedBytes += retained.length;
+    // Keep only the most recent tail; the reason a process exited is the last
+    // thing it printed, so truncating from the front preserves the diagnosis.
+    tail = Buffer.concat([tail, incoming]);
+    if (tail.length > PROCESS_OUTPUT_TAIL_BYTES) {
+      tail = tail.subarray(tail.length - PROCESS_OUTPUT_TAIL_BYTES);
+    }
   });
-  return () => Buffer.concat(chunks, retainedBytes).toString('utf8');
+  return () => {
+    const text = (buffer) => buffer.toString('utf8');
+    if (tail.length === 0) {
+      return text(head);
+    }
+    const omitted = head.length + tail.length >= PROCESS_OUTPUT_HEAD_BYTES + PROCESS_OUTPUT_TAIL_BYTES
+      ? '\n[sdkwork-webserver-release-smoke] ... output truncated ...\n'
+      : '';
+    return `${text(head)}${omitted}${text(tail)}`;
+  };
 }
 
 function delay(milliseconds) {
