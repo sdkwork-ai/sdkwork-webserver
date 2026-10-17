@@ -60,7 +60,18 @@ const STANDALONE_SAME_ORIGIN_PATHS = Object.freeze({
   openapi: '/openapi.json',
   deployApps: '/app/v3/api/apps',
   iamSession: '/app/v3/api/auth/sessions/current',
-  driveAssets: '/app/v3/api/assets',
+  // The third same-origin owner probe must target a route the composed gateway
+  // actually mounts. `/app/v3/api/assets` is owned by the `sdkwork-assets`
+  // workspace: the drive assembly deliberately excludes it
+  // (`sdkwork-api-drive-assembly::bootstrap` calls
+  // `build_app_business_router_without_asset_surface` because the federated host
+  // merges the assets capability workspace), and this gateway composes exactly
+  // six owners — iam / drive / skills / mcp / sandbox / deployments — with no
+  // assets module at all. Probing it here asserted a route that cannot exist in
+  // this topology. `/app/v3/api/drive/favorites` is drive's own
+  // `dual_token` GET surface, so it exercises the same unauthenticated
+  // 401/problem+json contract as the two probes beside it.
+  driveFavorites: '/app/v3/api/drive/favorites',
   missingApi: '/app/v3/api/__sdkwork_release_smoke_missing__',
 });
 const EXPECTED_BINARIES = [
@@ -756,7 +767,7 @@ async function verifyStandaloneSameOriginIngress({
     for (const ownerPath of [
       STANDALONE_SAME_ORIGIN_PATHS.deployApps,
       STANDALONE_SAME_ORIGIN_PATHS.iamSession,
-      STANDALONE_SAME_ORIGIN_PATHS.driveAssets,
+      STANDALONE_SAME_ORIGIN_PATHS.driveFavorites,
     ]) {
       if (!openapiDocument.paths?.[ownerPath]) {
         throw new Error(`standalone OpenAPI is missing embedded owner route ${ownerPath}`);
@@ -778,9 +789,9 @@ async function verifyStandaloneSameOriginIngress({
         operationId: 'sessions.current.retrieve',
       },
       {
-        label: 'standalone unauthenticated Drive assets',
-        path: STANDALONE_SAME_ORIGIN_PATHS.driveAssets,
-        operationId: 'assets.list',
+        label: 'standalone unauthenticated Drive favorites',
+        path: STANDALONE_SAME_ORIGIN_PATHS.driveFavorites,
+        operationId: 'favorites.list',
       },
     ]) {
       const response = await requestHttp(port, ownerRoute.path);

@@ -782,7 +782,12 @@ test('Linux release smoke validates, extracts, serves HTTP and HTTPS, and cleans
   // route; the retired webserver `/app/v3/api/applications` surface is gone.
   assert.match(source, /apps\.list/u);
   assert.match(source, /sessions\.current\.retrieve/u);
-  assert.match(source, /assets\.list/u);
+  // The third same-origin probe targets drive's own dual_token GET surface.
+  // `/app/v3/api/assets` is owned by the `sdkwork-assets` workspace, which the
+  // standalone gateway does not compose, so probing it can never succeed.
+  assert.match(source, /favorites\.list/u);
+  assert.match(source, /driveFavorites: '\/app\/v3\/api\/drive\/favorites'/u);
+  assert.doesNotMatch(source, /assets\.list/u);
   assert.match(source, /application\/problem\+json/u);
   assert.match(source, /instance: `GET \$\{ownerRoute\.path\}`/u);
   assert.match(source, /operationId: ownerRoute\.operationId/u);
