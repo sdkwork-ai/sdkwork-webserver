@@ -100,6 +100,37 @@ test('release smoke does not mistake the derived fallback URL for a real databas
   );
 });
 
+test('release smoke names its disposable database as a canonical SDKWork identity', () => {
+  const source = readSmokeSource();
+  // The workspace database loader accepts only `sdkwork_ai_dev`, `sdkwork_ai_test`,
+  // `sdkwork_ai_staging`, `sdkwork_ai_prod`, `sdkwork_ai_demo` and
+  // `sdkwork_ai_test_*`, requires schema == database name, and requires
+  // `sdkwork_ai_test_*` to authenticate as `sdkwork_ai_test`. An arbitrary name
+  // was rejected with "is not a canonical SDKWork workspace identity".
+  assert.match(
+    source,
+    /const SMOKE_POSTGRES_DATABASE = 'sdkwork_ai_test_[a-z0-9_]*';/u,
+    'the disposable database must use a canonical workspace identity',
+  );
+  assert.match(
+    source,
+    /const SMOKE_POSTGRES_USER = 'sdkwork_ai_test';/u,
+    'a sdkwork_ai_test_* database must authenticate as sdkwork_ai_test',
+  );
+  // The schema must track the disposable database, never a stale value inherited
+  // from the developer's own .env.postgres.
+  assert.match(
+    source,
+    /SDKWORK_DATABASE_SCHEMA: SMOKE_POSTGRES_DATABASE/u,
+    'the schema must equal the disposable database name',
+  );
+  assert.match(
+    source,
+    /process\.env\.SDKWORK_DATABASE_SCHEMA = SMOKE_POSTGRES_DATABASE;/u,
+    'the exported schema must be aligned for every packaged child process',
+  );
+});
+
 test('release smoke points the packaged gateway at the provisioned database', () => {
   const source = readSmokeSource();
   // A provisioned database that is not handed to the gateway is useless: the

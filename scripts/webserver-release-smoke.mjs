@@ -157,8 +157,14 @@ function run(command, args, options = {}) {
 // and does not depend on validate-step ordering.
 const SMOKE_POSTGRES_IMAGE =
   'postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7';
-const SMOKE_POSTGRES_DATABASE = 'sdkwork_release_smoke';
-const SMOKE_POSTGRES_USER = 'sdkwork_smoke';
+// The workspace database loader only accepts the canonical SDKWork identities
+// (`sdkwork_ai_dev`, `sdkwork_ai_test`, `sdkwork_ai_staging`, `sdkwork_ai_prod`,
+// `sdkwork_ai_demo`, plus `sdkwork_ai_test_*`), and it additionally requires the
+// schema to equal the database name and the username to match the profile.
+// An arbitrary name such as `sdkwork_release_smoke` is rejected with
+// "PostgreSQL database ... is not a canonical SDKWork workspace identity".
+const SMOKE_POSTGRES_DATABASE = 'sdkwork_ai_test_release_smoke';
+const SMOKE_POSTGRES_USER = 'sdkwork_ai_test';
 const SMOKE_POSTGRES_PASSWORD = 'sdkwork-smoke-only-password';
 const SMOKE_POSTGRES_READY_ATTEMPTS = 60;
 const SMOKE_POSTGRES_READY_INTERVAL_MS = 1_000;
@@ -517,7 +523,12 @@ function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseU
   // the disposable PostgreSQL this smoke started is the one the packaged
   // gateway must actually migrate and serve against.
   const databaseEnv = databaseUrl
-    ? { SDKWORK_DATABASE_URL: databaseUrl }
+    ? {
+      SDKWORK_DATABASE_URL: databaseUrl,
+      SDKWORK_DATABASE_SCHEMA: SMOKE_POSTGRES_DATABASE,
+      SDKWORK_DATABASE_NAME: SMOKE_POSTGRES_DATABASE,
+      SDKWORK_DATABASE_USERNAME: SMOKE_POSTGRES_USER,
+    }
     : canonicalizeWorkspaceDatabaseEnv(
       resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' }),
     );
@@ -703,9 +714,17 @@ function hermeticEnv(runtimeConfigFile) {
 // this smoke owns the database, publish its URL so every packaged binary in the
 // smoke resolves the same instance instead of the developer's `.env.postgres`.
 function publishSmokeDatabaseEnv(databaseUrl) {
-  if (databaseUrl && !process.env.SDKWORK_DATABASE_URL) {
-    process.env.SDKWORK_DATABASE_URL = databaseUrl;
+  if (!databaseUrl || process.env.SDKWORK_DATABASE_URL) {
+    return;
   }
+  process.env.SDKWORK_DATABASE_URL = databaseUrl;
+  // The workspace loader rejects a URL whose schema differs from the database
+  // name, and it reads the schema from the environment when the URL omits it.
+  // A stale `SDKWORK_DATABASE_SCHEMA` left over from the developer's own
+  // `.env.postgres` would therefore be applied to this disposable database.
+  process.env.SDKWORK_DATABASE_SCHEMA = SMOKE_POSTGRES_DATABASE;
+  process.env.SDKWORK_DATABASE_NAME = SMOKE_POSTGRES_DATABASE;
+  process.env.SDKWORK_DATABASE_USERNAME = SMOKE_POSTGRES_USER;
 }
 
 function writeHermeticRuntimeConfig(temporaryRoot) {
