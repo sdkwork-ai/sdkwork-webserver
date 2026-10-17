@@ -1,0 +1,76 @@
+# Release-tarball image for sdkwork-webserver.
+#
+# Build context = the directory the release tarball unpacks into:
+#   bin/  etc/  share/sdkwork/
+#
+# The release archive intentionally carries no container entrypoint, so this
+# file ships its own. The repository's deployments/docker/Dockerfile.standalone
+# consumes a staged context produced by scripts/docker/build-standalone-image.mjs
+# and is not usable from a tarball alone.
+FROM debian:bookworm-slim
+
+# curl for health checks, util-linux for ss, tini as PID 1 so the gateway
+# receives SIGTERM and the container stops promptly.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        tini \
+        util-linux \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 sdkwork \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent \
+        --shell /usr/sbin/nologin sdkwork
+
+WORKDIR /app
+
+# The runtime user must own the tree so a mounted config stays writable when a
+# container starts as that user.
+COPY --chown=10001:10001 bin/ /app/bin/
+COPY --chown=10001:10001 share/ /app/share/
+COPY --chown=10001:10001 etc/ /app/etc/
+COPY --chown=10001:10001 docker/entrypoint-release.sh /usr/local/bin/sdkwork-webserver-entrypoint
+
+# Directories the runtime writes to. The release bundle is read-only; anything
+# mutated at runtime lives on these volumes.
+RUN chmod 0755 /usr/local/bin/sdkwork-webserver-entrypoint \
+    && chmod 0755 /app/bin/* \
+    && install -d -o sdkwork -g sdkwork -m 0750 \
+        /etc/sdkwork/webserver \
+        /etc/sdkwork/webserver/secrets \
+        /etc/sdkwork/api-gateway \
+        /etc/sdkwork/certs \
+        /run/secrets/sdkwork/api-gateway \
+        /var/lib/sdkwork/webserver/acme-webroot \
+        /var/lib/sdkwork/webserver/acme-accounts \
+        /var/lib/sdkwork/webserver/tls-materials \
+        /opt/deploy \
+        /opt/deploy/drive
+
+ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
+    SDKWORK_WEBSERVER_SERVER_APP_ROOT=/app \
+    SDKWORK_APP_ROOT=/app \
+    SDKWORK_IAM_APP_ROOT=/app/share/sdkwork/iam \
+    SDKWORK_DRIVE_APP_ROOT=/app/share/sdkwork/drive \
+    SDKWORK_DEPLOY_APP_ROOT=/app/share/sdkwork/deploy \
+    SDKWORK_WEB_STORE_APP_ROOT=/app/share/sdkwork/webstore \
+    SDKWORK_SKILLS_APP_ROOT=/app/share/sdkwork/skills \
+    SDKWORK_MCP_APP_ROOT=/app/share/sdkwork/mcp \
+    SDKWORK_WEBSERVER_PC_STATIC_ROOT=/app/share/sdkwork/webserver/web/pc \
+    SDKWORK_WEBSERVER_H5_STATIC_ROOT=/app/share/sdkwork/webserver/web/h5 \
+    SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT=/app/share/sdkwork/webserver/web/static \
+    SDKWORK_WEBSERVER_TABLET_SURFACE=pc \
+    SDKWORK_WEBSERVER_RUNTIME_TARGET=container \
+    SDKWORK_WEBSERVER_DEPLOYMENT_PROFILE=standalone \
+    SDKWORK_SPACE_ROOT=/opt/deploy \
+    SDKWORK_DEPLOY_SANDBOX_ROOT=/opt/deploy \
+    SDKWORK_DRIVE_WEBSITE_CACHE_ENABLED=true \
+    SDKWORK_DRIVE_WEBSITE_CACHE_ROOT=/opt/deploy/drive/website-cache \
+    SDKWORK_SERVICE_USER=sdkwork
+
+EXPOSE 8080 9091
+
+# The entrypoint execs the gateway, so tini is PID 1 and the gateway is PID 2;
+# SIGTERM reaches the process that actually holds the listeners.
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/sdkwork-webserver-entrypoint"]
+CMD ["serve-management"]

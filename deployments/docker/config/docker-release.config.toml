@@ -1,0 +1,95 @@
+# Runtime configuration for a release-tarball Docker deployment.
+#
+#   install -m 0640 -o 10001 -g 10001 docker-guide-validate.toml \
+#     /opt/sdkwork/etc/webserver/config.toml
+#
+# Every key below is taken from the config structs in
+# crates/sdkwork-webserver-core/src/runtime_config.rs and
+# crates/sdkwork-webserver-resolver-cache/src/config.rs. Both use
+# #[serde(rename_all = "camelCase")] on the resolver-cache side, so those keys
+# must stay camelCase.
+#
+# Scope matters when validating a change: [ingress] and [database] are read by
+# the management path, while [resolution_cache] is read only by the data plane
+# (data_plane/runtime.rs::build_resolution_chain). A bad key under
+# [resolution_cache] fails when the data plane starts, not serve-management.
+#
+# Credentials are never written here. config.toml only carries the *path* to a
+# secret file; the file itself is mounted read-only and must be mode 0600.
+
+[profile]
+deployment_profile = "standalone"
+environment = "production"
+profile_id = "standalone.production"
+node_id = 0
+
+# ---------------------------------------------------------------------------
+# Ports. [ingress].bind is the in-container listen address; the compose port
+# mapping's right-hand side must match it exactly.
+# ---------------------------------------------------------------------------
+[ingress]
+# 0.0.0.0 is required for traffic to reach the container from the host.
+bind = "0.0.0.0:8080"
+# Loopback-only ops socket for host health checks and metrics. Do not publish.
+data_plane_operations_bind = "127.0.0.1:9091"
+# Drives generated links and the CORS allowlist.
+public_http_url = "http://webserver.example.com"
+cors_allowed_origins = ["http://webserver.example.com", "http://127.0.0.1:8080"]
+management_expose_allowed = true
+
+[deploy]
+deployment_profile = "standalone"
+environment = "production"
+profile_id = "standalone.production"
+use_memory_drive = true
+use_memory_content_provider = true
+
+# ---------------------------------------------------------------------------
+# Database. Container-localhost is the container itself, so an external
+# database must be addressed by service name or host name.
+# ---------------------------------------------------------------------------
+[database]
+engine = "postgresql"
+host = "db"                                  # compose service name
+port = 5432
+name = "sdkwork_ai_prod"
+schema = "sdkwork_ai_prod"
+# Keep false: silently using the public schema hides a provisioning mistake.
+schema_fallback_public = false
+username = "sdkwork_app"
+password_file = "/etc/sdkwork/webserver/secrets/database.secret"
+ssl_mode = "disable"                         # require / verify-ca / verify-full for a managed DB
+max_connections = 20
+# Leave true for a self-contained first boot. Set false when an external
+# migration pipeline owns the schema; nothing then self-heals a missing table.
+auto_migrate = true
+
+# ---------------------------------------------------------------------------
+# Resolution cache: file -> memory -> redis -> database.
+#
+# Read by the data plane (serve-imports / data-plane); serve-management does
+# not consume this section. The Redis layer is optional and connects lazily,
+# so an unreachable Redis degrades to the layers above instead of blocking
+# startup.# ---------------------------------------------------------------------------
+[resolution_cache]
+enabled = true
+# Optional local hosts-style seed file, loaded into the memory layer at boot.
+# file = "/etc/sdkwork/webserver/resolver.seed"
+memory = true
+memoryMaxEntries = 65536
+memoryTtlSeconds = 60
+database = true
+# Negative caching absorbs brief upstream DNS outages.
+negativeTtlSeconds = 10
+
+[resolution_cache.redis]
+# redis://host:port, or rediss:// for TLS. redis://:password@host:port to
+# authenticate. Compose injects SDKWORK_WEBSERVER_REDIS_URL, which overrides
+# this value when set.
+url = "redis://:change-me@cache:6379"
+# The only required field in this section.
+ttlSeconds = 300
+# Namespace keys when several environments share one Redis instance.
+prefix = "sdkwork:resolver"
+connectTimeoutMs = 1000
+operationTimeoutMs = 250

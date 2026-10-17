@@ -1,5 +1,9 @@
 # sdkwork-webserver Docker 安装与部署指南
 
+> **本文覆盖仓库内 / bundle 通道**（`bin/` 单操作员入口）。
+> **从 GitHub Release 产物直接部署**（无仓库、无 `bin/`）请看
+> [`docker-release-deploy.md`](./docker-release-deploy.md)。
+
 > 规范依据：`sdkwork-specs/DOCKER_SPEC.md`（镜像/安装/配置标准）、`sdkwork-specs/MODULE_BIN_SPEC.md`（`bin/` 入口标准）、`sdkwork-specs/DEPLOYMENT_SPEC.md` §6/§6.1（容器安装与外部依赖）。
 > 本文档为唯一权威 Docker 安装文档，取代并已合并：`WSL_DOCKER_DEPLOY.md`、`WSL_EXTERNAL_DEPLOY.md`、`docker-remote-deploy.md/.en.md`。English version: [docker-install.en.md](./docker-install.en.md)
 
