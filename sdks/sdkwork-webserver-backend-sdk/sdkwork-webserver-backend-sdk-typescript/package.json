@@ -15,7 +15,8 @@
     }
   },
   "scripts": {
-    "build": "pnpm run build:transport && pnpm run typecheck",
+    "build": "pnpm run build:deps && pnpm run build:transport && pnpm run typecheck",
+    "build:deps": "pnpm --filter @sdkwork/sdk-common build",
     "build:transport": "pnpm --dir generated/server-openapi build",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
