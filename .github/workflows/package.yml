@@ -74,6 +74,10 @@ on:
         description: sdkwork-utils commit/ref.
         required: false
         default: main
+      sdkwork_specs_ref:
+        description: sdkwork-specs commit/ref.
+        required: false
+        default: main
       sdkwork_app_topology_ref:
         description: sdkwork-app-topology commit/ref.
         required: false
@@ -151,6 +155,7 @@ jobs:
           "SDKWORK_DATABASE_REF": "${{ github.event.inputs.sdkwork_database_ref || vars.SDKWORK_DATABASE_REF }}",
           "SDKWORK_SDK_COMMONS_REF": "${{ github.event.inputs.sdkwork_sdk_commons_ref || vars.SDKWORK_SDK_COMMONS_REF }}",
           "SDKWORK_UTILS_REF": "${{ github.event.inputs.sdkwork_utils_ref || vars.SDKWORK_UTILS_REF }}",
+          "SDKWORK_SPECS_REF": "${{ github.event.inputs.sdkwork_specs_ref || vars.SDKWORK_SPECS_REF }}",
           "SDKWORK_APP_TOPOLOGY_REF": "${{ github.event.inputs.sdkwork_app_topology_ref || vars.SDKWORK_APP_TOPOLOGY_REF }}",
           "SDKWORK_DEPLOYMENTS_REF": "${{ github.event.inputs.sdkwork_deployments_ref || vars.SDKWORK_DEPLOYMENTS_REF }}",
           "SDKWORK_KNOWLEDGEBASE_REF": "${{ github.event.inputs.sdkwork_knowledgebase_ref || vars.SDKWORK_KNOWLEDGEBASE_REF }}",
