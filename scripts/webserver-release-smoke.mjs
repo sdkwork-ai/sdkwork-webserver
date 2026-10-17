@@ -37,7 +37,13 @@ const OUTPUT_ROOT = path.join(REPO_ROOT, 'dist', 'release');
 const MAX_PROCESS_OUTPUT_BYTES = 256 * 1024;
 const PROCESS_OUTPUT_HEAD_BYTES = 64 * 1024;
 const PROCESS_OUTPUT_TAIL_BYTES = MAX_PROCESS_OUTPUT_BYTES - PROCESS_OUTPUT_HEAD_BYTES;
-const MAX_RESPONSE_BYTES = 64 * 1024;
+// The smoke parses the composite OpenAPI document the gateway assembles from
+// every mounted owner surface, and that document is far larger than a single
+// route's response: `JSON.parse` needs the whole body, so a 64 KiB ceiling
+// truncated it into a parse failure rather than a readable diagnostic. 8 MiB is
+// still a bound — the smoke reads a loopback response, it does not accept an
+// unbounded stream — while leaving room for the full document.
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const COMMAND_TIMEOUT_MS = 30 * 1000;
 const START_TIMEOUT_MS = 15 * 1000;
 const STOP_TIMEOUT_MS = 10 * 1000;
@@ -454,7 +460,11 @@ function requestHealth(protocol, port) {
         response.on('data', (chunk) => {
           bytes += chunk.length;
           if (bytes > MAX_RESPONSE_BYTES) {
-            request.destroy(new Error(`smoke response exceeds ${MAX_RESPONSE_BYTES} bytes`));
+            request.destroy(
+              new Error(
+                `smoke ${protocol} health response exceeds ${MAX_RESPONSE_BYTES} bytes`,
+              ),
+            );
             return;
           }
           chunks.push(Buffer.from(chunk));
@@ -490,7 +500,12 @@ function requestHttp(port, requestPath, headers = {}) {
         response.on('data', (chunk) => {
           bytes += chunk.length;
           if (bytes > MAX_RESPONSE_BYTES) {
-            request.destroy(new Error(`smoke response exceeds ${MAX_RESPONSE_BYTES} bytes`));
+            // Name the path. Without it the failure reads "smoke response exceeds
+            // 65536 bytes" and there is no way to tell which of the same-origin
+            // routes produced the oversized body.
+            request.destroy(
+              new Error(`smoke response for ${requestPath} exceeds ${MAX_RESPONSE_BYTES} bytes`),
+            );
             return;
           }
           chunks.push(Buffer.from(chunk));
