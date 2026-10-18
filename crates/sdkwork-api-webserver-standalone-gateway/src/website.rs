@@ -1983,8 +1983,8 @@ mod tests {
         // The reader rejects any file a group or other user can reach, so the
         // fixture must be owner-only. Leaving the mode to the ambient umask
         // makes this test pass under a restrictive login umask and fail on a
-        // stock CI runner (which creates 0644 files), so set it explicitly.
-        restrict_to_owner(&token);
+        // stock CI runner (which creates 0644 files), so set it explicitly
+        // after each write.
         std::fs::write(&token, "0123456789abcdef").unwrap();
         restrict_to_owner(&token);
         assert_eq!(
