@@ -165,6 +165,47 @@ async fn round_trip(stream_port: u16, payload: &[u8]) -> Vec<u8> {
     echoed
 }
 
+/// Round-trip one payload, retrying the connection while the data plane is
+/// still binding its listener.
+///
+/// A separate readiness probe cannot be used here: every connection to the
+/// stream listener is forwarded to the upstream and `EchoUpstream::accepted`
+/// counts them, so probing first would inflate the very counter these tests
+/// assert on. Retrying the real request keeps the connection count exact and
+/// still removes the startup race.
+async fn round_trip_when_ready(stream_port: u16, payload: &[u8]) -> Vec<u8> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match try_round_trip(stream_port, payload).await {
+            Ok(echoed) => return echoed,
+            Err(error) if tokio::time::Instant::now() < deadline => {
+                let _ = error;
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(error) => panic!("stream round trip never completed: {error}"),
+        }
+    }
+}
+
+async fn try_round_trip(stream_port: u16, payload: &[u8]) -> std::io::Result<Vec<u8>> {
+    let mut client = TcpStream::connect(("127.0.0.1", stream_port)).await?;
+    client.write_all(payload).await?;
+    let mut echoed = Vec::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let mut buffer = [0_u8; 4096];
+        let read = tokio::time::timeout_at(deadline, client.read(&mut buffer)).await??;
+        if read == 0 {
+            break;
+        }
+        echoed.extend_from_slice(&buffer[..read]);
+        if echoed.len() >= payload.len() {
+            break;
+        }
+    }
+    Ok(echoed)
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn forwards_bytes_to_a_literal_tcp_target() {
     let mut upstream = EchoUpstream::spawn().await;
@@ -180,7 +221,7 @@ async fn forwards_bytes_to_a_literal_tcp_target() {
     );
     let (shutdown_tx, task) = spawn_data_plane(&config_path);
 
-    let echoed = round_trip(stream_port, b"ping-through-stream").await;
+    let echoed = round_trip_when_ready(stream_port, b"ping-through-stream").await;
     assert_eq!(echoed, b"ping-through-stream");
     assert_eq!(upstream.accepted.load(Ordering::Acquire), 1);
 
@@ -228,10 +269,10 @@ async fn forwards_bytes_through_a_declared_upstream_and_emits_proxy_protocol() {
 
     // The PROXY protocol header is written to the upstream on connect; the
     // echo upstream reflects it, so consume the header line before asserting
-    // the payload round trip.
-    let mut client = TcpStream::connect(("127.0.0.1", stream_port))
-        .await
-        .expect("connect to stream listener");
+    // the payload round trip. Retrying the connection is what waits out the
+    // listener startup: a readiness probe would be forwarded to the upstream
+    // too and would capture `first_line` before the real payload does.
+    let mut client = connect_when_ready(stream_port).await;
     client
         .write_all(b"through-upstream")
         .await
@@ -296,9 +337,7 @@ async fn idle_proxy_timeout_closes_a_silent_connection() {
     );
     let (shutdown_tx, task) = spawn_data_plane(&config_path);
 
-    let mut client = TcpStream::connect(("127.0.0.1", stream_port))
-        .await
-        .expect("connect to stream listener");
+    let mut client = connect_when_ready(stream_port).await;
     // No traffic: the proxy must cut the connection after proxyTimeoutMs of
     // idle on both directions.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
@@ -341,6 +380,27 @@ fn write_self_signed_certificate(directory: &Path, stem: &str, names: &[&str]) -
     std::fs::write(directory.join(format!("{stem}.key")), key.serialize_pem())
         .expect("write private key");
     certificate.der().as_ref().to_vec()
+}
+
+/// Connect once the stream listener accepts, without opening a throwaway
+/// connection first.
+///
+/// Every connection reaching the stream listener is forwarded to the upstream,
+/// and these tests assert on how many connections arrived and what the first
+/// line was. A separate readiness probe would be forwarded too and would
+/// corrupt both counters, so the readiness wait retries the real connection.
+async fn connect_when_ready(stream_port: u16) -> TcpStream {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match TcpStream::connect(("127.0.0.1", stream_port)).await {
+            Ok(stream) => return stream,
+            Err(error) if tokio::time::Instant::now() < deadline => {
+                let _ = error;
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(error) => panic!("stream listener never accepted a connection: {error}"),
+        }
+    }
 }
 
 async fn wait_ready(stream_port: u16) {

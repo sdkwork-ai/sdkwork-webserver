@@ -181,12 +181,40 @@ struct DataPlane {
     task: tokio::task::JoinHandle<Result<(), DataPlaneError>>,
 }
 
+/// Connect once the data plane's listener accepts, retrying while it binds.
+async fn connect_when_ready(port: u16) -> tokio::net::TcpStream {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
+            Ok(stream) => return stream,
+            Err(error) if tokio::time::Instant::now() < deadline => {
+                let _ = error;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Err(error) => panic!("data plane on port {port} never accepted: {error}"),
+        }
+    }
+}
+
 impl DataPlane {
     /// Sends one request the way a visitor would and returns the raw response.
     async fn request(&self, host: &str, extra_headers: &str) -> String {
-        let mut visitor = tokio::net::TcpStream::connect(("127.0.0.1", self.port))
-            .await
-            .expect("visitor connect");
+        // The listener is bound inside the spawned data-plane task, so retry the
+        // real connection instead of sleeping a fixed interval. A separate
+        // readiness probe is not usable here: the plane proxies to an upstream
+        // whose connection count these tests assert on, and a probe would be
+        // forwarded and inflate it.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut visitor = loop {
+            match tokio::net::TcpStream::connect(("127.0.0.1", self.port)).await {
+                Ok(stream) => break stream,
+                Err(error) if tokio::time::Instant::now() < deadline => {
+                    let _ = error;
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                Err(error) => panic!("cluster data plane never bound port {}: {error}", self.port),
+            }
+        };
         let request =
             format!("GET / HTTP/1.1\r\nHost: {host}\r\n{extra_headers}Connection: close\r\n\r\n");
         visitor
@@ -231,7 +259,6 @@ async fn spawn_data_plane(config: serde_json::Value) -> DataPlane {
         })
         .await
     });
-    tokio::time::sleep(Duration::from_millis(300)).await;
     DataPlane {
         port,
         overlay,
@@ -536,9 +563,7 @@ async fn websocket_upgrade_is_pumped_through_a_cluster_hop() {
     let plane = spawn_data_plane(app_config(available_port())).await;
     plane.publish(topology_of(vec![membership("node-ws", instance.address)]));
 
-    let mut visitor = tokio::net::TcpStream::connect(("127.0.0.1", plane.port))
-        .await
-        .expect("visitor connect");
+    let mut visitor = connect_when_ready(plane.port).await;
     let handshake = format!(
         "GET /socket HTTP/1.1\r\nHost: {SERVED_DOMAIN}\r\nConnection: keep-alive, Upgrade\r\n\
          Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\n\
