@@ -943,10 +943,33 @@ async fn raw_http_status(port: u16, request: &[u8]) -> u16 {
     raw_status_code(&response).expect("status line")
 }
 
+/// Connect to a data-plane listener that the spawned task has not bound yet.
+///
+/// `spawn_data_plane` returns as soon as the runtime task is scheduled; the
+/// listener socket is bound inside that task. A request-based test never
+/// notices because `wait_for_http` retries until the listener answers, but a
+/// raw-socket test connected immediately and took `ConnectionRefused` as a
+/// data-plane defect. Under the parallel packaging load on a hosted runner
+/// that race went red on every platform target while the retrying tests stayed
+/// green, so the wait belongs here rather than in each caller.
+async fn connect_raw(port: u16, expect_message: &str) -> tokio::net::TcpStream {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
+            Ok(stream) => return stream,
+            Err(error) => {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "{expect_message}: {error}"
+                );
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        }
+    }
+}
+
 async fn raw_http_response(port: u16, request: &[u8]) -> Vec<u8> {
-    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect raw HTTP client");
+    let mut stream = connect_raw(port, "connect raw HTTP client").await;
     stream.write_all(request).await.expect("write raw request");
     let mut response = Vec::new();
     timeout(Duration::from_secs(2), stream.read_to_end(&mut response))
@@ -1067,9 +1090,7 @@ fn raw_status_code(response: &[u8]) -> Option<u16> {
 }
 
 async fn assert_raw_request_rejected(port: u16, request: &[u8]) {
-    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect rejected raw HTTP client");
+    let mut stream = connect_raw(port, "connect rejected raw HTTP client").await;
     stream
         .write_all(request)
         .await
@@ -1126,9 +1147,7 @@ async fn connect_tls(
         .with_root_certificates(roots)
         .with_no_client_auth();
     tls_config.alpn_protocols = vec![alpn.to_vec()];
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect raw TLS client");
+    let tcp = connect_raw(port, "connect raw TLS client").await;
     let tls = TlsConnector::from(Arc::new(tls_config))
         .connect(
             ServerName::try_from("localhost".to_owned()).expect("valid DNS name"),
@@ -1460,9 +1479,7 @@ async fn streams_proxy_body_and_enforces_body_limit() {
     assert_eq!(echoed.status(), reqwest::StatusCode::OK);
     assert_eq!(echoed.text().await.expect("read echo"), "four");
 
-    let mut expecting = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect Expect proxy client");
+    let mut expecting = connect_raw(port, "connect Expect proxy client").await;
     expecting
         .write_all(
             b"POST /expect HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 4\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n",
@@ -2567,9 +2584,7 @@ async fn preserves_expect_continue_semantics_over_tls() {
         .with_root_certificates(roots)
         .with_no_client_auth();
     tls_config.alpn_protocols = vec![b"http/1.1".to_vec()];
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect raw TLS client");
+    let tcp = connect_raw(port, "connect raw TLS client").await;
     let mut tls = TlsConnector::from(Arc::new(tls_config))
         .connect(
             ServerName::try_from("localhost".to_owned()).expect("valid DNS name"),
@@ -2892,9 +2907,7 @@ async fn advertises_http2_stream_budget_and_rejects_oversized_header_lists() {
         .with_root_certificates(roots)
         .with_no_client_auth();
     tls_config.alpn_protocols = vec![b"h2".to_vec()];
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect HTTP/2 TLS client");
+    let tcp = connect_raw(port, "connect HTTP/2 TLS client").await;
     let tls = TlsConnector::from(Arc::new(tls_config))
         .connect(
             ServerName::try_from("localhost".to_owned()).expect("valid DNS name"),
@@ -3181,9 +3194,7 @@ async fn closes_overloaded_http1_connection_and_recovers_after_stream_completion
     )
     .await;
 
-    let mut held_stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect cancellable HTTP/1 client");
+    let mut held_stream = connect_raw(port, "connect cancellable HTTP/1 client").await;
     held_stream
         .write_all(b"GET /held HTTP/1.1\r\nHost: test.localhost\r\nConnection: close\r\n\r\n")
         .await
@@ -3266,9 +3277,7 @@ async fn times_out_idle_http1_response_body_and_releases_admission() {
     let base_url = format!("http://127.0.0.1:{port}");
     wait_for_http(&client, &format!("{base_url}/ready"), "test.localhost").await;
 
-    let mut held_stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect idle-response HTTP/1 client");
+    let mut held_stream = connect_raw(port, "connect idle-response HTTP/1 client").await;
     held_stream
         .write_all(b"GET /held HTTP/1.1\r\nHost: test.localhost\r\nConnection: close\r\n\r\n")
         .await
@@ -3435,9 +3444,7 @@ async fn closes_slow_reading_http1_client_at_connection_write_deadline() {
     let base_url = format!("http://127.0.0.1:{port}");
     wait_for_http(&client, &format!("{base_url}/ready"), "test.localhost").await;
 
-    let mut slow_client = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect slow-reading client");
+    let mut slow_client = connect_raw(port, "connect slow-reading client").await;
     slow_client
         .write_all(b"GET /large.bin HTTP/1.1\r\nHost: test.localhost\r\nConnection: close\r\n\r\n")
         .await
@@ -3889,9 +3896,7 @@ async fn maximum_connection_age_closes_http1_keep_alive_and_allows_a_fresh_conne
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
 
-    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect HTTP/1 maximum-age client");
+    let mut stream = connect_raw(port, "connect HTTP/1 maximum-age client").await;
     stream
         .write_all(b"GET / HTTP/1.1\r\nHost: test.localhost\r\n\r\n")
         .await
@@ -4100,9 +4105,7 @@ async fn forwards_and_bounds_http2_request_and_response_trailers() {
         .with_root_certificates(roots)
         .with_no_client_auth();
     tls_config.alpn_protocols = vec![b"h2".to_vec()];
-    let tcp = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect HTTP/2 TLS client");
+    let tcp = connect_raw(port, "connect HTTP/2 TLS client").await;
     let tls = TlsConnector::from(Arc::new(tls_config))
         .connect(
             ServerName::try_from("localhost".to_owned()).expect("valid DNS name"),
@@ -4598,9 +4601,7 @@ async fn closes_idle_http1_keep_alive_without_interrupting_active_upload() {
     drop(client);
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let mut idle = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect idle HTTP/1 client");
+    let mut idle = connect_raw(port, "connect idle HTTP/1 client").await;
     idle.write_all(
         b"GET / HTTP/1.1\r\nHost: test.localhost\r\n\r\nGET / HTTP/1.1\r\nHost: test.localhost\r\n\r\n",
     )
@@ -4623,9 +4624,7 @@ async fn closes_idle_http1_keep_alive_without_interrupting_active_upload() {
         result => panic!("idle HTTP/1 connection did not close at its deadline: {result:?}"),
     }
 
-    let mut uploading = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect slow upload client");
+    let mut uploading = connect_raw(port, "connect slow upload client").await;
     uploading
         .write_all(
             b"POST / HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 4\r\nConnection: close\r\n\r\na",
@@ -4669,9 +4668,7 @@ async fn http1_keep_alive_timeout_does_not_interrupt_streaming_response() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
 
-    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect streaming HTTP/1 client");
+    let mut stream = connect_raw(port, "connect streaming HTTP/1 client").await;
     stream
         .write_all(b"GET / HTTP/1.1\r\nHost: test.localhost\r\n\r\n")
         .await
@@ -4985,9 +4982,7 @@ async fn request_body_progress_timeouts_close_http1_and_allow_fresh_connections(
     )
     .await;
 
-    let mut missing = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect missing-Body client");
+    let mut missing = connect_raw(port, "connect missing-Body client").await;
     missing
         .write_all(b"POST / HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 4\r\n\r\n")
         .await
@@ -5005,9 +5000,7 @@ async fn request_body_progress_timeouts_close_http1_and_allow_fresh_connections(
         "HTTP/1 request Body timeout forces connection close"
     );
 
-    let mut stalled = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect stalled-Body client");
+    let mut stalled = connect_raw(port, "connect stalled-Body client").await;
     stalled
         .write_all(b"POST / HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 4\r\n\r\na")
         .await
@@ -5020,9 +5013,7 @@ async fn request_body_progress_timeouts_close_http1_and_allow_fresh_connections(
         .expect("read request Body idle timeout response");
     assert_eq!(raw_status_code(&response), Some(408));
 
-    let mut progressing = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect progressing-Body client");
+    let mut progressing = connect_raw(port, "connect progressing-Body client").await;
     progressing
         .write_all(b"POST / HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 4\r\nConnection: close\r\n\r\na")
         .await
@@ -5085,9 +5076,7 @@ async fn proxy_request_body_timeout_maps_to_408_instead_of_upstream_failure() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
 
-    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect proxy timeout client");
+    let mut stream = connect_raw(port, "connect proxy timeout client").await;
     stream
         .write_all(b"POST / HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 4\r\n\r\n")
         .await
@@ -5128,9 +5117,7 @@ async fn forwards_http1_early_responses_closes_uploads_and_avoids_upstream_pool_
     .await;
 
     for (index, status) in statuses.into_iter().enumerate() {
-        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
-            .await
-            .expect("connect early-response HTTP/1 client");
+        let mut stream = connect_raw(port, "connect early-response HTTP/1 client").await;
         let request = format!(
             "POST /early/{status} HTTP/1.1\r\nHost: test.localhost\r\nContent-Length: 100000\r\n\r\nseed"
         );
@@ -5692,9 +5679,7 @@ async fn enforces_http1_header_count_bytes_timeout_and_strict_framing() {
         "wire guard resets framing state for a pipelined request"
     );
 
-    let mut slow = tokio::net::TcpStream::connect(("127.0.0.1", port))
-        .await
-        .expect("connect slow HTTP client");
+    let mut slow = connect_raw(port, "connect slow HTTP client").await;
     slow.write_all(b"GET / HTTP/1.1\r\nHost: test.localhost\r\nX-Slow:")
         .await
         .expect("write incomplete headers");

@@ -120,3 +120,10 @@ deployments/docker/state/
 
 # Temporary local scripts (never commit)
 tmp_*.py
+
+# CI run-polling scratch: the poller itself plus the per-run result snapshots it
+# writes next to itself. `tmp_*.sh` above already covered the shell form, but the
+# JS poller and its `tmp_poll_<runid>.json` snapshots had no rule and showed up
+# as untracked on every watch run.
+tmp_poll*.js
+tmp_poll*.json
