@@ -165,7 +165,7 @@
       {
         "name": "Build workspace JS library packages (PC/H5 dependency chain)",
         "shell": "pwsh",
-        "run": "pnpm --filter \"@sdkwork/webserver-pc^...\" run --if-present build && pnpm --filter \"@sdkwork/webserver-h5^...\" run --if-present build"
+        "run": "pnpm --workspace-concurrency=1 --filter \"@sdkwork/webserver-pc^...\" run --if-present build && pnpm --workspace-concurrency=1 --filter \"@sdkwork/webserver-h5^...\" run --if-present build"
       }
     ],
     "package": [
