@@ -22,9 +22,11 @@ impl ServerFileApi {
     }
 
     /// Browse a deployment node directory
-    pub async fn server_files_node_directory_list(&self, node_id: &str, path: &str) -> Result<ServerDirectoryListing, SdkworkError> {
+    pub async fn server_files_node_directory_list(&self, node_id: &str, path: &str, page: Option<i64>, page_size: Option<i64>) -> Result<ServerDirectoryListing, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("path", path, "form", true, false, None),
+            QueryParameterSpec::new("page", page, "form", true, false, None),
+            QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
         ]);
         let path = append_query_string(backend_path(&format!("/server_files/nodes/{}/directory", serialize_path_parameter(node_id, PathParameterSpec::new("nodeId", "simple", false)))), &query);
         self.client.get(&path, None, None).await

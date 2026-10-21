@@ -15,9 +15,11 @@ class ServerFileApi(private val client: HttpClient) {
     }
 
     /** Browse a deployment node directory */
-    suspend fun serverFilesNodeDirectoryList(nodeId: String, path: String): ServerFilesNodeDirectoryListResponse? {
+    suspend fun serverFilesNodeDirectoryList(nodeId: String, path: String, page: Int? = null, pageSize: Int? = null): ServerFilesNodeDirectoryListResponse? {
         val query = buildQueryString(listOf(
-            QueryParameterSpec("path", path, "form", true, false, null)
+            QueryParameterSpec("path", path, "form", true, false, null),
+            QueryParameterSpec("page", page, "form", true, false, null),
+            QueryParameterSpec("page_size", pageSize, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/${serializePathParameter(nodeId, PathParameterSpec("nodeId", "simple", false))}/directory"), query))
         return client.convertValue(raw, object : TypeReference<ServerFilesNodeDirectoryListResponse>() {})

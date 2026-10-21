@@ -5584,6 +5584,7 @@
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-permission": "web.servers.files.read",
         "x-sdkwork-owner": "sdkwork-webserver",
+        "x-sdkwork-pagination-mode": "offset",
         "parameters": [
           {
             "name": "nodeId",
@@ -5601,6 +5602,12 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
           }
         ],
         "responses": {
@@ -12328,6 +12335,10 @@
             "type": "boolean",
             "default": false,
             "description": "True when the directory has more children than the deployment's maximumEntries cap; the listing is truncated."
+          },
+          "pageInfo": {
+            "$ref": "#/components/schemas/PageInfo",
+            "description": "Present only when page/pageSize were requested; omitted for the legacy whole-directory response."
           }
         }
       },

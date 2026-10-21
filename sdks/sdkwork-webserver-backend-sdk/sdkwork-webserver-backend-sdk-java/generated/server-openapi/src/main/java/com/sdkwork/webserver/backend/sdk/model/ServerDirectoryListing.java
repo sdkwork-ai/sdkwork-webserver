@@ -8,6 +8,7 @@ public class ServerDirectoryListing {
     private String parentPath;
     private List<ServerEntry> entries;
     private Boolean truncated;
+    private PageInfo pageInfo;
 
     public String getNodeId() {
         return this.nodeId;
@@ -47,5 +48,13 @@ public class ServerDirectoryListing {
 
     public void setTruncated(Boolean truncated) {
         this.truncated = truncated;
+    }
+
+    public PageInfo getPageInfo() {
+        return this.pageInfo;
+    }
+
+    public void setPageInfo(PageInfo pageInfo) {
+        this.pageInfo = pageInfo;
     }
 }

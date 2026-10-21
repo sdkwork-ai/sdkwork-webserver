@@ -80,11 +80,7 @@ pub struct DirectoryListing {
     pub truncated: bool,
     /// Present only when the caller requested `page`/`pageSize`; absent keeps
     /// the historical whole-directory listing.
-    #[serde(
-        rename = "pageInfo",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "pageInfo", default, skip_serializing_if = "Option::is_none")]
     pub page_info: Option<sdkwork_utils_rust::PageInfo>,
 }
 
@@ -431,5 +427,43 @@ mod sensitive_name_tests {
         ] {
             assert!(!is_sensitive_file_name(name), "{name} must be readable");
         }
+    }
+}
+
+#[cfg(test)]
+mod browse_page_tests {
+    use super::{ServerFilesService, ServerFilesServiceConfig};
+
+    #[tokio::test]
+    async fn browse_page_slices_entries_and_reports_offset_metadata() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            std::fs::write(directory.path().join(name), name).expect("write fixture");
+        }
+        let service = ServerFilesService::new(ServerFilesServiceConfig {
+            node_id: "node".to_string(),
+            filesystem_root: directory.path().to_string_lossy().into_owned(),
+            ..ServerFilesServiceConfig::default()
+        })
+        .expect("service");
+        let root = directory.path().to_string_lossy().into_owned();
+
+        let page = service
+            .browse_directory_page(&root, Some(2), Some(1))
+            .await
+            .expect("browse page");
+        assert_eq!(page.entries.len(), 1);
+        let info = page.page_info.expect("explicit page carries pageInfo");
+        assert_eq!(info.page, Some(2));
+        assert_eq!(info.page_size, Some(1));
+        assert_eq!(info.total_items.as_deref(), Some("3"));
+        assert_eq!(info.has_more, Some(true));
+
+        let whole = service
+            .browse_directory(&root)
+            .await
+            .expect("whole listing");
+        assert_eq!(whole.entries.len(), 3);
+        assert!(whole.page_info.is_none(), "legacy call keeps no pageInfo");
     }
 }

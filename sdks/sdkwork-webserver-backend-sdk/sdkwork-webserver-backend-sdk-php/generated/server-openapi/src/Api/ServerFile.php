@@ -22,11 +22,13 @@ final class ServerFileApi extends BaseApi
     }
 
     /** Browse a deployment node directory */
-    public function serverFilesNodeDirectoryList(string $nodeId, string $path_): ?ServerFilesNodeDirectoryListResponse
+    public function serverFilesNodeDirectoryList(string $nodeId, string $path_, ?int $page = null, ?int $pageSize = null): ?ServerFilesNodeDirectoryListResponse
     {
         $path = $this->interpolatePath('/backend/v3/api/server_files/nodes/{nodeId}/directory', ['nodeId' => $this->serializePathParameter($nodeId, new PathParameterSpec('nodeId', 'simple', false))]);
         $query = $this->buildQueryString([
             new QueryParameterSpec('path', $path_, 'form', true, false, null),
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
         ]);
         $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);

@@ -20,10 +20,12 @@ module Sdkwork
           end
 
           # Browse a deployment node directory
-          def server_files_node_directory_list(node_id, path_)
+          def server_files_node_directory_list(node_id, path_, page: nil, page_size: nil)
             path = interpolate_path('/backend/v3/api/server_files/nodes/{nodeId}/directory', nodeId: serialize_path_parameter(node_id, PathParameterSpec.new('nodeId', 'simple', false)))
             query = build_query_string([
               QueryParameterSpec.new('path', path_, 'form', true, false, nil),
+              QueryParameterSpec.new('page', page, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)
             options = {}

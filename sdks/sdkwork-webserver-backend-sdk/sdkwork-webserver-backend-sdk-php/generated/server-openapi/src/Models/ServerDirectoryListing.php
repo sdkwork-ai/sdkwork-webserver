@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace SDKWork\Webserver\BackendSdk\Models;
 
+use SDKWork\Webserver\BackendSdk\Models\PageInfo;
 use SDKWork\Webserver\BackendSdk\Models\ServerEntry;
 
 final class ServerDirectoryListing
@@ -18,6 +19,9 @@ final class ServerDirectoryListing
 
     /** True when the directory has more children than the deployment's maximumEntries cap; the listing is truncated. */
     public ?bool $truncated = null;
+
+    /** Present only when page/pageSize were requested; omitted for the legacy whole-directory response. */
+    public ?PageInfo $pageInfo = null;
 
     public function __construct(array $data = [])
     {
@@ -38,6 +42,9 @@ final class ServerDirectoryListing
         $this->truncated = array_key_exists('truncated', $data)
             ? $data['truncated']
             : null;
+        $this->pageInfo = array_key_exists('pageInfo', $data)
+            ? is_array($data['pageInfo']) ? PageInfo::fromArray($data['pageInfo']) : null
+            : null;
     }
 
     public static function fromArray(?array $data): ?self
@@ -53,6 +60,7 @@ final class ServerDirectoryListing
             'parentPath' => $this->parentPath,
             'entries' => array_values(array_map(static fn($item) => $item instanceof ServerEntry ? $item->toArray() : $item, $this->entries)),
             'truncated' => $this->truncated,
+            'pageInfo' => $this->pageInfo instanceof PageInfo ? $this->pageInfo->toArray() : $this->pageInfo,
         ];
     }
 }

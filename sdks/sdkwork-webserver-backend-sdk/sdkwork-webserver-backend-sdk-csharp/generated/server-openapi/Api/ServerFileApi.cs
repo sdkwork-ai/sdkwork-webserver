@@ -26,11 +26,13 @@ namespace SDKWork.WebserverBackendSdk.Api
         /// <summary>
         /// Browse a deployment node directory
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeDirectoryListResponse?> ServerFilesNodeDirectoryListAsync(string nodeId, string path)
+        public async Task<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeDirectoryListResponse?> ServerFilesNodeDirectoryListAsync(string nodeId, string path, int? page = null, int? pageSize = null)
         {
             var queryString = BuildQueryString(new[]
             {
                 new QueryParameterSpec("path", path, "form", true, false, null),
+                new QueryParameterSpec("page", page, "form", true, false, null),
+                new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             });
             return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ServerFilesNodeDirectoryListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/server_files/nodes/{SerializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false))}/directory"), queryString));
         }

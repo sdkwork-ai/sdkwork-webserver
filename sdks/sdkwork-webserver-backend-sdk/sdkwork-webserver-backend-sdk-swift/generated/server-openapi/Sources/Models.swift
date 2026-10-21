@@ -1560,14 +1560,16 @@ public struct ServerDirectoryListing: Codable {
     public let parentPath: String?
     public let entries: [ServerEntry]?
     public let truncated: Bool?
+    public let pageInfo: PageInfo?
 
 
-    public init(nodeId: String? = nil, path: String? = nil, parentPath: String? = nil, entries: [ServerEntry]? = nil, truncated: Bool? = nil) {
+    public init(nodeId: String? = nil, path: String? = nil, parentPath: String? = nil, entries: [ServerEntry]? = nil, truncated: Bool? = nil, pageInfo: PageInfo? = nil) {
         self.nodeId = nodeId
         self.path = path
         self.parentPath = parentPath
         self.entries = entries
         self.truncated = truncated
+        self.pageInfo = pageInfo
     }
 }
 

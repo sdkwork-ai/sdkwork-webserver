@@ -13,9 +13,11 @@ public class ServerFileApi {
     }
 
     /// Browse a deployment node directory
-    public func serverFilesNodeDirectoryList(nodeId: String, path: String) async throws -> ServerFilesNodeDirectoryListResponse? {
+    public func serverFilesNodeDirectoryList(nodeId: String, path: String, page: Int? = nil, pageSize: Int? = nil) async throws -> ServerFilesNodeDirectoryListResponse? {
         let query = buildQueryString([
-            QueryParameterSpec(name: "path", value: path, style: "form", explode: true, allowReserved: false, contentType: nil)
+            QueryParameterSpec(name: "path", value: path, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/\(serializePathParameter(nodeId, PathParameterSpec(name: "nodeId", style: "simple", explode: false)))/directory"), query), responseType: ServerFilesNodeDirectoryListResponse.self)
     }

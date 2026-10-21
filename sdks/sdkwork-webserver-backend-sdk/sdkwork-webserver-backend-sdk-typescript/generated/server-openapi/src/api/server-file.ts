@@ -46,6 +46,8 @@ export class ServerFileNodeFileApi {
 
 export interface ServerFileNodeDirectoryListParams {
   path: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export class ServerFileNodeDirectoryApi {
@@ -60,6 +62,8 @@ export class ServerFileNodeDirectoryApi {
   async list(nodeId: string, params: ServerFileNodeDirectoryListParams, requestOptions?: ApiRequestOptions): Promise<ServerDirectoryListing> {
     const query = buildQueryString([
       { name: 'path', value: params.path, style: 'form', explode: true, allowReserved: false },
+      { name: 'page', value: params.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params.pageSize, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<ServerDirectoryListing>(appendQueryString(backendApiPath(`/server_files/nodes/${serializePathParameter(nodeId, { name: 'nodeId', style: 'simple', explode: false })}/directory`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
   }

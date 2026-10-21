@@ -213,10 +213,12 @@ class ServerFileNodeDirectoryApi:
         self._client = client
 
 
-    def list(self, node_id: str, path: str) -> ServerFilesNodeDirectoryListResponse:
+    def list(self, node_id: str, path: str, page: Optional[int] = None, page_size: Optional[int] = None) -> ServerFilesNodeDirectoryListResponse:
         """Browse a deployment node directory"""
         query = build_query_string([
             {'name': 'path', 'value': path, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
         ])
         return self._client.get(_append_query_string(f"/backend/v3/api/server_files/nodes/{serialize_path_parameter(node_id, {'name': 'nodeId', 'style': 'simple', 'explode': False})}/directory", query))
 

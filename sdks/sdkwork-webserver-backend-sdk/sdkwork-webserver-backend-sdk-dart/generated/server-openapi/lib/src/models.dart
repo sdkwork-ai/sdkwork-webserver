@@ -3556,13 +3556,15 @@ class ServerDirectoryListing {
   final String? parentPath;
   final List<ServerEntry>? entries;
   final bool? truncated;
+  final PageInfo? pageInfo;
 
   ServerDirectoryListing({
     this.nodeId,
     this.path,
     this.parentPath,
     this.entries,
-    this.truncated
+    this.truncated,
+    this.pageInfo
   });
 
   factory ServerDirectoryListing.fromJson(Map<String, dynamic> json) {
@@ -3583,7 +3585,11 @@ class ServerDirectoryListing {
             .whereType<ServerEntry>()
             .toList();
       })(),
-      truncated: json['truncated'] is bool ? json['truncated'] : null
+      truncated: json['truncated'] is bool ? json['truncated'] : null,
+      pageInfo: (() {
+        final map = _sdkworkAsMap(json['pageInfo']);
+        return map == null ? null : PageInfo.fromJson(map);
+      })()
     );
   }
 
@@ -3594,6 +3600,7 @@ class ServerDirectoryListing {
       'parentPath': parentPath,
       'entries': entries?.map((item) => item.toJson()).toList(),
       'truncated': truncated,
+      'pageInfo': pageInfo?.toJson(),
     };
   }
 }

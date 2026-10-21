@@ -257,7 +257,7 @@ DDL/迁移/仓储，也没有任何文档声称 Web Server 支持 SQLite。**Pos
 | A3 | 游标首页不可续页（同 P0-4） | repo/response/routes | **已修复** |
 | A4 | `tunnelMachines.list` 无分页、返回 `data.item.machines` 而非 `data.items+pageInfo`，上限 10k；PC 端伪造 `pageInfo` | `openapi.yaml:3834-3874`；`tunnel/service/mod.rs:274-282`；`pc-admin-core/src/index.tsx:177-187` | **部分修复**：列表新增 `page`/`pageSize` 与真实 `pageInfo`（offset、total、hasMore），PC 改为消费服务端 `pageInfo`；仍保留 `data.item.machines` 包装（改 `data.items` 是 breaking，需 v2） |
 | A5 | certificates 已声明 cursor，但首页返回 `mode:"offset"`（客户端按 mode 分支会去请求被拒绝的 `page=2`） | `openapi.yaml:1825-1830`；`response.rs:259-280` | **已修复**：所有页统一 `mode:"cursor"`，首页保留 `totalItems`，续页省略；OpenAPI 描述同步 |
-| A6 | server-files 目录列表最多 4096 条、无分页/`pageInfo`/≤100 例外 | `openapi.yaml`；`server-files-service/src/service.rs:32,181-184` | **部分修复**：目录列表新增 `truncated` 标志（第 4097 条探测），截断不再静默；仍无 `page`/`pageInfo`，分页需与 UI 同步设计 |
+| A6 | server-files 目录列表最多 4096 条、无分页/`pageInfo`/≤100 例外 | `openapi.yaml`；`server-files-service/src/service.rs:32,181-184` | **已修复（可选分页）**：保留 `truncated`；新增可选 `page`/`pageSize` 与 `pageInfo`（offset，截断时省略不可知总数、`hasMore=true`）。省略分页参数时保持旧的整目录响应 |
 | A7 | webserver config catalog 最多 4096 条、无分页 | `openapi.yaml`；`config-service/src/service.rs:46,56,258` | **已修复（可选分页）**：catalog 继续返回 `truncated`；新增可选 `page`/`pageSize` 与 `pageInfo`（offset，totalItems/totalPages 仅在未截断时给出，`hasMore` 覆盖截断）。**省略分页参数时保持旧的整目录响应**，不破坏既有客户端 |
 | A8 | `{domainId}` 路径参数声明为 `name: domain_id`，OpenAPI 模板非法，SDK 接受 `string|number` | `openapi.yaml:385,4782-4788`；生成的 `domain.ts:24` | **已修复**：`DomainIdParam` 改为 `name: domainId`，重新物化并再生成 14 个 SDK 目标 |
 | A9 | 集群实例列表用 `search` 而非规范要求的 `q` | `openapi.yaml:3599-3604`；`cluster_routes.rs:67-69` | **已修复**：契约、路由反序列化字段、SDK 全部改为 `q` |
@@ -1377,6 +1377,19 @@ p99 ~3.6 ms、10 分钟 soak 24,549,146 请求 0 失败、10k 路由 33 ms、15k
 - 新增单测 `catalog_page_slices_with_offset_metadata`：3 个文件、page=2/size=1 时
   `totalItems=3`、`hasMore=true`，末页 `hasMore=false`；config-service **9 passed**。
 - 验证：api operation patterns、pagination、fmt、workspace check、8-crate clippy 全绿。
+
+## 84. 第七十四轮：server-files 目录可选分页（A6 收口）（2026-10-21）
+
+- `DirectoryListing` 增加可选 `pageInfo`；`browse_directory_page(path, page, page_size)` 对已按
+  `maximumEntries` 截断的条目做 offset 切片；`browse_directory(path)` 保持旧的整目录行为。
+- 路由 `GET /backend/v3/api/server_files/nodes/{nodeId}/directory` 接受可选 `page`/`page_size`；
+  OpenAPI 加标准分页参数与 `x-sdkwork-pagination-mode: offset`，14 个 SDK target 重新生成。
+- 语义与 catalog 一致：未截断时给出精确总数；截断时省略精确总数、`hasMore=true`。
+- 新增单测 `browse_page_slices_entries_and_reports_offset_metadata`：3 个文件、page=2/size=1 →
+  1 条、totalItems=3、hasMore=true；旧调用无 `pageInfo`。server-files **19 + 7 passed**。
+- 验证：workspace check、fmt、8-crate clippy、routes lib 14/14、API operation patterns、
+  pagination 全部通过。
+
 
 
 

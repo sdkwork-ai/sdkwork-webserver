@@ -20,9 +20,11 @@ public class ServerFileApi {
     }
 
     /** Browse a deployment node directory */
-    public ServerFilesNodeDirectoryListResponse serverFilesNodeDirectoryList(String nodeId, String path) throws Exception {
+    public ServerFilesNodeDirectoryListResponse serverFilesNodeDirectoryList(String nodeId, String path, Integer page, Integer pageSize) throws Exception {
         String query = buildQueryString(List.of(
-            new QueryParameterSpec("path", path, "form", true, false, null)
+            new QueryParameterSpec("path", path, "form", true, false, null),
+            new QueryParameterSpec("page", page, "form", true, false, null),
+            new QueryParameterSpec("page_size", pageSize, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/server_files/nodes/" + serializePathParameter(nodeId, new PathParameterSpec("nodeId", "simple", false)) + "/directory"), query));
         return client.convertValue(raw, new TypeReference<ServerFilesNodeDirectoryListResponse>() {});

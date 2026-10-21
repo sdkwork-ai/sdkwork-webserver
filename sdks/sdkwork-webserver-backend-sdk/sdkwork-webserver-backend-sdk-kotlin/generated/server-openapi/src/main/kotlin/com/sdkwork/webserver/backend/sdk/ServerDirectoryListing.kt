@@ -5,5 +5,6 @@ data class ServerDirectoryListing(
     val path: String? = null,
     val parentPath: String? = null,
     val entries: List<ServerEntry>? = null,
-    val truncated: Boolean? = null
+    val truncated: Boolean? = null,
+    val pageInfo: PageInfo? = null
 )

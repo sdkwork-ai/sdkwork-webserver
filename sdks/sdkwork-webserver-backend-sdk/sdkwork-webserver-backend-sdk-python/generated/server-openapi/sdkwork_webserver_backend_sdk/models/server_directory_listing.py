@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
 if TYPE_CHECKING:
+    from .page_info import PageInfo
     from .server_entry import ServerEntry
 
 
@@ -13,3 +14,4 @@ class ServerDirectoryListing:
     parent_path: Optional[str]
     entries: List[ServerEntry]
     truncated: Optional[bool] = None
+    page_info: Optional[PageInfo] = None

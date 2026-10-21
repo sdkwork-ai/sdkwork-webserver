@@ -28,9 +28,11 @@ func (a *ServerFileApi) ServerFilesNodesList() (sdktypes.ServerFilesNodesListRes
 }
 
 // Browse a deployment node directory
-func (a *ServerFileApi) ServerFilesNodeDirectoryList(nodeId string, path string) (sdktypes.ServerFilesNodeDirectoryListResponse, error) {
+func (a *ServerFileApi) ServerFilesNodeDirectoryList(nodeId string, path string, page *int, pageSize *int) (sdktypes.ServerFilesNodeDirectoryListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "path", Value: path, Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/server_files/nodes/%s/directory", SerializePathParameter(nodeId, PathParameterSpec{Name: "nodeId", Style: "simple", Explode: false}))), query), nil, nil)
     if err != nil {

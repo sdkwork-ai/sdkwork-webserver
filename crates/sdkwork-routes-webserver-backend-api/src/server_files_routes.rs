@@ -661,6 +661,8 @@ mod tests {
             Path("local".to_owned()),
             Query(PathQuery {
                 path: root.to_string_lossy().into_owned(),
+                page: None,
+                page_size: None,
             }),
         )
         .await
@@ -698,6 +700,8 @@ mod tests {
             Path("local".to_owned()),
             Query(PathQuery {
                 path: "/".to_owned(),
+                page: None,
+                page_size: None,
             }),
         )
         .await

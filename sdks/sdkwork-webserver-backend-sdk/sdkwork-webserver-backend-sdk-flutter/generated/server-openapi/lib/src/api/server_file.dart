@@ -21,9 +21,11 @@ class ServerFileApi {
   }
 
   /// Browse a deployment node directory
-  Future<ServerFilesNodeDirectoryListResponse?> serverFilesNodeDirectoryList(String nodeId, String path) async {
+  Future<ServerFilesNodeDirectoryListResponse?> serverFilesNodeDirectoryList(String nodeId, String path, [int? page, int? pageSize]) async {
     final query = buildQueryString([
-      QueryParameterSpec('path', path, 'form', true, false, null)
+      QueryParameterSpec('path', path, 'form', true, false, null),
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/server_files/nodes/${serializePathParameter(nodeId, const PathParameterSpec('nodeId', 'simple', false))}/directory'), query));
     return (() {
