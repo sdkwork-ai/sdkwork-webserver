@@ -129,11 +129,7 @@ pub struct WebserverConfigCatalog {
     pub truncated: bool,
     /// Present only when the caller requested a page; absent keeps the
     /// historical “whole catalog” response.
-    #[serde(
-        rename = "pageInfo",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "pageInfo", default, skip_serializing_if = "Option::is_none")]
     pub page_info: Option<sdkwork_utils_rust::PageInfo>,
 }
 

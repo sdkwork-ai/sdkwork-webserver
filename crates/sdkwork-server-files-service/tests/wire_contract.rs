@@ -25,6 +25,7 @@ fn directory_listing_uses_the_openapi_camel_case_contract() {
         parent_path: Some("/opt".to_owned()),
         entries: Vec::new(),
         truncated: true,
+        page_info: None,
     };
     let value = serde_json::to_value(&listing).unwrap();
 

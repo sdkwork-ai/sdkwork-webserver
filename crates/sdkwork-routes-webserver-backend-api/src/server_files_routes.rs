@@ -153,6 +153,8 @@ async fn list_nodes(
 #[derive(Debug, Deserialize)]
 struct PathQuery {
     path: String,
+    page: Option<i32>,
+    page_size: Option<i32>,
 }
 
 async fn browse_node_directory(
@@ -164,7 +166,7 @@ async fn browse_node_directory(
     require_read(context).await?;
     let service = service_for(state, &node_id)?;
     let listing = service
-        .browse_directory(&query.path)
+        .browse_directory_page(&query.path, query.page, query.page_size)
         .await
         .map_err(browse_directory_error)?;
     Ok(ok_json(&listing))

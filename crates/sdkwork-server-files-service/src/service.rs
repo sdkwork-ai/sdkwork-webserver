@@ -78,6 +78,14 @@ pub struct DirectoryListing {
     /// complete listing from a truncated one.
     #[serde(default)]
     pub truncated: bool,
+    /// Present only when the caller requested `page`/`pageSize`; absent keeps
+    /// the historical whole-directory listing.
+    #[serde(
+        rename = "pageInfo",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub page_info: Option<sdkwork_utils_rust::PageInfo>,
 }
 
 /// A file content response.
@@ -157,6 +165,20 @@ impl ServerFilesService {
     pub async fn browse_directory(
         &self,
         requested_path: &str,
+    ) -> Result<DirectoryListing, BrowseDirectoryError> {
+        self.browse_directory_page(requested_path, None, None).await
+    }
+
+    /// List a directory, optionally over one offset page.
+    ///
+    /// `None`/`None` keeps the historical whole-directory response. The
+    /// enumeration is still capped by `maximumEntries`; a caller that pages
+    /// past the cap sees `truncated`/`hasMore` rather than an invented total.
+    pub async fn browse_directory_page(
+        &self,
+        requested_path: &str,
+        page: Option<i32>,
+        page_size: Option<i32>,
     ) -> Result<DirectoryListing, BrowseDirectoryError> {
         let resolved = self.contained_path(requested_path)?;
         let parent_path = resolved.parent().map(display_path);
@@ -259,12 +281,43 @@ impl ServerFilesService {
             return Err(BrowseDirectoryError::io(&error));
         }
 
+        let (page_info, entries) = match (page, page_size) {
+            (None, None) => (None, entries),
+            (page, page_size) => {
+                let page = page.unwrap_or(1).max(1);
+                let page_size = page_size.unwrap_or(200).clamp(1, 200);
+                let total = entries.len();
+                let offset = usize::try_from(page - 1)
+                    .unwrap_or(usize::MAX)
+                    .saturating_mul(usize::try_from(page_size).unwrap_or(usize::MAX));
+                let entries = entries
+                    .into_iter()
+                    .skip(offset)
+                    .take(usize::try_from(page_size).unwrap_or(usize::MAX))
+                    .collect::<Vec<_>>();
+                let total_pages = total.div_ceil(usize::try_from(page_size).unwrap_or(1));
+                let page_info = sdkwork_utils_rust::PageInfo {
+                    mode: sdkwork_utils_rust::PageMode::Offset,
+                    page: Some(page),
+                    page_size: Some(page_size),
+                    total_items: (!truncated).then(|| total.to_string()),
+                    total_pages: (!truncated)
+                        .then(|| i32::try_from(total_pages).ok())
+                        .flatten(),
+                    next_cursor: None,
+                    has_more: Some(truncated || offset.saturating_add(entries.len()) < total),
+                };
+                (Some(page_info), entries)
+            }
+        };
+
         Ok(DirectoryListing {
             node_id: self.config.node_id.clone(),
             path: display_path(&resolved),
             parent_path,
             entries,
             truncated,
+            page_info,
         })
     }
 
