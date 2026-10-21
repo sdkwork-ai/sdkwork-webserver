@@ -42,6 +42,7 @@ client.set_header('X-Custom-Header', 'value')
 ## API Modules
 
 - `client.application` - application API
+- `client.plugin` - plugin API
 - `client.application_domain` - application_domain API
 - `client.certificate` - certificate API
 - `client.domain` - domain API
@@ -67,6 +68,15 @@ client.set_header('X-Custom-Header', 'value')
 # List managed applications
 params = { 'page' => 1, 'page_size' => 2, 'application_type' => 'WEB', 'site_type' => 4, 'status' => 5, 'q' => 'q' }
 result = client.application.applications_list(params: params)
+puts result.inspect
+```
+
+### plugin
+
+```ruby
+# List the caller's plugin catalog
+params = { 'page' => 1, 'page_size' => 2, 'status' => 'draft', 'q' => 'q', 'owner_id' => '1' }
+result = client.plugin.plugins_list(params: params)
 puts result.inspect
 ```
 
@@ -156,7 +166,8 @@ puts result.inspect
 
 ```ruby
 # List the managed Web Server configuration catalog
-result = client.webserver_config.webserver_configs_list()
+params = { 'page' => 1, 'page_size' => 2 }
+result = client.webserver_config.webserver_configs_list(params: params)
 puts result.inspect
 ```
 
@@ -190,7 +201,8 @@ puts result.inspect
 
 ```ruby
 # List the tunnel connector machines this gateway manages
-result = client.tunnel.machines_list()
+params = { 'page' => 1, 'page_size' => 2 }
+result = client.tunnel.machines_list(params: params)
 puts result.inspect
 ```
 

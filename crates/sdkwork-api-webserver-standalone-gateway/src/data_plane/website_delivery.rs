@@ -317,7 +317,7 @@ fn classify_client(
                 Some(WebsiteClientClassificationSource::Bot),
             ));
         }
-        if is_tv_user_agent(&lower) {
+        if is_tv_user_agent(lower) {
             return Ok((
                 Some(WebsiteClientClass::Tv),
                 Some(WebsiteClientClassificationSource::UserAgent),
@@ -357,10 +357,7 @@ fn classify_client(
         ));
     }
     // Shared Adaptive Web mobile UA regex (SDKWORK_DEPLOY_SPEC.md §8).
-    if user_agent
-        .as_deref()
-        .is_some_and(matches_adaptive_mobile_user_agent)
-    {
+    if user_agent.is_some_and(matches_adaptive_mobile_user_agent) {
         return Ok((
             Some(WebsiteClientClass::Mobile),
             Some(WebsiteClientClassificationSource::UserAgent),

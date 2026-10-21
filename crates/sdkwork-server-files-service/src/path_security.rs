@@ -266,7 +266,7 @@ pub fn is_sensitive_file_name(file_name: &str) -> bool {
         .is_some_and(|(_, extension)| sensitive_extensions.contains(&extension))
         || sensitive_names
             .iter()
-            .any(|sensitive| name.starts_with(&format!("{sensitive}")))
+            .any(|sensitive| name.starts_with(sensitive))
 }
 
 #[cfg(test)]

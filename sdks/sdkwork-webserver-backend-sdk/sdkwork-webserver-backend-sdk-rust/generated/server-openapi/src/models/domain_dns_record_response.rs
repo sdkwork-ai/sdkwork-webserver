@@ -8,14 +8,14 @@ pub struct DomainDnsRecordResponse {
     #[serde(rename = "recordName")]
     pub record_name: String,
 
-    /// Zone-relative 主机记录 (`@` for the apex, `www`, `*`).
+    /// Zone-relative record owner (`@` for the apex, `www`, `*`).
     pub host: String,
 
     /// Record type as the provider spells it (A, AAAA, CNAME, TXT, MX).
     #[serde(rename = "recordType")]
     pub record_type: String,
 
-    /// Record content — the resolution IP for A/AAAA, the target for CNAME/MX.
+    /// Record content - the resolution IP for A/AAAA, the target for CNAME/MX.
     #[serde(rename = "recordValue")]
     pub record_value: String,
 

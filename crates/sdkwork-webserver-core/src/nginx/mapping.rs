@@ -46,7 +46,6 @@ use crate::config::{
 use super::parser::NginxDirective;
 
 const ACCEPTED_IGNORED: &[&str] = &[
-    // process / http tuning (gzip / limit_req_zone / proxy_cache* are handled explicitly)
     "user",
     "worker_processes",
     "worker_rlimit_nofile",
@@ -205,6 +204,39 @@ const ACCEPTED_IGNORED: &[&str] = &[
 ];
 
 const UNSUPPORTED_SECURITY: &[&str] = &[];
+
+/// One explicit compatibility diagnostic per imported directive the runtime
+/// accepts but does not enforce.
+///
+/// PRD §3 and §9 require that no unsupported nginx directive is *silently*
+/// accepted. The migration importer keeps accepting the tuning/behaviour
+/// directives an operator's stock configuration contains, but every such
+/// directive now surfaces a diagnostic with its source location and the reason
+/// its value has no effect, so a migration review can decide whether the
+/// equivalent SDKWork setting must be configured explicitly.
+pub(crate) fn ignored_directive_diagnostics(
+    directives: &[NginxDirective],
+) -> Vec<ConfigDiagnostic> {
+    fn walk(directives: &[NginxDirective], out: &mut Vec<ConfigDiagnostic>) {
+        for directive in directives {
+            if ACCEPTED_IGNORED.contains(&directive.name.as_str()) {
+                out.push(ConfigDiagnostic::new(
+                    format!("{}:{}", directive.source.display(), directive.line),
+                    format!(
+                        "`{}` is accepted for nginx compatibility but is not enforced by the \
+                         SDKWork runtime; the imported value has no effect and the equivalent \
+                         runtime setting must be configured explicitly",
+                        directive.name
+                    ),
+                ));
+            }
+            walk(&directive.children, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(directives, &mut out);
+    out
+}
 
 #[derive(Debug, Error)]
 pub enum NginxConfigError {
@@ -1130,7 +1162,7 @@ impl<'a> Mapper<'a> {
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
-                    if child.args.first().is_none() {
+                    if child.args.is_empty() {
                         return Err(NginxConfigError::unsupported(
                             child,
                             "listen requires an address",
@@ -1859,6 +1891,7 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn materialize_location(
         &mut self,
         location: &NginxDirective,
@@ -2348,9 +2381,7 @@ impl<'a> Mapper<'a> {
         {
             return Err(NginxConfigError::unsupported(
                 location,
-                format!(
-                    "try_files `@named` dispatch cannot be combined with proxy_pass | return | root | alias; the runtime only supports Adaptive Web dispatch on a location with no other serving behavior"
-                ),
+                "try_files `@named` dispatch cannot be combined with proxy_pass | return | root | alias; the runtime only supports Adaptive Web dispatch on a location with no other serving behavior".to_string(),
             ));
         }
         self.note_client_max_body_size(client_max_body_size);
@@ -3101,7 +3132,7 @@ impl<'a> Mapper<'a> {
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
-                    if child.args.first().is_none() {
+                    if child.args.is_empty() {
                         return Err(NginxConfigError::unsupported(
                             child,
                             "stream listen requires an address",

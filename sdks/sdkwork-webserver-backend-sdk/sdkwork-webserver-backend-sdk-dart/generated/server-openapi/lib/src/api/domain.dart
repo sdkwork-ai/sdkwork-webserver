@@ -183,6 +183,45 @@ class DomainApi {
     })();
   }
 
+  /// Read the root domain's WeChat MP domain-ownership verification file
+  Future<RootDomainsWechatVerificationRetrieveResponse?> rootDomainsWechatVerificationRetrieve(String rootDomainId) async {
+    final response = await _client.get(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsWechatVerificationRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Upload (or wholly replace) the root domain's WeChat verification file
+  Future<RootDomainsWechatVerificationUpdateResponse?> rootDomainsWechatVerificationUpdate(String rootDomainId, UpsertDomainWechatVerificationRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsWechatVerificationUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// Delete the root domain's WeChat verification file
+  Future<void> rootDomainsWechatVerificationDelete(String rootDomainId) async {
+    await _client.delete(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file'));
+  }
+
+  /// Self-check the root domain's WeChat verification file
+  Future<RootDomainsWechatVerificationCheckResponse?> rootDomainsWechatVerificationCheck(String rootDomainId) async {
+    final response = await _client.post(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file/check'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : RootDomainsWechatVerificationCheckResponse.fromJson(map);
+    })();
+  }
+
   /// Sync a root-domain Zone's resolution records through its cloud account
   Future<RootDomainsDnsRecordsSyncResponse?> rootDomainsDnsRecordsSync(String rootDomainId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
@@ -224,6 +263,15 @@ class DomainApi {
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : DomainsCreateResponse201.fromJson(map);
+    })();
+  }
+
+  /// Retrieve one tenant custom domain asset
+  Future<DomainsRetrieveResponse?> domainsRetrieve(String domainId) async {
+    final response = await _client.get(ApiPaths.backendPath('/domains/${serializePathParameter(domainId, const PathParameterSpec('domainId', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DomainsRetrieveResponse.fromJson(map);
     })();
   }
 

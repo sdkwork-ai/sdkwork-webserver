@@ -17,6 +17,36 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     ).with_required_permission("web.applications.write").with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/backend/v3/api/plugins",
+        "plugin",
+        "plugins.list",
+    ).with_required_permission("web.plugins.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/plugins",
+        "plugin",
+        "plugins.create",
+    ).with_required_permission("web.plugins.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/plugins/{pluginId}",
+        "plugin",
+        "plugins.retrieve",
+    ).with_required_permission("web.plugins.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/backend/v3/api/plugins/{pluginId}",
+        "plugin",
+        "plugins.update",
+    ).with_required_permission("web.plugins.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/backend/v3/api/plugins/{pluginId}",
+        "plugin",
+        "plugins.delete",
+    ).with_required_permission("web.plugins.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/backend/v3/api/applications/{applicationId}",
         "application",
         "applications.retrieve",
@@ -169,7 +199,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         HttpMethod::Put,
         "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
         "domain",
-        "rootDomains.wechatVerification.upsert",
+        "rootDomains.wechatVerification.update",
     ).with_required_permission("web.applications.write").with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
@@ -201,6 +231,12 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "domain",
         "domains.create",
     ).with_required_permission("web.applications.write").with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/domains/{domainId}",
+        "domain",
+        "domains.retrieve",
+    ).with_required_permission("web.applications.read"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/domains/{domainId}",
@@ -345,6 +381,24 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "nginx",
         "configs.deploy",
     ).with_required_permission("web.nginx.write").with_idempotent(true).with_rate_limit_tier(RateLimitTier::AuthCritical),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/nginx/etc/{configId}/revisions",
+        "nginx",
+        "configs.revisions.list",
+    ).with_required_permission("web.nginx.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}",
+        "nginx",
+        "configs.revisions.retrieve",
+    ).with_required_permission("web.nginx.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}/rollback",
+        "nginx",
+        "configs.revisions.rollback",
+    ).with_required_permission("web.nginx.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/nginx/reload",

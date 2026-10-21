@@ -266,5 +266,20 @@
         "binary": "sdkwork-webserver-website-delivery-edge-runtime"
       }
     ]
+  },
+  "verification": {
+    "commands": [
+      "pnpm check:app-composition",
+      "pnpm check:composable-architecture",
+      "pnpm check:api-assembly-closure",
+      "pnpm api:check",
+      "pnpm sdk:check",
+      "cargo test --workspace --no-fail-fast",
+      "cargo test -p sdkwork-intelligence-webserver-repository-sqlx --test repository_parity -- --ignored"
+    ]
+  },
+  "metadata": {
+    "standardVersion": "2026-10-21",
+    "status": "active"
   }
 }

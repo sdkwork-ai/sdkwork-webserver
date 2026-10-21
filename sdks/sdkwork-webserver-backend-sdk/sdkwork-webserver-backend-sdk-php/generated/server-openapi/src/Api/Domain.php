@@ -12,6 +12,7 @@ use SDKWork\Webserver\BackendSdk\Models\DomainDnsRecordStatusRequest;
 use SDKWork\Webserver\BackendSdk\Models\DomainsApplicationBindingUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\DomainsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\DomainsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\DomainsRetrieveResponse;
 use SDKWork\Webserver\BackendSdk\Models\DomainsVerifyResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsDnsRecordsCreateResponse201;
@@ -24,9 +25,13 @@ use SDKWork\Webserver\BackendSdk\Models\RootDomainsRetrieveResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsSubdomainsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\RootDomainsUpdateResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsWechatVerificationCheckResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsWechatVerificationRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\RootDomainsWechatVerificationUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\UpdateDomainApplicationBindingRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateDomainDnsRecordRequest;
 use SDKWork\Webserver\BackendSdk\Models\UpdateRootDomainRequest;
+use SDKWork\Webserver\BackendSdk\Models\UpsertDomainWechatVerificationRequest;
 
 final class DomainApi extends BaseApi
 {
@@ -223,6 +228,48 @@ final class DomainApi extends BaseApi
         return is_array($result) ? RootDomainsDnsRecordsStatusUpdateResponse::fromArray($result) : null;
     }
 
+    /** Read the root domain's WeChat MP domain-ownership verification file */
+    public function rootDomainsWechatVerificationRetrieve(string $rootDomainId): ?RootDomainsWechatVerificationRetrieveResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/verification_file', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? RootDomainsWechatVerificationRetrieveResponse::fromArray($result) : null;
+    }
+
+    /** Upload (or wholly replace) the root domain's WeChat verification file */
+    public function rootDomainsWechatVerificationUpdate(string $rootDomainId, array|UpsertDomainWechatVerificationRequest $body, string $idempotencyKey): ?RootDomainsWechatVerificationUpdateResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/verification_file', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $payload = $body instanceof UpsertDomainWechatVerificationRequest ? $body->toArray() : $body;
+        $requestHeaders = $this->buildRequestHeaders(
+            [
+                'Idempotency-Key' => new HeaderParameterSpec($idempotencyKey, 'simple', false, null),
+            ],
+            []
+        );
+        $result = $this->client->request('PUT', $path, [
+            'headers' => $requestHeaders,
+            'json' => $payload,
+        ]);
+        return is_array($result) ? RootDomainsWechatVerificationUpdateResponse::fromArray($result) : null;
+    }
+
+    /** Delete the root domain's WeChat verification file */
+    public function rootDomainsWechatVerificationDelete(string $rootDomainId): mixed
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/verification_file', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $result = $this->client->request('DELETE', $path, []);
+        return $result;
+    }
+
+    /** Self-check the root domain's WeChat verification file */
+    public function rootDomainsWechatVerificationCheck(string $rootDomainId): ?RootDomainsWechatVerificationCheckResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/root_domains/{rootDomainId}/verification_file/check', ['rootDomainId' => $this->serializePathParameter($rootDomainId, new PathParameterSpec('rootDomainId', 'simple', false))]);
+        $result = $this->client->request('POST', $path, []);
+        return is_array($result) ? RootDomainsWechatVerificationCheckResponse::fromArray($result) : null;
+    }
+
     /** Sync a root-domain Zone's resolution records through its cloud account */
     public function rootDomainsDnsRecordsSync(string $rootDomainId, string $idempotencyKey): ?RootDomainsDnsRecordsSyncResponse
     {
@@ -268,6 +315,14 @@ final class DomainApi extends BaseApi
             'json' => $payload,
         ]);
         return is_array($result) ? DomainsCreateResponse201::fromArray($result) : null;
+    }
+
+    /** Retrieve one tenant custom domain asset */
+    public function domainsRetrieve(string $domainId): ?DomainsRetrieveResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/domains/{domainId}', ['domainId' => $this->serializePathParameter($domainId, new PathParameterSpec('domainId', 'simple', false))]);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? DomainsRetrieveResponse::fromArray($result) : null;
     }
 
     /** Delete an unbound tenant custom domain asset */

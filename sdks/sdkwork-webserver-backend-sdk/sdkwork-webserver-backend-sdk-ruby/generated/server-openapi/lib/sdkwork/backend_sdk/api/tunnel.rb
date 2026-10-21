@@ -11,8 +11,13 @@ module Sdkwork
     module Api
       class TunnelApi < BaseApi
           # List the tunnel connector machines this gateway manages
-          def machines_list()
+          def machines_list(page: nil, page_size: nil)
             path = '/backend/v3/api/tunnel_machines'
+            query = build_query_string([
+              QueryParameterSpec.new('page', page, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+            ])
+            path = append_query_string(path, query)
             options = {}
 
             result = @client.request('GET', path, **options)

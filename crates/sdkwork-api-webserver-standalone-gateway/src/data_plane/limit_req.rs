@@ -16,6 +16,9 @@ struct ZoneState {
     max_keys: u32,
     rate_per_second: f64,
     entries: HashMap<IpAddr, Bucket>,
+    /// Last full-zone idle scan, so a saturated zone does not run an O(n)
+    /// `retain` on every new key.
+    last_reap: Option<Instant>,
 }
 
 struct Bucket {
@@ -40,6 +43,7 @@ impl LimitReqRuntime {
                     max_keys: zone.max_keys.max(1),
                     rate_per_second: zone.rate_per_second.max(f64::MIN_POSITIVE),
                     entries: HashMap::new(),
+                    last_reap: None,
                 }),
             );
         }
@@ -74,8 +78,22 @@ impl ZoneState {
             // departed clients. Evicting *active* victims instead would let
             // an IP flood continuously reset legitimate clients' buckets;
             // a zone still full of active clients rejects the new key.
+            //
+            // The scan is rate-limited: running a full-zone `retain` on every
+            // new key once the zone is full is an O(n)-per-request CPU/lock
+            // amplifier under a spoofed-source flood.
             let idle_limit = self.burst_idle_window(burst);
-            self.reap_idle_buckets(now, idle_limit);
+            let reap_interval = (idle_limit / 4).clamp(
+                std::time::Duration::from_secs(1),
+                std::time::Duration::from_secs(30),
+            );
+            if self
+                .last_reap
+                .is_none_or(|last| now.saturating_duration_since(last) >= reap_interval)
+            {
+                self.last_reap = Some(now);
+                self.reap_idle_buckets(now, idle_limit);
+            }
             if self.entries.len() as u32 >= self.max_keys {
                 return false;
             }
@@ -167,6 +185,7 @@ mod tests {
             max_keys: 2,
             rate_per_second: 1.0,
             entries: std::collections::HashMap::new(),
+            last_reap: None,
         };
         let now = std::time::Instant::now();
         zone.entries.insert(
@@ -197,6 +216,7 @@ mod tests {
             max_keys: 2,
             rate_per_second: 1.0,
             entries: std::collections::HashMap::new(),
+            last_reap: None,
         };
         zone.entries.insert(
             IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),

@@ -603,7 +603,7 @@ impl Service<Uri> for TimedConnector {
         Box::pin(async move {
             tokio::time::timeout(timeout, future)
                 .await
-                .map_err(|_| Box::new(UpstreamConnectError::Timeout) as BoxError)?
+                .map_err(|_| -> BoxError { Box::new(UpstreamConnectError::Timeout) })?
         })
     }
 }

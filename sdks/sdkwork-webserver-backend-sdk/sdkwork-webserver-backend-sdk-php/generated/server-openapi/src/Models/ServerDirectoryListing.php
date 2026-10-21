@@ -16,6 +16,9 @@ final class ServerDirectoryListing
 
     public array $entries = [];
 
+    /** True when the directory has more children than the deployment's maximumEntries cap; the listing is truncated. */
+    public ?bool $truncated = null;
+
     public function __construct(array $data = [])
     {
         $this->nodeId = array_key_exists('nodeId', $data)
@@ -32,6 +35,9 @@ final class ServerDirectoryListing
                 ? array_values(array_map(static fn($item) => is_array($item) ? ServerEntry::fromArray($item) : $item, $data['entries']))
                 : []
             : [];
+        $this->truncated = array_key_exists('truncated', $data)
+            ? $data['truncated']
+            : null;
     }
 
     public static function fromArray(?array $data): ?self
@@ -46,6 +52,7 @@ final class ServerDirectoryListing
             'path' => $this->path,
             'parentPath' => $this->parentPath,
             'entries' => array_values(array_map(static fn($item) => $item instanceof ServerEntry ? $item->toArray() : $item, $this->entries)),
+            'truncated' => $this->truncated,
         ];
     }
 }

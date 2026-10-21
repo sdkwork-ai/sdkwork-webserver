@@ -8,8 +8,8 @@ use async_trait::async_trait;
 use axum::http::Uri;
 use sdkwork_iam_web_adapter::IamWebRequestContextResolver;
 use sdkwork_web_core::{
-    SecurityPolicy, WebEnvironment, WebFrameworkError, WebRequestContextResolver,
-    WebRequestPrincipal,
+    is_registered_sdkwork_client_origin, SecurityPolicy, WebEnvironment, WebFrameworkError,
+    WebRequestContextResolver, WebRequestPrincipal,
 };
 use sdkwork_webserver_contract::{
     web_is_production_like_environment, web_use_dev_inline_auth_resolver,
@@ -78,8 +78,9 @@ fn is_exact_http_origin(origin: &str) -> bool {
 }
 
 /// Desktop shells and embedded WebViews may use registered custom URL schemes
-/// (for example `app://dsh`). Entries must be exact `scheme://authority` origins:
-/// no wildcard, path, query, fragment, or userinfo.
+/// (for example `app://dsh`, or the Electron document origin `dsh-app://app`).
+/// Entries must be exact `scheme://authority` origins: no wildcard, path,
+/// query, fragment, or userinfo.
 fn is_exact_custom_runtime_origin(origin: &str) -> bool {
     let Ok(uri) = origin.parse::<Uri>() else {
         return false;
@@ -108,7 +109,15 @@ fn is_exact_custom_runtime_origin(origin: &str) -> bool {
 }
 
 fn is_exact_allowed_origin(origin: &str) -> bool {
-    is_exact_http_origin(origin) || is_exact_custom_runtime_origin(origin)
+    // `CORS_SPEC.md` section 3 registers the first-party client origins, and
+    // that set is wider than the generic `app`/`tauri` custom schemes: the
+    // Electron shell's application document emits `dsh-app://app`. Deployments
+    // publish the whole registered set (`etc/topology/*.env` does), so a
+    // registered origin is exact by construction and must pass this gate even
+    // though its scheme is neither `http(s)` nor `app`/`tauri`.
+    is_registered_sdkwork_client_origin(origin)
+        || is_exact_http_origin(origin)
+        || is_exact_custom_runtime_origin(origin)
 }
 
 fn web_security_policy(
@@ -262,7 +271,7 @@ impl WebRequestContextResolver for ProductionFailClosedResolver {
 
 #[cfg(test)]
 mod tests {
-    use super::web_security_policy;
+    use super::{is_exact_allowed_origin, web_security_policy};
     use sdkwork_web_core::WebEnvironment;
 
     #[test]
@@ -357,6 +366,7 @@ mod tests {
             "app://birdcoder",
             "app://sdkwork",
             "app://dtupay",
+            "dsh-app://app",
             "tauri://localhost",
             "https://servicewechat.com",
         ] {
@@ -373,5 +383,31 @@ mod tests {
             .cors
             .validate_origin_value("app://unregistered")
             .expect_err("unregistered custom scheme stays denied");
+    }
+
+    #[test]
+    fn configured_origins_accept_every_registered_desktop_origin() {
+        // `etc/topology/*.env` publishes the full registered desktop set,
+        // including the Electron document origin `dsh-app://app`, whose scheme
+        // is neither `http(s)` nor `app`/`tauri`.
+        let configured = vec![
+            "https://api-dev.sdkwork.com".to_owned(),
+            "dsh-app://app".to_owned(),
+        ];
+        let policy = web_security_policy(&WebEnvironment::Dev, configured)
+            .expect("registered desktop origin is a valid exact origin");
+        policy
+            .cors
+            .validate_origin_value("dsh-app://app")
+            .expect("configured Electron document origin");
+
+        assert!(
+            !is_exact_allowed_origin("dsh-app://evil"),
+            "unregistered custom schemes stay invalid"
+        );
+        assert!(
+            !is_exact_allowed_origin("dsh-app://app/path"),
+            "a registered scheme still needs an exact origin"
+        );
     }
 }

@@ -130,6 +130,10 @@ pub struct TunnelMachineListResponse {
     /// Managed machines, most recently seen first.
     #[serde(default)]
     pub machines: Vec<TunnelMachineResponse>,
+    /// Offset-page metadata for the machine page. Optional on the wire so an
+    /// older producer still decodes; the current service always sends it.
+    #[serde(rename = "pageInfo", default, skip_serializing_if = "Option::is_none")]
+    pub page_info: Option<sdkwork_utils_rust::PageInfo>,
 }
 
 /// Operator switch request: `{"enabled": false}` takes the machine out of

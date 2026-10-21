@@ -239,6 +239,18 @@ impl UsageMeteringAggregator {
     /// Drain all current windows and ingest them. Failed ingests are
     /// re-merged into the buckets so the next flush retries them.
     pub async fn flush(&self) {
+        self.flush_windows(false).await;
+    }
+
+    /// Final shutdown flush: drain **open** windows too. A mid-window flush
+    /// would otherwise split one deduplicated window, but at process exit there
+    /// is no next flush, so keeping the open window would lose up to
+    /// `window_seconds` of billing facts on every graceful restart.
+    pub async fn flush_all(&self) {
+        self.flush_windows(true).await;
+    }
+
+    async fn flush_windows(&self, include_open: bool) {
         if !self.config.enabled {
             return;
         }
@@ -247,10 +259,11 @@ impl UsageMeteringAggregator {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        // Only windows that have fully closed are flushed: a mid-window flush
-        // would split one window into two events with the same deduplication
-        // key, and the second one would be dropped as a duplicate (data
-        // loss). Open windows stay bucketed for the next flush.
+        // Only windows that have fully closed are flushed by the periodic
+        // loop: a mid-window flush would split one window into two events with
+        // the same deduplication key, and the second one would be dropped as a
+        // duplicate (data loss). Open windows stay bucketed for the next flush
+        // unless this is the final shutdown flush.
         let drained = {
             let Ok(mut buckets) = self.buckets.lock() else {
                 tracing::warn!("usage metering bucket lock poisoned; skipping flush");
@@ -259,7 +272,7 @@ impl UsageMeteringAggregator {
             let mut drained = HashMap::new();
             let mut kept = HashMap::new();
             for (key, counters) in std::mem::take(&mut *buckets) {
-                if key.window_start_epoch + window_seconds <= now_epoch {
+                if include_open || key.window_start_epoch + window_seconds <= now_epoch {
                     drained.insert(key, counters);
                 } else {
                     kept.insert(key, counters);

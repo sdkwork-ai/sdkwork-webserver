@@ -6,6 +6,7 @@ namespace SDKWork\Webserver\BackendSdk;
 
 use SDKWork\Webserver\BackendSdk\Http\HttpClient;
 use SDKWork\Webserver\BackendSdk\Api\ApplicationApi;
+use SDKWork\Webserver\BackendSdk\Api\PluginApi;
 use SDKWork\Webserver\BackendSdk\Api\ApplicationDomainApi;
 use SDKWork\Webserver\BackendSdk\Api\CertificateApi;
 use SDKWork\Webserver\BackendSdk\Api\DomainApi;
@@ -27,6 +28,7 @@ final class SdkworkBackendClient
 {
     public HttpClient $http;
     public ApplicationApi $application;
+    public PluginApi $plugin;
     public ApplicationDomainApi $applicationDomain;
     public CertificateApi $certificate;
     public DomainApi $domain;
@@ -48,6 +50,7 @@ final class SdkworkBackendClient
     {
         $this->http = new HttpClient($config);
         $this->application = new ApplicationApi($this->http);
+        $this->plugin = new PluginApi($this->http);
         $this->applicationDomain = new ApplicationDomainApi($this->http);
         $this->certificate = new CertificateApi($this->http);
         $this->domain = new DomainApi($this->http);

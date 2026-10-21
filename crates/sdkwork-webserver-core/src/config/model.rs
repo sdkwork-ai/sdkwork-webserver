@@ -1871,7 +1871,7 @@ pub struct RouteMatchConfig {
     pub methods: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RoutePathType {
     Exact,
@@ -1955,7 +1955,7 @@ fn default_proxy_cache_max_entries() -> usize {
 }
 
 fn default_proxy_cache_max_object_bytes() -> u64 {
-    1 * 1024 * 1024
+    1024 * 1024
 }
 
 fn default_proxy_cache_max_memory_bytes() -> u64 {
@@ -2105,9 +2105,11 @@ pub struct UsageMeteringConfig {
 /// Usage ingest channel configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
+#[derive(Default)]
 pub enum UsageMeteringChannel {
     /// Write through the shared Deploy database (`deploy_usage_event`).
     /// Requires the process database connection.
+    #[default]
     Embedded,
     /// POST batches to the Deploy control-plane ingest endpoint
     /// (`/backend/v3/api/usage/ingest`).
@@ -2118,12 +2120,6 @@ pub enum UsageMeteringChannel {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         auth_token_file: Option<String>,
     },
-}
-
-impl Default for UsageMeteringChannel {
-    fn default() -> Self {
-        Self::Embedded
-    }
 }
 
 impl Default for UsageMeteringConfig {

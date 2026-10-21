@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordStatusRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsDnsRecordsCreateResponse201, RootDomainsDnsRecordsListResponse, RootDomainsDnsRecordsStatusUpdateResponse, RootDomainsDnsRecordsSyncResponse, RootDomainsDnsRecordsUpdateResponse, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest
+from ..models import CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordStatusRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsRetrieveResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsDnsRecordsCreateResponse201, RootDomainsDnsRecordsListResponse, RootDomainsDnsRecordsStatusUpdateResponse, RootDomainsDnsRecordsSyncResponse, RootDomainsDnsRecordsUpdateResponse, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, RootDomainsWechatVerificationCheckResponse, RootDomainsWechatVerificationRetrieveResponse, RootDomainsWechatVerificationUpdateResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest, UpsertDomainWechatVerificationRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -264,6 +264,10 @@ class DomainApi:
         )
         return self._client.post(f"/backend/v3/api/domains", json=body, headers=request_headers)
 
+    def retrieve(self, domain_id: str) -> DomainsRetrieveResponse:
+        """Retrieve one tenant custom domain asset"""
+        return self._client.get(f"/backend/v3/api/domains/{serialize_path_parameter(domain_id, {'name': 'domainId', 'style': 'simple', 'explode': False})}")
+
     def delete(self, domain_id: str, idempotency_key: str) -> None:
         """Delete an unbound tenant custom domain asset"""
         request_headers = build_request_headers(
@@ -291,6 +295,7 @@ class DomainRootDomainsApi:
         self._client = client
         self.subdomains = DomainRootDomainsSubdomainsApi(client)
         self.dns_records = DomainRootDomainsDnsRecordsApi(client)
+        self.wechat_verification = DomainRootDomainsWechatVerificationApi(client)
 
 
     def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, q: Optional[str] = None, cloud_account_id: Optional[str] = None) -> RootDomainsListResponse:
@@ -438,6 +443,35 @@ class DomainRootDomainsDnsRecordsStatusApi:
             {}
         )
         return self._client.patch(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records/{serialize_path_parameter(record_id, {'name': 'recordId', 'style': 'simple', 'explode': False})}/status", json=body, headers=request_headers)
+
+class DomainRootDomainsWechatVerificationApi:
+    """domain domain.root_domains.wechat_verification API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def retrieve(self, root_domain_id: str) -> RootDomainsWechatVerificationRetrieveResponse:
+        """Read the root domain's WeChat MP domain-ownership verification file"""
+        return self._client.get(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file")
+
+    def update(self, root_domain_id: str, body: UpsertDomainWechatVerificationRequest, idempotency_key: str) -> RootDomainsWechatVerificationUpdateResponse:
+        """Upload (or wholly replace) the root domain's WeChat verification file"""
+        request_headers = build_request_headers(
+            {
+                'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
+            },
+            {}
+        )
+        return self._client.put(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file", json=body, headers=request_headers)
+
+    def delete(self, root_domain_id: str) -> None:
+        """Delete the root domain's WeChat verification file"""
+        return self._client.delete(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file")
+
+    def check(self, root_domain_id: str) -> RootDomainsWechatVerificationCheckResponse:
+        """Self-check the root domain's WeChat verification file"""
+        return self._client.post(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file/check")
 
 class DomainApplicationBindingApi:
     """domain domains.application_binding API client."""

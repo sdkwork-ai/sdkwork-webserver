@@ -61,19 +61,27 @@ const PAGE_SIZE = 50;
 const INVENTORY_PAGE_SIZE = 200;
 const INVENTORY_MAX_PAGES = 10;
 
+interface PageWalk<Row> {
+  readonly rows: Row[];
+  /// True when the bounded walk hit its page cap with `hasMore` still set: the
+  /// inventory is larger than the picker can show and the caller must say so
+  /// rather than silently offering a prefix as the whole set.
+  readonly truncated: boolean;
+}
+
 async function readAllPages<Row>(
   read: (page: { page: number; pageSize: number }) => Promise<{
     items: Row[];
     pageInfo: { hasMore?: boolean };
   }>,
-): Promise<Row[]> {
+): Promise<PageWalk<Row>> {
   const rows: Row[] = [];
   for (let page = 1; page <= INVENTORY_MAX_PAGES; page += 1) {
     const result = await read({ page, pageSize: INVENTORY_PAGE_SIZE });
     rows.push(...result.items);
-    if (result.pageInfo.hasMore !== true) return rows;
+    if (result.pageInfo.hasMore !== true) return { rows, truncated: false };
   }
-  return rows;
+  return { rows, truncated: true };
 }
 
 const REVOKE_REASONS = [
@@ -720,6 +728,7 @@ function HostnamePickerDialog({
   const [rootDomains, setRootDomains] = useState<RootDomainResponse[] | null>(null);
   const [activeRootDomainId, setActiveRootDomainId] = useState(initialRootDomainId);
   const [rows, setRows] = useState<ApplicationDomainResponse[] | null>(null);
+  const [rowsTruncated, setRowsTruncated] = useState(false);
   const [draft, setDraft] = useState<ApplicationDomainResponse | undefined>(selection);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
@@ -732,11 +741,11 @@ function HostnamePickerDialog({
     void readAllPages((page) => client.domain.rootDomains.list({ ...page, status: 1 }))
       .then((items) => {
         if (!active) return;
-        setRootDomains(items);
+        setRootDomains(items.rows);
         // Opens on the caller's root domain when it named one, and on the first
         // one otherwise — never on nothing, because an empty picker with a full
         // list beside it reads as a failed read.
-        setActiveRootDomainId((current) => (current === "" ? (items[0]?.id ?? "") : current));
+        setActiveRootDomainId((current) => (current === "" ? (items.rows[0]?.id ?? "") : current));
       })
       .catch((cause) => {
         if (active) setError(errorText(cause, t));
@@ -744,7 +753,7 @@ function HostnamePickerDialog({
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, t]);
 
   useEffect(() => {
     if (activeRootDomainId === "") return;
@@ -754,7 +763,10 @@ function HostnamePickerDialog({
     setRows(null);
     void readAllPages((page) => client.domain.rootDomains.subdomains.list(activeRootDomainId, page))
       .then((items) => {
-        if (active) setRows(items);
+        if (active) {
+          setRows(items.rows);
+          setRowsTruncated(items.truncated);
+        }
       })
       .catch((cause) => {
         if (active) setError(errorText(cause, t));
@@ -765,7 +777,7 @@ function HostnamePickerDialog({
     return () => {
       active = false;
     };
-  }, [activeRootDomainId, client]);
+  }, [activeRootDomainId, client, t]);
 
   const switchRootDomain = (rootDomainId: string) => {
     setActiveRootDomainId(rootDomainId);
@@ -1009,6 +1021,11 @@ function HostnamePickerDialog({
             </div>
           </div>
         </div>
+        {rowsTruncated ? (
+          <p className="warning" role="status">
+            {t("resource.certificates.hostnameCandidatesTruncated")}
+          </p>
+        ) : null}
         <footer className="dialog-footer">
           {/* What Confirm will carry back, on the side the reading starts — see
               `.hostname-picker-count`'s `margin-right:auto`. */}
@@ -1123,7 +1140,7 @@ function IssueCertificateDialog({
     let active = true;
     void readAllPages((page) => client.domain.rootDomains.list({ ...page, status: 1 }))
       .then((items) => {
-        if (active) setRootDomains(items);
+        if (active) setRootDomains(items.rows);
       })
       .catch((cause) => {
         if (active) setError(errorText(cause, t));
@@ -1131,7 +1148,7 @@ function IssueCertificateDialog({
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, t]);
 
   // An empty list is the truthful answer for an edge with no accounts file, not
   // a failure: such an edge issues single-domain certificates over HTTP-01 and
@@ -1145,7 +1162,7 @@ function IssueCertificateDialog({
     let active = true;
     void readAllPages((page) => client.certificate.dnsAccounts.list(page))
       .then((items) => {
-        if (active) setAccounts(items);
+        if (active) setAccounts(items.rows);
       })
       .catch((cause) => {
         if (!active) return;
@@ -1155,7 +1172,7 @@ function IssueCertificateDialog({
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, t]);
 
   // Resolving the caller's target into the row it names, so a link from a
   // hostname row opens the form on that hostname rather than on an empty field
@@ -1177,7 +1194,7 @@ function IssueCertificateDialog({
     void readAllPages((page) => client.domain.rootDomains.subdomains.list(chosenRootDomainId, page))
       .then((items) => {
         if (!active) return;
-        const row = items.find(
+        const row = items.rows.find(
           (item) => item.isVerified && item.hostname.trim().toLowerCase() === target,
         );
         if (row !== undefined) setSelection(row);
@@ -1188,7 +1205,7 @@ function IssueCertificateDialog({
     return () => {
       active = false;
     };
-  }, [apex, chosenRootDomainId, client]);
+  }, [apex, chosenRootDomainId, client, t]);
 
   const chosenRootDomain = rootDomains.find((rootDomain) => rootDomain.id === chosenRootDomainId);
 

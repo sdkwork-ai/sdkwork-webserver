@@ -55,6 +55,7 @@ const client = new SdkworkBackendClient({
 ## API Modules
 
 - `client.application` - application API
+- `client.plugin` - plugin API
 - `client.applicationDomain` - application_domain API
 - `client.certificate` - certificate API
 - `client.domain` - domain API
@@ -87,6 +88,20 @@ const params = {
   q: 'q',
 };
 const result = await client.application.list(params);
+```
+
+### plugin
+
+```typescript
+// List the caller's plugin catalog
+const params = {
+  page: 1,
+  page_size: 2,
+  status: 'draft',
+  q: 'q',
+  owner_id: 'owner_id',
+};
+const result = await client.plugin.list(params);
 ```
 
 ### application_domain
@@ -188,7 +203,11 @@ const result = await client.serverFile.nodes.list();
 
 ```typescript
 // List the managed Web Server configuration catalog
-const result = await client.webserverConfig.list();
+const params = {
+  page: 1,
+  page_size: 2,
+};
+const result = await client.webserverConfig.list(params);
 ```
 
 ### agent
@@ -228,7 +247,11 @@ const result = await client.cluster.overview.retrieve();
 
 ```typescript
 // List the tunnel connector machines this gateway manages
-const result = await client.tunnel.tunnelMachines.list();
+const params = {
+  page: 1,
+  page_size: 2,
+};
+const result = await client.tunnel.tunnelMachines.list(params);
 ```
 
 ### traffic_usage

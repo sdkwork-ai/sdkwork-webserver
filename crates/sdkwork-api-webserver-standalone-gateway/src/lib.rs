@@ -1,3 +1,14 @@
+// Gateway error enums intentionally carry full diagnostic chains (file path,
+// upstream address, TLS state); boxing them would ripple through the public
+// boundary for a size lint.
+#![allow(clippy::result_large_err)]
+// Request handler helpers take the request parts they need; grouping them into
+// a struct would obscure the data-flow at every call site.
+#![allow(clippy::too_many_arguments)]
+// Handler futures and refresh maps are inherently nested; aliases would not add
+// clarity across module boundaries.
+#![allow(clippy::type_complexity)]
+
 #[cfg(feature = "management")]
 mod adaptive_surface;
 #[cfg(feature = "management")]

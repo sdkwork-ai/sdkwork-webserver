@@ -15,6 +15,11 @@ use super::support::{
 /// supplied. Matches PAGINATION_SPEC keyset head semantics for growing logs.
 const AUDIT_LOG_FIRST_PAGE_CREATED_AT: &str = "9999-12-31T23:59:59Z";
 
+/// Cursor scope for the audit list; the tenant predicate is applied by the
+/// query itself, and binding the operation keeps a cursor from another list
+/// from being replayed here.
+const AUDIT_CURSOR_SCOPE: &str = "audit";
+
 fn resolve_audit_list_cursor(query: &ListAuditLogsQuery) -> WebServiceResult<String> {
     if let Some(cursor) = query.cursor.as_deref() {
         if !cursor.is_empty() {
@@ -22,6 +27,7 @@ fn resolve_audit_list_cursor(query: &ListAuditLogsQuery) -> WebServiceResult<Str
         }
     }
     Ok(encode_keyset_cursor(
+        AUDIT_CURSOR_SCOPE,
         AUDIT_LOG_FIRST_PAGE_CREATED_AT,
         i64::MAX,
     ))
@@ -196,7 +202,7 @@ impl WebRepository {
                 "page_size must be between 1 and 200",
             ));
         }
-        let (cursor_created_at, cursor_id) = decode_keyset_cursor(cursor)
+        let (cursor_created_at, cursor_id) = decode_keyset_cursor(AUDIT_CURSOR_SCOPE, cursor)
             .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
 
         // Fail closed: tenant-less audit enumeration is forbidden (audit
@@ -279,7 +285,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_audit_log cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&created_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    AUDIT_CURSOR_SCOPE,
+                    &created_at,
+                    id,
+                ))
             })
             .transpose()?;
 

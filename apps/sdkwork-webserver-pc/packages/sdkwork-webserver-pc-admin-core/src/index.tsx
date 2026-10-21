@@ -176,15 +176,20 @@ export function createWebserverAdminRegistry(client: WebserverAdminSdkClient): W
     // its own local templates and always dials its own configured target.
     "tunnel-machines": {
       ...source(
-        () => client.tunnel.tunnelMachines.list().then((response) => ({
-          items: response.machines,
-          pageInfo: {
-            page: 1,
-            pageSize: Math.max(response.machines.length, 1),
-            hasMore: false,
-            mode: "offset" as const,
-          },
-        })),
+        (query) =>
+          client.tunnel.tunnelMachines
+            .list({ page: query.page, pageSize: query.pageSize })
+            .then((response) => ({
+              items: response.machines,
+              // The backend sends offset `pageInfo` with the exact total; the
+              // fallback only covers a producer that predates the field.
+              pageInfo: response.pageInfo ?? {
+                page: query.page,
+                pageSize: query.pageSize,
+                hasMore: false,
+                mode: "offset" as const,
+              },
+            })),
         [
           action("disable", "Switch machine off", {}, (context) => client.tunnel.tunnelMachines.enabled.update(selectedId(context, "deviceId"), { enabled: false }), {
             availableWhen: ({ selectedItem }) => instanceFlag(selectedItem, "enabled") === true,

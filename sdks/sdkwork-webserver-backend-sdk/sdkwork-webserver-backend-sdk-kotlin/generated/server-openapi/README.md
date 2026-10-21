@@ -54,6 +54,7 @@ val client = SdkworkBackendClient(config)
 ## API Modules
 
 - `client.application` - application API
+- `client.plugin` - plugin API
 - `client.applicationDomain` - application_domain API
 - `client.certificate` - certificate API
 - `client.domain` - domain API
@@ -86,6 +87,21 @@ val params = linkedMapOf<String, Any>(
     "q" to "q"
 )
 val result = client.application.applicationsList(params)
+println(result)
+```
+
+### plugin
+
+```kotlin
+// List the caller's plugin catalog
+val params = linkedMapOf<String, Any>(
+    "page" to 1,
+    "page_size" to 2,
+    "status" to "draft",
+    "q" to "q",
+    "owner_id" to "1"
+)
+val result = client.plugin.pluginsList(params)
 println(result)
 ```
 
@@ -197,7 +213,11 @@ println(result)
 
 ```kotlin
 // List the managed Web Server configuration catalog
-val result = client.webserverConfig.webserverConfigsList()
+val params = linkedMapOf<String, Any>(
+    "page" to 1,
+    "page_size" to 2
+)
+val result = client.webserverConfig.webserverConfigsList(params)
 println(result)
 ```
 
@@ -241,7 +261,11 @@ println(result)
 
 ```kotlin
 // List the tunnel connector machines this gateway manages
-val result = client.tunnel.machinesList()
+val params = linkedMapOf<String, Any>(
+    "page" to 1,
+    "page_size" to 2
+)
+val result = client.tunnel.machinesList(params)
 println(result)
 ```
 

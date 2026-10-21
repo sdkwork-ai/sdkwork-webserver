@@ -1,5 +1,6 @@
 from .http_client import HttpClient, SdkConfig
 from .api.application import ApplicationApi
+from .api.plugin import PluginApi
 from .api.application_domain import ApplicationDomainApi
 from .api.certificate import CertificateApi
 from .api.domain import DomainApi
@@ -24,6 +25,7 @@ class SdkworkBackendClient:
     def __init__(self, config: SdkConfig):
         self._client = HttpClient(config)
         self.application: ApplicationApi
+        self.plugin: PluginApi
         self.application_domain: ApplicationDomainApi
         self.certificate: CertificateApi
         self.domain: DomainApi
@@ -43,6 +45,7 @@ class SdkworkBackendClient:
 
         # Initialize API modules
         self.application = ApplicationApi(self._client)
+        self.plugin = PluginApi(self._client)
         self.application_domain = ApplicationDomainApi(self._client)
         self.certificate = CertificateApi(self._client)
         self.domain = DomainApi(self._client)

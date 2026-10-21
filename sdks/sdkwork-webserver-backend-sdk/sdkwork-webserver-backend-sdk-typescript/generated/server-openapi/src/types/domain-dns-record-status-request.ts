@@ -1,4 +1,4 @@
 export interface DomainDnsRecordStatusRequest {
-  /** `true` resumes the record; `false` pauses it (暂停解析). */
+  /** `true` resumes the record; `false` pauses it (paused resolution). */
   enabled: boolean;
 }

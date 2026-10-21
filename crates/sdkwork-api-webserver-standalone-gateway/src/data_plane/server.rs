@@ -270,7 +270,7 @@ where
     for stream in initial.app.streams() {
         match stream.protocol {
             sdkwork_webserver_core::StreamProtocol::Tcp => {
-                prepared_streams.push(prepare_stream_listener(stream).await?);
+                prepared_streams.push(prepare_stream_listener(stream, &initial).await?);
             }
             sdkwork_webserver_core::StreamProtocol::Udp => {
                 prepared_udp_streams.push(prepare_udp_stream_listener(stream).await?);
@@ -398,14 +398,14 @@ where
         () = &mut shutdown => {
             let drain_deadline = Instant::now() + drain_timeout;
             request_listener_shutdown(&shutdown_senders);
-            (collect_shutdown_results(&mut tasks).await, drain_deadline)
+            (collect_shutdown_results_until(&mut tasks, drain_deadline).await, drain_deadline)
         }
         result = tasks.join_next() => {
             let drain_deadline = Instant::now() + drain_timeout;
             request_listener_shutdown(&shutdown_senders);
             let result = match result {
                 Some(Ok((listener_id, Ok(())))) => {
-                    let _ = collect_shutdown_results(&mut tasks).await;
+                    let _ = collect_shutdown_results_until(&mut tasks, drain_deadline).await;
                     if listener_id == "host-operations" {
                         Err(DataPlaneError::OperationsListenerStopped)
                     } else {
@@ -413,11 +413,11 @@ where
                     }
                 }
                 Some(Ok((_listener_id, Err(error)))) => {
-                    let _ = collect_shutdown_results(&mut tasks).await;
+                    let _ = collect_shutdown_results_until(&mut tasks, drain_deadline).await;
                     Err(error)
                 }
                 Some(Err(error)) => {
-                    let _ = collect_shutdown_results(&mut tasks).await;
+                    let _ = collect_shutdown_results_until(&mut tasks, drain_deadline).await;
                     Err(DataPlaneError::ListenerTask(error))
                 }
                 None => Ok(()),
@@ -441,11 +441,17 @@ where
             Err(error) => tracing::error!(error = %error, "TLS runtime watcher task failed"),
         }
     }
-    if runtime
+    let tunnel_drained = runtime
         .tunnel_supervisor
         .stop_and_drain(remaining_drain)
-        .await
-    {
+        .await;
+    // Final metering flush: the periodic loop only drains closed windows, so a
+    // graceful restart would otherwise drop the open window (up to one window
+    // plus one flush interval of billing facts) on every deploy.
+    if let Some(meter) = usage_meter.as_ref() {
+        meter.flush_all().await;
+    }
+    if tunnel_drained {
         result
     } else {
         Err(DataPlaneError::TunnelDrainTimeout {
@@ -925,6 +931,32 @@ async fn collect_shutdown_results(
         }
     }
     first_error.map_or(Ok(()), Err)
+}
+
+/// Drain the listener tasks but never past the shutdown deadline plus a small
+/// collection grace. The listeners themselves already stop accepting at
+/// `drain_timeout`; without the grace, the collector's timer races the
+/// listener's own timer at exactly the same instant and reports a spurious
+/// timeout for a listener that is in fact finishing. The grace still bounds
+/// process exit when a listener ignores its stop signal.
+async fn collect_shutdown_results_until(
+    tasks: &mut JoinSet<(String, Result<(), DataPlaneError>)>,
+    deadline: Instant,
+) -> Result<(), DataPlaneError> {
+    const COLLECTION_GRACE: Duration = Duration::from_secs(5);
+    match tokio::time::timeout_at(
+        (deadline + COLLECTION_GRACE).into(),
+        collect_shutdown_results(tasks),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            let remaining = tasks.len();
+            tasks.abort_all();
+            Err(DataPlaneError::ListenerDrainTimeout { remaining })
+        }
+    }
 }
 
 /// Build the SaaS traffic usage meter when the app config enables

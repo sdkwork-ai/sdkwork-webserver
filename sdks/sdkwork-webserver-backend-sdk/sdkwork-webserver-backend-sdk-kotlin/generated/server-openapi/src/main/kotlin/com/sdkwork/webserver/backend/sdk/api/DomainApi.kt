@@ -144,6 +144,35 @@ class DomainApi(private val client: HttpClient) {
         return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsStatusUpdateResponse>() {})
     }
 
+    /** Read the root domain's WeChat MP domain-ownership verification file */
+    suspend fun rootDomainsWechatVerificationRetrieve(rootDomainId: String): RootDomainsWechatVerificationRetrieveResponse? {
+        val raw = client.get(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file"))
+        return client.convertValue(raw, object : TypeReference<RootDomainsWechatVerificationRetrieveResponse>() {})
+    }
+
+    /** Upload (or wholly replace) the root domain's WeChat verification file */
+    suspend fun rootDomainsWechatVerificationUpdate(rootDomainId: String, body: UpsertDomainWechatVerificationRequest, idempotencyKey: String): RootDomainsWechatVerificationUpdateResponse? {
+        val requestHeaders = buildRequestHeaders(
+            mapOf(
+                "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
+            ),
+            emptyMap()
+        )
+        val raw = client.put(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<RootDomainsWechatVerificationUpdateResponse>() {})
+    }
+
+    /** Delete the root domain's WeChat verification file */
+    suspend fun rootDomainsWechatVerificationDelete(rootDomainId: String): Unit {
+        client.delete(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file"))
+    }
+
+    /** Self-check the root domain's WeChat verification file */
+    suspend fun rootDomainsWechatVerificationCheck(rootDomainId: String): RootDomainsWechatVerificationCheckResponse? {
+        val raw = client.post(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file/check"), null)
+        return client.convertValue(raw, object : TypeReference<RootDomainsWechatVerificationCheckResponse>() {})
+    }
+
     /** Sync a root-domain Zone's resolution records through its cloud account */
     suspend fun rootDomainsDnsRecordsSync(rootDomainId: String, idempotencyKey: String): RootDomainsDnsRecordsSyncResponse? {
         val requestHeaders = buildRequestHeaders(
@@ -176,6 +205,12 @@ class DomainApi(private val client: HttpClient) {
         )
         val raw = client.post(ApiPaths.backendPath("/domains"), body, null, requestHeaders, "application/json")
         return client.convertValue(raw, object : TypeReference<DomainsCreateResponse201>() {})
+    }
+
+    /** Retrieve one tenant custom domain asset */
+    suspend fun domainsRetrieve(domainId: String): DomainsRetrieveResponse? {
+        val raw = client.get(ApiPaths.backendPath("/domains/${serializePathParameter(domainId, PathParameterSpec("domainId", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<DomainsRetrieveResponse>() {})
     }
 
     /** Delete an unbound tenant custom domain asset */

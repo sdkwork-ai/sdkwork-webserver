@@ -45,6 +45,12 @@ test('root pnpm surface exposes every owned capability through canonical action-
   }
   // Standalone-only refactor: cloud-prefixed canonical scripts no longer exist.
   for (const name of Object.keys(scripts)) {
+    // `import:switch:*` selects which sibling-module import set the edge loads
+    // (SDKWORK_WEBSERVER_SPEC §17.3); both profiles stay materialized, so this
+    // is not a retired cloud build/deploy surface.
+    if (name === 'import:switch:cloud') {
+      continue;
+    }
     assert.doesNotMatch(name, /:cloud$/u, `retired cloud script must not return: ${name}`);
   }
   assert.equal(scripts.dev, 'pnpm dev:standalone');

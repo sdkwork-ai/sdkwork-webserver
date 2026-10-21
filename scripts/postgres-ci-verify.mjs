@@ -23,6 +23,7 @@ const CRITICAL_SOURCE_FILES = Object.freeze([
   'database/ddl/baseline/postgres/0001_webserver_baseline.sql',
   'crates/sdkwork-webserver-database-host/tests/postgres_lifecycle.rs',
   'crates/sdkwork-intelligence-webserver-repository-sqlx/tests/repository_parity.rs',
+  'crates/sdkwork-intelligence-webserver-repository-sqlx/tests/node_registry_postgres.rs',
 ]);
 
 export function createPostgresCiPlan({
@@ -54,6 +55,19 @@ export function createPostgresCiPlan({
       '--test',
       'repository_parity',
       'postgres_repository_transactions_tenants_idempotency_and_pagination_are_bounded',
+      '--',
+      '--ignored',
+      '--exact',
+      '--nocapture',
+    ]),
+    nodeRegistryTest: Object.freeze([
+      'cargo',
+      'test',
+      '-p',
+      'sdkwork-intelligence-webserver-repository-sqlx',
+      '--test',
+      'node_registry_postgres',
+      'replicas_receive_distinct_node_ids_and_released_leases_are_reusable',
       '--',
       '--ignored',
       '--exact',
@@ -254,6 +268,8 @@ export function runPostgresCi(plan = createPostgresCiPlan()) {
     resetCanonicalSchema(containerName);
     console.log('[sdkwork-web-postgres-ci] verifying PostgreSQL Repository parity');
     run(plan.repositoryTest[0], plan.repositoryTest.slice(1), { env: testEnv });
+    console.log('[sdkwork-web-postgres-ci] verifying Snowflake node lease allocation');
+    run(plan.nodeRegistryTest[0], plan.nodeRegistryTest.slice(1), { env: testEnv });
   } finally {
     spawnSync('docker', ['rm', '--force', containerName], {
       cwd: REPO_ROOT,

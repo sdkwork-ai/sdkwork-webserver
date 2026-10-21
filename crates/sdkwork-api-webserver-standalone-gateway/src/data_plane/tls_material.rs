@@ -249,14 +249,18 @@ fn validate_leaf_certificate(
             "leaf X.509 certificate has trailing DER data",
         ));
     }
-    // nginx still starts with an expired leaf; warn and continue so
-    // multi-site SNI surfaces remain available during cert rotation lag.
+    // PRD §8.3/§9: an expired or not-yet-valid leaf must be rejected, not
+    // served "just in case". Activating it would publish an invalid certificate
+    // to every client while the control plane still reports the site healthy.
     if !certificate.validity().is_valid() {
-        tracing::warn!(
-            not_before = %certificate.validity().not_before,
-            not_after = %certificate.validity().not_after,
-            "leaf X.509 certificate is expired or not yet valid; loading anyway for nginx compatibility"
-        );
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "leaf X.509 certificate is expired or not yet valid (notBefore={}, notAfter={})",
+                certificate.validity().not_before,
+                certificate.validity().not_after
+            ),
+        ));
     }
     let subject_alternative_name = certificate
         .subject_alternative_name()
@@ -394,19 +398,19 @@ mod tests {
     }
 
     #[test]
-    fn expired_leaf_certificate_is_accepted_for_nginx_compat() {
+    fn expired_leaf_certificate_is_rejected() {
         let mut params = CertificateParams::new(vec!["expired.example.test".to_owned()])
             .expect("certificate parameters");
         params.not_before = date_time_ymd(2000, 1, 1);
         params.not_after = date_time_ymd(2001, 1, 1);
         let key = KeyPair::generate().expect("generate key");
         let certificate = params.self_signed(&key).expect("generate certificate");
-        let evidence = validate_leaf_certificate(
+        let error = validate_leaf_certificate(
             certificate.der().as_ref(),
             &["expired.example.test".to_owned()],
         )
-        .expect("expired leaf still loads for nginx compatibility");
-        assert!(evidence.not_after_unix_seconds < evidence.not_before_unix_seconds + 400 * 86_400);
+        .expect_err("an expired leaf must never be activated");
+        assert!(error.to_string().contains("expired or not yet valid"));
     }
 
     #[test]

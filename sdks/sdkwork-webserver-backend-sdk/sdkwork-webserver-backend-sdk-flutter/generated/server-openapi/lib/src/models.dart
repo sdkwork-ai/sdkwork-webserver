@@ -321,9 +321,11 @@ class TunnelMachineResponse {
 
 class TunnelMachineListResponse {
   final List<TunnelMachineResponse> machines;
+  final PageInfo? pageInfo;
 
   TunnelMachineListResponse({
-    required this.machines
+    required this.machines,
+    this.pageInfo
   });
 
   factory TunnelMachineListResponse.fromJson(Map<String, dynamic> json) {
@@ -340,6 +342,10 @@ class TunnelMachineListResponse {
       })())
             .whereType<TunnelMachineResponse>()
             .toList();
+      })(),
+      pageInfo: (() {
+        final map = _sdkworkAsMap(json['pageInfo']);
+        return map == null ? null : PageInfo.fromJson(map);
       })()
     );
   }
@@ -347,6 +353,7 @@ class TunnelMachineListResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'machines': machines.map((item) => item.toJson()).toList(),
+      'pageInfo': pageInfo?.toJson(),
     };
   }
 }
@@ -1614,6 +1621,370 @@ class ApplicationResponse {
   }
 }
 
+class PluginResponse {
+  final String id;
+  final String pluginKey;
+  final String displayName;
+  final String summary;
+  final String version;
+  final String categoryId;
+  final List<String> supportedHostTools;
+  final List<String> contributedCapabilities;
+  final String sourceKind;
+  final String? gitRepository;
+  final String? gitRef;
+  final String? artifactRef;
+  final String? checksumSha256;
+  final String? archiveFileName;
+  final String status;
+  final String createdAt;
+  final String updatedAt;
+
+  PluginResponse({
+    required this.id,
+    required this.pluginKey,
+    required this.displayName,
+    required this.summary,
+    required this.version,
+    required this.categoryId,
+    required this.supportedHostTools,
+    required this.contributedCapabilities,
+    required this.sourceKind,
+    this.gitRepository,
+    this.gitRef,
+    this.artifactRef,
+    this.checksumSha256,
+    this.archiveFileName,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt
+  });
+
+  factory PluginResponse.fromJson(Map<String, dynamic> json) {
+    return PluginResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.id is required');
+        }
+        return value;
+      })(),
+      pluginKey: (() {
+        final value = json['pluginKey']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.pluginKey is required');
+        }
+        return value;
+      })(),
+      displayName: (() {
+        final value = json['displayName']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.displayName is required');
+        }
+        return value;
+      })(),
+      summary: (() {
+        final value = json['summary']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.summary is required');
+        }
+        return value;
+      })(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.version is required');
+        }
+        return value;
+      })(),
+      categoryId: (() {
+        final value = json['categoryId']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.categoryId is required');
+        }
+        return value;
+      })(),
+      supportedHostTools: (() {
+        final list = _sdkworkAsList(json['supportedHostTools']);
+        if (list == null) {
+          throw FormatException('PluginResponse.supportedHostTools is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      contributedCapabilities: (() {
+        final list = _sdkworkAsList(json['contributedCapabilities']);
+        if (list == null) {
+          throw FormatException('PluginResponse.contributedCapabilities is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      sourceKind: (() {
+        final value = json['sourceKind']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.sourceKind is required');
+        }
+        return value;
+      })(),
+      gitRepository: json['gitRepository']?.toString(),
+      gitRef: json['gitRef']?.toString(),
+      artifactRef: json['artifactRef']?.toString(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      archiveFileName: json['archiveFileName']?.toString(),
+      status: (() {
+        final value = json['status']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.status is required');
+        }
+        return value;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('PluginResponse.updatedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'pluginKey': pluginKey,
+      'displayName': displayName,
+      'summary': summary,
+      'version': version,
+      'categoryId': categoryId,
+      'supportedHostTools': supportedHostTools.map((item) => item).toList(),
+      'contributedCapabilities': contributedCapabilities.map((item) => item).toList(),
+      'sourceKind': sourceKind,
+      'gitRepository': gitRepository,
+      'gitRef': gitRef,
+      'artifactRef': artifactRef,
+      'checksumSha256': checksumSha256,
+      'archiveFileName': archiveFileName,
+      'status': status,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class CreatePluginRequest {
+  final String pluginKey;
+  final String displayName;
+  final String? summary;
+  final String version;
+  final String categoryId;
+  final List<String>? supportedHostTools;
+  final List<String>? contributedCapabilities;
+  final String sourceKind;
+  final String? gitRepository;
+  final String? gitRef;
+  final String? artifactRef;
+  final String? checksumSha256;
+  final String? archiveFileName;
+  final String? status;
+
+  CreatePluginRequest({
+    required this.pluginKey,
+    required this.displayName,
+    this.summary,
+    required this.version,
+    required this.categoryId,
+    this.supportedHostTools,
+    this.contributedCapabilities,
+    required this.sourceKind,
+    this.gitRepository,
+    this.gitRef,
+    this.artifactRef,
+    this.checksumSha256,
+    this.archiveFileName,
+    this.status
+  });
+
+  factory CreatePluginRequest.fromJson(Map<String, dynamic> json) {
+    return CreatePluginRequest(
+      pluginKey: (() {
+        final value = json['pluginKey']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePluginRequest.pluginKey is required');
+        }
+        return value;
+      })(),
+      displayName: (() {
+        final value = json['displayName']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePluginRequest.displayName is required');
+        }
+        return value;
+      })(),
+      summary: json['summary']?.toString(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePluginRequest.version is required');
+        }
+        return value;
+      })(),
+      categoryId: (() {
+        final value = json['categoryId']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePluginRequest.categoryId is required');
+        }
+        return value;
+      })(),
+      supportedHostTools: (() {
+        final list = _sdkworkAsList(json['supportedHostTools']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      contributedCapabilities: (() {
+        final list = _sdkworkAsList(json['contributedCapabilities']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      sourceKind: (() {
+        final value = json['sourceKind']?.toString();
+        if (value == null) {
+          throw FormatException('CreatePluginRequest.sourceKind is required');
+        }
+        return value;
+      })(),
+      gitRepository: json['gitRepository']?.toString(),
+      gitRef: json['gitRef']?.toString(),
+      artifactRef: json['artifactRef']?.toString(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      archiveFileName: json['archiveFileName']?.toString(),
+      status: json['status']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'pluginKey': pluginKey,
+      'displayName': displayName,
+      'summary': summary,
+      'version': version,
+      'categoryId': categoryId,
+      'supportedHostTools': supportedHostTools?.map((item) => item).toList(),
+      'contributedCapabilities': contributedCapabilities?.map((item) => item).toList(),
+      'sourceKind': sourceKind,
+      'gitRepository': gitRepository,
+      'gitRef': gitRef,
+      'artifactRef': artifactRef,
+      'checksumSha256': checksumSha256,
+      'archiveFileName': archiveFileName,
+      'status': status,
+    };
+  }
+}
+
+class UpdatePluginRequest {
+  final String? displayName;
+  final String? summary;
+  final String? version;
+  final String? categoryId;
+  final List<String>? supportedHostTools;
+  final List<String>? contributedCapabilities;
+  final String? gitRepository;
+  final String? gitRef;
+  final String? artifactRef;
+  final String? checksumSha256;
+  final String? archiveFileName;
+  final String? status;
+
+  UpdatePluginRequest({
+    this.displayName,
+    this.summary,
+    this.version,
+    this.categoryId,
+    this.supportedHostTools,
+    this.contributedCapabilities,
+    this.gitRepository,
+    this.gitRef,
+    this.artifactRef,
+    this.checksumSha256,
+    this.archiveFileName,
+    this.status
+  });
+
+  factory UpdatePluginRequest.fromJson(Map<String, dynamic> json) {
+    return UpdatePluginRequest(
+      displayName: json['displayName']?.toString(),
+      summary: json['summary']?.toString(),
+      version: json['version']?.toString(),
+      categoryId: json['categoryId']?.toString(),
+      supportedHostTools: (() {
+        final list = _sdkworkAsList(json['supportedHostTools']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      contributedCapabilities: (() {
+        final list = _sdkworkAsList(json['contributedCapabilities']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      gitRepository: json['gitRepository']?.toString(),
+      gitRef: json['gitRef']?.toString(),
+      artifactRef: json['artifactRef']?.toString(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      archiveFileName: json['archiveFileName']?.toString(),
+      status: json['status']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'displayName': displayName,
+      'summary': summary,
+      'version': version,
+      'categoryId': categoryId,
+      'supportedHostTools': supportedHostTools?.map((item) => item).toList(),
+      'contributedCapabilities': contributedCapabilities?.map((item) => item).toList(),
+      'gitRepository': gitRepository,
+      'gitRef': gitRef,
+      'artifactRef': artifactRef,
+      'checksumSha256': checksumSha256,
+      'archiveFileName': archiveFileName,
+      'status': status,
+    };
+  }
+}
+
 class CreateApplicationDomainRequest {
   final String hostname;
   final bool? isPrimary;
@@ -1930,6 +2301,138 @@ class RootDomainResponse {
       'activeDeploymentCount': activeDeploymentCount,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
+    };
+  }
+}
+
+class DomainWechatVerificationResponse {
+  final String rootDomainId;
+  final String? fileName;
+  final String? content;
+  final String? updatedAt;
+
+  DomainWechatVerificationResponse({
+    required this.rootDomainId,
+    this.fileName,
+    this.content,
+    this.updatedAt
+  });
+
+  factory DomainWechatVerificationResponse.fromJson(Map<String, dynamic> json) {
+    return DomainWechatVerificationResponse(
+      rootDomainId: (() {
+        final value = json['rootDomainId']?.toString();
+        if (value == null) {
+          throw FormatException('DomainWechatVerificationResponse.rootDomainId is required');
+        }
+        return value;
+      })(),
+      fileName: json['fileName']?.toString(),
+      content: json['content']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'rootDomainId': rootDomainId,
+      'fileName': fileName,
+      'content': content,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class UpsertDomainWechatVerificationRequest {
+  final String fileName;
+  final String content;
+
+  UpsertDomainWechatVerificationRequest({
+    required this.fileName,
+    required this.content
+  });
+
+  factory UpsertDomainWechatVerificationRequest.fromJson(Map<String, dynamic> json) {
+    return UpsertDomainWechatVerificationRequest(
+      fileName: (() {
+        final value = json['fileName']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertDomainWechatVerificationRequest.fileName is required');
+        }
+        return value;
+      })(),
+      content: (() {
+        final value = json['content']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertDomainWechatVerificationRequest.content is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'fileName': fileName,
+      'content': content,
+    };
+  }
+}
+
+class DomainWechatVerificationCheckResponse {
+  final bool reachable;
+  final bool matched;
+  final int? statusCode;
+  final String? scheme;
+  final String? detail;
+  final String checkedAt;
+
+  DomainWechatVerificationCheckResponse({
+    required this.reachable,
+    required this.matched,
+    this.statusCode,
+    this.scheme,
+    this.detail,
+    required this.checkedAt
+  });
+
+  factory DomainWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
+    return DomainWechatVerificationCheckResponse(
+      reachable: (() {
+        final value = json['reachable'];
+        if (value is! bool) {
+          throw FormatException('DomainWechatVerificationCheckResponse.reachable is required');
+        }
+        return value;
+      })(),
+      matched: (() {
+        final value = json['matched'];
+        if (value is! bool) {
+          throw FormatException('DomainWechatVerificationCheckResponse.matched is required');
+        }
+        return value;
+      })(),
+      statusCode: json['statusCode'] is int ? json['statusCode'] : null,
+      scheme: json['scheme']?.toString(),
+      detail: json['detail']?.toString(),
+      checkedAt: (() {
+        final value = json['checkedAt']?.toString();
+        if (value == null) {
+          throw FormatException('DomainWechatVerificationCheckResponse.checkedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'reachable': reachable,
+      'matched': matched,
+      'statusCode': statusCode,
+      'scheme': scheme,
+      'detail': detail,
+      'checkedAt': checkedAt,
     };
   }
 }
@@ -3910,6 +4413,82 @@ class NginxConfigResponse {
   }
 }
 
+class NginxConfigRevisionSummary {
+  final int? versionNo;
+  final String? configName;
+  final String? configHash;
+  final String? createdBy;
+  final String? createdAt;
+
+  NginxConfigRevisionSummary({
+    this.versionNo,
+    this.configName,
+    this.configHash,
+    this.createdBy,
+    this.createdAt
+  });
+
+  factory NginxConfigRevisionSummary.fromJson(Map<String, dynamic> json) {
+    return NginxConfigRevisionSummary(
+      versionNo: json['versionNo'] is int ? json['versionNo'] : null,
+      configName: json['configName']?.toString(),
+      configHash: json['configHash']?.toString(),
+      createdBy: json['createdBy']?.toString(),
+      createdAt: json['createdAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'versionNo': versionNo,
+      'configName': configName,
+      'configHash': configHash,
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+class NginxConfigRevisionResponse {
+  final int? versionNo;
+  final String? configName;
+  final String? configContent;
+  final String? configHash;
+  final String? createdBy;
+  final String? createdAt;
+
+  NginxConfigRevisionResponse({
+    this.versionNo,
+    this.configName,
+    this.configContent,
+    this.configHash,
+    this.createdBy,
+    this.createdAt
+  });
+
+  factory NginxConfigRevisionResponse.fromJson(Map<String, dynamic> json) {
+    return NginxConfigRevisionResponse(
+      versionNo: json['versionNo'] is int ? json['versionNo'] : null,
+      configName: json['configName']?.toString(),
+      configContent: json['configContent']?.toString(),
+      configHash: json['configHash']?.toString(),
+      createdBy: json['createdBy']?.toString(),
+      createdAt: json['createdAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'versionNo': versionNo,
+      'configName': configName,
+      'configContent': configContent,
+      'configHash': configHash,
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+    };
+  }
+}
+
 class NginxConfigPage {
   final List<NginxConfigResponse>? items;
   final String? total;
@@ -4410,12 +4989,14 @@ class ServerDirectoryListing {
   final String path;
   final String? parentPath;
   final List<ServerEntry> entries;
+  final bool? truncated;
 
   ServerDirectoryListing({
     required this.nodeId,
     required this.path,
     required this.parentPath,
-    required this.entries
+    required this.entries,
+    this.truncated
   });
 
   factory ServerDirectoryListing.fromJson(Map<String, dynamic> json) {
@@ -4462,7 +5043,8 @@ class ServerDirectoryListing {
       })())
             .whereType<ServerEntry>()
             .toList();
-      })()
+      })(),
+      truncated: json['truncated'] is bool ? json['truncated'] : null
     );
   }
 
@@ -4472,6 +5054,7 @@ class ServerDirectoryListing {
       'path': path,
       'parentPath': parentPath,
       'entries': entries.map((item) => item.toJson()).toList(),
+      'truncated': truncated,
     };
   }
 }
@@ -4593,10 +5176,14 @@ class ServerFileContent {
 class WebserverConfigCatalog {
   final String configRoot;
   final List<WebserverConfigEntry> items;
+  final bool? truncated;
+  final PageInfo? pageInfo;
 
   WebserverConfigCatalog({
     required this.configRoot,
-    required this.items
+    required this.items,
+    this.truncated,
+    this.pageInfo
   });
 
   factory WebserverConfigCatalog.fromJson(Map<String, dynamic> json) {
@@ -4620,6 +5207,11 @@ class WebserverConfigCatalog {
       })())
             .whereType<WebserverConfigEntry>()
             .toList();
+      })(),
+      truncated: json['truncated'] is bool ? json['truncated'] : null,
+      pageInfo: (() {
+        final map = _sdkworkAsMap(json['pageInfo']);
+        return map == null ? null : PageInfo.fromJson(map);
       })()
     );
   }
@@ -4628,6 +5220,8 @@ class WebserverConfigCatalog {
     return <String, dynamic>{
       'configRoot': configRoot,
       'items': items.map((item) => item.toJson()).toList(),
+      'truncated': truncated,
+      'pageInfo': pageInfo?.toJson(),
     };
   }
 }
@@ -7854,6 +8448,190 @@ class ApplicationsCreateResponse201 {
   }
 }
 
+class PluginsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  PluginsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory PluginsListResponse.fromJson(Map<String, dynamic> json) {
+    return PluginsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('PluginsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('PluginsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('PluginsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PluginsCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  PluginsCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory PluginsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return PluginsCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('PluginsCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('PluginsCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('PluginsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PluginsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  PluginsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory PluginsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return PluginsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('PluginsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('PluginsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('PluginsRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PluginsUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  PluginsUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory PluginsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return PluginsUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('PluginsUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('PluginsUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('PluginsUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
 class ApplicationsRetrieveResponse {
   final int code;
   final dynamic data;
@@ -8728,6 +9506,144 @@ class RootDomainsDnsRecordsStatusUpdateResponse {
   }
 }
 
+class RootDomainsWechatVerificationRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsWechatVerificationRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsWechatVerificationRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsWechatVerificationRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsWechatVerificationRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsWechatVerificationRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsWechatVerificationRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsWechatVerificationUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsWechatVerificationUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsWechatVerificationUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsWechatVerificationUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsWechatVerificationUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsWechatVerificationUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsWechatVerificationUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsWechatVerificationCheckResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  RootDomainsWechatVerificationCheckResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory RootDomainsWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsWechatVerificationCheckResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('RootDomainsWechatVerificationCheckResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('RootDomainsWechatVerificationCheckResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('RootDomainsWechatVerificationCheckResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
 class RootDomainsDnsRecordsSyncResponse {
   final int code;
   final dynamic data;
@@ -8851,6 +9767,52 @@ class DomainsCreateResponse201 {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('DomainsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DomainsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DomainsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DomainsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return DomainsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DomainsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('DomainsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DomainsRetrieveResponse.traceId is required');
         }
         return value;
       })()
@@ -9799,6 +10761,144 @@ class ConfigsDeployResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('ConfigsDeployResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ConfigsRevisionsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ConfigsRevisionsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ConfigsRevisionsListResponse.fromJson(Map<String, dynamic> json) {
+    return ConfigsRevisionsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ConfigsRevisionsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ConfigsRevisionsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ConfigsRevisionsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ConfigsRevisionsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ConfigsRevisionsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ConfigsRevisionsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ConfigsRevisionsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ConfigsRevisionsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ConfigsRevisionsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ConfigsRevisionsRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ConfigsRevisionsRollbackResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ConfigsRevisionsRollbackResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ConfigsRevisionsRollbackResponse.fromJson(Map<String, dynamic> json) {
+    return ConfigsRevisionsRollbackResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ConfigsRevisionsRollbackResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ConfigsRevisionsRollbackResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ConfigsRevisionsRollbackResponse.traceId is required');
         }
         return value;
       })()

@@ -158,9 +158,7 @@ async fn serve_spa_index_with_credential_entry_bootstrap(
     spa_fallback: Option<&str>,
     method: &Method,
 ) -> Option<Response<Body>> {
-    let Some(token) = injection_token() else {
-        return None;
-    };
+    let token = injection_token()?;
     // Only SPA routes carry the credential-entry login renderer; ordinary
     // static surfaces never receive the token.
     let spa_fallback = spa_fallback?;

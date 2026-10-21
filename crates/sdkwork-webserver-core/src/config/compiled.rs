@@ -258,8 +258,8 @@ impl CompiledWebServerApp {
         // nested scan: each host contributes its server names once to every
         // listener it references, keeping compilation linear in the total
         // declared server-name count.
-        let mut listener_hosts: HashMap<&str, (HashMap<String, usize>, HashMap<String, usize>)> =
-            HashMap::new();
+        type ListenerHosts<'a> = HashMap<&'a str, (HashMap<String, usize>, HashMap<String, usize>)>;
+        let mut listener_hosts: ListenerHosts<'_> = HashMap::new();
         for (host_index, virtual_host) in config.virtual_hosts.iter().enumerate() {
             for listener_ref in &virtual_host.listener_refs {
                 let (exact_hosts, wildcard_hosts) =
@@ -478,10 +478,7 @@ impl CompiledWebServerApp {
                 // wildcard per request.
                 normalized_host.as_deref().and_then(|host| {
                     let mut candidate = host;
-                    loop {
-                        let Some((_, rest)) = candidate.split_once('.') else {
-                            break;
-                        };
+                    while let Some((_, rest)) = candidate.split_once('.') {
                         candidate = rest;
                         if let Some(index) = listener.wildcard_hosts.get(candidate) {
                             return Some(*index);

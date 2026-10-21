@@ -133,6 +133,32 @@ public class DomainApi {
         return try await client.patch(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records/\(serializePathParameter(recordId, PathParameterSpec(name: "recordId", style: "simple", explode: false)))/status"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsDnsRecordsStatusUpdateResponse.self)
     }
 
+    /// Read the root domain's WeChat MP domain-ownership verification file
+    public func rootDomainsWechatVerificationRetrieve(rootDomainId: String) async throws -> RootDomainsWechatVerificationRetrieveResponse? {
+        return try await client.get(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file"), responseType: RootDomainsWechatVerificationRetrieveResponse.self)
+    }
+
+    /// Upload (or wholly replace) the root domain's WeChat verification file
+    public func rootDomainsWechatVerificationUpdate(rootDomainId: String, body: UpsertDomainWechatVerificationRequest, idempotencyKey: String) async throws -> RootDomainsWechatVerificationUpdateResponse? {
+        let requestHeaders = buildRequestHeaders(
+            [
+                "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
+            ],
+            [:]
+        )
+        return try await client.put(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsWechatVerificationUpdateResponse.self)
+    }
+
+    /// Delete the root domain's WeChat verification file
+    public func rootDomainsWechatVerificationDelete(rootDomainId: String) async throws -> Void {
+        _ = try await client.delete(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file"))
+    }
+
+    /// Self-check the root domain's WeChat verification file
+    public func rootDomainsWechatVerificationCheck(rootDomainId: String) async throws -> RootDomainsWechatVerificationCheckResponse? {
+        return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file/check"), body: nil, responseType: RootDomainsWechatVerificationCheckResponse.self)
+    }
+
     /// Sync a root-domain Zone's resolution records through its cloud account
     public func rootDomainsDnsRecordsSync(rootDomainId: String, idempotencyKey: String) async throws -> RootDomainsDnsRecordsSyncResponse? {
         let requestHeaders = buildRequestHeaders(
@@ -162,6 +188,11 @@ public class DomainApi {
             [:]
         )
         return try await client.post(ApiPaths.backendPath("/domains"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: DomainsCreateResponse201.self)
+    }
+
+    /// Retrieve one tenant custom domain asset
+    public func domainsRetrieve(domainId: String) async throws -> DomainsRetrieveResponse? {
+        return try await client.get(ApiPaths.backendPath("/domains/\(serializePathParameter(domainId, PathParameterSpec(name: "domainId", style: "simple", explode: false)))"), responseType: DomainsRetrieveResponse.self)
     }
 
     /// Delete an unbound tenant custom domain asset

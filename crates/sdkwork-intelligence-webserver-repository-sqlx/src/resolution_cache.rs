@@ -18,8 +18,10 @@ pub struct SqlxResolutionCache {
 /// active (management feature deployments). Returns `None` when no pool is
 /// available so the chain falls back to the upper layers.
 pub fn resolution_cache_from_shared_pool() -> Option<Arc<dyn ResolutionDatabase>> {
-    process_shared_database_pool()
-        .map(|pool| Arc::new(SqlxResolutionCache { pool }) as Arc<dyn ResolutionDatabase>)
+    process_shared_database_pool().map(|pool| {
+        let cache: Arc<dyn ResolutionDatabase> = Arc::new(SqlxResolutionCache { pool });
+        cache
+    })
 }
 
 #[async_trait::async_trait]

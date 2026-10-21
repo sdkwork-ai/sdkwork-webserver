@@ -33,7 +33,7 @@ pub fn validate_proxy_set_header_entry(entry: &str) -> Result<(), String> {
     while let Some(start) = rest.find('$') {
         let after = &rest[start + 1..];
         if after.starts_with('$') {
-            rest = &after[1..];
+            rest = after.strip_prefix('$').unwrap_or(after);
             continue;
         }
         let end = after

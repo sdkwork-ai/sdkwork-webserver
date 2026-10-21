@@ -7,6 +7,7 @@ require_relative '../models/domain_dns_record_status_request'
 require_relative '../models/domains_application_binding_update_response'
 require_relative '../models/domains_create_response201'
 require_relative '../models/domains_list_response'
+require_relative '../models/domains_retrieve_response'
 require_relative '../models/domains_verify_response'
 require_relative '../models/root_domains_create_response201'
 require_relative '../models/root_domains_dns_records_create_response201'
@@ -19,9 +20,13 @@ require_relative '../models/root_domains_retrieve_response'
 require_relative '../models/root_domains_subdomains_create_response201'
 require_relative '../models/root_domains_subdomains_list_response'
 require_relative '../models/root_domains_update_response'
+require_relative '../models/root_domains_wechat_verification_check_response'
+require_relative '../models/root_domains_wechat_verification_retrieve_response'
+require_relative '../models/root_domains_wechat_verification_update_response'
 require_relative '../models/update_domain_application_binding_request'
 require_relative '../models/update_domain_dns_record_request'
 require_relative '../models/update_root_domain_request'
+require_relative '../models/upsert_domain_wechat_verification_request'
 
 module Sdkwork
   module BackendSdk
@@ -216,6 +221,50 @@ module Sdkwork
             result.is_a?(Hash) ? Models::RootDomainsDnsRecordsStatusUpdateResponse.from_hash(result) : nil
           end
 
+          # Read the root domain's WeChat MP domain-ownership verification file
+          def root_domains_wechat_verification_retrieve(root_domain_id)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/verification_file', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsWechatVerificationRetrieveResponse.from_hash(result) : nil
+          end
+
+          # Upload (or wholly replace) the root domain's WeChat verification file
+          def root_domains_wechat_verification_update(root_domain_id, idempotency_key, body: nil)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/verification_file', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            payload = body.respond_to?(:to_hash) ? body.to_hash : body
+            request_headers = build_request_headers(
+              {
+                'Idempotency-Key' => HeaderParameterSpec.new(idempotency_key, 'simple', false, nil),
+              },
+              {}
+            )
+            options = {}
+            options[:headers] = request_headers unless request_headers.empty?
+            options[:json] = payload unless payload.nil?
+            result = @client.request('PUT', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsWechatVerificationUpdateResponse.from_hash(result) : nil
+          end
+
+          # Delete the root domain's WeChat verification file
+          def root_domains_wechat_verification_delete(root_domain_id)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/verification_file', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            options = {}
+
+            result = @client.request('DELETE', path, **options)
+            result
+          end
+
+          # Self-check the root domain's WeChat verification file
+          def root_domains_wechat_verification_check(root_domain_id)
+            path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/verification_file/check', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
+            options = {}
+
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::RootDomainsWechatVerificationCheckResponse.from_hash(result) : nil
+          end
+
           # Sync a root-domain Zone's resolution records through its cloud account
           def root_domains_dns_records_sync(root_domain_id, idempotency_key)
             path = interpolate_path('/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync', rootDomainId: serialize_path_parameter(root_domain_id, PathParameterSpec.new('rootDomainId', 'simple', false)))
@@ -260,6 +309,15 @@ module Sdkwork
             options[:json] = payload unless payload.nil?
             result = @client.request('POST', path, **options)
             result.is_a?(Hash) ? Models::DomainsCreateResponse201.from_hash(result) : nil
+          end
+
+          # Retrieve one tenant custom domain asset
+          def domains_retrieve(domain_id)
+            path = interpolate_path('/backend/v3/api/domains/{domainId}', domainId: serialize_path_parameter(domain_id, PathParameterSpec.new('domainId', 'simple', false)))
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::DomainsRetrieveResponse.from_hash(result) : nil
           end
 
           # Delete an unbound tenant custom domain asset

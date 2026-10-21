@@ -73,8 +73,15 @@ pub fn web_dev_auth_bypass_enabled() -> bool {
     env_truthy("SDKWORK_WEBSERVER_DEV_AUTH_BYPASS")
 }
 
+/// Dev inline auth is an explicit development-only affordance.
+///
+/// `demo` is a public deployment (it has public HTTPS origins and CORS), so it
+/// must not inherit the development bypass merely because it is not
+/// production-like for key derivation. Only `development`/`dev` may opt in,
+/// and only when the bypass flag is set.
 pub fn web_use_dev_inline_auth_resolver() -> bool {
-    !web_is_production_like_environment() && web_dev_auth_bypass_enabled()
+    matches!(web_environment_name().as_str(), "development" | "dev")
+        && web_dev_auth_bypass_enabled()
 }
 
 /// Overrides the platform operator tenant id (see [`web_platform_operator_tenant_id`]).
@@ -146,6 +153,17 @@ mod tests {
         let _guard = env_test_lock();
         with_env("SDKWORK_WEBSERVER_ENVIRONMENT", Some("production"), || {
             with_env("SDKWORK_WEBSERVER_DEV_AUTH_BYPASS", Some("true"), || {
+                assert!(!web_use_dev_inline_auth_resolver());
+            });
+        });
+    }
+
+    #[test]
+    fn demo_never_uses_dev_inline_auth() {
+        let _guard = env_test_lock();
+        with_env("SDKWORK_WEBSERVER_ENVIRONMENT", Some("demo"), || {
+            with_env("SDKWORK_WEBSERVER_DEV_AUTH_BYPASS", Some("true"), || {
+                // The public demo must not inherit the development bypass.
                 assert!(!web_use_dev_inline_auth_resolver());
             });
         });

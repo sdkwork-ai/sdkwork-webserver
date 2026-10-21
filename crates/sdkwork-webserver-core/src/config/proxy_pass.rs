@@ -13,7 +13,7 @@ pub fn validate_proxy_pass_template(template: &str) -> Result<(), String> {
     while let Some(index) = remainder.find('$') {
         let rest = &remainder[index..];
         if rest.starts_with("$$") {
-            remainder = &rest[2..];
+            remainder = rest.strip_prefix("$$").unwrap_or(rest);
             continue;
         }
         let Some(end) = rest[1..]
@@ -57,6 +57,7 @@ pub fn validate_proxy_pass_template(template: &str) -> Result<(), String> {
 }
 
 /// Expand a dynamic `proxy_pass` template into a full URL.
+#[allow(clippy::result_unit_err)]
 pub fn expand_proxy_pass_template(
     template: &str,
     host: &str,

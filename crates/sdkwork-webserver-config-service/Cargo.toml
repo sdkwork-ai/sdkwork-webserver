@@ -19,6 +19,7 @@ tokio = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 toml.workspace = true
 sdkwork-server-files-service.workspace = true
+sdkwork-utils-rust.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

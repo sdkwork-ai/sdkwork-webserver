@@ -211,6 +211,14 @@ cache by exact path, Provider resource, or Provider type, with an epoch fence pr
 in-flight reinsertion. The loopback operations listener exports capacity, entries, in-flight work,
 lookup outcomes, writes, evictions, revalidations, and invalidations through the fixed-cardinality
 `sdkwork_web_data_plane_provider_resolution_cache_*` Prometheus family.
+Tunnel-machine management is an **optional** surface that proxies to the data-plane operations
+listener. It requires both `SDKWORK_WEBSERVER_TUNNEL_OPERATIONS_URL` (for example
+`http://127.0.0.1:3901`, the same bind as `SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND`) and
+`SDKWORK_WEBSERVER_OPERATIONS_AUTH_TOKEN_FILE` (a non-empty bearer-token file shared with the data
+plane). Without both, the routes fail with `503 Unavailable` by design and never return an empty
+machine list; the shipped profiles do not set the token file because it is a host secret that the
+deployment must provision. Declare `web.tunnel.read` / `web.tunnel.write` to the operator principal
+(the catalog now ships both codes).
 `SDKWORK_WEBSERVER_WEBSITE_RUNTIME_SET_RECOVERY_DIRECTORY` owns a dedicated node-local A/B slot
 directory containing only complete, hash-verified `sdkwork.website-runtime-set.v1` snapshots.
 Staging and production require this directory. Bootstrap selects the highest valid generation from

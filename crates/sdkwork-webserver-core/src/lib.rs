@@ -1,5 +1,8 @@
 //! Framework-independent Web Server configuration and runtime helpers.
 
+// `ModuleImportError` deliberately carries rich diagnostics (path, reason,
+// source); boxing every variant would obscure the API for a size lint.
+#![allow(clippy::result_large_err)]
 mod canonical_json;
 mod fs_bounds;
 mod json_schema;
@@ -8,6 +11,7 @@ pub mod config;
 pub mod config_paths;
 pub mod module_imports;
 pub mod nginx;
+pub mod nginx_activation;
 pub mod runtime_config;
 pub mod runtime_env;
 pub mod tls_runtime;
@@ -68,6 +72,7 @@ pub use module_imports::{
     WebserverModuleImport, MODULE_IMPORTS_ENV,
 };
 pub use nginx::prefer_h5_surface;
+pub use nginx_activation::scan_nginx_directive_risks;
 pub use runtime_config::{
     compile_merged_imports_app, configured_module_imports, expand_webserver_import_includes,
     imported_certificate_names, load_runtime_toml_config, merged_imports_app_config,

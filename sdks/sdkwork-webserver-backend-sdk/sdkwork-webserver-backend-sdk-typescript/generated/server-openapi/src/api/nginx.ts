@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CreateNginxConfigRequest, NginxConfigResponse, NginxDeployResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, PageInfo, UpdateNginxConfigRequest } from '../types';
+import type { CreateNginxConfigRequest, NginxConfigResponse, NginxConfigRevisionResponse, NginxConfigRevisionSummary, NginxDeployResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, PageInfo, UpdateNginxConfigRequest } from '../types';
 
 
 export class NginxStatusApi {
@@ -42,6 +42,39 @@ export class NginxReloadApi {
   }
 }
 
+export interface NginxConfigsRevisionsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export class NginxConfigsRevisionsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List an Nginx configuration's revisions */
+  async list(configId: string, params?: NginxConfigsRevisionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: NginxConfigRevisionSummary[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: NginxConfigRevisionSummary[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/nginx/etc/${serializePathParameter(configId, { name: 'configId', style: 'simple', explode: false })}/revisions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Retrieve one Nginx configuration revision */
+  async retrieve(configId: string, versionNo: number, requestOptions?: ApiRequestOptions): Promise<NginxConfigRevisionResponse> {
+    return this.client.request<NginxConfigRevisionResponse>(backendApiPath(`/nginx/etc/${serializePathParameter(configId, { name: 'configId', style: 'simple', explode: false })}/revisions/${serializePathParameter(versionNo, { name: 'versionNo', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Roll an Nginx configuration back to a revision */
+  async rollback(configId: string, versionNo: number, requestOptions?: ApiRequestOptions): Promise<NginxConfigResponse> {
+    return this.client.request<NginxConfigResponse>(backendApiPath(`/nginx/etc/${serializePathParameter(configId, { name: 'configId', style: 'simple', explode: false })}/revisions/${serializePathParameter(versionNo, { name: 'versionNo', style: 'simple', explode: false })}/rollback`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
 export interface NginxConfigsListParams {
   page?: number;
   pageSize?: number;
@@ -64,9 +97,11 @@ export interface NginxConfigsDeployParams {
 
 export class NginxConfigsApi {
   private client: HttpClient;
+  public readonly revisions: NginxConfigsRevisionsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.revisions = new NginxConfigsRevisionsApi(client);
   }
 
 

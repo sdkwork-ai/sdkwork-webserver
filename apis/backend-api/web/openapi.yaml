@@ -117,6 +117,214 @@ paths:
                       properties:
                         item:
                           $ref: '#/components/schemas/ApplicationResponse'
+  /backend/v3/api/plugins:
+    get:
+      operationId: plugins.list
+      summary: List the caller's plugin catalog
+      x-sdkwork-pagination-mode: offset
+      tags:
+      - plugin
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.plugins.read
+      x-sdkwork-owner: sdkwork-webserver
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - draft
+          - active
+      - name: q
+        in: query
+        schema:
+          type: string
+          maxLength: 100
+      - name: owner_id
+        in: query
+        description: Platform-operator review of another owner's catalog. Tenant-bound callers may not set it.
+        schema:
+          type: string
+          format: int64
+          pattern: '^-?[0-9]+$'
+          x-sdkwork-int64-string: true
+      responses:
+        '200':
+          description: Plugin catalog page returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/PluginResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+    post:
+      operationId: plugins.create
+      summary: Create a plugin catalog record
+      tags:
+      - plugin
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.plugins.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePluginRequest'
+      responses:
+        '201':
+          description: Plugin catalog record created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/PluginResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /backend/v3/api/plugins/{pluginId}:
+    parameters:
+    - name: pluginId
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      operationId: plugins.retrieve
+      summary: Retrieve one plugin catalog record
+      tags:
+      - plugin
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.plugins.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Plugin catalog record returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/PluginResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: plugins.update
+      summary: Update one plugin catalog record
+      tags:
+      - plugin
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.plugins.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-owner: sdkwork-webserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePluginRequest'
+      responses:
+        '200':
+          description: Plugin catalog record updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/PluginResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: plugins.delete
+      summary: Delete one plugin catalog record
+      tags:
+      - plugin
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.plugins.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-sdkwork-rate-limit-tier: auth-critical
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '204':
+          description: Plugin catalog record deleted successfully.
+        '404':
+          $ref: '#/components/responses/NotFound'
   /backend/v3/api/applications/{applicationId}:
     parameters:
     - $ref: '#/components/parameters/ApplicationIdParam'
@@ -612,7 +820,7 @@ paths:
         description: >-
           Restrict the inventory to the root domains bound to one cloud account.
           Omitted filters nothing. The literal `UNASSIGNED` selects the root
-          domains bound to no account — the ones whose account resolves per
+          domains bound to no account: the ones whose account resolves per
           operation. The literal cannot collide with a real account id, because
           the id shape admits only ASCII alphanumerics and `_.:-`, so whitespace
           and lower-case words like this one are unreachable as an id.
@@ -897,7 +1105,7 @@ paths:
         Pages the resolution-record snapshot the last cloud-account sync read
         from the provider: record type and record content (the resolution IP
         for A/AAAA, the target for CNAME/MX) per owner. The read never
-        contacts the provider — `rootDomains.dnsRecords.sync` does that. A
+        contacts the provider; `rootDomains.dnsRecords.sync` does that. A
         record whose owner matches no registered hostname still shows here at
         Zone scope; a record matched to a hostname deleted after the sync does
         not.
@@ -921,8 +1129,8 @@ paths:
         description: >-
           Restrict the page to one registered subdomain by id. The sync has
           already applied the wildcard semantics when it stamped each record
-          with its subdomain — a wildcard declaration's rows are its base
-          owner and every owner beneath it — so the filter is one equality,
+          with its subdomain: a wildcard declaration's rows are its base
+          owner and every owner beneath it, so the filter is one equality,
           not a name match.
         schema:
           type: string
@@ -930,9 +1138,9 @@ paths:
       - name: host
         in: query
         description: >-
-          Restrict the page to records whose 主机记录 (zone-relative owner)
-          contains this keyword, case-insensitive — the search Aliyun's own
-          解析设置 page offers.
+          Restrict the page to records whose zone-relative owner (the record
+          name) contains this keyword, case-insensitive: the search Aliyun's own
+          DNS settings page offers.
         schema:
           type: string
           minLength: 1
@@ -981,7 +1189,7 @@ paths:
         Validates the change (type in the managed set, owner in the DNS label
         alphabet, value parsed per type) and writes it through the Zone's cloud
         account, then joins the vendor's answer to the stored snapshot. The
-        owner is the zone-relative 主机记录 (`@`, `www`, `api.eu`, `*`); an
+        owner is the zone-relative record name (`@`, `www`, `api.eu`, `*`); an
         owner already carrying the zone suffix is refused before the vendor is
         asked.
       tags:
@@ -1038,8 +1246,8 @@ paths:
       operationId: rootDomains.dnsRecords.update
       summary: Replace a resolution record in place through the Zone's cloud account
       description: >-
-        A full replace of owner/type/value/TTL — the update shape every
-        integrated vendor shares — followed by the same replace in the stored
+        A full replace of owner/type/value/TTL (the update shape every
+        integrated vendor shares), followed by the same replace in the stored
         snapshot. The provider-side pause state is not touched here; only the
         status operation flips it.
       tags:
@@ -1211,7 +1419,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     put:
-      operationId: rootDomains.wechatVerification.upsert
+      operationId: rootDomains.wechatVerification.update
       summary: Upload (or wholly replace) the root domain's WeChat verification file
       description: >-
         Content is stored byte-exact: the platform compares bytes, so nothing
@@ -1325,8 +1533,8 @@ paths:
       summary: Sync a root-domain Zone's resolution records through its cloud account
       description: >-
         Re-reads the Zone's record inventory from its DNS provider through the
-        Zone's cloud account — the bound account when one is pinned, otherwise
-        the registered account whose zone covers the apex — and replaces the
+        Zone's cloud account: the bound account when one is pinned, otherwise
+        the registered account whose zone covers the apex; and replaces the
         stored snapshot whole. Two syncs in a row answer with equivalent
         snapshots, so the operation is idempotent.
       tags:
@@ -1452,6 +1660,39 @@ paths:
   /backend/v3/api/domains/{domainId}:
     parameters:
     - $ref: '#/components/parameters/DomainIdParam'
+    get:
+      operationId: domains.retrieve
+      summary: Retrieve one tenant custom domain asset
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.applications.read
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Tenant custom domain asset returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/ApplicationDomainResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       operationId: domains.delete
       summary: Delete an unbound tenant custom domain asset
@@ -1824,10 +2065,11 @@ paths:
       summary: List canonical certificates
       x-sdkwork-pagination-mode: cursor
       description: >-
-        Cursor mode over the per-issuance-growing certificate collection. The
-        first request (no cursor) is an offset page that carries the exact
-        total and, when more rows exist, the opaque `nextCursor` every later
-        page must present; `page` beyond the first offset page is refused.
+        Cursor mode over the per-issuance-growing certificate collection. Every
+        page carries `pageInfo.mode: "cursor"` and, when more rows exist, the
+        opaque `nextCursor` the next request must present. The first request
+        (no cursor) also reports the exact `totalItems`; deeper pages omit it.
+        `page` is not part of this operation and is refused.
       tags:
       - certificate
       security:
@@ -2472,6 +2714,169 @@ paths:
                           $ref: '#/components/schemas/NginxDeployResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+  /backend/v3/api/nginx/etc/{configId}/revisions:
+    parameters:
+    - name: configId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - $ref: '#/components/parameters/PageParam'
+    - $ref: '#/components/parameters/PageSizeParam'
+    get:
+      operationId: configs.revisions.list
+      summary: List an Nginx configuration's revisions
+      description: Paginated, newest first. The body of each revision is omitted from the list; retrieve one revision for its content.
+      tags:
+      - nginx
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.nginx.write
+      x-sdkwork-owner: sdkwork-webserver
+      x-sdkwork-pagination-mode: offset
+      responses:
+        '200':
+          description: Revision history returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/NginxConfigRevisionSummary'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}:
+    parameters:
+    - name: configId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: versionNo
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    get:
+      operationId: configs.revisions.retrieve
+      summary: Retrieve one Nginx configuration revision
+      description: Returns the immutable body captured for that version.
+      tags:
+      - nginx
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.nginx.write
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Revision returned successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/NginxConfigRevisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}/rollback:
+    parameters:
+    - name: configId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: versionNo
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    post:
+      operationId: configs.revisions.rollback
+      summary: Roll an Nginx configuration back to a revision
+      description: Restores the selected revision body as a new revision and increments versionNo; history stays append-only.
+      tags:
+      - nginx
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-api-surface: backend-api
+      x-sdkwork-api-authority: sdkwork-webserver-backend-api
+      x-sdkwork-request-context: WebRequestContext
+      x-sdkwork-auth-mode: dual-token
+      x-sdkwork-permission: web.nginx.write
+      x-sdkwork-owner: sdkwork-webserver
+      responses:
+        '200':
+          description: Configuration rolled back successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/NginxConfigResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /backend/v3/api/nginx/reload:
     post:
       operationId: reload
@@ -2872,7 +3277,10 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.servers.files.read
       x-sdkwork-owner: sdkwork-webserver
-      parameters: []
+      x-sdkwork-pagination-mode: offset
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
       responses:
         '200':
           description: Web Server configuration catalog returned successfully.
@@ -3596,7 +4004,7 @@ paths:
         schema:
           type: string
           maxLength: 256
-      - name: search
+      - name: q
         in: query
         description: Free-text search over name / endpoint / hostname.
         schema:
@@ -3853,6 +4261,10 @@ paths:
       x-sdkwork-auth-mode: dual-token
       x-sdkwork-permission: web.tunnel.read
       x-sdkwork-owner: sdkwork-webserver
+      x-sdkwork-pagination-mode: offset
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
       responses:
         '200':
           description: Machine list returned successfully.
@@ -4780,7 +5192,7 @@ components:
         type: string
         format: uuid
     DomainIdParam:
-      name: domain_id
+      name: domainId
       in: path
       required: true
       schema:
@@ -5037,6 +5449,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TunnelMachineResponse'
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
     SetTunnelMachineEnabledRequest:
       type: object
       additionalProperties: false
@@ -5686,6 +6100,193 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PluginResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - pluginKey
+      - displayName
+      - summary
+      - version
+      - categoryId
+      - supportedHostTools
+      - contributedCapabilities
+      - sourceKind
+      - status
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+        pluginKey:
+          type: string
+        displayName:
+          type: string
+        summary:
+          type: string
+        version:
+          type: string
+        categoryId:
+          type: string
+        supportedHostTools:
+          type: array
+          items:
+            type: string
+        contributedCapabilities:
+          type: array
+          items:
+            type: string
+        sourceKind:
+          type: string
+          enum:
+          - git
+          - archive
+        gitRepository:
+          type: string
+          nullable: true
+        gitRef:
+          type: string
+          nullable: true
+        artifactRef:
+          type: string
+          nullable: true
+        checksumSha256:
+          type: string
+          nullable: true
+        archiveFileName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+          - draft
+          - active
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreatePluginRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - pluginKey
+      - displayName
+      - version
+      - categoryId
+      - sourceKind
+      properties:
+        pluginKey:
+          type: string
+          pattern: '^plugin\.[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$'
+          maxLength: 200
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        summary:
+          type: string
+          maxLength: 500
+          default: ''
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        categoryId:
+          type: string
+          minLength: 1
+          maxLength: 120
+        supportedHostTools:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+        contributedCapabilities:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+        sourceKind:
+          type: string
+          enum:
+          - git
+          - archive
+        gitRepository:
+          type: string
+          maxLength: 500
+        gitRef:
+          type: string
+          maxLength: 200
+        artifactRef:
+          type: string
+          maxLength: 500
+        checksumSha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          nullable: true
+        archiveFileName:
+          type: string
+          maxLength: 255
+          nullable: true
+        status:
+          type: string
+          enum:
+          - draft
+          - active
+          default: draft
+    UpdatePluginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        summary:
+          type: string
+          maxLength: 500
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        categoryId:
+          type: string
+          minLength: 1
+          maxLength: 120
+        supportedHostTools:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+        contributedCapabilities:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+        gitRepository:
+          type: string
+          maxLength: 500
+        gitRef:
+          type: string
+          maxLength: 200
+        artifactRef:
+          type: string
+          maxLength: 500
+        checksumSha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          nullable: true
+        archiveFileName:
+          type: string
+          maxLength: 255
+          nullable: true
+        status:
+          type: string
+          enum:
+          - draft
+          - active
     CreateApplicationDomainRequest:
       type: object
       additionalProperties: false
@@ -5891,13 +6492,13 @@ components:
           type: string
         fileName:
           type: string
-          description: 平台发放的文件名(如 MP_verify_xxx.txt),按精确名称服务
+          description: File name issued by the platform (for example MP_verify_xxx.txt); served by exact name.
         content:
           type: string
-          description: 文件原文,逐字节保存与返回
+          description: Verbatim file content, stored and returned byte for byte.
         updatedAt:
           type: string
-          description: 最近一次上传/替换的时间
+          description: Time of the most recent upload or replacement.
     UpsertDomainWechatVerificationRequest:
       type: object
       required:
@@ -5908,11 +6509,11 @@ components:
           type: string
           maxLength: 64
           pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.txt$'
-          description: 平台发放的文件名,必须是 .txt 结尾
+          description: File name issued by the platform; must end with .txt.
         content:
           type: string
           maxLength: 2048
-          description: 文件原文,逐字节保存与返回
+          description: Verbatim file content, stored and returned byte for byte.
     DomainWechatVerificationCheckResponse:
       type: object
       required:
@@ -5922,23 +6523,23 @@ components:
       properties:
         reachable:
           type: boolean
-          description: 是否有任一协议取回了 2xx 响应
+          description: Whether any protocol fetched a 2xx response.
         matched:
           type: boolean
-          description: 取回内容是否与保存的文件逐字节一致
+          description: Whether the fetched content matches the stored file byte for byte.
         statusCode:
           type: integer
           format: int32
-          description: 命中方案的 HTTP 状态码
+          description: HTTP status code of the matched attempt.
         scheme:
           type: string
-          description: 命中方案(https 或 http)
+          description: Matched scheme (https or http).
         detail:
           type: string
-          description: 未通过时的一句话事实
+          description: One-line fact when the check did not pass.
         checkedAt:
           type: string
-          description: 自检时间
+          description: Time of the check.
     DomainDnsRecordResponse:
       type: object
       additionalProperties: false
@@ -5961,7 +6562,7 @@ components:
           description: Absolute record owner inside the zone, e.g. `www.example.com`.
         host:
           type: string
-          description: Zone-relative 主机记录 (`@` for the apex, `www`, `*`).
+          description: Zone-relative record owner (`@` for the apex, `www`, `*`).
         recordType:
           type: string
           maxLength: 16
@@ -5969,7 +6570,7 @@ components:
         recordValue:
           type: string
           maxLength: 1024
-          description: Record content — the resolution IP for A/AAAA, the target for CNAME/MX.
+          description: Record content - the resolution IP for A/AAAA, the target for CNAME/MX.
         ttlSeconds:
           type: integer
           minimum: 0
@@ -6029,7 +6630,7 @@ components:
           type: string
           minLength: 1
           maxLength: 253
-          description: Zone-relative 主机记录 (`@` for the apex, `www`, `api.eu`, `*`).
+          description: Zone-relative record owner (`@` for the apex, `www`, `api.eu`, `*`).
         recordValue:
           type: string
           minLength: 1
@@ -6090,7 +6691,7 @@ components:
       properties:
         enabled:
           type: boolean
-          description: '`true` resumes the record; `false` pauses it (暂停解析).'
+          description: '`true` resumes the record; `false` pauses it (paused resolution).'
     DomainDnsSyncResponse:
       type: object
       additionalProperties: false
@@ -7023,6 +7624,36 @@ components:
         updatedAt:
           type: string
           format: date-time
+    NginxConfigRevisionSummary:
+      type: object
+      properties:
+        versionNo:
+          type: integer
+        configName:
+          type: string
+        configHash:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    NginxConfigRevisionResponse:
+      type: object
+      properties:
+        versionNo:
+          type: integer
+        configName:
+          type: string
+        configContent:
+          type: string
+        configHash:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
     NginxConfigPage:
       type: object
       properties:
@@ -7224,6 +7855,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServerEntry'
+        truncated:
+          type: boolean
+          default: false
+          description: True when the directory has more children than the deployment's maximumEntries cap; the listing is truncated.
     ServerEntry:
       type: object
       additionalProperties: false
@@ -7295,6 +7930,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WebserverConfigEntry'
+        truncated:
+          type: boolean
+          default: false
+          description: True when the deployment has more catalog entries than the server's maximumEntries cap; items is the capped prefix.
+        pageInfo:
+          $ref: '#/components/schemas/PageInfo'
+          description: Present only when page/pageSize were requested; omitted for the legacy whole-catalog response.
     WebserverConfigEntry:
       type: object
       additionalProperties: false

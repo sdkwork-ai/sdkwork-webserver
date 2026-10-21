@@ -41,7 +41,7 @@ impl WebRepository {
             "SELECT COUNT(*) FROM webserver_root_domain r
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
-               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')
+               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\\')
                AND (NOT $4 OR (r.cloud_account_id IS NOT DISTINCT FROM $5))",
         )
         .bind(tenant_id)
@@ -99,7 +99,7 @@ impl WebRepository {
              ) agg ON TRUE
              WHERE r.tenant_id = $1 AND r.deleted_at IS NULL
                AND ($2 IS NULL OR r.status = $2)
-               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\')
+               AND ($3 IS NULL OR LOWER(r.hostname) LIKE $3 ESCAPE '\\')
                AND (NOT $4 OR (r.cloud_account_id IS NOT DISTINCT FROM $5))
              ORDER BY r.updated_at DESC, r.id DESC LIMIT $6 OFFSET $7",
         )

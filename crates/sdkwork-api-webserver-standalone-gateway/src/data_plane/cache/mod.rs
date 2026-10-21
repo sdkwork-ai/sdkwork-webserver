@@ -8,7 +8,7 @@
 //! - `backend.rs` — `CacheBackend` trait + in-memory LRU (L1)
 //! - `disk.rs`    — tiered memory+disk backend (`proxy_cache_path` L2 spill)
 //! - `mod.rs`     — `HttpResponseCache` facade: lookup / insert / conditional
-//!                  revalidation / single-flight coalescing
+//!   revalidation / single-flight coalescing
 //!
 //! Semantics follow nginx `proxy_cache`: only GET/HEAD, cacheable statuses
 //! without Set-Cookie, Vary-aware keys, `Cache-Control` freshness, stale
@@ -49,11 +49,15 @@ pub(crate) struct HttpResponseCache {
     default_ttl: Duration,
     stale_ttl: Duration,
     in_flight: Arc<Mutex<std::collections::HashMap<CacheKey, Arc<tokio::sync::Notify>>>>,
+    /// Process-wide byte budget for in-progress fills, in KiB. The entry cap
+    /// bounds the number of concurrent fills, not their bytes; without this a
+    /// burst of large objects multiplies `maxObjectBytes` by the in-flight cap.
+    fill_budget: Arc<tokio::sync::Semaphore>,
     metrics: Arc<DataPlaneMetrics>,
 }
 
 impl HttpResponseCache {
-    pub(crate) fn new(config: &ProxyCacheConfig, metrics: Arc<DataPlaneMetrics>) -> Arc<Self> {
+    pub(super) fn new(config: &ProxyCacheConfig, metrics: Arc<DataPlaneMetrics>) -> Arc<Self> {
         let mut disk_backed = false;
         let store: Arc<dyn CacheBackend> = match config
             .disk_path
@@ -100,8 +104,29 @@ impl HttpResponseCache {
             default_ttl: Duration::from_secs(config.default_ttl_seconds),
             stale_ttl: Duration::from_secs(config.stale_ttl_seconds),
             in_flight: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            fill_budget: Arc::new(tokio::sync::Semaphore::new(
+                usize::try_from(config.max_memory_bytes / 1024)
+                    .unwrap_or(usize::MAX)
+                    .max(1)
+                    .min(u32::MAX as usize),
+            )),
             metrics,
         })
+    }
+
+    /// Reserve the worst-case bytes of one response-cache fill from the
+    /// process-wide fill budget. The permit is released when the fill task
+    /// ends (stored, oversized, cancelled, or client disconnected). `None`
+    /// means the budget is saturated: the response still streams to the
+    /// client, it is simply not buffered for the cache.
+    pub(crate) fn try_reserve_fill_bytes(
+        &self,
+        bytes: u64,
+    ) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        let kib = bytes.div_ceil(1024).max(1).min(u64::from(u32::MAX)) as u32;
+        Arc::clone(&self.fill_budget)
+            .try_acquire_many_owned(kib)
+            .ok()
     }
 
     /// Read the backing store, off the runtime worker when disk-backed.
@@ -313,6 +338,23 @@ mod tests {
             vary: Vec::new(),
             fresh_seconds: 60,
         }
+    }
+
+    #[test]
+    fn fill_budget_bounds_aggregate_fill_bytes() {
+        let cache = HttpResponseCache::new(&config(), metrics());
+        let first = cache
+            .try_reserve_fill_bytes(4096)
+            .expect("the whole 4 KiB budget is available");
+        assert!(
+            cache.try_reserve_fill_bytes(1024).is_none(),
+            "a saturated fill budget must refuse another reservation"
+        );
+        drop(first);
+        assert!(
+            cache.try_reserve_fill_bytes(1024).is_some(),
+            "dropping the fill releases its reservation"
+        );
     }
 
     #[tokio::test]

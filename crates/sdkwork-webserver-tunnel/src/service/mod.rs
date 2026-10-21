@@ -272,12 +272,13 @@ impl TunnelService for GatewayTunnelService {
     }
 
     async fn list_devices(&self) -> Result<Vec<TunnelDeviceView>> {
+        let routes_by_session = self.route_index();
         Ok(self
             .shared
             .devices
             .list()
             .into_iter()
-            .map(|record| self.device_view(record))
+            .map(|record| self.device_view(record, &routes_by_session))
             .collect())
     }
 
@@ -287,7 +288,8 @@ impl TunnelService for GatewayTunnelService {
             .devices
             .get(device_id)
             .ok_or(TunnelError::DeviceNotFound)?;
-        Ok(self.device_view(record))
+        let routes_by_session = self.route_index();
+        Ok(self.device_view(record, &routes_by_session))
     }
 
     async fn set_device_enabled(
@@ -321,30 +323,58 @@ impl TunnelService for GatewayTunnelService {
     }
 }
 
+/// Routes grouped by the session that owns them, each with its last probe
+/// verdict. Building this once per listing keeps the machine list O(devices +
+/// routes) instead of rescanning the whole route registry for every device.
+type RoutesBySession = HashMap<Option<String>, Vec<(TunnelRoute, bool)>>;
+
 impl GatewayTunnelService {
+    /// Snapshot the route registry once and group it by owning session.
+    fn route_index(&self) -> RoutesBySession {
+        let mut index: RoutesBySession = HashMap::new();
+        for route in self.shared.registry.list() {
+            let healthy = self
+                .shared
+                .registry
+                .get(&route.id)
+                .map(|registered| registered.health.is_healthy())
+                .unwrap_or(true);
+            let key = route.session_id.as_ref().map(ToString::to_string);
+            index.entry(key).or_default().push((route, healthy));
+        }
+        for routes in index.values_mut() {
+            routes.sort_by(|left, right| left.0.id.cmp(&right.0.id));
+        }
+        index
+    }
+
     /// Joins one inventory record with the live session and route state that
     /// other components own.
-    fn device_view(&self, record: crate::gateway::devices::DeviceRecord) -> TunnelDeviceView {
+    fn device_view(
+        &self,
+        record: crate::gateway::devices::DeviceRecord,
+        routes_by_session: &RoutesBySession,
+    ) -> TunnelDeviceView {
         let session_id = self.shared.sessions.session_of_device(&record.device.id);
         let session_key = session_id.as_ref().map(ToString::to_string);
-        let mut routes: Vec<TunnelRoute> = Vec::new();
-        let mut unhealthy: Vec<RouteId> = Vec::new();
         // Routes belong to a *session*, so a machine that is offline has none:
         // its routes were unregistered when the session ended. Filtering by the
-        // session id keeps the console honest — it never shows a route that no
+        // session id keeps the console honest - it never shows a route that no
         // longer forwards.
-        for route in self.shared.registry.list() {
-            if route.session_id.as_ref() != session_id.as_ref() {
-                continue;
+        let bucket = routes_by_session
+            .get(&session_key)
+            .cloned()
+            .unwrap_or_default();
+        let mut routes: Vec<TunnelRoute> = Vec::with_capacity(bucket.len());
+        let mut route_ids: Vec<RouteId> = Vec::with_capacity(bucket.len());
+        let mut unhealthy: Vec<RouteId> = Vec::new();
+        for (route, healthy) in bucket {
+            if !healthy {
+                unhealthy.push(route.id.clone());
             }
-            if let Some(registered) = self.shared.registry.get(&route.id) {
-                if !registered.health.is_healthy() {
-                    unhealthy.push(route.id.clone());
-                }
-            }
+            route_ids.push(route.id.clone());
             routes.push(route);
         }
-        routes.sort_by(|left, right| left.id.cmp(&right.id));
         unhealthy.sort();
         TunnelDeviceView {
             device: record.device,
@@ -359,7 +389,7 @@ impl GatewayTunnelService {
             bytes_in: record.bytes_in,
             bytes_out: record.bytes_out,
             sessions_total: record.sessions_total,
-            route_ids: routes.iter().map(|route| route.id.clone()).collect(),
+            route_ids,
             routes,
             unhealthy_route_ids: unhealthy,
         }

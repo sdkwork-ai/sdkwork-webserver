@@ -3,6 +3,7 @@ import Foundation
 /// API modules for sdkwork-webserver-backend-sdk
 public struct API {
     public static let application = ApplicationApi.self
+    public static let plugin = PluginApi.self
     public static let applicationDomain = ApplicationDomainApi.self
     public static let certificate = CertificateApi.self
     public static let domain = DomainApi.self

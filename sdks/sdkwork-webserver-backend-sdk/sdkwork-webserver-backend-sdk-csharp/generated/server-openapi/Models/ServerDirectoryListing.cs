@@ -10,5 +10,6 @@ namespace SDKWork.WebserverBackendSdk.Models
         public string Path { get; set; }
         public string ParentPath { get; set; }
         public List<ServerEntry> Entries { get; set; }
+        public bool? Truncated { get; set; }
     }
 }

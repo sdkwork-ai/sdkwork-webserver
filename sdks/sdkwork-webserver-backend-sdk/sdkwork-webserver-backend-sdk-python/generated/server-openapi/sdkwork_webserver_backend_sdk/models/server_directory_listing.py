@@ -12,3 +12,4 @@ class ServerDirectoryListing:
     path: str
     parent_path: Optional[str]
     entries: List[ServerEntry]
+    truncated: Optional[bool] = None

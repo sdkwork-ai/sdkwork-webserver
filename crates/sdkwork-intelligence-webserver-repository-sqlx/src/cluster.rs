@@ -114,8 +114,7 @@ const HOST_PROJECTION: &str = "h.uuid, ch.uuid AS cluster_uuid, h.name, h.hostna
         CAST(h.created_at AS TEXT) AS created_at,
         CAST(h.updated_at AS TEXT) AS updated_at,
         h.id,
-        (SELECT COUNT(*) FROM webserver_cluster_instance i
-          WHERE i.host_id = h.id AND i.deleted_at IS NULL) AS instance_count";
+        COALESCE(host_instances.instance_count, 0) AS instance_count";
 
 const INSTANCE_PROJECTION: &str = "i.uuid, ci.uuid AS cluster_uuid, ch.uuid AS host_uuid,
         ch.name AS host_name, i.name, i.role, i.environment, i.process_pid,
@@ -170,18 +169,31 @@ impl WebRepository {
             .try_get("total")
             .map_err(|error| store_error("map webserver_cluster count", error))?;
 
+        // One grouped pass per child table, joined to the page. The previous
+        // shape ran three correlated COUNT subqueries per cluster row (and, in
+        // the host/instance counts, without a tenant predicate), so a page of
+        // N clusters scanned the child tables N times.
         let sql = "SELECT c.uuid, c.name, c.code, c.description, c.status,
                 c.heartbeat_interval_seconds, c.offline_threshold_seconds,
                 c.lb_strategy, CAST(c.served_domains AS TEXT) AS served_domains,
                 CAST(c.created_at AS TEXT) AS created_at, CAST(c.updated_at AS TEXT) AS updated_at,
-                (SELECT COUNT(*) FROM webserver_cluster_host h
-                  WHERE h.cluster_id = c.id AND h.deleted_at IS NULL) AS host_count,
-                (SELECT COUNT(*) FROM webserver_cluster_instance i
-                  WHERE i.cluster_id = c.id AND i.deleted_at IS NULL) AS instance_count,
-                (SELECT COUNT(*) FROM webserver_cluster_instance i
-                  WHERE i.cluster_id = c.id AND i.deleted_at IS NULL AND i.status = 1)
-                    AS online_instance_count
+                COALESCE(hosts.host_count, 0) AS host_count,
+                COALESCE(instances.instance_count, 0) AS instance_count,
+                COALESCE(instances.online_instance_count, 0) AS online_instance_count
          FROM webserver_cluster c
+         LEFT JOIN (
+             SELECT cluster_id, COUNT(*) AS host_count
+             FROM webserver_cluster_host
+             WHERE tenant_id = $1 AND deleted_at IS NULL
+             GROUP BY cluster_id
+         ) hosts ON hosts.cluster_id = c.id
+         LEFT JOIN (
+             SELECT cluster_id, COUNT(*) AS instance_count,
+                    COUNT(*) FILTER (WHERE status = 1) AS online_instance_count
+             FROM webserver_cluster_instance
+             WHERE tenant_id = $1 AND deleted_at IS NULL
+             GROUP BY cluster_id
+         ) instances ON instances.cluster_id = c.id
          WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
          ORDER BY c.updated_at DESC, c.id DESC LIMIT $2 OFFSET $3";
         let rows = sqlx::query(sql)
@@ -306,7 +318,7 @@ impl WebRepository {
         let served_domains = request
             .served_domains
             .as_ref()
-            .map(|domains| serde_json::to_string(domains))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|error| WebServiceError::Internal(format!("encode servedDomains: {error}")))?;
         // `served_domains` is JSONB and the bind is a JSON string, so the
@@ -393,12 +405,18 @@ impl WebRepository {
         };
 
         let rows = if let Some(cursor) = cursor {
-            let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
+            let (cursor_updated_at, cursor_id) = decode_keyset_cursor("cluster_hosts:0", cursor)
                 .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
             let sql = format!(
                 "SELECT {HOST_PROJECTION}
                  FROM webserver_cluster_host h
                  JOIN webserver_cluster ch ON ch.id = h.cluster_id
+                 LEFT JOIN (
+                     SELECT host_id, COUNT(*) AS instance_count
+                     FROM webserver_cluster_instance
+                     WHERE tenant_id = $1 AND deleted_at IS NULL
+                     GROUP BY host_id
+                 ) host_instances ON host_instances.host_id = h.id
                  WHERE h.tenant_id = $1 AND h.deleted_at IS NULL
                    AND (h.updated_at, h.id) < (CAST($2 AS TIMESTAMPTZ), $3)
                    AND ($4::BIGINT IS NULL OR h.cluster_id = $4)
@@ -419,6 +437,12 @@ impl WebRepository {
                 "SELECT {HOST_PROJECTION}
                  FROM webserver_cluster_host h
                  JOIN webserver_cluster ch ON ch.id = h.cluster_id
+                 LEFT JOIN (
+                     SELECT host_id, COUNT(*) AS instance_count
+                     FROM webserver_cluster_instance
+                     WHERE tenant_id = $1 AND deleted_at IS NULL
+                     GROUP BY host_id
+                 ) host_instances ON host_instances.host_id = h.id
                  WHERE h.tenant_id = $1 AND h.deleted_at IS NULL
                    AND ($4::BIGINT IS NULL OR h.cluster_id = $4)
                    AND ($5::INT IS NULL OR h.status = $5)
@@ -444,6 +468,12 @@ impl WebRepository {
             "SELECT {HOST_PROJECTION}
              FROM webserver_cluster_host h
              JOIN webserver_cluster ch ON ch.id = h.cluster_id
+             LEFT JOIN (
+                 SELECT host_id, COUNT(*) AS instance_count
+                 FROM webserver_cluster_instance
+                 WHERE tenant_id = $1 AND deleted_at IS NULL
+                 GROUP BY host_id
+             ) host_instances ON host_instances.host_id = h.id
              WHERE h.tenant_id = $1 AND h.uuid = $2 AND h.deleted_at IS NULL");
         let row = sqlx::query(audited_sql(&sql))
             .bind(0_i64)
@@ -574,7 +604,7 @@ impl WebRepository {
         let search_pattern =
             search.map(|term| like_contains_pattern(&term.trim().to_ascii_lowercase()));
         let rows = if let Some(cursor) = cursor {
-            let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
+            let (cursor_updated_at, cursor_id) = decode_keyset_cursor("cluster_instances:0", cursor)
                 .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
             let sql = format!(
                 "SELECT {INSTANCE_PROJECTION}
@@ -590,9 +620,9 @@ impl WebRepository {
                    AND ($8::INT IS NULL OR i.join_mode = $8)
                    AND ($9::INT IS NULL OR i.sync_status = $9)
                    AND ($10::JSONB IS NULL OR i.labels @> $10::JSONB)
-                   AND ($11::TEXT IS NULL OR i.name ILIKE $11 ESCAPE '\'
-                        OR i.public_endpoint ILIKE $11 ESCAPE '\'
-                        OR ch.hostname ILIKE $11 ESCAPE '\')
+                   AND ($11::TEXT IS NULL OR i.name ILIKE $11 ESCAPE '\\'
+                        OR i.public_endpoint ILIKE $11 ESCAPE '\\'
+                        OR ch.hostname ILIKE $11 ESCAPE '\\')
                    AND ($12::TEXT IS NULL OR i.build_version = $12)
                  ORDER BY i.updated_at DESC, i.id DESC LIMIT $13");
             sqlx::query(audited_sql(&sql))
@@ -626,9 +656,9 @@ impl WebRepository {
                    AND ($8::INT IS NULL OR i.join_mode = $8)
                    AND ($9::INT IS NULL OR i.sync_status = $9)
                    AND ($10::JSONB IS NULL OR i.labels @> $10::JSONB)
-                   AND ($11::TEXT IS NULL OR i.name ILIKE $11 ESCAPE '\'
-                        OR i.public_endpoint ILIKE $11 ESCAPE '\'
-                        OR ch.hostname ILIKE $11 ESCAPE '\')
+                   AND ($11::TEXT IS NULL OR i.name ILIKE $11 ESCAPE '\\'
+                        OR i.public_endpoint ILIKE $11 ESCAPE '\\'
+                        OR ch.hostname ILIKE $11 ESCAPE '\\')
                    AND ($12::TEXT IS NULL OR i.build_version = $12)
                  ORDER BY i.updated_at DESC, i.id DESC LIMIT $2 OFFSET $3");
             sqlx::query(audited_sql(&sql))
@@ -683,7 +713,7 @@ impl WebRepository {
         let labels_json = request
             .labels
             .as_ref()
-            .map(|labels| serde_json::to_string(labels))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|error| WebServiceError::Internal(format!("encode labels: {error}")))?;
         // Drain transitions stamp/clear `drain_started_at` alongside the flag.
@@ -780,7 +810,7 @@ impl WebRepository {
         };
 
         let rows = if let Some(cursor) = cursor {
-            let (cursor_occurred_at, cursor_id) = decode_keyset_cursor(cursor)
+            let (cursor_occurred_at, cursor_id) = decode_keyset_cursor("cluster_events:0", cursor)
                 .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
             let sql = format!(
                 "SELECT {EVENT_PROJECTION}
@@ -845,8 +875,9 @@ impl WebRepository {
             ));
         }
         let rows = if let Some(cursor) = cursor {
-            let (cursor_reported_at, cursor_id) = decode_keyset_cursor(cursor)
-                .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
+            let (cursor_reported_at, cursor_id) =
+                decode_keyset_cursor("cluster_heartbeat:0", cursor)
+                    .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
             let sql = "SELECT h.uuid, h.status, h.latency_ms,
                     CAST(h.metrics AS TEXT) AS metrics,
                     CAST(h.reported_at AS TEXT) AS reported_at, h.id
@@ -900,7 +931,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_cluster_heartbeat cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&reported_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    "cluster_heartbeat:0",
+                    &reported_at,
+                    id,
+                ))
             })
             .transpose()?;
         Ok(ClusterHeartbeatSamplePage {
@@ -2529,7 +2564,11 @@ fn finalize_cluster_host_page(
             let id: i64 = last
                 .try_get("id")
                 .map_err(|error| store_error("map webserver_cluster_host cursor id", error))?;
-            Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+            Ok::<_, WebServiceError>(encode_keyset_cursor(
+                "cluster_hosts:0",
+                &updated_at,
+                id,
+            ))
         })
         .transpose()?;
     Ok(ClusterHostPage {
@@ -2560,7 +2599,11 @@ fn finalize_cluster_instance_page(
             let id: i64 = last.try_get("id").map_err(|error| {
                 store_error("map webserver_cluster_instance cursor id", error)
             })?;
-            Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+            Ok::<_, WebServiceError>(encode_keyset_cursor(
+                "cluster_instances:0",
+                &updated_at,
+                id,
+            ))
         })
         .transpose()?;
     Ok(ClusterInstancePage {
@@ -2591,7 +2634,11 @@ fn finalize_cluster_event_page(
             let id: i64 = last
                 .try_get("id")
                 .map_err(|error| store_error("map webserver_cluster_event cursor id", error))?;
-            Ok::<_, WebServiceError>(encode_keyset_cursor(&occurred_at, id))
+            Ok::<_, WebServiceError>(encode_keyset_cursor(
+                "cluster_events:0",
+                &occurred_at,
+                id,
+            ))
         })
         .transpose()?;
     Ok(ClusterEventPage {

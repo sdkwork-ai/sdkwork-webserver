@@ -93,6 +93,35 @@ namespace SDKWork.WebserverBackendSdk.Api
         }
 
         /// <summary>
+        /// List an Nginx configuration's revisions
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsRevisionsListResponse?> ConfigsRevisionsListAsync(string configId, int? page = null, int? pageSize = null)
+        {
+            var queryString = BuildQueryString(new[]
+            {
+                new QueryParameterSpec("page", page, "form", true, false, null),
+                new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
+            });
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ConfigsRevisionsListResponse>(ApiPaths.AppendQueryString(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/revisions"), queryString));
+        }
+
+        /// <summary>
+        /// Retrieve one Nginx configuration revision
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsRevisionsRetrieveResponse?> ConfigsRevisionsRetrieveAsync(string configId, int versionNo)
+        {
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.ConfigsRevisionsRetrieveResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/revisions/{SerializePathParameter(versionNo, new PathParameterSpec("versionNo", "simple", false))}"));
+        }
+
+        /// <summary>
+        /// Roll an Nginx configuration back to a revision
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.ConfigsRevisionsRollbackResponse?> ConfigsRevisionsRollbackAsync(string configId, int versionNo)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.ConfigsRevisionsRollbackResponse>(ApiPaths.BackendPath($"/nginx/etc/{SerializePathParameter(configId, new PathParameterSpec("configId", "simple", false))}/revisions/{SerializePathParameter(versionNo, new PathParameterSpec("versionNo", "simple", false))}/rollback"), null);
+        }
+
+        /// <summary>
         /// Reload Nginx
         /// </summary>
         public async Task<SDKWork.WebserverBackendSdk.Models.ReloadResponse?> ReloadAsync(string idempotencyKey)

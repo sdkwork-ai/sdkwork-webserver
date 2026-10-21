@@ -10,4 +10,5 @@ export const webserverShellApplicationZhCn = {
   "shell.status.loadingRuntime": "正在加载 SDKWork Web Server",
   "shell.status.loadingWorkspace": "正在加载工作台",
   "shell.error.runtimeUnavailable": "运行时配置加载失败，请稍后重试。",
+  "shell.error.workspaceUnavailable": "工作台加载失败，请刷新页面或重新登录。",
 } as const;

@@ -117,7 +117,7 @@ impl ClusterApi {
     }
 
     /// List webserver process instances with liveness state
-    pub async fn clusters_instances_list(&self, page_size: Option<i64>, cursor: Option<&str>, cluster_id: Option<&str>, host_id: Option<&str>, status: Option<i64>, health_state: Option<&str>, join_mode: Option<i64>, sync_status: Option<i64>, labels: Option<&str>, search: Option<&str>, build_version: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_instances_list(&self, page_size: Option<i64>, cursor: Option<&str>, cluster_id: Option<&str>, host_id: Option<&str>, status: Option<i64>, health_state: Option<&str>, join_mode: Option<i64>, sync_status: Option<i64>, labels: Option<&str>, q: Option<&str>, build_version: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
@@ -128,7 +128,7 @@ impl ClusterApi {
             QueryParameterSpec::new("join_mode", join_mode, "form", true, false, None),
             QueryParameterSpec::new("sync_status", sync_status, "form", true, false, None),
             QueryParameterSpec::new("labels", labels, "form", true, false, None),
-            QueryParameterSpec::new("search", search, "form", true, false, None),
+            QueryParameterSpec::new("q", q, "form", true, false, None),
             QueryParameterSpec::new("build_version", build_version, "form", true, false, None),
         ]);
         let path = append_query_string(backend_path(&"/clusters/instances".to_string()), &query);

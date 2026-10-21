@@ -13,4 +13,8 @@ pub struct ServerDirectoryListing {
     pub parent_path: String,
 
     pub entries: Vec<ServerEntry>,
+
+    /// True when the directory has more children than the deployment's maximumEntries cap; the listing is truncated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
 }

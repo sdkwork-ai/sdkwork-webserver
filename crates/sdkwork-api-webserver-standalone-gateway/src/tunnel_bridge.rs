@@ -149,50 +149,77 @@ async fn pump_websocket(
 }
 
 /// Builds the gateway options from the app config's `[tunnel]` section.
-/// Returns `None` when the section is absent or disabled (PRD §77: a
-/// disabled tunnel leaves the runtime unchanged).
+/// Returns `Ok(None)` when the section is absent or disabled (PRD §77: a
+/// disabled tunnel leaves the runtime unchanged). A configured tunnel with
+/// unreadable or missing TLS material is an error: silently downgrading it to
+/// a self-signed certificate (or silently disabling it) turns a provisioning
+/// mistake into a trust or availability incident.
 pub(crate) fn build_gateway_options(
     config: &TunnelConfig,
     metrics: Arc<sdkwork_webserver_tunnel::TunnelMetrics>,
-) -> Option<TunnelGatewayOptions> {
+) -> Result<Option<TunnelGatewayOptions>, String> {
     if !config.enabled {
-        return None;
+        return Ok(None);
     }
-    let bind: std::net::SocketAddr = config.gateway_or_default().listen.parse().ok()?;
+    let bind: std::net::SocketAddr = config
+        .gateway_or_default()
+        .listen
+        .parse()
+        .map_err(|error| format!("invalid tunnel gateway listen address: {error}"))?;
     let mut options = TunnelGatewayOptions::from_config(config, bind, Vec::new(), Vec::new());
     let (cert_pem, key_pem) =
         load_tls_material(&options.tls_cert_pem_env, &options.tls_key_pem_env)?;
     options.cert_pem = cert_pem;
     options.key_pem = key_pem;
     options.metrics = metrics;
-    Some(options)
+    Ok(Some(options))
 }
 
 fn load_tls_material(
     cert_env: &Option<String>,
     key_env: &Option<String>,
-) -> Option<(Vec<u8>, Vec<u8>)> {
+) -> Result<(Vec<u8>, Vec<u8>), String> {
     match (cert_env, key_env) {
         (Some(cert_name), Some(key_name)) => {
-            let cert_path = std::env::var(cert_name).ok()?;
-            let key_path = std::env::var(key_name).ok()?;
-            let cert = std::fs::read(cert_path).ok()?;
-            let key = std::fs::read(key_path).ok()?;
-            Some((cert, key))
+            let cert_path = std::env::var(cert_name)
+                .map_err(|_| format!("tunnel TLS certificate env `{cert_name}` is not set"))?;
+            let key_path = std::env::var(key_name)
+                .map_err(|_| format!("tunnel TLS private-key env `{key_name}` is not set"))?;
+            let cert = std::fs::read(&cert_path).map_err(|error| {
+                format!("cannot read tunnel TLS certificate {cert_path}: {error}")
+            })?;
+            let key = std::fs::read(&key_path).map_err(|error| {
+                format!("cannot read tunnel TLS private key {key_path}: {error}")
+            })?;
+            Ok((cert, key))
         }
-        _ => {
+        (None, None) => {
+            if sdkwork_webserver_core::runtime_env::web_is_production_like_environment() {
+                return Err(
+                    "tunnel TLS material is not configured; supply tlsCertPemEnv/tlsKeyPemEnv \
+                     for a production-like deployment instead of a self-signed certificate"
+                        .to_string(),
+                );
+            }
             let sans = vec!["localhost".to_owned(), "127.0.0.1".to_owned()];
-            let material =
-                sdkwork_webserver_tunnel_transport::tls::generate_self_signed(&sans).ok()?;
+            let material = sdkwork_webserver_tunnel_transport::tls::generate_self_signed(&sans)
+                .map_err(|error| {
+                    format!("cannot generate the tunnel development certificate: {error}")
+                })?;
             tracing::warn!(
                 pin = %material.sha256,
                 "tunnel gateway uses a SELF-SIGNED development certificate; agents should pin this fingerprint or supply TLS material via tlsCertPemEnv/tlsKeyPemEnv"
             );
-            Some((
+            Ok((
                 material.cert_pem.into_bytes(),
                 material.key_pem.into_bytes(),
             ))
         }
+        _ => Err(
+            "tunnel TLS must configure both tlsCertPemEnv and tlsKeyPemEnv, or neither in \
+             development"
+                .to_string(),
+        ),
     }
 }
 

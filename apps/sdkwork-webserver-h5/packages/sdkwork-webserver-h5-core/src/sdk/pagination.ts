@@ -8,7 +8,13 @@ export interface WebserverH5ListPage {
   hasMore: boolean;
   page: number;
   pageSize: number;
-  totalItems: number;
+  /**
+   * Exact decimal `totalItems` from the wire. It stays a string because the
+   * contract is `int64`; converting it to `number` silently rounds totals past
+   * `Number.MAX_SAFE_INTEGER` (API_SPEC §13.6). Callers that only need a pager
+   * signal read `hasMore`/`totalPages`.
+   */
+  totalItems: string;
   totalPages: number;
 }
 
@@ -28,8 +34,15 @@ export function toWebserverH5ListPage(
   const page = Math.max(1, pageInfo?.page ?? 1);
   const pageSize = Math.max(1, pageInfo?.pageSize ?? DEFAULT_H5_LIST_PAGE_SIZE);
   const totalPages = Math.max(0, pageInfo?.totalPages ?? 0);
-  const rawTotalItems = Number(pageInfo?.totalItems ?? 0);
-  const totalItems = Number.isFinite(rawTotalItems) ? rawTotalItems : 0;
+  const rawTotalItems = pageInfo?.totalItems;
+  const totalItems =
+    typeof rawTotalItems === "number"
+      ? Number.isSafeInteger(rawTotalItems) && rawTotalItems >= 0
+        ? String(rawTotalItems)
+        : "0"
+      : typeof rawTotalItems === "string" && /^(0|[1-9]\d*)$/u.test(rawTotalItems)
+        ? rawTotalItems
+        : "0";
   return {
     hasMore: pageInfo?.hasMore === true || (totalPages > 0 && page < totalPages),
     page,

@@ -202,7 +202,7 @@ fn materialize_static_resource(
         "stripPrefix": strip_prefix,
     });
     if let Some(try_files) = location.get("tryFiles").and_then(Value::as_array) {
-        if let Some(last) = try_files.iter().filter_map(Value::as_str).last() {
+        if let Some(last) = try_files.iter().filter_map(Value::as_str).next_back() {
             if last.starts_with('/') {
                 resource["spaFallback"] = Value::String(last.trim_start_matches('/').to_owned());
             }
@@ -1634,6 +1634,7 @@ impl<'a> Materializer<'a> {
         Ok(name)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn materialize_location(
         &mut self,
         server_index: usize,
@@ -3101,15 +3102,14 @@ impl<'a> Materializer<'a> {
                             )
                         })?,
                         Value::Number(number) => {
-                            let value = number.as_u64().filter(|value| *value > 0).ok_or_else(
+                            number.as_u64().filter(|value| *value > 0).ok_or_else(
                                 || {
                                     materialize_error(
                                         "server.toml.tunnel.routes[].bandwidthLimit",
                                         "must be a positive byte-per-second number or a size like \"2MB\"",
                                     )
                                 },
-                            )?;
-                            value
+                            )?
                         }
                         _ => {
                             return Err(materialize_error(

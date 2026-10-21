@@ -8,7 +8,7 @@ final class CreateDomainDnsRecordRequest
 {
     public ?string $recordType = null;
 
-    /** Zone-relative 主机记录 (`@` for the apex, `www`, `api.eu`, `*`). */
+    /** Zone-relative record owner (`@` for the apex, `www`, `api.eu`, `*`). */
     public ?string $host = null;
 
     public ?string $recordValue = null;

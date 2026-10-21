@@ -1,4 +1,4 @@
-use std::{error::Error, io, path::PathBuf};
+use std::{error::Error, io, path::PathBuf, time::Duration};
 
 use sdkwork_api_webserver_standalone_gateway::{
     build_router, configure_packaged_runtime_roots_from_env,
@@ -248,12 +248,20 @@ async fn run_nginx_compat_until(
     for (file, error) in &loaded.skipped {
         tracing::warn!(file = %file.display(), error = %error, "nginx site skipped (unsupported directives)");
     }
+    for diagnostic in &loaded.compatibility {
+        tracing::warn!(
+            path = %diagnostic.path,
+            message = %diagnostic.message,
+            "nginx compatibility directive accepted but not enforced"
+        );
+    }
     tracing::info!(
         path = %path.display(),
         virtual_hosts = loaded.app.virtual_hosts.len(),
         upstreams = loaded.app.upstreams.len(),
         streams = loaded.app.streams.len(),
         skipped = loaded.skipped.len(),
+        ignored_directives = loaded.compatibility.len(),
         "nginx compatibility configuration materialized"
     );
     let compiled = loader
@@ -274,6 +282,9 @@ fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
         .map_err(|error| io::Error::other(format!("nginx materialization failed: {error}")))?;
     for (file, error) in &loaded.skipped {
         tracing::warn!(file = %file.display(), error = %error, "nginx site skipped");
+    }
+    for diagnostic in &loaded.compatibility {
+        eprintln!("compatibility: {}: {}", diagnostic.path, diagnostic.message);
     }
     // Validate exactly what serve runs: `load` materializes, but only
     // `load_and_compile` applies the semantic validator (upstream URL
@@ -336,7 +347,7 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
     })?;
     let compiled = loader
         .load_and_compile(&path, &options)
-        .inspect_err(|error| log_config_diagnostics(error))
+        .inspect_err(log_config_diagnostics)
         .map_err(|error| io::Error::other(format!("config compile failed: {error}")))?;
     let route_count = compiled
         .config()
@@ -500,19 +511,30 @@ async fn run_management_plane() -> MainResult<()> {
     reconcile_application_registry_at_startup().await;
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "management listener started");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    let serve = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal());
+    match tokio::time::timeout(MANAGEMENT_DRAIN_TIMEOUT, serve).await {
+        Ok(result) => result?,
+        Err(_) => tracing::warn!(
+            timeout_s = MANAGEMENT_DRAIN_TIMEOUT.as_secs(),
+            "management drain deadline expired; terminating with in-flight requests cut"
+        ),
+    }
     Ok(())
 }
+
+/// Upper bound on management-plane graceful shutdown. A hung management
+/// request must not keep the process alive past SIGTERM: the data plane already
+/// drains to its own configured deadline, and the supervisor expects this
+/// process to exit deterministically.
+const MANAGEMENT_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Samples cluster-wide certificate expiry into the operations metrics
 /// snapshot (`data_plane::certificates_metrics`). Best effort by design: the
 /// edge serves without the control-plane database (PRD-FR-015), so a failed
 /// bootstrap or a failed sample leaves the last observation in place and logs
 /// - the gauges honestly report "no observation" (-1) until one lands. The
-/// interval is env-tunable and bounded; sampling is a periodic read, never a
-/// request-path dependency.
+///   interval is env-tunable and bounded; sampling is a periodic read, never a
+///   request-path dependency.
 fn spawn_certificate_expiry_sampler() {
     const DEFAULT_INTERVAL_SECS: u64 = 300;
     const MIN_INTERVAL_SECS: u64 = 30;

@@ -64,9 +64,10 @@ pub(crate) struct ClusterInstanceListQuery {
     /// Label selector `k1=v1,k2=v2` (every pair must match).
     #[serde(default)]
     labels: Option<String>,
-    /// Free-text search over name / endpoint / hostname.
+    /// Free-text search over name / endpoint / hostname (`API_SPEC` §16.6:
+    /// the canonical free-text query parameter is `q`).
     #[serde(default)]
-    search: Option<String>,
+    q: Option<String>,
     /// Exact build version (version-skew management).
     #[serde(default)]
     build_version: Option<String>,
@@ -232,7 +233,7 @@ pub(crate) async fn list_cluster_instances(
                 query.join_mode,
                 query.sync_status,
                 query.labels.as_deref(),
-                query.search.as_deref(),
+                query.q.as_deref(),
                 query.build_version.as_deref(),
                 query.page_size,
                 query.cursor.as_deref(),

@@ -973,7 +973,7 @@ impl WebAppApi for WebService {
         // the decision is race-free either way.
         let current = self.repository.count_tenant_applications(tenant_id).await?;
         if current >= capacity {
-            return Err(WebServiceError::conflict(&format!(
+            return Err(WebServiceError::conflict(format!(
                 "tenant already owns {current} applications; the per-tenant capacity is {capacity}"
             )));
         }

@@ -18,6 +18,33 @@
         "replacementCode": null
       },
       {
+        "code": "web.plugins.write",
+        "name": "Manage plugins",
+        "resource": "plugins",
+        "action": "write",
+        "status": "active",
+        "since": "0.2.0",
+        "replacementCode": null
+      },
+      {
+        "code": "web.tunnel.read",
+        "name": "Read tunnel machines",
+        "resource": "tunnel",
+        "action": "read",
+        "status": "active",
+        "since": "0.2.0",
+        "replacementCode": null
+      },
+      {
+        "code": "web.tunnel.write",
+        "name": "Manage tunnel machines",
+        "resource": "tunnel",
+        "action": "write",
+        "status": "active",
+        "since": "0.2.0",
+        "replacementCode": null
+      },
+      {
         "code": "web.certificates.read",
         "name": "Read certificates",
         "resource": "certificates",
@@ -199,7 +226,16 @@
         "patterns": [
           "web.certificates.*",
           "web.sandbox.*",
-          "web.traffic.read"
+          "web.traffic.read",
+          "web.plugins.*",
+          "deploy.apps.read",
+          "deploy.domainZones.read",
+          "deploy.certificates.read",
+          "deploy.marketplaceTemplates.read",
+          "deploy.appTemplates.read",
+          "skills.marketplace.read",
+          "mcp.marketplace.read",
+          "iam.provider_accounts.read"
         ]
       },
       {

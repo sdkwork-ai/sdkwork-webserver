@@ -12,9 +12,14 @@ use SDKWork\Webserver\BackendSdk\Models\WebserverConfigWriteRequest;
 final class WebserverConfigApi extends BaseApi
 {
     /** List the managed Web Server configuration catalog */
-    public function webserverConfigsList(): ?WebserverConfigsListResponse
+    public function webserverConfigsList(?int $page = null, ?int $pageSize = null): ?WebserverConfigsListResponse
     {
         $path = '/backend/v3/api/webserver_configs';
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
         return is_array($result) ? WebserverConfigsListResponse::fromArray($result) : null;
     }

@@ -92,6 +92,37 @@ class NginxApi {
     })();
   }
 
+  /// List an Nginx configuration's revisions
+  Future<ConfigsRevisionsListResponse?> configsRevisionsList(String configId, [int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.backendPath('/nginx/etc/${serializePathParameter(configId, const PathParameterSpec('configId', 'simple', false))}/revisions'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ConfigsRevisionsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Retrieve one Nginx configuration revision
+  Future<ConfigsRevisionsRetrieveResponse?> configsRevisionsRetrieve(String configId, int versionNo) async {
+    final response = await _client.get(ApiPaths.backendPath('/nginx/etc/${serializePathParameter(configId, const PathParameterSpec('configId', 'simple', false))}/revisions/${serializePathParameter(versionNo, const PathParameterSpec('versionNo', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ConfigsRevisionsRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Roll an Nginx configuration back to a revision
+  Future<ConfigsRevisionsRollbackResponse?> configsRevisionsRollback(String configId, int versionNo) async {
+    final response = await _client.post(ApiPaths.backendPath('/nginx/etc/${serializePathParameter(configId, const PathParameterSpec('configId', 'simple', false))}/revisions/${serializePathParameter(versionNo, const PathParameterSpec('versionNo', 'simple', false))}/rollback'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ConfigsRevisionsRollbackResponse.fromJson(map);
+    })();
+  }
+
   /// Reload Nginx
   Future<ReloadResponse?> reload(String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(

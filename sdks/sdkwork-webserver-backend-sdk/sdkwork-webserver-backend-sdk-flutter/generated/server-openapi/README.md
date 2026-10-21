@@ -45,6 +45,7 @@ client.setHeader('X-Custom-Header', 'value');
 ## API Modules
 
 - `client.application` - application API
+- `client.plugin` - plugin API
 - `client.applicationDomain` - application_domain API
 - `client.certificate` - certificate API
 - `client.domain` - domain API
@@ -76,6 +77,20 @@ final params = <String, dynamic>{
   'q': 'q',
 };
 final result = await client.application.applicationsList(params);
+print(result);
+```
+
+### plugin
+```dart
+// List the caller's plugin catalog
+final params = <String, dynamic>{
+  'page': 1,
+  'page_size': 2,
+  'status': 'draft',
+  'q': 'q',
+  'owner_id': '1',
+};
+final result = await client.plugin.pluginsList(params);
 print(result);
 ```
 
@@ -177,7 +192,11 @@ print(result);
 ### webserver_config
 ```dart
 // List the managed Web Server configuration catalog
-final result = await client.webserverConfig.webserverConfigsList();
+final params = <String, dynamic>{
+  'page': 1,
+  'page_size': 2,
+};
+final result = await client.webserverConfig.webserverConfigsList(params);
 print(result);
 ```
 
@@ -217,7 +236,11 @@ print(result);
 ### tunnel
 ```dart
 // List the tunnel connector machines this gateway manages
-final result = await client.tunnel.machinesList();
+final params = <String, dynamic>{
+  'page': 1,
+  'page_size': 2,
+};
+final result = await client.tunnel.machinesList(params);
 print(result);
 ```
 

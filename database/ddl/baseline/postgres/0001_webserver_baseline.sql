@@ -2587,3 +2587,132 @@ CREATE INDEX IF NOT EXISTS idx_webserver_application_host_app
 
 CREATE INDEX IF NOT EXISTS idx_webserver_certificate_expiry_summary
     ON webserver_certificate_version (status, not_after);
+
+-- sdkwork:migration
+-- id: 0027_webserver_tenant_integrity_and_active_indexes
+-- engine: postgres
+-- module: webserver
+-- description: Consolidated into the pre-launch baseline (the baseline is the
+--   full snapshot; 0027 remains the forward upgrade for existing databases).
+-- reversible: true
+-- rollback: forward-fix keeps the integrity constraints
+-- transactional: true
+-- lock: access-exclusive
+-- lock_timeout: 5s
+-- statement_timeout: 120s
+
+ALTER TABLE webserver_site ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_deployment ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_domain ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_domain_dns_record ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_domain_wechat_verification ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_env_variable ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_health_check ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_nginx_config ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_root_domain ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_server ALTER COLUMN tenant_id DROP DEFAULT;
+
+ALTER TABLE webserver_application DROP CONSTRAINT IF EXISTS uk_webserver_application_slug;
+DROP INDEX IF EXISTS uk_webserver_application_slug;
+CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_application_slug
+    ON webserver_application (tenant_id, slug)
+    WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_nginx_config_site_active
+    ON webserver_nginx_config (site_id)
+    WHERE is_active = TRUE AND status = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_source_version_tenant_id
+    ON webserver_source_version (tenant_id, id);
+
+ALTER TABLE webserver_nginx_config DROP CONSTRAINT IF EXISTS fk_webserver_nginx_config_site;
+ALTER TABLE webserver_nginx_config
+    ADD CONSTRAINT fk_webserver_nginx_config_site
+    FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
+
+ALTER TABLE webserver_source_version DROP CONSTRAINT IF EXISTS fk_webserver_source_version_site;
+ALTER TABLE webserver_source_version
+    ADD CONSTRAINT fk_webserver_source_version_site
+    FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
+
+ALTER TABLE webserver_deployment DROP CONSTRAINT IF EXISTS fk_webserver_deployment_site;
+ALTER TABLE webserver_deployment
+    ADD CONSTRAINT fk_webserver_deployment_site
+    FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
+
+ALTER TABLE webserver_deployment DROP CONSTRAINT IF EXISTS fk_webserver_deployment_source_version;
+ALTER TABLE webserver_deployment
+    ADD CONSTRAINT fk_webserver_deployment_source_version
+    FOREIGN KEY (tenant_id, source_version_id)
+    REFERENCES webserver_source_version (tenant_id, id);
+
+ALTER TABLE webserver_env_variable DROP CONSTRAINT IF EXISTS fk_webserver_env_variable_site;
+ALTER TABLE webserver_env_variable
+    ADD CONSTRAINT fk_webserver_env_variable_site
+    FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
+
+ALTER TABLE webserver_health_check DROP CONSTRAINT IF EXISTS fk_webserver_health_check_site;
+ALTER TABLE webserver_health_check
+    ADD CONSTRAINT fk_webserver_health_check_site
+    FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
+
+ALTER TABLE webserver_domain_wechat_verification
+    DROP CONSTRAINT IF EXISTS fk_webserver_domain_wechat_verification_root;
+ALTER TABLE webserver_domain_wechat_verification
+    ADD CONSTRAINT fk_webserver_domain_wechat_verification_root
+    FOREIGN KEY (tenant_id, root_domain_id)
+    REFERENCES webserver_root_domain (tenant_id, id);
+
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_host_tenant_updated
+    ON webserver_cluster_host (tenant_id, updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_instance_tenant_updated
+    ON webserver_cluster_instance (tenant_id, updated_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_webserver_cluster_event_tenant_occurred
+    ON webserver_cluster_event (tenant_id, occurred_at DESC, id DESC);
+
+-- 0028: per-owner plugin catalog (see
+-- database/migrations/postgres/0028_webserver_plugin_catalog.up.sql).
+CREATE TABLE IF NOT EXISTS webserver_plugin (
+    id BIGINT NOT NULL,
+    uuid VARCHAR(64) NOT NULL,
+    tenant_id BIGINT NOT NULL,
+    organization_id BIGINT NOT NULL DEFAULT 0,
+    data_scope INTEGER NOT NULL DEFAULT 1,
+    user_id BIGINT NOT NULL,
+    plugin_key TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    plugin_version TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    supported_host_tools_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    contributed_capabilities_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    source_kind TEXT NOT NULL,
+    git_repository TEXT,
+    git_ref TEXT,
+    artifact_ref TEXT,
+    checksum_sha256 TEXT,
+    archive_file_name TEXT,
+    plugin_status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    deleted_at TIMESTAMPTZ,
+    deleted_by BIGINT,
+    CONSTRAINT webserver_plugin_pkey PRIMARY KEY (id),
+    CONSTRAINT uk_webserver_plugin_uuid UNIQUE (uuid),
+    CONSTRAINT uk_webserver_plugin_tenant_id UNIQUE (tenant_id, id),
+    CONSTRAINT chk_webserver_plugin_key
+        CHECK (plugin_key ~ '^plugin\.[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$'),
+    CONSTRAINT chk_webserver_plugin_source CHECK (source_kind IN ('git', 'archive')),
+    CONSTRAINT chk_webserver_plugin_status CHECK (plugin_status IN ('draft', 'active')),
+    CONSTRAINT chk_webserver_plugin_checksum
+        CHECK (checksum_sha256 IS NULL OR checksum_sha256 ~ '^[0-9a-f]{64}$')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_plugin_active_key
+    ON webserver_plugin (tenant_id, user_id, plugin_key)
+    WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_webserver_plugin_owner_updated
+    ON webserver_plugin (tenant_id, user_id, updated_at DESC, id DESC)
+    WHERE deleted_at IS NULL;

@@ -1,6 +1,7 @@
 import 'src/http/client.dart';
 import 'src/http/sdk_config.dart';
 import 'src/api/application.dart';
+import 'src/api/plugin.dart';
 import 'src/api/application_domain.dart';
 import 'src/api/certificate.dart';
 import 'src/api/domain.dart';
@@ -22,6 +23,7 @@ class SdkworkBackendClient {
   final HttpClient _httpClient;
 
   late final ApplicationApi application;
+  late final PluginApi plugin;
   late final ApplicationDomainApi applicationDomain;
   late final CertificateApi certificate;
   late final DomainApi domain;
@@ -43,6 +45,7 @@ class SdkworkBackendClient {
     required SdkConfig config,
   }) : _httpClient = HttpClient(config: config) {
     application = ApplicationApi(_httpClient);
+    plugin = PluginApi(_httpClient);
     applicationDomain = ApplicationDomainApi(_httpClient);
     certificate = CertificateApi(_httpClient);
     domain = DomainApi(_httpClient);

@@ -7,12 +7,13 @@ use axum::{
 use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateDomainDnsRecordRequest, CreateDomainRequest,
     CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateSourceVersionRequest, DomainDnsRecordStatusRequest, ImportGitSourceVersionRequest,
-    IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery, ListDomainDnsRecordsQuery,
-    ListNginxConfigsQuery, ListRootDomainsQuery, RevokeCertificateRequest,
-    UpdateApplicationRequest, UpdateCertificateRequest, UpdateDomainApplicationBindingRequest,
-    UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    CreatePluginRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
+    CreateServerRequest, CreateSourceVersionRequest, DomainDnsRecordStatusRequest,
+    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
+    ListAuditLogsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListPluginsQuery,
+    ListRootDomainsQuery, RevokeCertificateRequest, UpdateApplicationRequest,
+    UpdateCertificateRequest, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest,
+    UpdateNginxConfigRequest, UpdatePluginRequest, UpdateRootDomainRequest,
     UpsertDomainWechatVerificationRequest, WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
@@ -26,7 +27,8 @@ use sdkwork_routes_webserver_common::{
     accepted_async, created_resource, no_content, ok_application_page, ok_audit_log_page,
     ok_certificate_distribution_page, ok_certificate_page, ok_deployment_page, ok_dns_account_page,
     ok_domain_dns_record_page, ok_domain_page, ok_listener_certificate_binding_page,
-    ok_nginx_config_page, ok_resource, ok_root_domain_page, ok_server_page, ok_source_version_page,
+    ok_nginx_config_page, ok_nginx_config_revision, ok_nginx_config_revision_page, ok_plugin_page,
+    ok_resource, ok_root_domain_page, ok_server_page, ok_source_version_page,
     validate_pagination_query, WebApiError,
 };
 
@@ -128,7 +130,10 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
             paths::DOMAINS,
             get(list_managed_domains).post(create_managed_domain),
         )
-        .route(paths::DOMAIN, axum::routing::delete(delete_managed_domain))
+        .route(
+            paths::DOMAIN,
+            get(retrieve_managed_domain).delete(delete_managed_domain),
+        )
         .route(paths::DOMAIN_VERIFY, post(verify_managed_domain))
         .route(
             paths::DOMAIN_APPLICATION_BINDING,
@@ -178,6 +183,18 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
         )
         .route(paths::NGINX_CONFIG_VALIDATE, post(validate_nginx_config))
         .route(paths::NGINX_CONFIG_DEPLOY, post(deploy_nginx_config))
+        .route(
+            paths::NGINX_CONFIG_REVISIONS,
+            get(list_nginx_config_revisions),
+        )
+        .route(
+            paths::NGINX_CONFIG_REVISION,
+            get(retrieve_nginx_config_revision),
+        )
+        .route(
+            paths::NGINX_CONFIG_REVISION_ROLLBACK,
+            post(rollback_nginx_config_revision),
+        )
         .route(paths::NGINX_RELOAD, post(reload_nginx))
         .route(paths::NGINX_STATUS, get(retrieve_nginx_status))
         .route(paths::SERVERS, get(list_servers).post(create_server))
@@ -292,6 +309,13 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
             paths::PLATFORM_METRICS_SUMMARY,
             get(metrics_summary_routes::retrieve_platform_metrics_summary),
         )
+        .route(paths::PLUGINS, get(list_plugins).post(create_plugin))
+        .route(
+            paths::PLUGIN,
+            get(retrieve_plugin)
+                .patch(update_plugin)
+                .delete(delete_plugin),
+        )
         .layer(axum::middleware::from_fn(validate_pagination_query))
         .with_state(BackendState { api })
 }
@@ -310,12 +334,12 @@ pub fn build_agent_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -
 }
 
 #[derive(Debug, Deserialize)]
-struct PageQuery {
+pub(crate) struct PageQuery {
     #[serde(default = "default_page")]
-    page: i32,
+    pub(crate) page: i32,
     #[serde(default = "default_page_size")]
-    page_size: i32,
-    cursor: Option<String>,
+    pub(crate) page_size: i32,
+    pub(crate) cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -765,6 +789,20 @@ async fn list_managed_domains(
     )
 }
 
+async fn retrieve_managed_domain(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(domain_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .retrieve_managed_domain(&context, &domain_id)
+            .await,
+    )
+}
+
 async fn create_managed_domain(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
@@ -828,6 +866,7 @@ async fn list_application_source_versions(
     Query(query): Query<PageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
+    let cursor_request = query.cursor.is_some();
     ok_source_version_page(
         state
             .api
@@ -839,6 +878,7 @@ async fn list_application_source_versions(
                 query.cursor.as_deref(),
             )
             .await,
+        cursor_request,
     )
 }
 
@@ -893,6 +933,7 @@ async fn list_application_deployments(
     Query(query): Query<DeploymentPageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
+    let cursor_request = query.cursor.is_some();
     ok_deployment_page(
         state
             .api
@@ -905,6 +946,7 @@ async fn list_application_deployments(
                 query.cursor.as_deref(),
             )
             .await,
+        cursor_request,
     )
 }
 
@@ -1131,6 +1173,49 @@ async fn retrieve_nginx_config(
     ok_resource(state.api.retrieve_nginx_config(&context, &config_id).await)
 }
 
+async fn list_nginx_config_revisions(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(config_id): Path<String>,
+    Query(query): Query<PageQuery>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_nginx_config_revision_page(
+        state
+            .api
+            .list_nginx_config_revisions(&context, &config_id, query.page, query.page_size)
+            .await,
+    )
+}
+
+async fn retrieve_nginx_config_revision(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path((config_id, version_no)): Path<(String, i32)>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_nginx_config_revision(
+        state
+            .api
+            .retrieve_nginx_config_revision(&context, &config_id, version_no)
+            .await,
+    )
+}
+
+async fn rollback_nginx_config_revision(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path((config_id, version_no)): Path<(String, i32)>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .rollback_nginx_config_revision(&context, &config_id, version_no)
+            .await,
+    )
+}
+
 async fn update_nginx_config(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
@@ -1186,6 +1271,7 @@ async fn list_servers(
     Query(query): Query<PageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
+    let cursor_request = query.cursor.is_some();
     ok_server_page(
         state
             .api
@@ -1198,6 +1284,7 @@ async fn list_servers(
             .await,
         query.page,
         query.page_size,
+        cursor_request,
     )
 }
 
@@ -1217,4 +1304,55 @@ async fn list_audit_logs(
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
     ok_audit_log_page(state.api.list_audit_logs(&context, &query).await)
+}
+
+async fn list_plugins(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Query(query): Query<ListPluginsQuery>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_plugin_page(state.api.list_plugins(&context, &query).await)
+}
+
+async fn create_plugin(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Json(request): Json<CreatePluginRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    created_resource(state.api.create_plugin(&context, &request).await)
+}
+
+async fn retrieve_plugin(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(plugin_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(state.api.retrieve_plugin(&context, &plugin_id).await)
+}
+
+async fn update_plugin(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(plugin_id): Path<String>,
+    Json(request): Json<UpdatePluginRequest>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    ok_resource(
+        state
+            .api
+            .update_plugin(&context, &plugin_id, &request)
+            .await,
+    )
+}
+
+async fn delete_plugin(
+    State(state): State<BackendState>,
+    context: Option<Extension<WebBackendRequestContext>>,
+    Path(plugin_id): Path<String>,
+) -> Result<Response, WebApiError> {
+    let context = require_backend_context(context)?;
+    no_content(state.api.delete_plugin(&context, &plugin_id).await)
 }

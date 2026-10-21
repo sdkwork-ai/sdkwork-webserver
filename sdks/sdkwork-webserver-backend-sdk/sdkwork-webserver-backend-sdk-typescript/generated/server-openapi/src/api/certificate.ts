@@ -63,7 +63,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
 
 
 /** List certificates active on an application domain listener */
-  async list(applicationId: string, domainId: string | number, params?: CertificateApplicationsDomainsListenerCertificateBindingsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ListenerCertificateBindingResponse[]; pageInfo: PageInfo; }> {
+  async list(applicationId: string, domainId: string, params?: CertificateApplicationsDomainsListenerCertificateBindingsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ListenerCertificateBindingResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
@@ -72,7 +72,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
   }
 
 /** Bind a certificate version to an application domain listener */
-  async create(applicationId: string, domainId: string | number, body: CreateListenerCertificateBindingRequest, params: CertificateApplicationsDomainsListenerCertificateBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<ListenerCertificateBindingResponse> {
+  async create(applicationId: string, domainId: string, body: CreateListenerCertificateBindingRequest, params: CertificateApplicationsDomainsListenerCertificateBindingsCreateParams, requestOptions?: ApiRequestOptions): Promise<ListenerCertificateBindingResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
@@ -83,7 +83,7 @@ export class CertificateApplicationsDomainsListenerCertificateBindingsApi {
   }
 
 /** Remove a certificate from an application domain listener */
-  async delete(applicationId: string, domainId: string | number, bindingId: string, params: CertificateApplicationsDomainsListenerCertificateBindingsDeleteParams, requestOptions?: ApiRequestOptions): Promise<void> {
+  async delete(applicationId: string, domainId: string, bindingId: string, params: CertificateApplicationsDomainsListenerCertificateBindingsDeleteParams, requestOptions?: ApiRequestOptions): Promise<void> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },

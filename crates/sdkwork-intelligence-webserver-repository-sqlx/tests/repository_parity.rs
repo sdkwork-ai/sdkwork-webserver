@@ -14,11 +14,12 @@ use sdkwork_webserver_contract::{
     CertificateIssueUpdate, CertificateOperationLease, CreateApplicationRequest,
     CreateDeploymentRequest, CreateDomainRequest, CreateEnvVariableRequest,
     CreateHealthCheckRequest, CreateListenerCertificateBindingRequest, CreateManagedDomainRequest,
-    CreateNginxConfigRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
-    CreateServerRequest, CreateSourceVersionRequest, IssueCertificateRequest,
-    ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
-    MediaResource, RevokeCertificateRequest, RuntimeObservationState, SourceVersionConfigSnapshot,
-    UpdateApplicationRequest, UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest,
+    CreateNginxConfigRequest, CreatePlatformTargetRequest, CreatePluginRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery,
+    ListNginxConfigsQuery, ListRootDomainsQuery, MediaResource, RevokeCertificateRequest,
+    RuntimeObservationState, SourceVersionConfigSnapshot, UpdateApplicationRequest,
+    UpdateDomainApplicationBindingRequest, UpdateNginxConfigRequest, UpdatePluginRequest,
     UpdateRootDomainRequest, WebServiceErrorKind, WebsiteRuntimeSetSnapshot,
     ROOT_DOMAIN_CLOUD_ACCOUNT_UNASSIGNED,
 };
@@ -94,7 +95,9 @@ async fn enqueue_and_claim_certificate(
             Some(idempotency_key),
         )
         .await
-        .expect("enqueue certificate operation");
+        .unwrap_or_else(|error| {
+            panic!("enqueue certificate operation `{idempotency_key}` failed: {error:?}")
+        });
     repository
         .claim_certificate_operations(lease_owner, 60, 32)
         .await
@@ -192,10 +195,120 @@ async fn postgres_repository_transactions_tenants_idempotency_and_pagination_are
     .await;
 
     verify_repository_contract(&context).await;
+    verify_plugin_catalog(&context).await;
     verify_certificate_activation_compensation(&context).await;
     verify_certificate_revocation_ari_and_tls_projection(&context).await;
     verify_certificate_keyset_pagination(&context).await;
     context.pool.close().await;
+}
+
+async fn verify_plugin_catalog(context: &TestContext) {
+    let repository = &context.repository;
+    const OWNER: i64 = 501;
+    let created = repository
+        .create_plugin(
+            TENANT_A,
+            OWNER,
+            &CreatePluginRequest {
+                plugin_key: "plugin.parity.catalog".to_string(),
+                display_name: "Parity Plugin".to_string(),
+                summary: "catalog ownership".to_string(),
+                version: "1.0.0".to_string(),
+                category_id: "plugin.category.testing".to_string(),
+                supported_host_tools: vec!["codex".to_string()],
+                contributed_capabilities: vec!["mcp".to_string()],
+                source_kind: "git".to_string(),
+                git_repository: Some("https://example.test/plugin.git".to_string()),
+                git_ref: Some("main".to_string()),
+                artifact_ref: None,
+                checksum_sha256: None,
+                archive_file_name: None,
+                status: None,
+            },
+        )
+        .await
+        .expect("create plugin");
+    assert_eq!(created.status, "draft");
+    assert_eq!(created.supported_host_tools, vec!["codex".to_string()]);
+
+    let listed = repository
+        .list_plugins(TENANT_A, OWNER, 1, 20, None, None)
+        .await
+        .expect("list plugins");
+    assert_eq!(listed.total, 1);
+    assert_eq!(listed.items[0].id, created.id);
+
+    // The owner scope is part of the read: another user and another tenant see
+    // nothing, and the other owner cannot read by id either.
+    let other_owner = repository
+        .list_plugins(TENANT_A, OWNER + 1, 1, 20, None, None)
+        .await
+        .expect("list other owner plugins");
+    assert_eq!(other_owner.total, 0);
+    let other_tenant = repository
+        .list_plugins(TENANT_B, OWNER, 1, 20, None, None)
+        .await
+        .expect("list other tenant plugins");
+    assert_eq!(other_tenant.total, 0);
+    assert_eq!(
+        repository
+            .retrieve_plugin(TENANT_A, OWNER + 1, &created.id)
+            .await
+            .expect_err("another owner must not read the plugin")
+            .kind(),
+        WebServiceErrorKind::NotFound
+    );
+
+    let updated = repository
+        .update_plugin(
+            TENANT_A,
+            OWNER,
+            &created.id,
+            &UpdatePluginRequest {
+                display_name: Some("Renamed Plugin".to_string()),
+                status: Some("active".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("update plugin");
+    assert_eq!(updated.display_name, "Renamed Plugin");
+    assert_eq!(updated.status, "active");
+
+    let duplicate = repository
+        .create_plugin(
+            TENANT_A,
+            OWNER,
+            &CreatePluginRequest {
+                plugin_key: "plugin.parity.catalog".to_string(),
+                display_name: "Duplicate".to_string(),
+                version: "1.0.1".to_string(),
+                category_id: "plugin.category.testing".to_string(),
+                source_kind: "git".to_string(),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect_err("duplicate active plugin key must conflict");
+    assert_eq!(duplicate.kind(), WebServiceErrorKind::Conflict);
+
+    repository
+        .delete_plugin(TENANT_A, OWNER, &created.id)
+        .await
+        .expect("delete plugin");
+    let after_delete = repository
+        .list_plugins(TENANT_A, OWNER, 1, 20, None, None)
+        .await
+        .expect("list after delete");
+    assert_eq!(after_delete.total, 0);
+    assert_eq!(
+        repository
+            .retrieve_plugin(TENANT_A, OWNER, &created.id)
+            .await
+            .expect_err("deleted plugin must not be retrievable")
+            .kind(),
+        WebServiceErrorKind::NotFound
+    );
 }
 
 async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestContext) {
@@ -225,6 +338,41 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
             .await
             .expect("resolve revocation site"),
     };
+    // A platform target hangs off the application, so it must inherit the
+    // application's organization instead of writing the 0 sentinel. Backend
+    // operators create applications under an organization; the child rows must
+    // not silently lose that dimension.
+    let platform_target = repository
+        .create_platform_target(
+            TENANT_A,
+            &application.id,
+            &CreatePlatformTargetRequest {
+                target_key: "parity-target".to_string(),
+                platform: "ANDROID".to_string(),
+                tech_stack: Some("NATIVE".to_string()),
+                architectures: Some(vec!["arm64-v8a".to_string()]),
+                bundle_id: None,
+                package_name: None,
+                app_id: None,
+                bundle_name: None,
+                allowed_channels: None,
+            },
+        )
+        .await
+        .expect("create platform target");
+    let target_organization: i64 = sqlx::query_scalar(
+        "SELECT organization_id FROM webserver_app_platform_target
+         WHERE tenant_id = $1 AND uuid = $2",
+    )
+    .bind(TENANT_A)
+    .bind(&platform_target.id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("read platform target organization");
+    assert_eq!(
+        target_organization, 31,
+        "platform target must inherit the application organization"
+    );
     let domain = repository
         .create_domain(
             TENANT_A,
@@ -1503,6 +1651,30 @@ async fn verify_public_repository_surface(
             .total,
         0
     );
+    let managed_page = repository
+        .list_managed_domains(TENANT_A, 1, 20)
+        .await
+        .expect("list tenant managed domains for retrieve");
+    let managed_id = managed_page
+        .items
+        .first()
+        .expect("tenant has a managed domain")
+        .id
+        .clone();
+    let retrieved = repository
+        .retrieve_managed_domain(TENANT_A, &managed_id)
+        .await
+        .expect("retrieve the managed domain by id");
+    assert_eq!(retrieved.id, managed_id);
+    // The detail read is tenant-scoped even when the caller knows the id.
+    assert_eq!(
+        repository
+            .retrieve_managed_domain(TENANT_B, &managed_id)
+            .await
+            .expect_err("another tenant must not read the domain")
+            .kind(),
+        WebServiceErrorKind::NotFound
+    );
 
     let detached_lease = enqueue_and_claim_certificate(
         repository,
@@ -1752,6 +1924,55 @@ async fn verify_public_repository_surface(
         )
         .await
         .expect("update nginx config timestamp");
+    // `version_no` is the content-revision counter and must advance on every
+    // edit; the detail response carries the new body.
+    assert_eq!(nginx.version_no, 2);
+    assert!(nginx.config_content.contains("http2"));
+    let revisions: Vec<(i32, String)> = sqlx::query_as(
+        "SELECT version_no, config_content
+           FROM webserver_nginx_config_revision
+          WHERE config_id = (SELECT id FROM webserver_nginx_config WHERE uuid = $1)
+          ORDER BY version_no",
+    )
+    .bind(&nginx.id)
+    .fetch_all(&context.pool)
+    .await
+    .expect("read nginx config revision history");
+    assert_eq!(
+        revisions.len(),
+        2,
+        "create + update must each snapshot once"
+    );
+    assert_eq!(revisions[0].0, 1);
+    assert!(revisions[0].1.contains("listen 443 ssl"));
+    assert_eq!(revisions[1].0, 2);
+    assert!(revisions[1].1.contains("http2"));
+    let revision_page = repository
+        .list_nginx_config_revisions(Some(TENANT_A), &nginx.id, 1, 20)
+        .await
+        .expect("list nginx config revisions through the port");
+    assert_eq!(revision_page.total, 2);
+    assert_eq!(revision_page.items[0].version_no, 2);
+    assert_eq!(revision_page.items[1].version_no, 1);
+    let revision = repository
+        .retrieve_nginx_config_revision(Some(TENANT_A), &nginx.id, 1)
+        .await
+        .expect("retrieve first nginx config revision");
+    assert_eq!(revision.version_no, 1);
+    assert!(revision.config_content.contains("listen 443 ssl"));
+    let rolled_back = repository
+        .rollback_nginx_config_revision(Some(TENANT_A), &nginx.id, 1)
+        .await
+        .expect("roll back to the first nginx config revision");
+    assert_eq!(rolled_back.version_no, 3);
+    assert!(rolled_back.config_content.contains("listen 443 ssl"));
+    assert!(!rolled_back.config_content.contains("http2"));
+    let after_rollback = repository
+        .list_nginx_config_revisions(Some(TENANT_A), &nginx.id, 1, 20)
+        .await
+        .expect("list revisions after rollback");
+    assert_eq!(after_rollback.total, 3);
+    assert_eq!(after_rollback.items[0].version_no, 3);
     assert_eq!(
         repository
             .list_nginx_configs(
@@ -1819,6 +2040,11 @@ async fn verify_public_repository_surface(
             cert_type: 1,
             key_algorithm: "ECDSA".to_string(),
             auto_renew: true,
+            // Deterministic scheduling evidence: the certificate's own lead
+            // time overrides the caller default, so pin the maximum accepted
+            // lead (90 days) instead of relying on the wall clock having
+            // drifted into the default 30-day window.
+            renew_before_days: 90,
             ..IssueCertificateRequest::default()
         },
         "parity-certificate-issue",
@@ -1867,20 +2093,21 @@ async fn verify_public_repository_surface(
         1
     );
     let initial_listener_version_id = listener_binding.desired_certificate_version_id.clone();
-    assert_eq!(
-        repository
-            .list_certificates(TENANT_A, None, None, None, 1, 20, None)
-            .await
-            .expect("list certificate timestamp projections")
-            .total,
-        3
-    );
+    let certificates_page = repository
+        .list_certificates(TENANT_A, None, None, None, 1, 20, None)
+        .await
+        .expect("list certificate timestamp projections");
+    // The certificate ledger is cursor-only and grows per issuance, so it
+    // deliberately reports no filtered total; the page itself is complete.
+    assert_eq!(certificates_page.total, 0);
+    assert_eq!(certificates_page.items.len(), 3);
     assert_eq!(
         repository
             .list_certificates(TENANT_A, Some(91), Some(site_id), None, 1, 20, None)
             .await
             .expect("owning user can list application certificates")
-            .total,
+            .items
+            .len(),
         1
     );
     assert_eq!(
@@ -1888,7 +2115,8 @@ async fn verify_public_repository_surface(
             .list_certificates(TENANT_A, None, None, Some(&domain.id), 1, 20, None)
             .await
             .expect("filter certificates by domain")
-            .total,
+            .items
+            .len(),
         1
     );
     assert!(repository
@@ -1983,7 +2211,8 @@ async fn verify_public_repository_surface(
             .list_certificates(TENANT_A, None, None, None, 1, 20, None)
             .await
             .expect("automatic renewal update preserves canonical row")
-            .total,
+            .items
+            .len(),
         3
     );
     let same_algorithm_lease = enqueue_and_claim_certificate(
@@ -2506,6 +2735,9 @@ async fn verify_certificate_keyset_pagination(context: &TestContext) {
             )
             .await
             .expect("create keyset domain");
+        // Certificate issuance requires verified domain ownership; the keyset
+        // fixture predated that rule and would otherwise fail issuance.
+        verify_site_domain_with_evidence(repository, TENANT_A, &site_id, &domain.id).await;
         let lease = enqueue_and_claim_certificate(
             repository,
             TENANT_A,
@@ -2529,7 +2761,10 @@ async fn verify_certificate_keyset_pagination(context: &TestContext) {
                     &format!("keyset-{index}.example.test"),
                     3,
                     "ECDSA",
-                    '7',
+                    // Fingerprints/serials are unique per tenant and must be
+                    // lowercase hex (the schema check rejects other shapes);
+                    // three fixture certificates must not share a marker.
+                    char::from(b'b' + index as u8),
                     false,
                 ),
             )
@@ -2538,14 +2773,15 @@ async fn verify_certificate_keyset_pagination(context: &TestContext) {
         certificate_ids.push(lease.certificate_id);
     }
 
-    // Page one without a cursor: exact total, exact continuation, minted token.
+    // Page one without a cursor: no filtered total (cursor-only ledger), exact
+    // continuation, minted token.
     let first_page = repository
         .list_certificates(TENANT_A, Some(91), Some(&site_id), None, 1, 2, None)
         .await
         .expect("list first certificate keyset page");
     assert_eq!(
-        first_page.total, 3,
-        "page one carries the exact filtered total"
+        first_page.total, 0,
+        "the cursor-only ledger carries no filtered total"
     );
     assert_eq!(first_page.has_more, Some(true));
     assert_eq!(first_page.items.len(), 2);
@@ -2605,6 +2841,22 @@ async fn verify_certificate_keyset_pagination(context: &TestContext) {
         .await
         .expect_err("a tampered cursor must be refused");
     assert_eq!(tampered.kind(), WebServiceErrorKind::Validation);
+
+    // A cursor is bound to the operation and tenant that issued it; another
+    // tenant replaying it gets a validation error, never another tenant's page.
+    let cross_tenant = repository
+        .list_certificates(
+            TENANT_B,
+            Some(91),
+            Some(&site_id),
+            None,
+            1,
+            2,
+            Some(&cursor),
+        )
+        .await
+        .expect_err("a cursor from another tenant must be refused");
+    assert_eq!(cross_tenant.kind(), WebServiceErrorKind::Validation);
 }
 
 fn test_media_resource(node_id: &str, width: i32, height: i32) -> MediaResource {

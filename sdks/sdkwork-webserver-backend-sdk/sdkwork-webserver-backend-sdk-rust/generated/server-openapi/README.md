@@ -5,13 +5,13 @@ Generated SDKWork v3 dual-token transport SDK.
 ## Installation
 
 ```bash
-cargo add sdkwork-webserver-backend-sdk
+cargo add sdkwork-webserver-backend-sdk-generated-rust
 ```
 
 ## Quick Start
 
 ```rust
-use sdkwork_webserver_backend_sdk::{SdkworkBackendClient, SdkworkConfig};
+use sdkwork_webserver_backend_sdk_generated_rust::{SdkworkBackendClient, SdkworkConfig};
 
 
 #[tokio::main]
@@ -44,6 +44,7 @@ client.set_header("X-Custom-Header", "value");
 ## API Modules
 
 - `client.application()` - application API
+- `client.plugin()` - plugin API
 - `client.application_domain()` - application_domain API
 - `client.certificate()` - certificate API
 - `client.domain()` - domain API
@@ -76,6 +77,21 @@ query.insert("site_type".to_string(), serde_json::json!(4));
 query.insert("status".to_string(), serde_json::json!(5));
 query.insert("q".to_string(), serde_json::json!("q"));
 let result = client.application().applications_list(Some(&query)).await?;
+println!("{result:?}");
+```
+
+### plugin
+
+```rust
+use std::collections::HashMap;
+// List the caller's plugin catalog
+let mut query = HashMap::new();
+query.insert("page".to_string(), serde_json::json!(1));
+query.insert("page_size".to_string(), serde_json::json!(2));
+query.insert("status".to_string(), serde_json::json!("draft"));
+query.insert("q".to_string(), serde_json::json!("q"));
+query.insert("owner_id".to_string(), serde_json::json!("1"));
+let result = client.plugin().plugins_list(Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -186,8 +202,12 @@ println!("{result:?}");
 ### webserver_config
 
 ```rust
+use std::collections::HashMap;
 // List the managed Web Server configuration catalog
-let result = client.webserver_config().webserver_configs_list().await?;
+let mut query = HashMap::new();
+query.insert("page".to_string(), serde_json::json!(1));
+query.insert("page_size".to_string(), serde_json::json!(2));
+let result = client.webserver_config().webserver_configs_list(Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -230,8 +250,12 @@ println!("{result:?}");
 ### tunnel
 
 ```rust
+use std::collections::HashMap;
 // List the tunnel connector machines this gateway manages
-let result = client.tunnel().machines_list().await?;
+let mut query = HashMap::new();
+query.insert("page".to_string(), serde_json::json!(1));
+query.insert("page_size".to_string(), serde_json::json!(2));
+let result = client.tunnel().machines_list(Some(&query)).await?;
 println!("{result:?}");
 ```
 
@@ -264,7 +288,7 @@ println!("{result:?}");
 ## Error Handling
 
 ```rust
-use sdkwork_webserver_backend_sdk::{SdkworkBackendClient, SdkworkConfig};
+use sdkwork_webserver_backend_sdk_generated_rust::{SdkworkBackendClient, SdkworkConfig};
 
 
 let client = SdkworkBackendClient::new(SdkworkConfig::new("http://localhost:3800"))?;

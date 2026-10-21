@@ -149,7 +149,7 @@ impl ProxyRequestBodyControl {
     where
         T: Send + Sync + 'static,
     {
-        let mut body = Some(Box::new(body) as Box<dyn Send + Sync>);
+        let mut body: Option<Box<dyn Send + Sync>> = Some(Box::new(body));
         {
             let mut deferred = self.deferred_body();
             if matches!(

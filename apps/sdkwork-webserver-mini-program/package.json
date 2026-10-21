@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@sdkwork/app-topology": "workspace:*",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "miniprogram-api-typings": "^4.1.0",
     "typescript": "catalog:"
   }

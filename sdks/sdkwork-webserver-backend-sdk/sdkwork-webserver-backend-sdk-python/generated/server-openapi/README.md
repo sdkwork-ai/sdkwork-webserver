@@ -49,6 +49,7 @@ client.set_header('X-Custom-Header', 'value')
 ## API Modules
 
 - `client.application` - application API
+- `client.plugin` - plugin API
 - `client.application_domain` - application_domain API
 - `client.certificate` - certificate API
 - `client.domain` - domain API
@@ -81,6 +82,21 @@ params = {
     'q': 'q',
 }
 result = client.application.list(params)
+print(result)
+```
+
+### plugin
+
+```python
+# List the caller's plugin catalog
+params = {
+    'page': 1,
+    'page_size': 2,
+    'status': 'draft',
+    'q': 'q',
+    'owner_id': 'owner_id',
+}
+result = client.plugin.list(params)
 print(result)
 ```
 
@@ -192,7 +208,11 @@ print(result)
 
 ```python
 # List the managed Web Server configuration catalog
-result = client.webserver_config.list()
+params = {
+    'page': 1,
+    'page_size': 2,
+}
+result = client.webserver_config.list(params)
 print(result)
 ```
 
@@ -236,7 +256,11 @@ print(result)
 
 ```python
 # List the tunnel connector machines this gateway manages
-result = client.tunnel.tunnel_machines.list()
+params = {
+    'page': 1,
+    'page_size': 2,
+}
+result = client.tunnel.tunnel_machines.list(params)
 print(result)
 ```
 

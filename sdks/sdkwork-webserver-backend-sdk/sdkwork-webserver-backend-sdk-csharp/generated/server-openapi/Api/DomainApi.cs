@@ -189,6 +189,45 @@ namespace SDKWork.WebserverBackendSdk.Api
         }
 
         /// <summary>
+        /// Read the root domain's WeChat MP domain-ownership verification file
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationRetrieveResponse?> RootDomainsWechatVerificationRetrieveAsync(string rootDomainId)
+        {
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationRetrieveResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file"));
+        }
+
+        /// <summary>
+        /// Upload (or wholly replace) the root domain's WeChat verification file
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationUpdateResponse?> RootDomainsWechatVerificationUpdateAsync(string rootDomainId, SDKWork.WebserverBackendSdk.Models.UpsertDomainWechatVerificationRequest body, string idempotencyKey)
+        {
+            var requestHeaders = BuildRequestHeaders(
+                new Dictionary<string, HeaderParameterSpec>
+                {
+                    ["Idempotency-Key"] = new HeaderParameterSpec(idempotencyKey, "simple", false, null),
+                },
+                new Dictionary<string, HeaderParameterSpec>()
+            );
+            return await _client.PutAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationUpdateResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
+        /// Delete the root domain's WeChat verification file
+        /// </summary>
+        public async Task RootDomainsWechatVerificationDeleteAsync(string rootDomainId)
+        {
+            await _client.DeleteAsync<object>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file"));
+        }
+
+        /// <summary>
+        /// Self-check the root domain's WeChat verification file
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationCheckResponse?> RootDomainsWechatVerificationCheckAsync(string rootDomainId)
+        {
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationCheckResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file/check"), null);
+        }
+
+        /// <summary>
         /// Sync a root-domain Zone's resolution records through its cloud account
         /// </summary>
         public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsDnsRecordsSyncResponse?> RootDomainsDnsRecordsSyncAsync(string rootDomainId, string idempotencyKey)
@@ -229,6 +268,14 @@ namespace SDKWork.WebserverBackendSdk.Api
                 new Dictionary<string, HeaderParameterSpec>()
             );
             return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.DomainsCreateResponse201>(ApiPaths.BackendPath("/domains"), body, null, requestHeaders, "application/json");
+        }
+
+        /// <summary>
+        /// Retrieve one tenant custom domain asset
+        /// </summary>
+        public async Task<SDKWork.WebserverBackendSdk.Models.DomainsRetrieveResponse?> DomainsRetrieveAsync(string domainId)
+        {
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.DomainsRetrieveResponse>(ApiPaths.BackendPath($"/domains/{SerializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false))}"));
         }
 
         /// <summary>

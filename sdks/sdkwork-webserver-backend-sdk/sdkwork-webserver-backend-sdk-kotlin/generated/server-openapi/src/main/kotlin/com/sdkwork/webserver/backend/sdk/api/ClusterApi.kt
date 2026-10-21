@@ -107,7 +107,7 @@ class ClusterApi(private val client: HttpClient) {
     }
 
     /** List webserver process instances with liveness state */
-    suspend fun clustersInstancesList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, hostId: String? = null, status: Int? = null, healthState: String? = null, joinMode: Int? = null, syncStatus: Int? = null, labels: String? = null, search: String? = null, buildVersion: String? = null): ClustersInstancesListResponse? {
+    suspend fun clustersInstancesList(pageSize: Int? = null, cursor: String? = null, clusterId: String? = null, hostId: String? = null, status: Int? = null, healthState: String? = null, joinMode: Int? = null, syncStatus: Int? = null, labels: String? = null, q: String? = null, buildVersion: String? = null): ClustersInstancesListResponse? {
         val query = buildQueryString(listOf(
             QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             QueryParameterSpec("cursor", cursor, "form", true, false, null),
@@ -118,7 +118,7 @@ class ClusterApi(private val client: HttpClient) {
             QueryParameterSpec("join_mode", joinMode, "form", true, false, null),
             QueryParameterSpec("sync_status", syncStatus, "form", true, false, null),
             QueryParameterSpec("labels", labels, "form", true, false, null),
-            QueryParameterSpec("search", search, "form", true, false, null),
+            QueryParameterSpec("q", q, "form", true, false, null),
             QueryParameterSpec("build_version", buildVersion, "form", true, false, null)
         ))
         val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances"), query))

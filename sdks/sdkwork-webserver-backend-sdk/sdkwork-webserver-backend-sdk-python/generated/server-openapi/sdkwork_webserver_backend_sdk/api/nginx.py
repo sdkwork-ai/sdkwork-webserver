@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import ConfigsCreateResponse201, ConfigsDeployResponse, ConfigsListResponse, ConfigsRetrieveResponse, ConfigsUpdateResponse, ConfigsValidateResponse, CreateNginxConfigRequest, ReloadResponse, StatusRetrieveResponse, UpdateNginxConfigRequest
+from ..models import ConfigsCreateResponse201, ConfigsDeployResponse, ConfigsListResponse, ConfigsRetrieveResponse, ConfigsRevisionsListResponse, ConfigsRevisionsRetrieveResponse, ConfigsRevisionsRollbackResponse, ConfigsUpdateResponse, ConfigsValidateResponse, CreateNginxConfigRequest, ReloadResponse, StatusRetrieveResponse, UpdateNginxConfigRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -252,6 +252,7 @@ class NginxConfigsApi:
 
     def __init__(self, client: HttpClient):
         self._client = client
+        self.revisions = NginxConfigsRevisionsApi(client)
 
 
     def list(self, page: Optional[int] = None, page_size: Optional[int] = None, site_id: Optional[str] = None, config_type: Optional[int] = None, is_active: Optional[bool] = None) -> ConfigsListResponse:
@@ -302,6 +303,29 @@ class NginxConfigsApi:
             {}
         )
         return self._client.post(f"/backend/v3/api/nginx/etc/{serialize_path_parameter(config_id, {'name': 'configId', 'style': 'simple', 'explode': False})}/deploy", headers=request_headers)
+
+class NginxConfigsRevisionsApi:
+    """nginx nginx.configs.revisions API client."""
+
+    def __init__(self, client: HttpClient):
+        self._client = client
+
+
+    def list(self, config_id: str, page: Optional[int] = None, page_size: Optional[int] = None) -> ConfigsRevisionsListResponse:
+        """List an Nginx configuration's revisions"""
+        query = build_query_string([
+            {'name': 'page', 'value': page, 'style': 'form', 'explode': True, 'allow_reserved': False},
+            {'name': 'page_size', 'value': page_size, 'style': 'form', 'explode': True, 'allow_reserved': False},
+        ])
+        return self._client.get(_append_query_string(f"/backend/v3/api/nginx/etc/{serialize_path_parameter(config_id, {'name': 'configId', 'style': 'simple', 'explode': False})}/revisions", query))
+
+    def retrieve(self, config_id: str, version_no: int) -> ConfigsRevisionsRetrieveResponse:
+        """Retrieve one Nginx configuration revision"""
+        return self._client.get(f"/backend/v3/api/nginx/etc/{serialize_path_parameter(config_id, {'name': 'configId', 'style': 'simple', 'explode': False})}/revisions/{serialize_path_parameter(version_no, {'name': 'versionNo', 'style': 'simple', 'explode': False})}")
+
+    def rollback(self, config_id: str, version_no: int) -> ConfigsRevisionsRollbackResponse:
+        """Roll an Nginx configuration back to a revision"""
+        return self._client.post(f"/backend/v3/api/nginx/etc/{serialize_path_parameter(config_id, {'name': 'configId', 'style': 'simple', 'explode': False})}/revisions/{serialize_path_parameter(version_no, {'name': 'versionNo', 'style': 'simple', 'explode': False})}/rollback")
 
 class NginxReloadApi:
     """nginx nginx.reload API client."""

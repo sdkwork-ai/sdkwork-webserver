@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{CreateNginxConfigRequest, NginxConfigResponse, NginxDeployResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, UpdateNginxConfigRequest};
+use crate::models::{CreateNginxConfigRequest, NginxConfigResponse, NginxConfigRevisionResponse, NginxDeployResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, UpdateNginxConfigRequest};
 
 #[derive(Clone)]
 pub struct NginxApi {
@@ -75,6 +75,28 @@ impl NginxApi {
             &[],
         );
         self.client.post(&path, Option::<&serde_json::Value>::None, None, headers.as_ref(), None).await
+    }
+
+    /// List an Nginx configuration's revisions
+    pub async fn configs_revisions_list(&self, config_id: &str, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+        let query = build_query_string(&[
+            QueryParameterSpec::new("page", page, "form", true, false, None),
+            QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
+        ]);
+        let path = append_query_string(backend_path(&format!("/nginx/etc/{}/revisions", serialize_path_parameter(config_id, PathParameterSpec::new("configId", "simple", false)))), &query);
+        self.client.get(&path, None, None).await
+    }
+
+    /// Retrieve one Nginx configuration revision
+    pub async fn configs_revisions_retrieve(&self, config_id: &str, version_no: i64) -> Result<NginxConfigRevisionResponse, SdkworkError> {
+        let path = backend_path(&format!("/nginx/etc/{}/revisions/{}", serialize_path_parameter(config_id, PathParameterSpec::new("configId", "simple", false)), serialize_path_parameter(version_no, PathParameterSpec::new("versionNo", "simple", false))));
+        self.client.get(&path, None, None).await
+    }
+
+    /// Roll an Nginx configuration back to a revision
+    pub async fn configs_revisions_rollback(&self, config_id: &str, version_no: i64) -> Result<NginxConfigResponse, SdkworkError> {
+        let path = backend_path(&format!("/nginx/etc/{}/revisions/{}/rollback", serialize_path_parameter(config_id, PathParameterSpec::new("configId", "simple", false)), serialize_path_parameter(version_no, PathParameterSpec::new("versionNo", "simple", false))));
+        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
     }
 
     /// Reload Nginx

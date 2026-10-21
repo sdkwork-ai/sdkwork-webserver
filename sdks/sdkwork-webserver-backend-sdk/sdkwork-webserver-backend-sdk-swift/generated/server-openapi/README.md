@@ -49,6 +49,7 @@ client.setHeader("X-Custom-Header", value: "value")
 ## API Modules
 
 - `client.application` - application API
+- `client.plugin` - plugin API
 - `client.applicationDomain` - application_domain API
 - `client.certificate` - certificate API
 - `client.domain` - domain API
@@ -81,6 +82,21 @@ let params: [String: Any] = [
     "q": "q"
 ]
 let result = try await client.application.applicationsList(params: params)
+print(result)
+```
+
+### plugin
+
+```swift
+// List the caller's plugin catalog
+let params: [String: Any] = [
+    "page": 1,
+    "page_size": 2,
+    "status": "draft",
+    "q": "q",
+    "owner_id": "1"
+]
+let result = try await client.plugin.pluginsList(params: params)
 print(result)
 ```
 
@@ -192,7 +208,11 @@ print(result)
 
 ```swift
 // List the managed Web Server configuration catalog
-let result = try await client.webserverConfig.webserverConfigsList()
+let params: [String: Any] = [
+    "page": 1,
+    "page_size": 2
+]
+let result = try await client.webserverConfig.webserverConfigsList(params: params)
 print(result)
 ```
 
@@ -236,7 +256,11 @@ print(result)
 
 ```swift
 // List the tunnel connector machines this gateway manages
-let result = try await client.tunnel.machinesList()
+let params: [String: Any] = [
+    "page": 1,
+    "page_size": 2
+]
+let result = try await client.tunnel.machinesList(params: params)
 print(result)
 ```
 

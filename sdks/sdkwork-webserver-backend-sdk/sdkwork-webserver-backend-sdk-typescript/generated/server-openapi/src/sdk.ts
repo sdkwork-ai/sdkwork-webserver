@@ -3,6 +3,7 @@ import type { SdkworkBackendConfig } from './types/common';
 import type { AuthTokenManager } from '@sdkwork/sdk-common';
 
 import { ApplicationApi, createApplicationApi } from './api/application';
+import { PluginApi, createPluginApi } from './api/plugin';
 import { ApplicationDomainApi, createApplicationDomainApi } from './api/application-domain';
 import { CertificateApi, createCertificateApi } from './api/certificate';
 import { DomainApi, createDomainApi } from './api/domain';
@@ -24,6 +25,7 @@ export class SdkworkBackendClient {
   private httpClient: HttpClient;
 
   public readonly application: ApplicationApi;
+  public readonly plugin: PluginApi;
   public readonly applicationDomain: ApplicationDomainApi;
   public readonly certificate: CertificateApi;
   public readonly domain: DomainApi;
@@ -44,6 +46,8 @@ export class SdkworkBackendClient {
   constructor(config: SdkworkBackendConfig) {
     this.httpClient = createHttpClient(config);
     this.application = createApplicationApi(this.httpClient);
+
+    this.plugin = createPluginApi(this.httpClient);
 
     this.applicationDomain = createApplicationDomainApi(this.httpClient);
 

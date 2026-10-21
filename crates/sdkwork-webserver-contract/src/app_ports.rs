@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::cluster::*;
 use crate::dto::*;
 use crate::metrics::*;
+use crate::plugins::*;
 use crate::problem::WebServiceResult;
 use crate::tunnel::*;
 use crate::usage::*;
@@ -541,6 +542,10 @@ pub trait WebAppApi: Send + Sync {
 }
 
 #[async_trait]
+// The backend port is one trait of narrow operations; `async_trait` expands a
+// few of them with the receiver plus context/query arguments. Splitting those
+// into parameter structs would change every implementor for a lint-only reason.
+#[allow(clippy::too_many_arguments)]
 pub trait WebBackendApi: Send + Sync {
     async fn list_applications(
         &self,
@@ -783,6 +788,15 @@ pub trait WebBackendApi: Send + Sync {
         page_size: i32,
     ) -> WebServiceResult<DomainPage>;
 
+    /// Reads one tenant custom domain by id. The detail surface needs this
+    /// instead of scanning a page of the list, which silently 404s any domain
+    /// outside the page the console happened to load.
+    async fn retrieve_managed_domain(
+        &self,
+        context: &WebBackendRequestContext,
+        domain_id: &str,
+    ) -> WebServiceResult<DomainResponse>;
+
     async fn create_managed_domain(
         &self,
         context: &WebBackendRequestContext,
@@ -961,6 +975,28 @@ pub trait WebBackendApi: Send + Sync {
         &self,
         context: &WebBackendRequestContext,
         config_id: &str,
+    ) -> WebServiceResult<NginxConfigResponse>;
+
+    async fn list_nginx_config_revisions(
+        &self,
+        context: &WebBackendRequestContext,
+        config_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<NginxConfigRevisionPage>;
+
+    async fn retrieve_nginx_config_revision(
+        &self,
+        context: &WebBackendRequestContext,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<NginxConfigRevisionResponse>;
+
+    async fn rollback_nginx_config_revision(
+        &self,
+        context: &WebBackendRequestContext,
+        config_id: &str,
+        version_no: i32,
     ) -> WebServiceResult<NginxConfigResponse>;
 
     async fn update_nginx_config(
@@ -1180,6 +1216,8 @@ pub trait WebBackendApi: Send + Sync {
     async fn list_tunnel_machines(
         &self,
         context: &WebBackendRequestContext,
+        page: i32,
+        page_size: i32,
     ) -> WebServiceResult<TunnelMachineListResponse>;
 
     /// One managed machine, or a `NotFound` when no such machine is known.
@@ -1292,6 +1330,39 @@ pub trait WebBackendApi: Send + Sync {
         context: &WebBackendRequestContext,
         query: &MetricsSummaryQuery,
     ) -> WebServiceResult<MetricsSummaryResponse>;
+
+    /// List the caller's own plugin catalog. The owner is the authenticated
+    /// operator: a tenant or user parameter cannot retarget the read.
+    async fn list_plugins(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &ListPluginsQuery,
+    ) -> WebServiceResult<PluginPage>;
+
+    async fn create_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        request: &CreatePluginRequest,
+    ) -> WebServiceResult<PluginResponse>;
+
+    async fn retrieve_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        plugin_id: &str,
+    ) -> WebServiceResult<PluginResponse>;
+
+    async fn update_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        plugin_id: &str,
+        request: &UpdatePluginRequest,
+    ) -> WebServiceResult<PluginResponse>;
+
+    async fn delete_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        plugin_id: &str,
+    ) -> WebServiceResult<()>;
 }
 
 #[cfg(test)]

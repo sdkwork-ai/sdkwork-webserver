@@ -365,9 +365,7 @@ fn glob_match(pattern: &str, text: &str) -> bool {
                 }
             }
             '?' => {
-                for index in 0..text.len() {
-                    next[index + 1] = reachable[index];
-                }
+                next[1..=text.len()].copy_from_slice(&reachable[..text.len()]);
             }
             literal => {
                 for (index, character) in text.iter().enumerate() {
@@ -503,16 +501,20 @@ pub fn compile_merged_imports_app() -> Result<Option<crate::CompiledWebServerApp
 
 /// Bootstrap placeholder certificates: when a certificate referenced by the
 /// merged module configuration has no material on disk yet, generate a
-/// self-signed placeholder (SAN covers the certificate's server names) so
-/// the data plane starts. Operators replace the placeholder with real
-/// material (ACME issuance or uploaded files) without a restart. A
-/// half-present pair (certificate without key or vice versa) fails closed
-/// with a precise diagnostic instead of being overwritten.
+/// self-signed placeholder (SAN covers the certificate's server names) so a
+/// **development** data plane starts. Production-like deployments must never
+/// serve a placeholder: missing material is a provisioning failure and fails
+/// startup with the exact paths to supply. Operators replace a development
+/// placeholder with real material (ACME issuance or uploaded files) without a
+/// restart. A half-present pair (certificate without key or vice versa) fails
+/// closed with a precise diagnostic instead of being overwritten.
 pub fn ensure_import_bootstrap_certificates(
     app: &WebServerAppConfig,
     base: &Path,
 ) -> Result<(), String> {
     use crate::config::CertificateSource;
+    let production_like = crate::runtime_env::web_is_production_like_environment()
+        || crate::runtime_env::web_environment_name() == "demo";
     for certificate in &app.certificates {
         let CertificateSource::ProtectedFile {
             certificate_file,
@@ -526,6 +528,16 @@ pub fn ensure_import_bootstrap_certificates(
         if certificate_path.is_file() != private_key_path.is_file() {
             return Err(format!(
                 "certificate `{}`: only one of {} / {} exists; supply both or remove both so a bootstrap placeholder can be generated",
+                certificate.id,
+                certificate_path.display(),
+                private_key_path.display()
+            ));
+        }
+        if production_like {
+            return Err(format!(
+                "certificate `{}`: TLS material is missing ({} / {}); a production-like \
+                 deployment must never bind a self-signed bootstrap placeholder — provision the \
+                 certificate and private key (ACME issuance or operator upload) before startup",
                 certificate.id,
                 certificate_path.display(),
                 private_key_path.display()
@@ -583,12 +595,38 @@ fn resolve_certificate_file_path(base: &Path, configured: &str) -> Result<PathBu
 }
 
 fn write_private_certificate_file(path: &Path, content: &[u8]) -> Result<(), String> {
-    std::fs::write(path, content)
-        .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+    use std::io::Write;
+
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        // Create the file already at 0600: a `write` followed by `chmod`
+        // leaves a window where the private key is readable under the process
+        // umask, and a failed `chmod` would leave it readable permanently.
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|error| format!("cannot create {}: {error}", path.display()))?;
+        file.write_all(content)
+            .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        file.sync_all()
+            .map_err(|error| format!("cannot sync {}: {error}", path.display()))?;
+        // An existing file keeps its old mode across truncation; enforce 0600
+        // explicitly and propagate a failure instead of ignoring it.
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|error| format!("cannot secure {}: {error}", path.display()))?;
+    }
+    #[cfg(not(unix))]
+    {
+        let mut file = std::fs::File::create(path)
+            .map_err(|error| format!("cannot create {}: {error}", path.display()))?;
+        file.write_all(content)
+            .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        file.sync_all()
+            .map_err(|error| format!("cannot sync {}: {error}", path.display()))?;
     }
     Ok(())
 }

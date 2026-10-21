@@ -2,13 +2,14 @@ use super::{EngineArguments, EngineDatabase, EngineRow, WebRepository};
 use crate::audited_sql;
 use sdkwork_webserver_contract::{
     CreateNginxConfigRequest, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
+    NginxConfigRevisionPage, NginxConfigRevisionResponse, NginxConfigRevisionSummary,
     NginxStatusResponse, UpdateNginxConfigRequest, WebServiceError, WebServiceResult,
 };
 use sqlx::Row;
 
 use super::support::{
     bool_from_row, instant_write_expression, new_uuid, next_id, now_rfc3339, pagination,
-    resolve_site_internal_id, sha256_hex, store_error,
+    resolve_site_internal_id, retry_transient_transaction, sha256_hex, store_error,
 };
 
 /// Fail closed: every production caller binds a tenant, and a tenant-less
@@ -43,7 +44,11 @@ impl WebRepository {
         );
         let mut list_sql = String::from(
             "SELECT config.uuid, config.tenant_id, site.uuid AS site_uuid,
-                    config.config_name, config.config_type, config.is_active, config.status
+                    config.config_name, config.config_type, config.config_content,
+                    config.config_hash, config.is_active, config.version_no,
+                    CAST(config.deployed_at AS TEXT) AS deployed_at, config.status,
+                    CAST(config.created_at AS TEXT) AS created_at,
+                    CAST(config.updated_at AS TEXT) AS updated_at
              FROM webserver_nginx_config config
              INNER JOIN webserver_site site
                ON site.id = config.site_id AND site.tenant_id = config.tenant_id
@@ -103,7 +108,7 @@ impl WebRepository {
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
-            items.push(map_nginx_config_row(row).map_err(|error| {
+            items.push(map_nginx_config_row(row, false).map_err(|error| {
                 WebServiceError::Internal(format!("map webserver_nginx_config row: {error}"))
             })?);
         }
@@ -153,6 +158,16 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert webserver_nginx_config", error))?;
 
+        self.capture_nginx_config_revision(
+            tenant_id,
+            id,
+            1,
+            &request.config_name,
+            &request.config_content,
+            &config_hash,
+        )
+        .await?;
+
         self.retrieve_nginx_config_repo(Some(tenant_id), &uuid)
             .await
     }
@@ -165,7 +180,11 @@ impl WebRepository {
         let tenant_id = require_nginx_tenant(tenant_id)?;
         let row = sqlx::query(
             "SELECT config.uuid, config.tenant_id, site.uuid AS site_uuid,
-                    config.config_name, config.config_type, config.is_active, config.status
+                    config.config_name, config.config_type, config.config_content,
+                    config.config_hash, config.is_active, config.version_no,
+                    CAST(config.deployed_at AS TEXT) AS deployed_at, config.status,
+                    CAST(config.created_at AS TEXT) AS created_at,
+                    CAST(config.updated_at AS TEXT) AS updated_at
              FROM webserver_nginx_config config
              INNER JOIN webserver_site site
                ON site.id = config.site_id AND site.tenant_id = config.tenant_id
@@ -178,7 +197,7 @@ impl WebRepository {
         .map_err(|error| store_error("retrieve webserver_nginx_config", error))?
         .ok_or_else(|| WebServiceError::not_found("nginx config not found"))?;
 
-        map_nginx_config_row(&row).map_err(|error| WebServiceError::Internal(error.to_string()))
+        map_nginx_config_row(&row, true).map_err(|error| WebServiceError::Internal(error.to_string()))
     }
 
     pub(super) async fn update_nginx_config_repo(
@@ -189,7 +208,7 @@ impl WebRepository {
     ) -> WebServiceResult<NginxConfigResponse> {
         let tenant_id = require_nginx_tenant(tenant_id)?;
         let row = sqlx::query(
-            "SELECT config_name, config_content, version FROM webserver_nginx_config
+            "SELECT id, config_name, config_content, version FROM webserver_nginx_config
              WHERE tenant_id = $1 AND uuid = $2",
         )
         .bind(tenant_id)
@@ -202,6 +221,9 @@ impl WebRepository {
         let stored_config_name: String = row
             .try_get("config_name")
             .map_err(|error| store_error("map webserver_nginx_config config_name", error))?;
+        let config_internal_id: i64 = row
+            .try_get("id")
+            .map_err(|error| store_error("map webserver_nginx_config id", error))?;
         let stored_config_content: String = row
             .try_get("config_content")
             .map_err(|error| store_error("map webserver_nginx_config config_content", error))?;
@@ -227,6 +249,7 @@ impl WebRepository {
         let tenant_update_sql = format!(
             "UPDATE webserver_nginx_config
              SET config_name = $3, config_content = $4, config_hash = $5,
+                 version_no = version_no + 1,
                  updated_at = {tenant_time}, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND version = $7"
         );
@@ -249,7 +272,19 @@ impl WebRepository {
                 .await;
         }
 
-        self.retrieve_nginx_config_repo(Some(tenant_id), config_id).await
+        let updated = self
+            .retrieve_nginx_config_repo(Some(tenant_id), config_id)
+            .await?;
+        self.capture_nginx_config_revision(
+            tenant_id,
+            config_internal_id,
+            updated.version_no,
+            &updated.config_name,
+            &updated.config_content,
+            &updated.config_hash,
+        )
+        .await?;
+        Ok(updated)
     }
 
     pub(super) async fn load_nginx_config_content_repo(
@@ -282,7 +317,9 @@ impl WebRepository {
         let site_internal_id = resolve_site_internal_id(&self.pool, tenant_id, site_id).await?;
         let row = sqlx::query(
             "SELECT config_content FROM webserver_nginx_config
-             WHERE site_id = $1 AND is_active = TRUE AND status = 1",
+             WHERE site_id = $1 AND is_active = TRUE AND status = 1
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 1",
         )
         .bind(site_internal_id)
         .fetch_optional(&self.pool)
@@ -293,7 +330,188 @@ impl WebRepository {
             .map_err(|error| store_error("map active webserver_nginx_config content", error))
     }
 
+    async fn nginx_config_internal_id(
+        &self,
+        tenant_id: i64,
+        config_id: &str,
+    ) -> WebServiceResult<i64> {
+        let id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM webserver_nginx_config WHERE tenant_id = $1 AND uuid = $2",
+        )
+        .bind(tenant_id)
+        .bind(config_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve webserver_nginx_config id", error))?;
+        id.ok_or_else(|| WebServiceError::not_found("nginx config not found"))
+    }
+
+    pub(super) async fn list_nginx_config_revisions_repo(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<NginxConfigRevisionPage> {
+        let tenant_id = require_nginx_tenant(tenant_id)?;
+        let internal_id = self.nginx_config_internal_id(tenant_id, config_id).await?;
+        let (page, page_size, offset) = pagination(page, page_size)?;
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM webserver_nginx_config_revision
+             WHERE tenant_id = $1 AND config_id = $2",
+        )
+        .bind(tenant_id)
+        .bind(internal_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("count webserver_nginx_config_revision", error))?;
+        let rows = sqlx::query(
+            "SELECT version_no, config_name, config_hash, created_by,
+                    CAST(created_at AS TEXT) AS created_at
+             FROM webserver_nginx_config_revision
+             WHERE tenant_id = $1 AND config_id = $2
+             ORDER BY version_no DESC
+             LIMIT $3 OFFSET $4",
+        )
+        .bind(tenant_id)
+        .bind(internal_id)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list webserver_nginx_config_revision", error))?;
+        let items = rows
+            .into_iter()
+            .map(|row| {
+                Ok(NginxConfigRevisionSummary {
+                    version_no: row.try_get("version_no")?,
+                    config_name: row.try_get("config_name")?,
+                    config_hash: row.try_get("config_hash")?,
+                    created_by: row.try_get("created_by")?,
+                    created_at: row.try_get("created_at")?,
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()
+            .map_err(|error| store_error("map webserver_nginx_config_revision", error))?;
+        Ok(NginxConfigRevisionPage {
+            items,
+            total,
+            page,
+            page_size,
+        })
+    }
+
+    pub(super) async fn retrieve_nginx_config_revision_repo(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<NginxConfigRevisionResponse> {
+        let tenant_id = require_nginx_tenant(tenant_id)?;
+        let internal_id = self.nginx_config_internal_id(tenant_id, config_id).await?;
+        let row = sqlx::query(
+            "SELECT version_no, config_name, config_content, config_hash, created_by,
+                    CAST(created_at AS TEXT) AS created_at
+             FROM webserver_nginx_config_revision
+             WHERE tenant_id = $1 AND config_id = $2 AND version_no = $3",
+        )
+        .bind(tenant_id)
+        .bind(internal_id)
+        .bind(version_no)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("retrieve webserver_nginx_config_revision", error))?
+        .ok_or_else(|| WebServiceError::not_found("nginx config revision not found"))?;
+        Ok(NginxConfigRevisionResponse {
+            version_no: row
+                .try_get("version_no")
+                .map_err(|error| store_error("map revision version_no", error))?,
+            config_name: row
+                .try_get("config_name")
+                .map_err(|error| store_error("map revision config_name", error))?,
+            config_content: row
+                .try_get("config_content")
+                .map_err(|error| store_error("map revision config_content", error))?,
+            config_hash: row
+                .try_get("config_hash")
+                .map_err(|error| store_error("map revision config_hash", error))?,
+            created_by: row
+                .try_get("created_by")
+                .map_err(|error| store_error("map revision created_by", error))?,
+            created_at: row
+                .try_get("created_at")
+                .map_err(|error| store_error("map revision created_at", error))?,
+        })
+    }
+
+    pub(super) async fn rollback_nginx_config_revision_repo(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<NginxConfigResponse> {
+        let revision = self
+            .retrieve_nginx_config_revision_repo(tenant_id, config_id, version_no)
+            .await?;
+        // A rollback is a forward write: it restores the old body as a new
+        // revision (and a new version number), so the history stays append-only
+        // and the rollback itself is auditable.
+        self.update_nginx_config_repo(
+            tenant_id,
+            config_id,
+            &UpdateNginxConfigRequest {
+                config_name: Some(revision.config_name),
+                config_content: Some(revision.config_content),
+            },
+        )
+        .await
+    }
+
+    /// Snapshots one content revision. `(config_id, version_no)` is unique, so
+    /// a retried write is idempotent instead of appending a duplicate.
+    async fn capture_nginx_config_revision(
+        &self,
+        tenant_id: i64,
+        config_id: i64,
+        version_no: i32,
+        config_name: &str,
+        config_content: &str,
+        config_hash: &str,
+    ) -> WebServiceResult<()> {
+        let id = next_id(self.id_generator())?;
+        let uuid = new_uuid();
+        let now = now_rfc3339();
+        sqlx::query(audited_sql(
+            "INSERT INTO webserver_nginx_config_revision (
+                id, uuid, tenant_id, config_id, version_no, config_name,
+                config_content, config_hash, created_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz)
+             ON CONFLICT (config_id, version_no) DO NOTHING",
+        ))
+        .bind(id)
+        .bind(&uuid)
+        .bind(tenant_id)
+        .bind(config_id)
+        .bind(version_no)
+        .bind(config_name)
+        .bind(config_content)
+        .bind(config_hash)
+        .bind(&now)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("insert webserver_nginx_config_revision", error))?;
+        Ok(())
+    }
+
     pub(super) async fn webserver_nginx_config_repo(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+    ) -> WebServiceResult<NginxConfigResponse> {
+        retry_transient_transaction(|| self.activate_nginx_config_once(tenant_id, config_id)).await
+    }
+
+    async fn activate_nginx_config_once(
         &self,
         tenant_id: Option<i64>,
         config_id: &str,
@@ -335,6 +553,29 @@ impl WebRepository {
             .begin()
             .await
             .map_err(|error| store_error("begin deploy webserver_nginx_config transaction", error))?;
+
+        // Serialize activations for one site. Without this parent-row lock two
+        // concurrent activations each deactivate the set visible in their own
+        // READ COMMITTED snapshot and then activate their own target, leaving
+        // two `is_active = TRUE` rows. Migration 0027's partial unique index is
+        // the database-level backstop, but the lock is what lets both requests
+        // finish instead of turning the second into a 23505 conflict.
+        let site_locked = sqlx::query(
+            "SELECT 1 FROM webserver_site
+             WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+             FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(site_internal_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| store_error("lock webserver_site for nginx activation", error))?;
+        if site_locked.is_none() {
+            tx.rollback().await.map_err(|error| {
+                store_error("rollback missing webserver_site nginx activation", error)
+            })?;
+            return Err(WebServiceError::not_found("site not found"));
+        }
 
         sqlx::query(audited_sql(&deactivate_sql))
             .bind(tenant_id)
@@ -469,13 +710,28 @@ fn apply_binds<'q>(
     query
 }
 
-fn map_nginx_config_row(row: &EngineRow) -> Result<NginxConfigResponse, sqlx::Error> {
+fn map_nginx_config_row(
+    row: &EngineRow,
+    include_content: bool,
+) -> Result<NginxConfigResponse, sqlx::Error> {
     Ok(NginxConfigResponse {
         id: row.try_get("uuid")?,
         site_id: row.try_get("site_uuid")?,
         config_name: row.try_get("config_name")?,
         config_type: row.try_get("config_type")?,
+        // A page must not carry every config body: one row may be up to the
+        // 1 MiB materialization limit, and the list only needs the summary.
+        config_content: if include_content {
+            row.try_get("config_content")?
+        } else {
+            String::new()
+        },
+        config_hash: row.try_get("config_hash")?,
         is_active: bool_from_row(row, "is_active")?,
+        version_no: row.try_get("version_no")?,
+        deployed_at: row.try_get("deployed_at")?,
         status: row.try_get("status")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
     })
 }

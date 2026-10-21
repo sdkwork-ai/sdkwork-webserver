@@ -6230,6 +6230,10 @@ async fn an_nginx_declared_acme_webroot_serves_challenges_with_narrow_precedence
 
     let port = available_port();
     let config = directory.path().join("product-edge-nginx.conf");
+    // nginx treats backslash as an escape introducer, so a native Windows
+    // path would lose `\t`/`\n` sequences. Forward slashes are the portable
+    // spelling of the same path in an nginx directive.
+    let webroot_directive = webroot.to_string_lossy().replace('\\', "/");
     fs::write(
         &config,
         format!(
@@ -6245,7 +6249,7 @@ server {{
     }}
 }}
 "#,
-            webroot = webroot.display(),
+            webroot = webroot_directive,
         ),
     )
     .expect("write nginx config");

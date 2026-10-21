@@ -624,7 +624,7 @@ pub async fn reconcile_application_registry_at_startup() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sdkwork_webserver_core::config::{CertificateConfig, CertificateSource, VirtualHostConfig};
+    use sdkwork_webserver_core::config::{CertificateConfig, VirtualHostConfig};
 
     fn import(id: &str) -> WebserverModuleImport {
         WebserverModuleImport {

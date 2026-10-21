@@ -162,7 +162,7 @@ pub fn apr1_hash(password: &str, salt: &str) -> String {
 
     let mut remaining = password_bytes.len();
     while remaining > 16 {
-        ctx.update(&digest_alt);
+        ctx.update(digest_alt);
         remaining -= 16;
     }
     ctx.update(&digest_alt[..remaining]);
@@ -170,7 +170,7 @@ pub fn apr1_hash(password: &str, salt: &str) -> String {
     let mut bit = password_bytes.len();
     while bit != 0 {
         if bit & 1 == 1 {
-            ctx.update(&[0u8]);
+            ctx.update([0u8]);
         } else {
             ctx.update(&password_bytes[..1]);
         }

@@ -9,12 +9,17 @@ use sqlx::Row;
 use super::support::{
     cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
     json_from_row, new_uuid, next_id, now_rfc3339, pagination, resolve_site_internal_id,
-    store_error,
+    retry_transient_transaction, store_error,
 };
 
 /// Rows rewritten per retention-prune batch, so a large backlog prunes in
 /// bounded statement slices instead of one transaction-wide rewrite.
 const SOURCE_VERSION_PRUNE_BATCH: i64 = 500;
+
+/// Batches one source-version create may prune before yielding. The rest of
+/// the backlog is pruned by later requests, so the create transaction never
+/// holds the site row lock across an unbounded history.
+const SOURCE_VERSION_PRUNE_MAX_BATCHES: usize = 40;
 
 impl WebRepository {
     pub(super) async fn list_source_versions_repo(
@@ -50,7 +55,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("count webserver_source_version", error))?;
         let rows = sqlx::query(
-            "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
+            "SELECT id, uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
                     status, CAST(created_at AS TEXT) AS created_at
              FROM webserver_source_version
@@ -73,13 +78,33 @@ impl WebRepository {
             .map(|row| map_source_version_row(row, site_id))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| WebServiceError::Internal(format!("map webserver_source_version: {error}")))?;
+        // First page: exact total plus the keyset continuation (see the
+        // deployment list for the same contract).
+        let has_more = total > offset.saturating_add(items.len() as i64);
+        let next_cursor = if has_more {
+            let last = rows.last().ok_or_else(|| {
+                WebServiceError::Internal("empty source version page with has_more".to_string())
+            })?;
+            let created_at = cursor_instant_from_row(last, "created_at")
+                .map_err(|error| store_error("map webserver_source_version cursor instant", error))?;
+            let id: i64 = last.try_get("id").map_err(|error| {
+                store_error("map webserver_source_version cursor id", error)
+            })?;
+            Some(encode_keyset_cursor(
+                &format!("source_versions:{tenant_id}"),
+                &created_at,
+                id,
+            ))
+        } else {
+            None
+        };
         Ok(SourceVersionPage {
             items,
             total,
             page,
             page_size,
-            next_cursor: None,
-            has_more: None,
+            next_cursor,
+            has_more: Some(has_more),
         })
     }
 
@@ -98,8 +123,9 @@ impl WebRepository {
                 "page_size must be between 1 and 200",
             ));
         }
-        let (cursor_created_at, cursor_id) = decode_keyset_cursor(cursor)
-            .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
+        let (cursor_created_at, cursor_id) =
+            decode_keyset_cursor(&format!("source_versions:{tenant_id}"), cursor)
+                .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
         let sql = "SELECT uuid, version_tag, source_type, source_ref, commit_hash, artifact_path,
                     artifact_size, artifact_hash, CAST(config_snapshot AS TEXT) AS config_snapshot,
                     status, CAST(created_at AS TEXT) AS created_at,
@@ -133,7 +159,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_source_version cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&created_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    &format!("source_versions:{tenant_id}"),
+                    &created_at,
+                    id,
+                ))
             })
             .transpose()?;
         Ok(SourceVersionPage {
@@ -147,6 +177,26 @@ impl WebRepository {
     }
 
     pub(super) async fn create_source_version_repo(
+        &self,
+        tenant_id: i64,
+        site_id: &str,
+        actor_id: Option<i64>,
+        retention_limit: i32,
+        request: &CreateSourceVersionRequest,
+    ) -> WebServiceResult<SourceVersionResponse> {
+        retry_transient_transaction(|| {
+            self.create_source_version_once(
+                tenant_id,
+                site_id,
+                actor_id,
+                retention_limit,
+                request,
+            )
+        })
+        .await
+    }
+
+    async fn create_source_version_once(
         &self,
         tenant_id: i64,
         site_id: &str,
@@ -217,43 +267,85 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert webserver_source_version", error))?;
 
-        // Prune in bounded batches. After a long outage or a bulk import the
-        // retention window can hold thousands of rows, and one statement
-        // rewriting all of them would hold every row lock and emit every WAL
-        // record inside one transaction slice — then hit statement_timeout and
-        // retry the whole thing forever. Each batch is its own statement in
-        // the same transaction; marked rows leave the eligible set, so every
-        // iteration makes progress and the loop terminates on a short batch.
-        loop {
-            let pruned = sqlx::query(
-                "WITH retained AS (
-                     SELECT id
-                     FROM webserver_source_version
-                     WHERE tenant_id = $1 AND site_id = $2 AND status = 1
-                     ORDER BY created_at DESC, id DESC
-                     OFFSET $3
-                     LIMIT $4
-                 )
-                 UPDATE webserver_source_version AS source_version
-                 SET status = 3, pruned_at = CAST($6 AS TIMESTAMPTZ), pruned_by = $5,
-                     updated_at = CAST($6 AS TIMESTAMPTZ), version = source_version.version + 1
-                 FROM retained
-                 WHERE source_version.tenant_id = $1
-                   AND source_version.id = retained.id
-                   AND source_version.status = 1",
-            )
-            .bind(tenant_id)
-            .bind(site_internal_id)
-            .bind(retention_limit)
-            .bind(SOURCE_VERSION_PRUNE_BATCH)
-            .bind(actor_id)
-            .bind(&now)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|error| store_error("prune webserver_source_version", error))?
-            .rows_affected();
-            if (pruned as i64) < SOURCE_VERSION_PRUNE_BATCH {
-                break;
+        // Prune in bounded keyset batches. The retention boundary is the
+        // (created_at, id) of the row immediately after the newest
+        // `retention_limit` rows; every eligible row below it is pruned in
+        // batches ordered by the same descending key, and the cursor moves to
+        // the last pruned row. This avoids re-scanning an ever-growing OFFSET
+        // on each iteration, and the iteration cap keeps one create request
+        // from holding the site row lock for an unbounded backlog (the rest is
+        // pruned by the next request).
+        let boundary = sqlx::query(
+            "SELECT CAST(created_at AS TEXT) AS created_at, id
+             FROM webserver_source_version
+             WHERE tenant_id = $1 AND site_id = $2 AND status = 1
+             ORDER BY created_at DESC, id DESC
+             OFFSET $3
+             LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(site_internal_id)
+        .bind(retention_limit)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|error| store_error("read webserver_source_version retention boundary", error))?;
+        if let Some(boundary) = boundary {
+            let mut cursor_created_at: String = boundary
+                .try_get("created_at")
+                .map_err(|error| store_error("map retention boundary created_at", error))?;
+            let mut cursor_id: i64 = boundary
+                .try_get("id")
+                .map_err(|error| store_error("map retention boundary id", error))?;
+            for _ in 0..SOURCE_VERSION_PRUNE_MAX_BATCHES {
+                let pruned = sqlx::query(
+                    "WITH retained AS (
+                         SELECT id, created_at
+                         FROM webserver_source_version
+                         WHERE tenant_id = $1 AND site_id = $2 AND status = 1
+                           AND (created_at, id) <= (CAST($3 AS TIMESTAMPTZ), $4)
+                         ORDER BY created_at DESC, id DESC
+                         LIMIT $5
+                     )
+                     UPDATE webserver_source_version AS source_version
+                     SET status = 3, pruned_at = CAST($7 AS TIMESTAMPTZ), pruned_by = $6,
+                         updated_at = CAST($7 AS TIMESTAMPTZ), version = source_version.version + 1
+                     FROM retained
+                     WHERE source_version.tenant_id = $1
+                       AND source_version.id = retained.id
+                       AND source_version.status = 1
+                     RETURNING CAST(source_version.created_at AS TEXT) AS created_at,
+                               source_version.id",
+                )
+                .bind(tenant_id)
+                .bind(site_internal_id)
+                .bind(&cursor_created_at)
+                .bind(cursor_id)
+                .bind(SOURCE_VERSION_PRUNE_BATCH)
+                .bind(actor_id)
+                .bind(&now)
+                .fetch_all(&mut *transaction)
+                .await
+                .map_err(|error| store_error("prune webserver_source_version", error))?;
+                let count = pruned.len() as i64;
+                if let Some(last) = pruned
+                    .iter()
+                    .min_by_key(|row| {
+                        (
+                            row.try_get::<String, _>("created_at").unwrap_or_default(),
+                            row.try_get::<i64, _>("id").unwrap_or(i64::MAX),
+                        )
+                    })
+                {
+                    cursor_created_at = last.try_get("created_at").map_err(|error| {
+                        store_error("map pruned source_version created_at", error)
+                    })?;
+                    cursor_id = last
+                        .try_get("id")
+                        .map_err(|error| store_error("map pruned source_version id", error))?;
+                }
+                if count < SOURCE_VERSION_PRUNE_BATCH {
+                    break;
+                }
             }
         }
 

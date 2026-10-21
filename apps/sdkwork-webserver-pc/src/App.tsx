@@ -4,8 +4,8 @@ import { SdkworkThemeProvider } from "@sdkwork/ui-pc-react/theme";
 import { portalAgentCatalog } from "@sdkwork/webserver-pc-portal";
 import type { SdkworkThemeSelection } from "@sdkwork/ui-pc-react/theme";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect, useMemo, useState, Component, type ReactNode } from "react";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { BootstrappedWebserverPcRuntime } from "./bootstrap/runtime.ts";
 import {
   commitBrowserLocalePreference,
@@ -75,31 +75,33 @@ function WebserverApplication({ runtime }: { runtime: BootstrappedWebserverPcRun
       themeSelection={themeSelection}
     >
       <BrowserRouter>
-        <Routes>
-          <Route
-            path="/"
-            element={(
-              <PublicPortalApplication
-                availableLocales={runtime.config.activeLocales}
-                locale={locale}
-                onLocaleChange={handleLocaleChange}
-                runtime={runtime}
-              />
-            )}
-          />
-          <Route
-            path="/docs/*"
-            element={<PublicDocumentationApplication locale={locale} runtime={runtime} />}
-          />
-          <Route
-            path="/*"
-            element={(
-              <Suspense fallback={<SurfaceLoadingState message={messages["shell.status.loadingWorkspace"]} />}>
-                <LazyAuthenticatedSurface locale={locale} runtime={runtime} />
-              </Suspense>
-            )}
-          />
-        </Routes>
+        <RouteFailureScope message={messages["shell.error.workspaceUnavailable"]}>
+          <Routes>
+            <Route
+              path="/"
+              element={(
+                <PublicPortalApplication
+                  availableLocales={runtime.config.activeLocales}
+                  locale={locale}
+                  onLocaleChange={handleLocaleChange}
+                  runtime={runtime}
+                />
+              )}
+            />
+            <Route
+              path="/docs/*"
+              element={<PublicDocumentationApplication locale={locale} runtime={runtime} />}
+            />
+            <Route
+              path="/*"
+              element={(
+                <Suspense fallback={<SurfaceLoadingState message={messages["shell.status.loadingWorkspace"]} />}>
+                  <LazyAuthenticatedSurface locale={locale} runtime={runtime} />
+                </Suspense>
+              )}
+            />
+          </Routes>
+        </RouteFailureScope>
       </BrowserRouter>
     </SdkworkThemeProvider>
   );
@@ -129,7 +131,7 @@ function PublicPortalApplication({
   const messages = useSdkworkModuleMessages(webserverApplicationCatalog);
   const statistics = useMemo(
     () => createBrowserPortalStatistics(async () => (await runtime.loadConsoleClients()).deploy),
-    [runtime.loadConsoleClients],
+    [runtime],
   );
 
   const viewer = authState.isAuthenticated
@@ -191,8 +193,55 @@ function usePublicAuthState(runtime: BootstrappedWebserverPcRuntime) {
 
   useEffect(() => {
     if (authState.isBootstrapped) return;
-    void runtime.authController.bootstrap().catch(() => undefined);
+    void runtime.authController.bootstrap().catch((error: unknown) => {
+      // A failed bootstrap leaves the public surfaces unauthenticated; surface
+      // it in the console rather than discarding the rejection silently.
+      console.error("webserver auth bootstrap failed", error);
+    });
   }, [authState.isBootstrapped, runtime.authController]);
 
   return authState;
+}
+
+/**
+ * Route-level failure boundary.
+ *
+ * A lazily imported surface (or any render in the route tree) that rejects
+ * used to unwrap straight to the root and leave a blank page. This renders the
+ * shell's localized "workspace unavailable" state instead, and resets on the
+ * next navigation so one failed route cannot wedge every later page.
+ */
+class WorkspaceFailureBoundary extends Component<
+  { message: string; children: ReactNode },
+  { failed: boolean }
+> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: unknown) {
+    console.error("webserver route surface failed", error);
+  }
+
+  override render() {
+    if (this.state.failed) {
+      return (
+        <div className="bootstrap-state" role="alert">
+          {this.props.message}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function RouteFailureScope({ message, children }: { message: string; children: ReactNode }) {
+  const { pathname } = useLocation();
+  return (
+    <WorkspaceFailureBoundary key={pathname} message={message}>
+      {children}
+    </WorkspaceFailureBoundary>
+  );
 }

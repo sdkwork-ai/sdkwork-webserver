@@ -25,7 +25,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use arc_swap::{ArcSwap, ArcSwapOption};
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -78,15 +78,25 @@ struct CacheEntry {
 /// 节奏一致。
 pub(crate) struct CachedWechatVerificationSource {
     inner: Arc<dyn WechatVerificationSource>,
-    cache: ArcSwap<HashMap<String, CacheEntry>>,
+    /// Guarded map, updated in place: an `ArcSwap` would clone the whole map
+    /// on every insert, turning host diversity into O(n) copying per request.
+    cache: std::sync::Mutex<HashMap<String, CacheEntry>>,
 }
 
 impl CachedWechatVerificationSource {
     pub(crate) fn new(inner: Arc<dyn WechatVerificationSource>) -> Self {
         Self {
             inner,
-            cache: ArcSwap::from_pointee(HashMap::new()),
+            cache: std::sync::Mutex::new(HashMap::new()),
         }
+    }
+
+    #[cfg(test)]
+    fn cache_len(&self) -> usize {
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .len()
     }
 }
 
@@ -94,10 +104,20 @@ impl CachedWechatVerificationSource {
 impl WechatVerificationSource for CachedWechatVerificationSource {
     async fn lookup(&self, hostname: &str) -> Option<WechatVerificationFile> {
         let now = Instant::now();
-        if let Some(entry) = self.cache.load().get(hostname) {
-            if entry.expires_at > now {
-                return entry.file.clone();
-            }
+        // A live entry (positive or negative) answers without the inner
+        // lookup; `Some(None)` is a cached negative and must not refetch.
+        let cached: Option<Option<WechatVerificationFile>> = {
+            let cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            cache
+                .get(hostname)
+                .filter(|entry| entry.expires_at > now)
+                .map(|entry| entry.file.clone())
+        };
+        if let Some(file) = cached {
+            return file;
         }
         let file = self.inner.lookup(hostname).await;
         let ttl = if file.is_some() {
@@ -105,7 +125,10 @@ impl WechatVerificationSource for CachedWechatVerificationSource {
         } else {
             NEGATIVE_TTL
         };
-        let mut cache = HashMap::clone(&self.cache.load());
+        let mut cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         // 清扫过期条目：TTL 的惰性生效在写入时补一次全图清扫，地图不会
         // 留住无人再问的死条目。
         cache.retain(|_, entry| entry.expires_at > now);
@@ -128,7 +151,6 @@ impl WechatVerificationSource for CachedWechatVerificationSource {
                 expires_at: now + ttl,
             },
         );
-        self.cache.store(Arc::new(cache));
         file
     }
 }
@@ -179,7 +201,7 @@ impl WebserverWechatVerificationSource {
 impl WechatVerificationSource for WebserverWechatVerificationSource {
     async fn lookup(&self, hostname: &str) -> Option<WechatVerificationFile> {
         let (file_name, content) =
-            sdkwork_intelligence_webserver_repository_sqlx::wechat_verification_by_hostname_lookup(
+            sdkwork_api_webserver_assembly::wechat_verification_by_hostname_lookup(
                 &self.pool, hostname,
             )
             .await
@@ -243,19 +265,14 @@ pub(crate) async fn serve_wechat_verification_file(
     path: &str,
     method: &str,
 ) -> Option<Response<Body>> {
-    let Some(file_name) = requested_verification_file_name(path) else {
-        return None;
-    };
+    let file_name = requested_verification_file_name(path)?;
     if !matches!(method, "GET" | "HEAD") {
         // 动词在命中的命名空间里仍然收口：验证文件是只读资源，写动词不
         // 应被转交给宿主应用，否则一个 PUT 就可能让微信抓到被改写的内容。
-        return match source.lookup(hostname).await {
-            Some(_) => Some(text_response(
-                StatusCode::METHOD_NOT_ALLOWED,
-                "method is not allowed\n",
-            )),
-            None => None,
-        };
+        return source
+            .lookup(hostname)
+            .await
+            .map(|_| text_response(StatusCode::METHOD_NOT_ALLOWED, "method is not allowed\n"));
     }
     let file = source.lookup(hostname).await?;
     // 文件名按精确比较：微信生成的名字大小写敏感，平台不做大小写归一。
@@ -427,7 +444,7 @@ mod tests {
             let host = format!("host-{index}.example.com");
             assert!(cached.lookup(&host).await.is_none());
         }
-        let size = cached.cache.load().len();
+        let size = cached.cache_len();
         assert!(
             size <= MAX_CACHE_ENTRIES,
             "cache grew to {size} entries; the cap must hold"

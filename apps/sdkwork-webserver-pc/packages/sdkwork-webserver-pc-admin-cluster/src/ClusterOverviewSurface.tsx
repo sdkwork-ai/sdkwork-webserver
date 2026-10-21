@@ -4,7 +4,7 @@ import type {
   ClusterOverviewResponse,
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
-import { translateWebserver } from "@sdkwork/webserver-pc-commons";
+import { formatWebserverErrorMessage, translateWebserver } from "@sdkwork/webserver-pc-commons";
 import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -61,7 +61,9 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
         }
       } catch (cause) {
         if (cancelled || controller.signal.aborted) return;
-        setError(cause instanceof Error ? cause.message : String(cause));
+        // Never surface a raw transport/provider sentence: the shared formatter
+        // maps known codes to localized copy and sanitizes/truncates the rest.
+        setError(formatWebserverErrorMessage(cause, (key) => translateWebserver(locale, key)));
       } finally {
         if (!cancelled) setRefreshing(false);
       }
@@ -73,7 +75,7 @@ export function ClusterOverviewSurface({ locale, resource }: ClusterOverviewSurf
       window.clearInterval(timer);
       inFlight.current?.abort();
     };
-  }, [client]);
+  }, [client, locale]);
 
   const t = (key: Parameters<typeof translateWebserver>[1]) => translateWebserver(locale, key);
 

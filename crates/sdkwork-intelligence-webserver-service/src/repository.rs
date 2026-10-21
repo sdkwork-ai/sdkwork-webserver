@@ -12,19 +12,20 @@ use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
     CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
-    CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
-    DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse, EnvVariablePage,
-    EnvVariableResponse, HealthCheckPage, HealthCheckResponse, IssueCertificateRequest,
-    ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
-    ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
-    NginxConfigResponse, NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse,
+    CreatePluginRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
+    CreateServerRequest, CreateServerResponse, CreateSourceVersionRequest, DeploymentPage,
+    DeploymentResponse, DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse,
+    EnvVariablePage, EnvVariableResponse, HealthCheckPage, HealthCheckResponse,
+    IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery, ListNginxConfigsQuery,
+    ListRootDomainsQuery, ListenerCertificateBindingPage, ListenerCertificateBindingResponse,
+    NginxConfigPage, NginxConfigResponse, NginxConfigRevisionPage, NginxConfigRevisionResponse,
+    NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse, PluginPage, PluginResponse,
     RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
     RuntimeAssignmentDelivery, RuntimeObservation, RuntimeObservationState, ServerPage,
     SourceVersionPage, SourceVersionResponse, TlsCertificateAssignmentMaterial,
     UpdateApplicationRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest,
     UpdateClusterRequest, UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest,
-    UpdateNginxConfigRequest, UpdateRootDomainRequest,
+    UpdateNginxConfigRequest, UpdatePluginRequest, UpdateRootDomainRequest,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,10 +175,7 @@ pub fn hostname_matches_record(hostname: &str, record_name: &str) -> bool {
 /// The order matters for a zone that registered both `api.example.com` and
 /// `*.example.com` — the record at `api.example.com` is the exact row's
 /// answer, whatever the wildcard would also cover.
-pub fn domain_asset_for_record<'a>(
-    assets: &'a [DomainHostnameAsset],
-    record_name: &str,
-) -> Option<i64> {
+pub fn domain_asset_for_record(assets: &[DomainHostnameAsset], record_name: &str) -> Option<i64> {
     assets
         .iter()
         .find(|asset| asset.hostname == record_name)
@@ -551,6 +549,9 @@ pub struct AuditLogWrite<'a> {
 }
 
 #[async_trait]
+// One port of narrow operations; `async_trait` expands the receiver plus
+// context arguments. Parameter-struct refactors would touch every implementor.
+#[allow(clippy::too_many_arguments)]
 pub trait WebRepositoryPort: Send + Sync {
     async fn ready_check(&self) -> WebServiceResult<()>;
 
@@ -642,6 +643,45 @@ pub trait WebRepositoryPort: Send + Sync {
         application_id: &str,
         platform_target_id: &str,
     ) -> WebServiceResult<PlatformTargetResponse>;
+
+    async fn create_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        request: &CreatePluginRequest,
+    ) -> WebServiceResult<PluginResponse>;
+
+    async fn list_plugins(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        page: i32,
+        page_size: i32,
+        status: Option<&str>,
+        keyword: Option<&str>,
+    ) -> WebServiceResult<PluginPage>;
+
+    async fn retrieve_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        plugin_id: &str,
+    ) -> WebServiceResult<PluginResponse>;
+
+    async fn update_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        plugin_id: &str,
+        request: &UpdatePluginRequest,
+    ) -> WebServiceResult<PluginResponse>;
+
+    async fn delete_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        plugin_id: &str,
+    ) -> WebServiceResult<()>;
 
     async fn list_domains(
         &self,
@@ -880,6 +920,12 @@ pub trait WebRepositoryPort: Send + Sync {
         page: i32,
         page_size: i32,
     ) -> WebServiceResult<DomainPage>;
+
+    async fn retrieve_managed_domain(
+        &self,
+        tenant_id: i64,
+        domain_id: &str,
+    ) -> WebServiceResult<DomainResponse>;
 
     async fn create_managed_domain(
         &self,
@@ -1184,6 +1230,28 @@ pub trait WebRepositoryPort: Send + Sync {
         &self,
         tenant_id: Option<i64>,
         config_id: &str,
+    ) -> WebServiceResult<NginxConfigResponse>;
+
+    async fn list_nginx_config_revisions(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<NginxConfigRevisionPage>;
+
+    async fn retrieve_nginx_config_revision(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<NginxConfigRevisionResponse>;
+
+    async fn rollback_nginx_config_revision(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        version_no: i32,
     ) -> WebServiceResult<NginxConfigResponse>;
 
     async fn update_nginx_config(

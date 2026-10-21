@@ -19,6 +19,7 @@ use super::certificate_secrets::{
 use super::{EngineRow, WebRepository};
 
 impl WebRepository {
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn list_certificates_repo(
         &self,
         tenant_id: i64,
@@ -58,11 +59,7 @@ impl WebRepository {
         // can carry an exact `has_more` and mint the keyset continuation the
         // client must use beyond this page.
         let fetch_size = i64::from(page_size) + 1;
-        let windowed_total = |rows: &[EngineRow]| -> Option<i64> {
-            rows.first()
-                .and_then(|row| row.try_get::<i64, _>("page_total").ok())
-        };
-        let rows = sqlx::query(audited_sql(&certificate_select(
+        let rows = sqlx::query(audited_sql(&certificate_cursor_select(
             "c.tenant_id = $1 AND c.deleted_at IS NULL
              AND ($2 IS NULL OR c.user_id = $2)
              AND ($3 IS NULL OR EXISTS (
@@ -101,42 +98,11 @@ impl WebRepository {
             .into_iter()
             .take(page_size as usize)
             .collect::<Vec<_>>();
-        let total = match windowed_total(&page_rows) {
-            Some(total) => total,
-            None => {
-                let total: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM webserver_certificate c
-              WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
-                AND ($2 IS NULL OR c.user_id = $2)
-               AND ($3 IS NULL OR EXISTS (
-                   SELECT 1 FROM webserver_certificate_identifier ci
-                   INNER JOIN webserver_site_binding b ON b.tenant_id = ci.tenant_id
-                       AND b.domain_id = ci.domain_id AND b.deleted_at IS NULL
-                       AND b.status <> 'ARCHIVED'
-                   INNER JOIN webserver_site s ON s.tenant_id = b.tenant_id AND s.id = b.site_id
-                   WHERE ci.tenant_id = c.tenant_id AND ci.certificate_id = c.id
-                     AND s.uuid = $3 AND s.deleted_at IS NULL
-               ))
-               AND ($4 IS NULL OR EXISTS (
-                   SELECT 1 FROM webserver_certificate_identifier domain_ci
-                   INNER JOIN webserver_domain domain_d ON domain_d.tenant_id = domain_ci.tenant_id
-                       AND domain_d.id = domain_ci.domain_id
-                       AND ($2 IS NULL OR domain_d.user_id = $2)
-                   WHERE domain_ci.tenant_id = c.tenant_id
-                     AND domain_ci.certificate_id = c.id
-                     AND domain_d.uuid = $4 AND domain_d.deleted_at IS NULL
-               ))",
-        )
-        .bind(tenant_id)
-        .bind(owner_id)
-        .bind(site_uuid)
-        .bind(domain_uuid)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|error| store_error("count webserver_certificate", error))?;
-                total
-            }
-        };
+        // No filtered total: the collection grows with every issuance, and the
+        // cursor contract does not require `totalItems`. The previous window
+        // count (`COUNT(*) OVER ()`) scanned the whole filtered set on every
+        // first page; the response omits the field instead of guessing.
+        let total = 0;
         let items = page_rows
             .iter()
             .map(map_certificate_row)
@@ -145,8 +111,8 @@ impl WebRepository {
                 WebServiceError::Internal(format!("map webserver_certificate row: {error}"))
             })?;
         // Mint the keyset continuation so the client never needs a second
-        // offset request: page one carries the exact total, the exact
-        // `has_more`, and the opaque cursor for the next keyset page.
+        // offset request: page one carries `has_more` and the opaque cursor for
+        // the next keyset page; deeper pages continue from that cursor.
         let next_cursor = has_more
             .then(|| {
                 let last = page_rows
@@ -157,7 +123,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_certificate cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    &format!("certificates:{tenant_id}"),
+                    &updated_at,
+                    id,
+                ))
             })
             .transpose()?;
         Ok(CertificatePage {
@@ -229,8 +199,9 @@ impl WebRepository {
                 "page_size must be between 1 and 200",
             ));
         }
-        let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
-            .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
+        let (cursor_updated_at, cursor_id) =
+            decode_keyset_cursor(&format!("certificates:{tenant_id}"), cursor)
+                .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
         let sql = certificate_cursor_select(
             "c.tenant_id = $1 AND c.deleted_at IS NULL
              AND ($2 IS NULL OR c.user_id = $2)
@@ -288,7 +259,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_certificate cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    &format!("certificates:{tenant_id}"),
+                    &updated_at,
+                    id,
+                ))
             })
             .transpose()?;
         Ok(CertificatePage {

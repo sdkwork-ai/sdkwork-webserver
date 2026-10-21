@@ -5,7 +5,7 @@ pub struct CreateDomainDnsRecordRequest {
     #[serde(rename = "recordType")]
     pub record_type: String,
 
-    /// Zone-relative 主机记录 (`@` for the apex, `www`, `api.eu`, `*`).
+    /// Zone-relative record owner (`@` for the apex, `www`, `api.eu`, `*`).
     pub host: String,
 
     #[serde(rename = "recordValue")]

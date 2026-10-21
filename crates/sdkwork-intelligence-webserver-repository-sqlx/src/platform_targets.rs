@@ -69,7 +69,9 @@ impl WebRepository {
                 bundle_id, package_name, app_id_value, bundle_name,
                 allowed_channels_json, target_status, created_at, updated_at, version
              ) VALUES (
-                $1, $2, $3, 0, 1, NULL, $4,
+                $1, $2, $3,
+                COALESCE((SELECT organization_id FROM webserver_application WHERE tenant_id = $3 AND id = $4), 0),
+                1, NULL, $4,
                 $5, $6, $7, {architectures_expression},
                 $9, $10, $11, $12,
                 {channels_expression}, 'ACTIVE', {now_expression}, {now_expression}, 0

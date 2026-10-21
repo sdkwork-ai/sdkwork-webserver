@@ -181,9 +181,9 @@ tables:
       - { name: uk_webserver_domain_wechat_verification_root, type: unique, columns: [root_domain_id] }
       - name: fk_webserver_domain_wechat_verification_root
         type: foreign_key
-        columns: [root_domain_id]
+        columns: [tenant_id, root_domain_id]
         references_table: webserver_root_domain
-        references_columns: [id]
+        references_columns: [tenant_id, id]
     indexes:
       - { name: uk_webserver_domain_wechat_verification_uuid, columns: [uuid], unique: true }
       - { name: uk_webserver_domain_wechat_verification_root, columns: [root_domain_id], unique: true }
@@ -348,14 +348,42 @@ tables:
       - { name: uk_webserver_nginx_config_uuid, type: unique, columns: [uuid] }
       - name: fk_webserver_nginx_config_site
         type: foreign_key
-        columns: [site_id]
+        columns: [tenant_id, site_id]
         references_table: webserver_site
-        references_columns: [id]
+        references_columns: [tenant_id, id]
     indexes:
       - { name: uk_webserver_nginx_config_uuid, columns: [uuid], unique: true }
+      - { name: uk_webserver_nginx_config_site_active, columns: [site_id], unique: true, predicate: "is_active AND status = 1" }
       - { name: idx_webserver_nginx_config_site_active, columns: [site_id, is_active] }
       - { name: idx_webserver_nginx_config_type_status, columns: [config_type, status] }
       - { name: idx_webserver_nginx_config_tenant_updated, columns: [tenant_id, updated_at, id] }
+  - name: webserver_nginx_config_revision
+    lifecycle_status: active
+    owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      config_id: { type: int64, required: true }
+      version_no: { type: int32, required: true }
+      config_name: { type: string, required: true }
+      config_content: { type: text, required: true }
+      config_hash: { type: string, required: true }
+      created_by: { type: string, required: false }
+      created_at: { type: instant, required: true }
+    constraints:
+      - { name: webserver_nginx_config_revision_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_nginx_config_revision_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_nginx_config_revision_version, type: unique, columns: [config_id, version_no] }
+      - name: fk_webserver_nginx_config_revision_config
+        type: foreign_key
+        columns: [config_id]
+        references_table: webserver_nginx_config
+        references_columns: [id]
+    indexes:
+      - { name: uk_webserver_nginx_config_revision_uuid, columns: [uuid], unique: true }
+      - { name: uk_webserver_nginx_config_revision_version, columns: [config_id, version_no], unique: true }
+      - { name: idx_webserver_nginx_config_revision_lookup, columns: [tenant_id, config_id, version_no] }
   - name: webserver_certificate
     lifecycle_status: active
     owner: web-platform
@@ -633,16 +661,18 @@ tables:
     constraints:
       - { name: webserver_source_version_pkey, type: primary_key, columns: [id] }
       - { name: uk_webserver_source_version_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_source_version_tenant_id, type: unique, columns: [tenant_id, id] }
       - { name: uk_webserver_source_version_site_tag, type: unique, columns: [tenant_id, site_id, version_tag] }
       - { name: chk_webserver_source_version_type, type: check }
       - { name: chk_webserver_source_version_status, type: check }
       - name: fk_webserver_source_version_site
         type: foreign_key
-        columns: [site_id]
+        columns: [tenant_id, site_id]
         references_table: webserver_site
-        references_columns: [id]
+        references_columns: [tenant_id, id]
     indexes:
       - { name: uk_webserver_source_version_uuid, columns: [uuid], unique: true }
+      - { name: uk_webserver_source_version_tenant_id, columns: [tenant_id, id], unique: true }
       - { name: uk_webserver_source_version_site_tag, columns: [tenant_id, site_id, version_tag], unique: true }
       - { name: idx_webserver_source_version_site_created, columns: [site_id, created_at] }
       - { name: idx_webserver_source_version_tenant_site_created, columns: [tenant_id, site_id, created_at] }
@@ -685,14 +715,14 @@ tables:
       - { name: uk_webserver_deployment_idempotency, type: unique, columns: [tenant_id, idempotency_key] }
       - name: fk_webserver_deployment_site
         type: foreign_key
-        columns: [site_id]
+        columns: [tenant_id, site_id]
         references_table: webserver_site
-        references_columns: [id]
+        references_columns: [tenant_id, id]
       - name: fk_webserver_deployment_source_version
         type: foreign_key
-        columns: [source_version_id]
+        columns: [tenant_id, source_version_id]
         references_table: webserver_source_version
-        references_columns: [id]
+        references_columns: [tenant_id, id]
     indexes:
       - { name: uk_webserver_deployment_uuid, columns: [uuid], unique: true }
       - { name: uk_webserver_deployment_idempotency, columns: [tenant_id, idempotency_key], unique: true }
@@ -723,9 +753,9 @@ tables:
       - { name: uk_webserver_env_variable_active_key, type: unique, columns: [site_id, environment, key], predicate: "status = 1" }
       - name: fk_webserver_env_variable_site
         type: foreign_key
-        columns: [site_id]
+        columns: [tenant_id, site_id]
         references_table: webserver_site
-        references_columns: [id]
+        references_columns: [tenant_id, id]
     indexes:
       - { name: uk_webserver_env_variable_uuid, columns: [uuid], unique: true }
       - { name: uk_webserver_env_variable_active_key, columns: [site_id, environment, key], unique: true, predicate: "status = 1" }
@@ -755,9 +785,9 @@ tables:
       - { name: uk_webserver_health_check_uuid, type: unique, columns: [uuid] }
       - name: fk_webserver_health_check_site
         type: foreign_key
-        columns: [site_id]
+        columns: [tenant_id, site_id]
         references_table: webserver_site
-        references_columns: [id]
+        references_columns: [tenant_id, id]
     indexes:
       - { name: uk_webserver_health_check_uuid, columns: [uuid], unique: true }
       - { name: idx_webserver_health_check_site, columns: [site_id] }
@@ -963,7 +993,6 @@ tables:
       - { name: webserver_application_pkey, type: primary_key, columns: [id] }
       - { name: uk_webserver_application_uuid, type: unique, columns: [uuid] }
       - { name: uk_webserver_application_tenant_id, type: unique, columns: [tenant_id, id] }
-      - { name: uk_webserver_application_slug, type: unique, columns: [tenant_id, slug] }
       - name: fk_webserver_application_site
         type: foreign_key
         columns: [tenant_id, site_id]
@@ -973,6 +1002,7 @@ tables:
       - { name: chk_webserver_application_status, type: check }
       - { name: chk_webserver_application_access_surfaces, type: check }
     indexes:
+      - { name: uk_webserver_application_slug, columns: [tenant_id, slug], unique: true, predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_application_tenant_status_updated, columns: [tenant_id, status, updated_at] }
       - { name: idx_webserver_application_user_updated, columns: [user_id, updated_at], predicate: "user_id IS NOT NULL" }
       - { name: idx_webserver_application_tenant_updated_id, columns: [tenant_id, updated_at, id], predicate: "deleted_at IS NULL" }
@@ -1053,6 +1083,46 @@ tables:
     indexes:
       - { name: idx_webserver_app_platform_target_app_id, columns: [tenant_id, app_id, id], predicate: "deleted_at IS NULL" }
       - { name: uk_webserver_app_platform_target_active_key, columns: [tenant_id, app_id, target_key], unique: true, predicate: "deleted_at IS NULL" }
+  - name: webserver_plugin
+    lifecycle_status: active
+    owner: web-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      organization_id: { type: int64, required: true }
+      data_scope: { type: int32, required: true }
+      user_id: { type: int64, required: true }
+      plugin_key: { type: string, required: true }
+      display_name: { type: string, required: true }
+      summary: { type: string, required: true }
+      plugin_version: { type: string, required: true }
+      category_id: { type: string, required: true }
+      supported_host_tools_json: { type: json, required: true }
+      contributed_capabilities_json: { type: json, required: true }
+      source_kind: { type: string, required: true }
+      git_repository: { type: string, required: false }
+      git_ref: { type: string, required: false }
+      artifact_ref: { type: string, required: false }
+      checksum_sha256: { type: string, required: false }
+      archive_file_name: { type: string, required: false }
+      plugin_status: { type: string, required: true }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+      version: { type: int64, required: true }
+      deleted_at: { type: instant, required: false }
+      deleted_by: { type: int64, required: false }
+    constraints:
+      - { name: webserver_plugin_pkey, type: primary_key, columns: [id] }
+      - { name: uk_webserver_plugin_uuid, type: unique, columns: [uuid] }
+      - { name: uk_webserver_plugin_tenant_id, type: unique, columns: [tenant_id, id] }
+      - { name: chk_webserver_plugin_key, type: check }
+      - { name: chk_webserver_plugin_source, type: check }
+      - { name: chk_webserver_plugin_status, type: check }
+      - { name: chk_webserver_plugin_checksum, type: check }
+    indexes:
+      - { name: uk_webserver_plugin_active_key, columns: [tenant_id, user_id, plugin_key], unique: true, predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_plugin_owner_updated, columns: [tenant_id, user_id, updated_at, id], predicate: "deleted_at IS NULL" }
   - name: webserver_resolution_cache
     lifecycle_status: active
     owner: web-platform
@@ -1171,6 +1241,7 @@ tables:
       - { name: uk_webserver_cluster_host_machine_code, columns: [tenant_id, machine_code], unique: true, predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_host_cluster_status_updated, columns: [tenant_id, cluster_id, status, updated_at, id], predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_host_cluster_join_mode, columns: [tenant_id, cluster_id, join_mode], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_cluster_host_tenant_updated, columns: [tenant_id, updated_at, id] }
   - name: webserver_cluster_instance
     lifecycle_status: active
     owner: web-platform
@@ -1250,6 +1321,7 @@ tables:
       - { name: idx_webserver_cluster_instance_cluster_join_mode, columns: [tenant_id, cluster_id, join_mode, status], predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_instance_sync_status, columns: [tenant_id, cluster_id, sync_status], predicate: "deleted_at IS NULL" }
       - { name: idx_webserver_cluster_instance_routing, columns: [tenant_id, cluster_id, routing_enabled, draining], predicate: "deleted_at IS NULL" }
+      - { name: idx_webserver_cluster_instance_tenant_updated, columns: [tenant_id, updated_at, id] }
   - name: webserver_cluster_event
     lifecycle_status: active
     owner: web-platform
@@ -1289,6 +1361,7 @@ tables:
     indexes:
       - { name: idx_webserver_cluster_event_cluster_occurred, columns: [tenant_id, cluster_id, occurred_at, id] }
       - { name: idx_webserver_cluster_event_instance_occurred, columns: [tenant_id, instance_id, occurred_at, id] }
+      - { name: idx_webserver_cluster_event_tenant_occurred, columns: [tenant_id, occurred_at, id] }
   - name: webserver_cluster_heartbeat
     lifecycle_status: active
     owner: web-platform

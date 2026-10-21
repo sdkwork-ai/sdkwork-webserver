@@ -1,4 +1,5 @@
 from .application import ApplicationApi
+from .plugin import PluginApi
 from .application_domain import ApplicationDomainApi
 from .certificate import CertificateApi
 from .domain import DomainApi
@@ -16,4 +17,4 @@ from .tunnel import TunnelApi
 from .traffic_usage import TrafficUsageApi
 from .metrics_summary import MetricsSummaryApi
 
-__all__ = ['ApplicationApi', 'ApplicationDomainApi', 'CertificateApi', 'DomainApi', 'ApplicationSourceVersionApi', 'ApplicationDeploymentApi', 'CertificateDistributionApi', 'NginxApi', 'ServerApi', 'ServerFileApi', 'WebserverConfigApi', 'AgentApi', 'AuditApi', 'ClusterApi', 'TunnelApi', 'TrafficUsageApi', 'MetricsSummaryApi']
+__all__ = ['ApplicationApi', 'PluginApi', 'ApplicationDomainApi', 'CertificateApi', 'DomainApi', 'ApplicationSourceVersionApi', 'ApplicationDeploymentApi', 'CertificateDistributionApi', 'NginxApi', 'ServerApi', 'ServerFileApi', 'WebserverConfigApi', 'AgentApi', 'AuditApi', 'ClusterApi', 'TunnelApi', 'TrafficUsageApi', 'MetricsSummaryApi']

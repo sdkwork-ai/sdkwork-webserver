@@ -68,6 +68,28 @@ public class NginxApi {
         return client.convertValue(raw, new TypeReference<ConfigsDeployResponse>() {});
     }
 
+    /** List an Nginx configuration's revisions */
+    public ConfigsRevisionsListResponse configsRevisionsList(String configId, Integer page, Integer pageSize) throws Exception {
+        String query = buildQueryString(List.of(
+            new QueryParameterSpec("page", page, "form", true, false, null),
+            new QueryParameterSpec("page_size", pageSize, "form", true, false, null)
+        ));
+        Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/nginx/etc/" + serializePathParameter(configId, new PathParameterSpec("configId", "simple", false)) + "/revisions"), query));
+        return client.convertValue(raw, new TypeReference<ConfigsRevisionsListResponse>() {});
+    }
+
+    /** Retrieve one Nginx configuration revision */
+    public ConfigsRevisionsRetrieveResponse configsRevisionsRetrieve(String configId, Integer versionNo) throws Exception {
+        Object raw = client.get(ApiPaths.backendPath("/nginx/etc/" + serializePathParameter(configId, new PathParameterSpec("configId", "simple", false)) + "/revisions/" + serializePathParameter(versionNo, new PathParameterSpec("versionNo", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<ConfigsRevisionsRetrieveResponse>() {});
+    }
+
+    /** Roll an Nginx configuration back to a revision */
+    public ConfigsRevisionsRollbackResponse configsRevisionsRollback(String configId, Integer versionNo) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/nginx/etc/" + serializePathParameter(configId, new PathParameterSpec("configId", "simple", false)) + "/revisions/" + serializePathParameter(versionNo, new PathParameterSpec("versionNo", "simple", false)) + "/rollback"), null);
+        return client.convertValue(raw, new TypeReference<ConfigsRevisionsRollbackResponse>() {});
+    }
+
     /** Reload Nginx */
     public ReloadResponse reload(String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(

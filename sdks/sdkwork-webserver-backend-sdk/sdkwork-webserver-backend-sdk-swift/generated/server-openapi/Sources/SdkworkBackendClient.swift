@@ -4,6 +4,7 @@ import SDKworkCommon
 public class SdkworkBackendClient {
     private let httpClient: HttpClient
     public let application: ApplicationApi
+    public let plugin: PluginApi
     public let applicationDomain: ApplicationDomainApi
     public let certificate: CertificateApi
     public let domain: DomainApi
@@ -24,6 +25,7 @@ public class SdkworkBackendClient {
     public init(baseURL: String) {
         self.httpClient = HttpClient(baseURL: baseURL)
         self.application = ApplicationApi(client: httpClient)
+        self.plugin = PluginApi(client: httpClient)
         self.applicationDomain = ApplicationDomainApi(client: httpClient)
         self.certificate = CertificateApi(client: httpClient)
         self.domain = DomainApi(client: httpClient)
@@ -45,6 +47,7 @@ public class SdkworkBackendClient {
     public init(config: SdkConfig) {
         self.httpClient = HttpClient(config: config)
         self.application = ApplicationApi(client: httpClient)
+        self.plugin = PluginApi(client: httpClient)
         self.applicationDomain = ApplicationDomainApi(client: httpClient)
         self.certificate = CertificateApi(client: httpClient)
         self.domain = DomainApi(client: httpClient)

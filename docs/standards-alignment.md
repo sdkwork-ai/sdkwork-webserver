@@ -292,26 +292,67 @@ node ..\sdkwork-specs\tools\deployctl.mjs validate --root . --profile standalone
 node ..\sdkwork-github-workflow\scripts\sdkwork-workflow.mjs validate --config sdkwork.workflow.json
 ```
 
-On 2026-08-01 the workspace upgraded to sqlx 0.9 and all dynamically assembled SQL statements
-pass the sqlx compile-time injection audit. Nginx risk scanning rejects variable proxy targets,
-covers the full proxy directive family (`grpc_pass`/`fastcgi_pass`/`uwsgi_pass`/`scgi_pass`/
-`memcached_pass`), scans `set`/`map` URL literals and `upstream` members, and rejects unix
-sockets; the pagination gate, API envelope gate, OpenAPI materialization, and all 26 SDK
-generation targets verify current against the cursor-only contracts.
-On 2026-07-21, a local Docker 28.0.4 Linux daemon completed the pinned PostgreSQL lifecycle/seed/drift
-test, PostgreSQL repository parity test, checksummed PostgreSQL custom-format backup/restore,
-streaming replication, primary shutdown,
-standby promotion, and post-promotion tenant write. On 2026-08-01 the full Rust workspace compiles
-cleanly, all workspace library and data-plane integration tests pass, OpenAPI materialization and
-all 26 SDK generation targets verify current, and the pagination, API envelope, API operation
-pattern, and database framework gates pass. Linux x64/arm64 archive smoke, registry publication,
-image signing, Kubernetes rollout, and production observability still require their declared Linux
-runners, credentials, infrastructure, and release approval.
+Current verification state (updated 2026-10-21; run the commands below before citing any of it):
+
+- `cargo check --workspace --all-targets` passes; `cargo fmt -- --check` passes.
+- `check-api-operation-patterns.mjs`, `check-api-response-envelope.mjs`, `check-pagination.mjs`,
+  `check-sdk-standard.mjs`, `materialize_web_phase1_contracts.mjs --check` and
+  `generate_web_sdks.mjs --check` (14 materialized targets) pass. The composable-architecture
+  closure (port bindings, permission composition, Rust/frontend composition, resolved graph,
+  app SDK consumer imports) is wired into `pnpm verify` as `check:composable-architecture`.
+- The PostgreSQL lifecycle and repository-parity suites require a disposable PostgreSQL instance
+  (`pnpm test:postgres:required`); they are `#[ignore]`d for `cargo test` and are executed by the
+  release workflow's validate phase, which now runs the database, recovery and HA drills before
+  `pnpm verify` so an unrelated standards failure cannot mask missing database evidence. Both suites
+  were executed against PostgreSQL 18.3 on 2026-10-21 and passed (baseline + 25 ordered migrations +
+  seed + drift clean; repository transactions/tenant isolation/idempotency/keyset/rollback/plugin
+  catalog/nginx revision history).
+- The full Rust workspace compiles cleanly and the gateway/acme/service/edge/core library suites pass
+  locally on Windows; the previously platform-sensitive nginx include-glob tests were fixed by
+  spelling directive paths portably (T10 closed). `cargo test --workspace --no-fail-fast` currently
+  reports **125 targets, 0 failures** (3 capacity tests are `#[ignore]`d by design), and
+  `pnpm check:rust-clippy` covers eight crates with `-D warnings`.
+- Linux x64/arm64 archive smoke, registry publication, image signing, Kubernetes rollout, and
+  production observability still require their declared Linux runners, credentials, infrastructure,
+  and release approval.
 
 Supply-chain verification covers the Web Server application lock and its source Core/UI workspaces;
 all three currently report no known Node vulnerabilities. The shared frontend toolchain uses Vite
-8.1.5 with esbuild 0.28.1, while VitePress remains scoped to its compatible Vite 6.4.3 line. RustSec
-reports only `RUSTSEC-2023-0071` for `rsa` 0.9.10, which has no fixed release. Current consumers use
-RSA key generation, signing, and verification, not the advisory's PKCS#1 v1.5 decryption path. The
-advisory is intentionally not hidden by an audit ignore; accepting an exception or replacing the
-shared IAM/framework crypto implementation requires human security review.
+8.3.4 with esbuild 0.28.2 (vitest 5, jsdom 30, monaco-editor 0.57, React 19.3.1), while VitePress remains
+scoped to its compatible Vite 6.4.3 line. RustSec reports only `RUSTSEC-2023-0071` for `rsa` 0.9.10,
+which has no fixed release. Current consumers use RSA key generation, signing, and verification, not
+the advisory's PKCS#1 v1.5 decryption path. The advisory is intentionally not hidden by an audit
+ignore; accepting an exception or replacing the shared IAM/framework crypto implementation requires
+human security review.
+
+## Audit Remediation State
+
+The detailed, evidence-linked remediation record is
+`docs/engineering/reviews/REVIEW-20261020-webserver-full-audit.md`. That document is the authority for
+which audit finding is closed and which is still open; this file records the standing capabilities and
+must not be read as a release approval.
+
+Closed and verified in the tree: API operation-pattern compliance; all 14 generated SDK targets
+current; first-page keyset continuation for deployments/source-versions/servers; `LIKE ... ESCAPE`
+correctness; multi-zone `limit_conn` accounting; proxy-cache single-flight lifetime; stream TCP task
+reaping; ACME challenge-store lock scope; the shared nginx directive-risk gate used by both the admin
+API and edge staging; explicit diagnostics for nginx directives accepted but not enforced; truthful
+nginx edge-disabled responses; expired-leaf rejection; private-key mode at creation; production
+placeholder-certificate rejection; production role-password requirements; scoped bundled-gateway CORS;
+the PostgreSQL lifecycle test semantics plus bootstrap advisory-lock idle timeout; serialized nginx
+activation per site; cursor mode on the certificate ledger; the `domainId`/`q` query contracts; and
+migration `0027` (tenant-bound composite foreign keys, no tenant-0 defaults on business tables,
+soft-delete-aware application slug, one-active-nginx-config unique index, cluster list indexes,
+tenant-scoped WeChat verification reads, keyset retention pruning); the response-cache fill byte
+budget; blocking generation builds off the async worker; one shared shutdown drain deadline; a
+management-plane drain deadline; a final usage-metering flush on shutdown; fail-closed tunnel TLS
+material; rate-limited UDP/limit_req reaping; frame-bounded ACME provider responses; per-generation
+`limit_req`/`limit_conn` admission tables; and a 2x sub_filter rewrite budget; bounded transient
+transaction retries (`40001`/`40P01`/lock and statement timeouts); a stream TLS acceptor built
+once per listener; and a cursor-only certificate ledger without a window count.
+
+Still open (tracked with file:line in the review document): deployment execution/rollback, cluster
+convergence, migration immutability evidence, nginx activation race, organization scoping, paged
+non-paginated list contracts, memory/concurrency items, frontend IAM/authorization gaps, and commercial
+operations (capacity/soak/HA/billing/support).
+

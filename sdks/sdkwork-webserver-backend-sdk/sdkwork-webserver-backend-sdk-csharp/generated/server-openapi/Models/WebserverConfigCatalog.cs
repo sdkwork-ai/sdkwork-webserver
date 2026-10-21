@@ -8,5 +8,7 @@ namespace SDKWork.WebserverBackendSdk.Models
     {
         public string ConfigRoot { get; set; }
         public List<WebserverConfigEntry> Items { get; set; }
+        public bool? Truncated { get; set; }
+        public PageInfo? PageInfo { get; set; }
     }
 }

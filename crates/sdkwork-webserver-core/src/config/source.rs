@@ -23,7 +23,7 @@ use std::{
 use crate::nginx::{load_nginx_compat, NginxLoadReport};
 
 use super::{
-    error::WebServerConfigError,
+    error::{ConfigDiagnostic, WebServerConfigError},
     loader::{load_json_app_config, WebServerConfigFileRevision},
     model::WebServerAppConfig,
     server_toml::{load_server_toml_app, load_server_toml_file},
@@ -253,6 +253,9 @@ pub struct LoadedWebServerConfig {
     /// nginx progressive compatibility: site files skipped with their
     /// materialization reasons.
     pub skipped: Vec<(PathBuf, String)>,
+    /// Accepted-but-unenforced directives with their source location and
+    /// reason. PRD §3/§9: no imported nginx directive is silently ignored.
+    pub compatibility: Vec<ConfigDiagnostic>,
 }
 
 /// Strategy interface implemented by every authored config format.
@@ -295,6 +298,7 @@ impl ConfigSource for JsonConfigSource {
             source: path.to_path_buf(),
             revision: Some(revision),
             skipped: Vec::new(),
+            compatibility: Vec::new(),
         })
     }
 }
@@ -336,6 +340,7 @@ impl ConfigSource for TomlConfigSource {
                 source: path.to_path_buf(),
                 revision: None,
                 skipped: Vec::new(),
+                compatibility: Vec::new(),
             });
         }
         let app = load_server_toml_file(path, app_key)?;
@@ -345,6 +350,7 @@ impl ConfigSource for TomlConfigSource {
             source: path.to_path_buf(),
             revision: Some(super::loader::inspect_webserver_config_revision(path)?),
             skipped: Vec::new(),
+            compatibility: Vec::new(),
         })
     }
 }
@@ -361,7 +367,7 @@ impl ConfigSource for NginxConfConfigSource {
 
     fn matches(&self, path: &Path) -> bool {
         if path.is_dir() {
-            path.join("server.common.toml").is_file() == false
+            !path.join("server.common.toml").is_file()
                 && path
                     .read_dir()
                     .map(|entries| {
@@ -389,6 +395,7 @@ impl ConfigSource for NginxConfConfigSource {
             source: path.to_path_buf(),
             revision: None,
             skipped: report.skipped,
+            compatibility: report.ignored,
         })
     }
 }

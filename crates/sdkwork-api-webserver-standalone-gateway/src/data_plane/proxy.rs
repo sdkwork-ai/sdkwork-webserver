@@ -426,7 +426,7 @@ pub(super) async fn proxy_request_cached(
     // Single-flight: collapse concurrent fills per key. The fill guard
     // releases its slot and wakes waiters on drop, so a cancelled fill
     // (client disconnect, timeout eviction) can never strand later requests.
-    let _fill_guard = match cache.begin_fill(&base_key) {
+    let fill_guard = match cache.begin_fill(&base_key) {
         super::cache::CacheFillReservation::Bypass => {
             // Table saturated: proxy upstream without coalescing.
             return proxy_request(context, request).await;
@@ -440,7 +440,16 @@ pub(super) async fn proxy_request_cached(
             if let Some(hit) = cache.lookup(&base_key).await {
                 return cached_proxy_response(hit, request.headers());
             }
-            notified.await;
+            // The fill guard now lives until the upstream body has been
+            // stored, so a waiter normally wakes up to a cache hit. The wait
+            // stays bounded: a slow or stalled fill must never hold this
+            // request indefinitely, it degrades to one direct upstream call.
+            if tokio::time::timeout(CACHE_FILL_WAIT_TIMEOUT, notified)
+                .await
+                .is_err()
+            {
+                return proxy_request(context, request).await;
+            }
             if let Some(hit) = cache.lookup(&base_key).await {
                 return cached_proxy_response(hit, request.headers());
             }
@@ -460,9 +469,18 @@ pub(super) async fn proxy_request_cached(
             return cached_proxy_response(stale, &request_headers);
         }
     }
-    // The fill guard drops with this scope, releasing the in-flight slot.
-    store_proxy_response(&cache, &base_key, &request_headers, response).await
+    // The fill guard travels into the tee task below: it is released only
+    // once the body has been stored (or the fill has been abandoned), which
+    // is what makes the waiters above observe a hit instead of stampeding
+    // upstream. Dropping it here would notify them before `insert` ran.
+    store_proxy_response(&cache, &base_key, &request_headers, response, fill_guard).await
 }
+
+/// Upper bound on how long a coalesced waiter blocks on the filling request
+/// before it degrades to its own upstream call. The fill itself is bounded by
+/// the proxy read/write deadlines; this only prevents one slow object from
+/// parking every request for the same cache key.
+const CACHE_FILL_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Buffer and store a cacheable upstream response. Oversized or
 /// non-cacheable responses are left untouched.
@@ -471,6 +489,7 @@ async fn store_proxy_response(
     base_key: &super::cache::CacheKey,
     request_headers: &axum::http::HeaderMap,
     response: Response<Body>,
+    fill_guard: super::cache::FillGuard,
 ) -> Response<Body> {
     let maximum_bytes = cache_maximum_object_bytes(cache);
     let freshness = super::cache::freshness_for(
@@ -543,12 +562,23 @@ async fn store_proxy_response(
     );
     let fill_cache = Arc::clone(cache);
     tokio::spawn(async move {
+        // Own the single-flight slot for the whole body transfer and the
+        // store that follows it. `insert` below completes before this task
+        // ends, so dropping the guard here is the first moment a waiter can
+        // observe the stored object.
+        let _fill_guard = fill_guard;
         use futures_util::StreamExt;
+        // Bound aggregate fill memory before allocating: the in-flight cap
+        // bounds keys, not bytes. A saturated budget degrades to streaming the
+        // response without caching it, never to a larger buffer.
+        let fill_reservation =
+            fill_cache.try_reserve_fill_bytes(declared.unwrap_or(maximum_bytes).min(maximum_bytes));
         let mut stream = body.into_data_stream();
-        let mut buffered = declared
-            .map(|length| Vec::with_capacity(length.min(maximum_bytes) as usize))
-            .unwrap_or_default();
-        let mut collecting = true;
+        let mut buffered = match (fill_reservation.is_some(), declared) {
+            (true, Some(length)) => Vec::with_capacity(length.min(maximum_bytes) as usize),
+            _ => Vec::new(),
+        };
+        let mut collecting = fill_reservation.is_some();
         loop {
             let chunk = match stream.next().await {
                 Some(Ok(chunk)) => chunk,
@@ -864,11 +894,10 @@ async fn proxy_request_dynamic(
                 .dynamic_upstreams
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            cache.remove(&authority).map(|upstream| {
+            cache.remove(&authority).inspect(|upstream| {
                 // LRU touch: reinsertion moves the entry to the
                 // most-recently-used end in O(1).
                 cache.insert(authority.clone(), upstream.clone());
-                upstream
             })
         };
         if let Some(upstream) = cached {

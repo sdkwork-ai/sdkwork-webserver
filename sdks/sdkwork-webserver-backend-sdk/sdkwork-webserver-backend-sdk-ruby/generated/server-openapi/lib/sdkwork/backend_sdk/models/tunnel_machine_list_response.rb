@@ -2,11 +2,12 @@ module Sdkwork
   module BackendSdk
     module Models
       class TunnelMachineListResponse
-              attr_accessor :machines
+              attr_accessor :machines, :page_info
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
                 @machines = attributes['machines'].is_a?(Array) ? attributes['machines'].map { |item| item.is_a?(Hash) ? TunnelMachineResponse.from_hash(item) : item } : []
+                @page_info = attributes['pageInfo'].is_a?(Hash) ? PageInfo.from_hash(attributes['pageInfo']) : nil
               end
 
               def self.from_hash(data)
@@ -18,6 +19,7 @@ module Sdkwork
               def to_hash
                 {
                   'machines' => @machines.is_a?(Array) ? @machines.map { |item| item.respond_to?(:to_hash) ? item.to_hash : item } : [],
+                  'pageInfo' => @page_info&.to_hash,
                 }
               end
             end

@@ -1,0 +1,36 @@
+# Dependency update automation.
+#
+# Cargo and pnpm are the two authored dependency graphs; GitHub Actions is
+# pinned by commit SHA (the reusable packaging workflow already is), so this
+# keeps the SHA current instead of letting an action tag age silently.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      rust-patch-updates:
+        applies-to: version-updates
+        update-types:
+          - patch
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      js-minor-updates:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3

@@ -110,6 +110,15 @@ pub enum DataPlaneError {
     #[error("configuration reload worker failed: {0}")]
     ReloadWorker(#[source] tokio::task::JoinError),
 
+    #[error("listener drain deadline expired with {remaining} task(s) still running")]
+    ListenerDrainTimeout { remaining: usize },
+
+    #[error("tunnel configuration is invalid: {0}")]
+    TunnelConfiguration(String),
+
+    #[error("stream {stream_id} TLS material cannot be prepared: {detail}")]
+    StreamTlsMaterial { stream_id: String, detail: String },
+
     #[error("active upstream health supervisor failed: {0}")]
     ActiveHealthTask(#[source] tokio::task::JoinError),
 

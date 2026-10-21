@@ -23,8 +23,9 @@ pub use response::{
     ok_certificate_distribution_page, ok_certificate_page, ok_cluster_event_page,
     ok_cluster_heartbeat_page, ok_cluster_host_page, ok_cluster_instance_page, ok_cluster_page,
     ok_deployment_page, ok_dns_account_page, ok_domain_dns_record_page, ok_domain_page,
-    ok_listener_certificate_binding_page, ok_nginx_config_page, ok_platform_target_page,
-    ok_resource, ok_root_domain_page, ok_server_page, ok_source_version_page,
+    ok_listener_certificate_binding_page, ok_nginx_config_page, ok_nginx_config_revision,
+    ok_nginx_config_revision_page, ok_platform_target_page, ok_plugin_page, ok_resource,
+    ok_root_domain_page, ok_server_page, ok_source_version_page,
     BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE,
 };
 pub use sdkwork_webserver_http_host::{

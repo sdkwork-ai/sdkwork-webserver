@@ -816,8 +816,7 @@ impl WebService {
                     .instance
                     .join_mode
                     .as_deref()
-                    .map(sdkwork_webserver_contract::cluster_join_mode_value)
-                    .flatten()
+                    .and_then(sdkwork_webserver_contract::cluster_join_mode_value)
                     .unwrap_or(join_mode),
                 tunnel_route_domain: tunnel_route_domain.clone(),
             })
@@ -902,7 +901,7 @@ impl WebService {
             .metrics
             .get("quality")
             .cloned()
-            .map(|value| serde_json::from_value::<ClusterQualityMetrics>(value))
+            .map(serde_json::from_value::<ClusterQualityMetrics>)
             .transpose()
             .map_err(|error| {
                 WebServiceError::Validation(format!("invalid metrics.quality: {error}"))
@@ -1203,7 +1202,7 @@ impl WebService {
         // ceiling the peer-message enqueue path applies.
         const MAX_SYNC_REVISION_PAYLOAD_BYTES: usize = 16 * 1024;
         if canonical.len() > MAX_SYNC_REVISION_PAYLOAD_BYTES {
-            return Err(WebServiceError::validation(&format!(
+            return Err(WebServiceError::validation(format!(
                 "sync revision payload is {} bytes; maximum is {MAX_SYNC_REVISION_PAYLOAD_BYTES}",
                 canonical.len()
             )));

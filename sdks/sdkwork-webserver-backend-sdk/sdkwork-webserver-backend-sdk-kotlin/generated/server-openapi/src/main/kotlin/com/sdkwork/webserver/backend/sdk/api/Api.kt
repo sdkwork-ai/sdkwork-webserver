@@ -7,6 +7,7 @@ import com.sdkwork.webserver.backend.sdk.http.HttpClient
  */
 class Api(private val client: HttpClient) {
     val application: ApplicationApi = ApplicationApi(client)
+    val plugin: PluginApi = PluginApi(client)
     val applicationDomain: ApplicationDomainApi = ApplicationDomainApi(client)
     val certificate: CertificateApi = CertificateApi(client)
     val domain: DomainApi = DomainApi(client)

@@ -232,7 +232,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("count webserver_domain_dns_record", error))?;
 
-        let rows = sqlx::query(audited_sql(&format!(
+        let rows = sqlx::query(audited_sql(
             "SELECT rec.uuid, r.hostname AS zone_apex, rec.record_name, rec.record_type,
                     rec.record_value, rec.ttl_seconds, rec.priority, rec.record_line,
                     rec.record_status, rec.dns_provider, rec.cloud_account_id,
@@ -248,8 +248,8 @@ impl WebRepository {
                AND ($3::text IS NULL OR d.uuid = $3)
                AND ($4::text IS NULL OR LOWER(rec.record_name) LIKE $4 ESCAPE '\\')
                AND ($5::text IS NULL OR UPPER(rec.record_type) = $5)
-             ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $6 OFFSET $7"
-        )))
+             ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $6 OFFSET $7",
+        ))
         .bind(tenant_id)
         .bind(root_internal_id)
         .bind(domain_uuid)
@@ -559,7 +559,8 @@ impl WebRepository {
         .fetch_one(self.pool())
         .await
         .map_err(|error| store_error("upsert webserver_domain_wechat_verification", error))?;
-        Ok(instant_from_row(&row, "updated_at").map_err(|error| store_error("map wechat verification updated_at", error))?)
+        instant_from_row(&row, "updated_at")
+            .map_err(|error| store_error("map wechat verification updated_at", error))
     }
 
     /// Reads the root domain's WeChat verification file as
@@ -575,8 +576,9 @@ impl WebRepository {
         let row = sqlx::query(
             "SELECT file_name, content, updated_at
              FROM webserver_domain_wechat_verification
-             WHERE root_domain_id = $1 AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND root_domain_id = $2 AND deleted_at IS NULL",
         )
+        .bind(tenant_id)
         .bind(root_internal_id)
         .fetch_optional(self.pool())
         .await
@@ -605,8 +607,10 @@ impl WebRepository {
             .root_domain_internal_id(tenant_id, root_domain_id)
             .await?;
         let deleted = sqlx::query(
-            "DELETE FROM webserver_domain_wechat_verification WHERE root_domain_id = $1",
+            "DELETE FROM webserver_domain_wechat_verification
+             WHERE tenant_id = $1 AND root_domain_id = $2",
         )
+        .bind(tenant_id)
         .bind(root_internal_id)
         .execute(self.pool())
         .await

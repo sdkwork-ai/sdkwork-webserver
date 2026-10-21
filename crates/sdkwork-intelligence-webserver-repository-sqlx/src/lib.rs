@@ -171,6 +171,9 @@ macro_rules! repository_engine {
             mod platform_targets {
                 include!("platform_targets.rs");
             }
+            mod plugins {
+                include!("plugins.rs");
+            }
             mod source_versions {
                 include!("source_versions.rs");
             }

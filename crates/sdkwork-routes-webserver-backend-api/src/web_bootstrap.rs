@@ -336,18 +336,88 @@ mod tests {
         );
     }
 
-    async fn call_applications(resolver: TestResolver) -> StatusCode {
+    #[tokio::test]
+    async fn backend_framework_rejects_unauthenticated_requests() {
+        let keys = ["SDKWORK_ENVIRONMENT", "SDKWORK_WEBSERVER_ENVIRONMENT"];
+        let previous = keys
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect::<Vec<_>>();
+        for key in keys {
+            std::env::set_var(key, "development");
+        }
+        let layer = build_web_backend_api_framework_layer(
+            TestResolver {
+                tenant_id: "42",
+                login_scope: WebLoginScope::Organization,
+                permissions: Vec::new(),
+            },
+            None,
+            std::sync::Arc::new(NoOpAuditEmitter),
+            std::sync::Arc::new(NoOpSecurityEventEmitter),
+        );
+        for (key, value) in previous {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
         let app = with_web_request_context(
             Router::new().route(
                 "/backend/v3/api/applications",
                 get(|| async { StatusCode::OK }),
             ),
-            build_web_backend_api_framework_layer(
-                resolver,
-                None,
-                std::sync::Arc::new(NoOpAuditEmitter),
-                std::sync::Arc::new(NoOpSecurityEventEmitter),
+            layer,
+        );
+        let status = app
+            .oneshot(
+                Request::builder()
+                    .uri("/backend/v3/api/applications")
+                    .body(Body::empty())
+                    .expect("valid unauthenticated request"),
+            )
+            .await
+            .expect("framework response")
+            .status();
+        assert_eq!(
+            status,
+            StatusCode::UNAUTHORIZED,
+            "a dual-token surface must reject a request with no credentials"
+        );
+    }
+
+    async fn call_applications(resolver: TestResolver) -> StatusCode {
+        // The framework policy is resolved from the process environment. These
+        // tests exercise authorization, not deployment validation, so pin the
+        // environment to `development` while the layer is built and restore the
+        // caller's values immediately (a production host would otherwise require
+        // production CORS configuration and panic before the request runs).
+        let keys = ["SDKWORK_ENVIRONMENT", "SDKWORK_WEBSERVER_ENVIRONMENT"];
+        let previous = keys
+            .iter()
+            .map(|key| (*key, std::env::var(key).ok()))
+            .collect::<Vec<_>>();
+        for key in keys {
+            std::env::set_var(key, "development");
+        }
+        let layer = build_web_backend_api_framework_layer(
+            resolver,
+            None,
+            std::sync::Arc::new(NoOpAuditEmitter),
+            std::sync::Arc::new(NoOpSecurityEventEmitter),
+        );
+        for (key, value) in previous {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+        let app = with_web_request_context(
+            Router::new().route(
+                "/backend/v3/api/applications",
+                get(|| async { StatusCode::OK }),
             ),
+            layer,
         );
         app.oneshot(
             Request::builder()

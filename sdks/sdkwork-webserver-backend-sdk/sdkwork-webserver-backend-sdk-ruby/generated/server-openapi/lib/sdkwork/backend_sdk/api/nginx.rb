@@ -3,6 +3,9 @@ require_relative '../models/configs_create_response201'
 require_relative '../models/configs_deploy_response'
 require_relative '../models/configs_list_response'
 require_relative '../models/configs_retrieve_response'
+require_relative '../models/configs_revisions_list_response'
+require_relative '../models/configs_revisions_retrieve_response'
+require_relative '../models/configs_revisions_rollback_response'
 require_relative '../models/configs_update_response'
 require_relative '../models/configs_validate_response'
 require_relative '../models/create_nginx_config_request'
@@ -96,6 +99,38 @@ module Sdkwork
             options[:headers] = request_headers unless request_headers.empty?
             result = @client.request('POST', path, **options)
             result.is_a?(Hash) ? Models::ConfigsDeployResponse.from_hash(result) : nil
+          end
+
+          # List an Nginx configuration's revisions
+          def configs_revisions_list(config_id, page: nil, page_size: nil)
+            path = interpolate_path('/backend/v3/api/nginx/etc/{configId}/revisions', configId: serialize_path_parameter(config_id, PathParameterSpec.new('configId', 'simple', false)))
+            query = build_query_string([
+              QueryParameterSpec.new('page', page, 'form', true, false, nil),
+              QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
+            ])
+            path = append_query_string(path, query)
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::ConfigsRevisionsListResponse.from_hash(result) : nil
+          end
+
+          # Retrieve one Nginx configuration revision
+          def configs_revisions_retrieve(config_id, version_no)
+            path = interpolate_path('/backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}', configId: serialize_path_parameter(config_id, PathParameterSpec.new('configId', 'simple', false)), versionNo: serialize_path_parameter(version_no, PathParameterSpec.new('versionNo', 'simple', false)))
+            options = {}
+
+            result = @client.request('GET', path, **options)
+            result.is_a?(Hash) ? Models::ConfigsRevisionsRetrieveResponse.from_hash(result) : nil
+          end
+
+          # Roll an Nginx configuration back to a revision
+          def configs_revisions_rollback(config_id, version_no)
+            path = interpolate_path('/backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}/rollback', configId: serialize_path_parameter(config_id, PathParameterSpec.new('configId', 'simple', false)), versionNo: serialize_path_parameter(version_no, PathParameterSpec.new('versionNo', 'simple', false)))
+            options = {}
+
+            result = @client.request('POST', path, **options)
+            result.is_a?(Hash) ? Models::ConfigsRevisionsRollbackResponse.from_hash(result) : nil
           end
 
           # Reload Nginx

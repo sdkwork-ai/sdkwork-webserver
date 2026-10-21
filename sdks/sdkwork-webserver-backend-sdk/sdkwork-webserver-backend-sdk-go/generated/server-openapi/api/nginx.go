@@ -96,6 +96,40 @@ func (a *NginxApi) ConfigsDeploy(configId string, idempotencyKey string) (sdktyp
     return decodeResult[sdktypes.ConfigsDeployResponse](raw)
 }
 
+// List an Nginx configuration's revisions
+func (a *NginxApi) ConfigsRevisionsList(configId string, page *int, pageSize *int) (sdktypes.ConfigsRevisionsListResponse, error) {
+    query := BuildQueryString([]QueryParameterSpec{
+        {Name: "page", Value: func() interface{} { if page == nil { return nil }; return *page }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
+    })
+    raw, err := a.client.Get(AppendQueryString(BackendApiPath(fmt.Sprintf("/nginx/etc/%s/revisions", SerializePathParameter(configId, PathParameterSpec{Name: "configId", Style: "simple", Explode: false}))), query), nil, nil)
+    if err != nil {
+        var zero sdktypes.ConfigsRevisionsListResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ConfigsRevisionsListResponse](raw)
+}
+
+// Retrieve one Nginx configuration revision
+func (a *NginxApi) ConfigsRevisionsRetrieve(configId string, versionNo int) (sdktypes.ConfigsRevisionsRetrieveResponse, error) {
+    raw, err := a.client.Get(BackendApiPath(fmt.Sprintf("/nginx/etc/%s/revisions/%s", SerializePathParameter(configId, PathParameterSpec{Name: "configId", Style: "simple", Explode: false}), SerializePathParameter(versionNo, PathParameterSpec{Name: "versionNo", Style: "simple", Explode: false}))), nil, nil)
+    if err != nil {
+        var zero sdktypes.ConfigsRevisionsRetrieveResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ConfigsRevisionsRetrieveResponse](raw)
+}
+
+// Roll an Nginx configuration back to a revision
+func (a *NginxApi) ConfigsRevisionsRollback(configId string, versionNo int) (sdktypes.ConfigsRevisionsRollbackResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/nginx/etc/%s/revisions/%s/rollback", SerializePathParameter(configId, PathParameterSpec{Name: "configId", Style: "simple", Explode: false}), SerializePathParameter(versionNo, PathParameterSpec{Name: "versionNo", Style: "simple", Explode: false}))), nil, nil, nil, "")
+    if err != nil {
+        var zero sdktypes.ConfigsRevisionsRollbackResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.ConfigsRevisionsRollbackResponse](raw)
+}
+
 // Reload Nginx
 func (a *NginxApi) Reload(idempotencyKey string) (sdktypes.ReloadResponse, error) {
     headers := BuildRequestHeaders(

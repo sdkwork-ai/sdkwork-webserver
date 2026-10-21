@@ -1,6 +1,6 @@
 export interface CreateDomainDnsRecordRequest {
   recordType: 'A' | 'AAAA' | 'CNAME' | 'TXT' | 'MX' | 'NS' | 'CAA';
-  /** Zone-relative 主机记录 (`@` for the apex, `www`, `api.eu`, `*`). */
+  /** Zone-relative record owner (`@` for the apex, `www`, `api.eu`, `*`). */
   host: string;
   recordValue: string;
   ttlSeconds?: number;

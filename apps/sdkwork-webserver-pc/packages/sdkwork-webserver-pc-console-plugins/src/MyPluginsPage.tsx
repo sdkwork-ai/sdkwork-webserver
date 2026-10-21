@@ -80,6 +80,9 @@ export function MyPluginsPage({
       setError(cause instanceof Error ? cause.message : String(cause));
     }
     // `owner` is the isolation key: switching accounts must re-read the catalog.
+    // `reload` is recreated per render and reads the current owner; listing it
+    // would re-read on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner]);
 
   /**

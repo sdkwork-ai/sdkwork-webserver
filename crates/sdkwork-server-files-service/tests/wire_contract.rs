@@ -24,11 +24,13 @@ fn directory_listing_uses_the_openapi_camel_case_contract() {
         path: "/opt/deploy".to_owned(),
         parent_path: Some("/opt".to_owned()),
         entries: Vec::new(),
+        truncated: true,
     };
     let value = serde_json::to_value(&listing).unwrap();
 
     assert!(value.get("nodeId").is_some(), "got {value}");
     assert!(value.get("parentPath").is_some(), "got {value}");
+    assert_eq!(value.get("truncated"), Some(&serde_json::Value::Bool(true)));
     assert!(value.get("node_id").is_none(), "got {value}");
     assert!(value.get("parent_path").is_none(), "got {value}");
 }

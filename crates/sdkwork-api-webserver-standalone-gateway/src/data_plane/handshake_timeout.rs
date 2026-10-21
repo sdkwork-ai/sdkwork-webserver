@@ -91,7 +91,7 @@ mod tests {
         type Service = S;
         type Future = Pin<Box<dyn Future<Output = io::Result<(I, S)>> + Send + 'static>>;
 
-        fn accept(&self, stream: I, service: S) -> Self::Future {
+        fn accept(&self, _stream: I, _service: S) -> Self::Future {
             Box::pin(async {
                 std::future::pending::<()>().await;
                 unreachable!("pending never resolves")

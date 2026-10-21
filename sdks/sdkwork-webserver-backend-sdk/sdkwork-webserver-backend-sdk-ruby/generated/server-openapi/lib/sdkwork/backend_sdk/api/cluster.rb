@@ -172,7 +172,7 @@ module Sdkwork
           end
 
           # List webserver process instances with liveness state
-          def clusters_instances_list(page_size: nil, cursor: nil, cluster_id: nil, host_id: nil, status: nil, health_state: nil, join_mode: nil, sync_status: nil, labels: nil, search: nil, build_version: nil)
+          def clusters_instances_list(page_size: nil, cursor: nil, cluster_id: nil, host_id: nil, status: nil, health_state: nil, join_mode: nil, sync_status: nil, labels: nil, q: nil, build_version: nil)
             path = '/backend/v3/api/clusters/instances'
             query = build_query_string([
               QueryParameterSpec.new('page_size', page_size, 'form', true, false, nil),
@@ -184,7 +184,7 @@ module Sdkwork
               QueryParameterSpec.new('join_mode', join_mode, 'form', true, false, nil),
               QueryParameterSpec.new('sync_status', sync_status, 'form', true, false, nil),
               QueryParameterSpec.new('labels', labels, 'form', true, false, nil),
-              QueryParameterSpec.new('search', search, 'form', true, false, nil),
+              QueryParameterSpec.new('q', q, 'form', true, false, nil),
               QueryParameterSpec.new('build_version', build_version, 'form', true, false, nil),
             ])
             path = append_query_string(path, query)

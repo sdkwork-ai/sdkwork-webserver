@@ -96,14 +96,14 @@ fn upstream_tls_policy_key(
         .upstream_tls_ca_certificate_paths(&upstream.id)
         .unwrap_or_default()
     {
-        let pem = read_bounded_tls_material(&path)?;
+        let pem = read_bounded_tls_material(path)?;
         hasher.update((pem.len() as u64).to_le_bytes());
         hasher.update(&pem);
     }
     match app.upstream_tls_client_identity_paths(&upstream.id) {
         Some((certificate_path, private_key_path)) => {
-            let certificate = read_bounded_tls_material(&certificate_path)?;
-            let private_key = read_bounded_tls_material(&private_key_path)?;
+            let certificate = read_bounded_tls_material(certificate_path)?;
+            let private_key = read_bounded_tls_material(private_key_path)?;
             hasher.update([1_u8]);
             hasher.update((certificate.len() as u64).to_le_bytes());
             hasher.update(&certificate);

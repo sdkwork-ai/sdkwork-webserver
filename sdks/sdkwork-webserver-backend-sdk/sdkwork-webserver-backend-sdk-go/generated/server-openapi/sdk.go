@@ -8,6 +8,7 @@ import (
 type SdkworkBackendClient struct {
     http *sdkhttp.Client
     Application *api.ApplicationApi
+    Plugin *api.PluginApi
     ApplicationDomain *api.ApplicationDomainApi
     Certificate *api.CertificateApi
     Domain *api.DomainApi
@@ -36,6 +37,7 @@ func NewSdkworkBackendClientWithConfig(config sdkhttp.Config) *SdkworkBackendCli
     return &SdkworkBackendClient{
         http: client,
         Application: api.NewApplicationApi(client),
+        Plugin: api.NewPluginApi(client),
         ApplicationDomain: api.NewApplicationDomainApi(client),
         Certificate: api.NewCertificateApi(client),
         Domain: api.NewDomainApi(client),

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use sdkwork_database_id::SnowflakeIdGenerator;
+use sdkwork_database_id::{NodeAllocatorConfig, SnowflakeIdGenerator, SnowflakeNodeAllocator};
 use sdkwork_database_sqlx::enable_process_shared_database_pool;
 use sdkwork_intelligence_webserver_service::{WebRepositoryPort, WebService};
 use sdkwork_utils_rust::derive_aes_256_key;
@@ -24,19 +24,37 @@ pub struct WebRuntime {
     pub service: WebService,
 }
 
-fn snowflake_from_env() -> Result<SnowflakeIdGenerator, String> {
-    let node_id = match std::env::var("SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID") {
-        Ok(value) => value
+/// Resolve this process's unique Snowflake node id.
+///
+/// An explicit non-zero `SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID` wins (single-node
+/// profiles pin it). Otherwise the id comes from the shared
+/// `sdkwork_node_registry` lease allocator: two replicas of the same deployment
+/// then receive different ids automatically instead of both defaulting to 0
+/// and colliding on every generated id. Allocation failure is a boot failure —
+/// a silent fallback to 0 would reintroduce the collision.
+async fn node_generator_from_env() -> Result<SnowflakeIdGenerator, String> {
+    if let Ok(raw) = std::env::var("SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID") {
+        let node_id = raw
+            .trim()
             .parse::<u16>()
-            .map_err(|error| format!("invalid SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID: {error}"))?,
-        Err(_) => {
-            return Err(
-                "SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID is required (multi-instance must set unique node id)"
-                    .to_string(),
-            );
+            .map_err(|error| format!("invalid SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID: {error}"))?;
+        if node_id != 0 {
+            return SnowflakeIdGenerator::new(node_id).map_err(|error| error.to_string());
         }
-    };
-    SnowflakeIdGenerator::new(node_id).map_err(|error| error.to_string())
+    }
+    let service_name = "sdkwork-webserver";
+    let (generator, _lease) = SnowflakeNodeAllocator::allocate_generator_from_env_with_config(
+        service_name,
+        "webserver",
+        NodeAllocatorConfig::from_service_name(service_name),
+    )
+    .await
+    .map_err(|error| {
+        format!(
+            "Snowflake node id is neither configured nor allocatable from the node registry: {error}"
+        )
+    })?;
+    Ok(generator)
 }
 
 fn secret_key_from_env() -> Result<SecretEncryptionKey, String> {
@@ -305,18 +323,18 @@ where
 pub async fn bootstrap_web_runtime_from_env() -> Result<WebRuntime, String> {
     enable_process_shared_database_pool();
     let lifecycle_host = bootstrap_web_database_from_env().await?;
-    let id_generator = snowflake_from_env()?;
+    let id_generator = node_generator_from_env().await?;
     let secret_key = secret_key_from_env()?;
     require_cursor_hmac_key_in_production()?;
     let pool = lifecycle_host
         .pool()
         .as_postgres()
         .ok_or_else(|| "web runtime requires a PostgreSQL database pool".to_string())?;
-    let repository = Arc::new(PostgresWebRepository::new(
+    let repository: Arc<dyn WebRepositoryPort> = Arc::new(PostgresWebRepository::new(
         pool.clone(),
         id_generator,
         secret_key,
-    )) as Arc<dyn WebRepositoryPort>;
+    ));
 
     let certificate_issuer = Arc::new(certificate_issuer_from_env(&secret_key)?);
     let edge_runtime = Arc::new(

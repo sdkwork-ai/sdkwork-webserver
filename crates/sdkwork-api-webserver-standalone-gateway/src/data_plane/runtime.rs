@@ -35,31 +35,36 @@ use super::{
 const MAX_TLS_MATERIAL_BYTES: u64 = 1024 * 1024;
 
 /// Builds the tunnel gateway shared state when the app config enables the
-/// tunnel; `None` (or a broken tunnel section) leaves the data plane
-/// unchanged apart from a warning (PRD SS77).
+/// tunnel; `Ok(None)` leaves the data plane unchanged. A tunnel that is enabled
+/// but misconfigured (invalid address, unreadable/missing TLS material) is an
+/// error: silently disabling it or downgrading to self-signed would hide a
+/// provisioning failure behind an availability or trust incident.
 fn build_tunnel(
     config: &sdkwork_webserver_core::WebServerAppConfig,
-) -> (
-    Option<Arc<sdkwork_webserver_tunnel::gateway::GatewayShared>>,
-    Option<sdkwork_webserver_tunnel::TunnelGatewayOptions>,
-) {
+) -> Result<
+    (
+        Option<Arc<sdkwork_webserver_tunnel::gateway::GatewayShared>>,
+        Option<sdkwork_webserver_tunnel::TunnelGatewayOptions>,
+    ),
+    DataPlaneError,
+> {
     let Some(tunnel_config) = config.tunnel.as_ref() else {
-        return (None, None);
+        return Ok((None, None));
     };
     if !tunnel_config.enabled {
-        return (None, None);
+        return Ok((None, None));
     }
-    if let Err(error) = tunnel_config.validate() {
-        tracing::warn!(error = %error, "tunnel configuration is invalid; tunnel disabled");
-        return (None, None);
-    }
+    tunnel_config
+        .validate()
+        .map_err(|error| DataPlaneError::TunnelConfiguration(error.to_string()))?;
     let tunnel_metrics = Arc::new(sdkwork_webserver_tunnel::TunnelMetrics::new());
     let Some(options) = crate::tunnel_bridge::build_gateway_options(tunnel_config, tunnel_metrics)
+        .map_err(DataPlaneError::TunnelConfiguration)?
     else {
-        return (None, None);
+        return Ok((None, None));
     };
     let shared = sdkwork_webserver_tunnel::gateway::GatewayShared::from_options(&options);
-    (Some(shared), Some(options))
+    Ok((Some(shared), Some(options)))
 }
 
 pub(crate) struct RuntimeGeneration {
@@ -76,6 +81,11 @@ pub(crate) struct RuntimeGeneration {
     pub dynamic_upstreams: std::sync::Mutex<hashlink::LinkedHashMap<String, Arc<ProxyUpstream>>>,
     /// Multi-layer resolution cache chain shared by upstream resolvers.
     pub resolution_chain: Option<Arc<ResolutionChain>>,
+    /// Admission tables for this exact generation. Keeping them inside the
+    /// generation makes a request that pinned one generation use that
+    /// generation's zones and limits, instead of a table swapped mid-request.
+    pub limit_req: LimitReqRuntime,
+    pub limit_conn: LimitConnRuntime,
 }
 
 impl RuntimeGeneration {
@@ -128,6 +138,8 @@ impl RuntimeGeneration {
         let proxy_cache = app.config().proxy_cache.enabled.then(|| {
             super::cache::HttpResponseCache::new(&app.config().proxy_cache, metrics.clone())
         });
+        let limit_req = LimitReqRuntime::from_zones(&app.config().limit_req_zones);
+        let limit_conn = LimitConnRuntime::from_zones(&app.config().limit_conn_zones);
         Ok(Arc::new(Self {
             id,
             revision,
@@ -137,6 +149,8 @@ impl RuntimeGeneration {
             resolver,
             dynamic_upstreams: std::sync::Mutex::new(hashlink::LinkedHashMap::new()),
             resolution_chain,
+            limit_req,
+            limit_conn,
         }))
     }
 
@@ -196,8 +210,6 @@ pub(crate) struct DataPlaneRuntime {
     pub connection_permits: Arc<Semaphore>,
     pub request_gate: RequestAdmissionGate,
     pub resource_pressure: Arc<ResourcePressureController>,
-    pub limit_req: ArcSwap<LimitReqRuntime>,
-    pub limit_conn: ArcSwap<LimitConnRuntime>,
     pub tunnel_supervisor: Arc<TunnelSupervisor>,
     /// Live tunnel gateway state when the app config enables the tunnel
     /// capability; `None` keeps the runtime unchanged (PRD SS77).
@@ -228,7 +240,7 @@ fn build_resolution_chain(
     let file = match config.file.as_deref() {
         Some(path) => Some(Arc::new(
             FileResolverSource::load(std::path::Path::new(path))
-                .map_err(|message| DataPlaneError::ResolverCache(message))?,
+                .map_err(DataPlaneError::ResolverCache)?,
         )),
         None => None,
     };
@@ -250,9 +262,13 @@ fn build_resolution_chain(
         // The backend connects lazily on first async use with bounded
         // timeouts, so generation builds never block an executor worker on
         // Redis availability (a stalled Redis degrades to the upper layers).
-        std::sync::Arc::new(
-            sdkwork_webserver_resolver_cache::redis::RedisResolverCache::new(redis_config.clone()),
-        ) as std::sync::Arc<dyn sdkwork_webserver_resolver_cache::ResolverCacheBackend>
+        let backend: std::sync::Arc<dyn sdkwork_webserver_resolver_cache::ResolverCacheBackend> =
+            std::sync::Arc::new(
+                sdkwork_webserver_resolver_cache::redis::RedisResolverCache::new(
+                    redis_config.clone(),
+                ),
+            );
+        backend
     });
     #[cfg(feature = "management")]
     let database = if config.database {
@@ -335,14 +351,8 @@ impl DataPlaneRuntime {
             Duration::from_millis(app.config().limits.max_connection_age_ms),
             metrics.clone(),
         );
-        let (tunnel, tunnel_options) = build_tunnel(app.config());
+        let (tunnel, tunnel_options) = build_tunnel(app.config())?;
         let initial = RuntimeGeneration::build(app, revision, 1, metrics.clone())?;
-        let limit_req = ArcSwap::from_pointee(LimitReqRuntime::from_zones(
-            &initial.app.config().limit_req_zones,
-        ));
-        let limit_conn = ArcSwap::from_pointee(LimitConnRuntime::from_zones(
-            &initial.app.config().limit_conn_zones,
-        ));
         Ok(Arc::new(Self {
             current: ArcSwap::from(initial),
             topology,
@@ -357,8 +367,6 @@ impl DataPlaneRuntime {
                 resource_pressure.clone(),
             ),
             resource_pressure,
-            limit_req,
-            limit_conn,
             tunnel_supervisor,
             tunnel,
             tunnel_options,
@@ -516,16 +524,26 @@ impl DataPlaneRuntime {
 
         let generation = current.id.saturating_add(1);
         let next_revision = revision.sha256().to_owned();
-        let candidate = match RuntimeGeneration::build(
-            revision.into_app(),
-            next_revision.clone(),
-            generation,
-            self.metrics.clone(),
-        ) {
-            Ok(candidate) => candidate,
-            Err(error) => {
+        // Building a generation reads every certificate/private-key file and
+        // serializes the compiled configuration. That is blocking filesystem
+        // work; running it inline parks a runtime worker (and a stalled secret
+        // volume can consume the pool), so it runs on the blocking pool.
+        let build_app = revision.into_app();
+        let build_revision = next_revision.clone();
+        let build_metrics = self.metrics.clone();
+        let candidate = match tokio::task::spawn_blocking(move || {
+            RuntimeGeneration::build(build_app, build_revision, generation, build_metrics)
+        })
+        .await
+        {
+            Ok(Ok(candidate)) => candidate,
+            Ok(Err(error)) => {
                 self.metrics.record_reload(ReloadResult::Failed);
                 return Err(error);
+            }
+            Err(error) => {
+                self.metrics.record_reload(ReloadResult::Failed);
+                return Err(DataPlaneError::ReloadWorker(error));
             }
         };
         let previous_supervisor = {
@@ -535,12 +553,6 @@ impl DataPlaneRuntime {
                 .then(|| ActiveHealthSupervisor::start(candidate.clone()))
                 .flatten();
             self.current.store(candidate.clone());
-            self.limit_req.store(Arc::new(LimitReqRuntime::from_zones(
-                &candidate.app.config().limit_req_zones,
-            )));
-            self.limit_conn.store(Arc::new(LimitConnRuntime::from_zones(
-                &candidate.app.config().limit_conn_zones,
-            )));
             std::mem::replace(&mut active_health.supervisor, next_supervisor)
         };
         if let Some(supervisor) = previous_supervisor {

@@ -187,6 +187,50 @@ func (a *DomainApi) RootDomainsDnsRecordsStatusUpdate(rootDomainId string, recor
     return decodeResult[sdktypes.RootDomainsDnsRecordsStatusUpdateResponse](raw)
 }
 
+// Read the root domain's WeChat MP domain-ownership verification file
+func (a *DomainApi) RootDomainsWechatVerificationRetrieve(rootDomainId string) (sdktypes.RootDomainsWechatVerificationRetrieveResponse, error) {
+    raw, err := a.client.Get(BackendApiPath(fmt.Sprintf("/root_domains/%s/verification_file", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), nil, nil)
+    if err != nil {
+        var zero sdktypes.RootDomainsWechatVerificationRetrieveResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsWechatVerificationRetrieveResponse](raw)
+}
+
+// Upload (or wholly replace) the root domain's WeChat verification file
+func (a *DomainApi) RootDomainsWechatVerificationUpdate(rootDomainId string, body sdktypes.UpsertDomainWechatVerificationRequest, idempotencyKey string) (sdktypes.RootDomainsWechatVerificationUpdateResponse, error) {
+    headers := BuildRequestHeaders(
+        map[string]ParameterSpec{"Idempotency-Key": ParameterSpec{Value: idempotencyKey, Style: "simple", Explode: false},},
+        map[string]ParameterSpec{},
+    )
+    raw, err := a.client.Put(BackendApiPath(fmt.Sprintf("/root_domains/%s/verification_file", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), body, nil, headers, "application/json")
+    if err != nil {
+        var zero sdktypes.RootDomainsWechatVerificationUpdateResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsWechatVerificationUpdateResponse](raw)
+}
+
+// Delete the root domain's WeChat verification file
+func (a *DomainApi) RootDomainsWechatVerificationDelete(rootDomainId string) (struct{}, error) {
+    raw, err := a.client.Delete(BackendApiPath(fmt.Sprintf("/root_domains/%s/verification_file", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), nil, nil)
+    if err != nil {
+        var zero struct{}
+        return zero, err
+    }
+    return decodeResult[struct{}](raw)
+}
+
+// Self-check the root domain's WeChat verification file
+func (a *DomainApi) RootDomainsWechatVerificationCheck(rootDomainId string) (sdktypes.RootDomainsWechatVerificationCheckResponse, error) {
+    raw, err := a.client.Post(BackendApiPath(fmt.Sprintf("/root_domains/%s/verification_file/check", SerializePathParameter(rootDomainId, PathParameterSpec{Name: "rootDomainId", Style: "simple", Explode: false}))), nil, nil, nil, "")
+    if err != nil {
+        var zero sdktypes.RootDomainsWechatVerificationCheckResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.RootDomainsWechatVerificationCheckResponse](raw)
+}
+
 // Sync a root-domain Zone's resolution records through its cloud account
 func (a *DomainApi) RootDomainsDnsRecordsSync(rootDomainId string, idempotencyKey string) (sdktypes.RootDomainsDnsRecordsSyncResponse, error) {
     headers := BuildRequestHeaders(
@@ -227,6 +271,16 @@ func (a *DomainApi) DomainsCreate(body sdktypes.CreateManagedDomainRequest, idem
         return zero, err
     }
     return decodeResult[sdktypes.DomainsCreateResponse201](raw)
+}
+
+// Retrieve one tenant custom domain asset
+func (a *DomainApi) DomainsRetrieve(domainId string) (sdktypes.DomainsRetrieveResponse, error) {
+    raw, err := a.client.Get(BackendApiPath(fmt.Sprintf("/domains/%s", SerializePathParameter(domainId, PathParameterSpec{Name: "domainId", Style: "simple", Explode: false}))), nil, nil)
+    if err != nil {
+        var zero sdktypes.DomainsRetrieveResponse
+        return zero, err
+    }
+    return decodeResult[sdktypes.DomainsRetrieveResponse](raw)
 }
 
 // Delete an unbound tenant custom domain asset

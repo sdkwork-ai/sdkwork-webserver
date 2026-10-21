@@ -208,7 +208,48 @@ pub(crate) async fn list_machines() -> WebServiceResult<TunnelMachineListRespons
         serde_json::from_value(machines).map_err(|error| {
             WebServiceError::Internal(format!("machine list does not match the contract: {error}"))
         })?;
-    Ok(TunnelMachineListResponse { machines })
+    Ok(TunnelMachineListResponse {
+        machines,
+        page_info: None,
+    })
+}
+
+/// Offset page over the gateway's machine list.
+///
+/// The gateway returns the complete inventory (bounded by the tunnel
+/// configuration's `maxDevices`), so slicing here is a presentation concern,
+/// not a database scan. `pageInfo` carries the exact total so the console no
+/// longer fabricates `hasMore: false`.
+pub(crate) async fn list_machines_page(
+    page: i32,
+    page_size: i32,
+) -> WebServiceResult<TunnelMachineListResponse> {
+    let page = page.max(1);
+    let page_size = page_size.clamp(1, 200);
+    let response = list_machines().await?;
+    let total = response.machines.len();
+    let total_pages = total.div_ceil(usize::try_from(page_size).unwrap_or(1));
+    let skip = usize::try_from(page - 1)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(usize::try_from(page_size).unwrap_or(usize::MAX));
+    let machines = response
+        .machines
+        .into_iter()
+        .skip(skip)
+        .take(usize::try_from(page_size).unwrap_or(usize::MAX))
+        .collect::<Vec<_>>();
+    Ok(TunnelMachineListResponse {
+        machines,
+        page_info: Some(sdkwork_utils_rust::PageInfo {
+            mode: sdkwork_utils_rust::PageMode::Offset,
+            page: Some(page),
+            page_size: Some(page_size),
+            total_items: Some(total.to_string()),
+            total_pages: i32::try_from(total_pages).ok(),
+            next_cursor: None,
+            has_more: Some(usize::try_from(page).unwrap_or(usize::MAX) < total_pages),
+        }),
+    })
 }
 
 /// One machine's detail.

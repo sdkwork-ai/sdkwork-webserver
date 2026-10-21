@@ -1818,6 +1818,11 @@ fn validate_routes(
         .iter()
         .map(|zone| zone.name.as_str())
         .collect::<HashSet<_>>();
+    // Overlap detection is keyed by `(path_type, path)` so a host with N routes
+    // does not compare every pair. Only routes that share a matcher can overlap,
+    // and their count is expected to be tiny (a duplicate is a configuration
+    // error); the previous O(N²) scan was the 10k-route compile bottleneck.
+    let mut routes_by_matcher: HashMap<(RoutePathType, &str), Vec<usize>> = HashMap::new();
     for (index, route) in routes.iter().enumerate() {
         let path = format!("{host_path}/routes/{index}");
         let configured_path = &route.route_match.path;
@@ -1906,23 +1911,28 @@ fn validate_routes(
             route.cache_policy.as_ref(),
         );
 
-        for (other_index, other) in routes.iter().take(index).enumerate() {
-            if route.route_match.path_type == other.route_match.path_type
-                && route.route_match.path == other.route_match.path
-                && methods_overlap(
+        let matcher_key = (route.route_match.path_type, route.route_match.path.as_str());
+        if let Some(earlier) = routes_by_matcher.get(&matcher_key) {
+            for &other_index in earlier {
+                let other = &routes[other_index];
+                if methods_overlap(
                     route.route_match.methods.as_deref(),
                     other.route_match.methods.as_deref(),
-                )
-            {
-                validator.push(
-                    &path,
-                    format!(
-                        "route overlaps route {} at {host_path}/routes/{other_index}",
-                        other.id
-                    ),
-                );
+                ) {
+                    validator.push(
+                        &path,
+                        format!(
+                            "route overlaps route {} at {host_path}/routes/{other_index}",
+                            other.id
+                        ),
+                    );
+                }
             }
         }
+        routes_by_matcher
+            .entry(matcher_key)
+            .or_default()
+            .push(index);
     }
 }
 

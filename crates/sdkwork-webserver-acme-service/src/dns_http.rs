@@ -485,21 +485,29 @@ pub(crate) fn encode_form_component(value: &str) -> String {
 
 async fn bounded_response(response: Response<Incoming>) -> AcmeServiceResult<DnsApiResponse> {
     let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .map_err(|error| {
+    // Read frame by frame and refuse before crossing the limit. Collecting the
+    // whole body first made the 256 KiB cap apply only after the allocation,
+    // so a compromised provider endpoint could OOM the issuance path.
+    let mut body = response.into_body();
+    let mut bytes = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.map_err(|error| {
             AcmeServiceError::provider(format!("read DNS provider response: {error}"))
-        })?
-        .to_bytes();
-    if body.len() > MAX_DNS_RESPONSE_BODY_BYTES {
-        return Err(AcmeServiceError::provider(format!(
-            "DNS provider response of {} bytes exceeds {MAX_DNS_RESPONSE_BODY_BYTES}",
-            body.len()
-        )));
+        })?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        if bytes.len().saturating_add(data.len()) > MAX_DNS_RESPONSE_BODY_BYTES {
+            return Err(AcmeServiceError::provider(format!(
+                "DNS provider response exceeds {MAX_DNS_RESPONSE_BODY_BYTES}"
+            )));
+        }
+        bytes.extend_from_slice(data);
     }
-    Ok(DnsApiResponse { status, body })
+    Ok(DnsApiResponse {
+        status,
+        body: Bytes::from(bytes),
+    })
 }
 
 #[cfg(test)]

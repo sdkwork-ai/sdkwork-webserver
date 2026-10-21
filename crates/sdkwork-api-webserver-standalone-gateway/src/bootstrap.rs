@@ -52,11 +52,11 @@ pub async fn build_router() -> Result<Router, String> {
         .route_manifest
         .validate_route_auth_for_surfaces(&request_profile)
         .map_err(|error| format!("standalone route auth validation failed: {error}"))?;
-    let readiness_check = match app_shell.as_ref() {
+    let readiness_check: Arc<dyn sdkwork_web_bootstrap::ReadinessCheck> = match app_shell.as_ref() {
         Some(app_shell) => Arc::new(CompositeReadinessCheck::new(vec![
             profile.assembly.readiness_check.clone(),
             app_shell.readiness_check(),
-        ])) as Arc<dyn sdkwork_web_bootstrap::ReadinessCheck>,
+        ])),
         None => profile.assembly.readiness_check.clone(),
     };
     // Durable idempotency: replace the process-local memory store with the

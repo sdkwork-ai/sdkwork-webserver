@@ -3,9 +3,24 @@
   "kind": "sdkwork.component.spec",
   "component": {
     "id": "sdkwork-webserver-tunnel",
-    "name": "SDKWork WebServer Tunnel",
+    "name": "sdkwork-webserver-tunnel",
+    "displayName": "SDKWork WebServer Tunnel",
     "description": "Built-in network tunnel capability for the SDKWork WebServer: QUIC gateway, inside-network agent, STP/1 control plane, route/session management, HTTP/TCP relay, and CLI.",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "type": "rust-crate",
+    "root": "sdkwork-webserver/crates/sdkwork-webserver-tunnel",
+    "domain": "platform",
+    "capability": "webserver-tunnel",
+    "surface": "backend-service",
+    "languages": ["rust"],
+    "generated": false,
+    "status": "active",
+    "manifests": [
+      "Cargo.toml",
+      "specs/component.spec.json",
+      "../../../Cargo.toml",
+      "../../../specs/component.spec.json"
+    ]
   },
   "canonicalSpecs": [
     { "id": "tunnel-prd", "path": "../../../docs/tunnel.md", "role": "product-and-architecture" },
@@ -63,6 +78,15 @@
     "node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .",
     "node ../sdkwork-specs/tools/check-rust-manifest-standard.mjs --root ."
   ],
+  "verification": {
+    "commands": [
+      "cargo check --workspace",
+      "cargo test -p sdkwork-webserver-tunnel-core -p sdkwork-webserver-tunnel-protocol -p sdkwork-webserver-tunnel-transport -p sdkwork-webserver-tunnel",
+      "cargo test -p sdkwork-api-webserver-standalone-gateway --test tunnel_relay",
+      "node ../sdkwork-specs/tools/check-rust-crate-naming-standard.mjs --root .",
+      "node ../sdkwork-specs/tools/check-rust-manifest-standard.mjs --root ."
+    ]
+  },
   "invariants": [
     "tunnel.enabled=false leaves the webserver byte-for-byte unchanged (PRD 77)",
     "relay targets always come from agent-local configuration (PRD 45)",

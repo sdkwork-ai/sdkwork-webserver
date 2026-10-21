@@ -161,7 +161,7 @@ impl DomainApi {
     }
 
     /// Upload (or wholly replace) the root domain's WeChat verification file
-    pub async fn root_domains_wechat_verification_upsert(&self, root_domain_id: &str, body: &UpsertDomainWechatVerificationRequest, idempotency_key: &str) -> Result<DomainWechatVerificationResponse, SdkworkError> {
+    pub async fn root_domains_wechat_verification_update(&self, root_domain_id: &str, body: &UpsertDomainWechatVerificationRequest, idempotency_key: &str) -> Result<DomainWechatVerificationResponse, SdkworkError> {
         let path = backend_path(&format!("/root_domains/{}/verification_file", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
         let headers = build_request_headers(
             &[
@@ -216,6 +216,12 @@ impl DomainApi {
             &[],
         );
         self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+    }
+
+    /// Retrieve one tenant custom domain asset
+    pub async fn domains_retrieve(&self, domain_id: &str) -> Result<ApplicationDomainResponse, SdkworkError> {
+        let path = backend_path(&format!("/domains/{}", serialize_path_parameter(domain_id, PathParameterSpec::new("domainId", "simple", false))));
+        self.client.get(&path, None, None).await
     }
 
     /// Delete an unbound tenant custom domain asset

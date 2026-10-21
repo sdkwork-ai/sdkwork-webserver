@@ -116,6 +116,10 @@
     "test:database:recovery": "node scripts/database-recovery-verify.mjs",
     "test:postgres:ha": "node scripts/postgres-ha-verify.mjs",
     "test:postgres:required": "node scripts/postgres-ci-verify.mjs",
+    "test:acme:pebble": "node tools/run-pebble-e2e.mjs",
+    "test:capacity": "cargo test -p sdkwork-api-webserver-standalone-gateway --test capacity_smoke -- --ignored --nocapture",
+    "test:connections": "cargo test -p sdkwork-api-webserver-standalone-gateway --test capacity_smoke data_plane_accepts_many_idle_connections -- --ignored --nocapture",
+    "test:route-compile": "cargo test -p sdkwork-api-webserver-standalone-gateway --test capacity_smoke compiles_ten_thousand_routes_within_budget -- --ignored --nocapture",
     "test:contracts": "node --test tests/contract/*.contract.test.mjs",
     "test:contract:iam-application-bootstrap": "node --test scripts/dev/sdkwork-webserver-iam-application-bootstrap-standard.test.mjs",
     "check:client-native-roots": "node --experimental-strip-types --test \"apps/sdkwork-webserver-harmony-mobile/tests/*.test.mjs\" \"apps/sdkwork-webserver-flutter-mobile/tests/*.test.mjs\"",
@@ -129,6 +133,7 @@
     "check:api-envelope": "node ../sdkwork-specs/tools/check-api-response-envelope.mjs --workspace .",
     "check:api-operation-patterns": "node ../sdkwork-specs/tools/check-api-operation-patterns.mjs --root .",
     "check:repository-docs": "node ../sdkwork-specs/tools/check-repository-docs-standard.mjs --root .",
+    "check:rust-clippy": "cargo clippy --no-deps -p sdkwork-webserver-contract -p sdkwork-webserver-core -p sdkwork-webserver-tunnel-core -p sdkwork-intelligence-webserver-service -p sdkwork-intelligence-webserver-repository-sqlx -p sdkwork-server-files-service -p sdkwork-webserver-config-service -p sdkwork-api-webserver-standalone-gateway -- -D warnings",
     "check:pnpm-script-standard": "node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix webserver,web",
     "check:agent-workflow-standard": "node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --root .",
     "verify": "pnpm exec sdkwork-app verify",
@@ -174,6 +179,7 @@
     "sbom:generate": "node scripts/webserver-sbom.mjs generate",
     "sbom:check": "node scripts/webserver-sbom.mjs validate",
     "check:app-composition": "node ../sdkwork-specs/tools/verify-repo.mjs --root .",
+    "check:composable-architecture": "node ../sdkwork-specs/tools/check-component-port-bindings.mjs --root . && node ../sdkwork-specs/tools/check-permission-composition.mjs --root . && node ../sdkwork-specs/tools/check-rust-backend-composition.mjs --root . && node ../sdkwork-specs/tools/check-frontend-composition.mjs --root . && node ../sdkwork-specs/tools/check-composition-resolver.mjs --root . && node ../sdkwork-specs/tools/check-app-sdk-consumer-imports.mjs --workspace .",
     "check:edge-exposure-governance": "node tools/check-edge-exposure-governance.mjs --root .",
     "check:database-prefix-ownership": "node scripts/check-database-prefix-ownership.mjs",
     "api:assembly:materialize": "node ../sdkwork-specs/tools/materialize-api-assembly.mjs --root .",
@@ -182,7 +188,8 @@
     "_sdkwork:runtime:website-data-plane": "cargo run -p sdkwork-webserver-website-delivery-edge-runtime --",
     "_sdkwork:build": "node scripts/build.mjs --release",
     "_sdkwork:test": "cargo test --workspace && pnpm test:contracts && pnpm test:contract:iam-application-bootstrap",
-    "_sdkwork:check": "pnpm run check:app-composition && pnpm check:api-assembly-closure && pnpm db:pool:validate && pnpm check:iam-application-bootstrap && pnpm api:check && pnpm sdk:check && pnpm check:repository-docs && pnpm check:pnpm-script-standard && pnpm check:agent-workflow-standard && pnpm check:browser-dist-layout && pnpm check:browser-build-scripts && pnpm check:shell-portability && pnpm check:edge-exposure-governance && pnpm check:webserver-toml && pnpm check:webserver-materialization && pnpm check:webserver-toml:all && pnpm topology:validate && pnpm db:validate && pnpm deploy:validate && pnpm --dir apps/sdkwork-webserver-pc check && pnpm --dir apps/sdkwork-webserver-h5 check && pnpm --dir apps/sdkwork-webserver-mini-program check && pnpm check:client-native-roots",
+    "lint": "eslint apps/sdkwork-webserver-pc/src apps/sdkwork-webserver-pc/packages apps/sdkwork-webserver-h5/src apps/sdkwork-webserver-h5/packages --max-warnings 0",
+    "_sdkwork:check": "pnpm run check:app-composition && pnpm check:composable-architecture && pnpm check:api-assembly-closure && pnpm db:pool:validate && pnpm check:iam-application-bootstrap && pnpm api:check && pnpm sdk:check && pnpm check:repository-docs && pnpm check:pnpm-script-standard && pnpm check:agent-workflow-standard && pnpm check:browser-dist-layout && pnpm check:browser-build-scripts && pnpm check:shell-portability && pnpm check:edge-exposure-governance && pnpm check:webserver-toml && pnpm check:webserver-materialization && pnpm check:webserver-toml:all && pnpm topology:validate && pnpm db:validate && pnpm deploy:validate && pnpm --dir apps/sdkwork-webserver-pc check && pnpm --dir apps/sdkwork-webserver-h5 check && pnpm --dir apps/sdkwork-webserver-mini-program check && pnpm check:rust-clippy && pnpm lint && pnpm check:client-native-roots",
     "_sdkwork:verify": "cargo fmt -- --check && pnpm run _sdkwork:test && pnpm api:materialize:check && pnpm check && pnpm exec sdkwork-app dev --deployment-profile standalone --dry-run && pnpm check:cors-standard",
     "_sdkwork:clean": "node scripts/clean.mjs",
     "_sdkwork:release:package:standalone": "node scripts/webserver-release.mjs package --deployment-profile standalone",
@@ -200,5 +207,11 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     }
+  },
+  "devDependencies": {
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0"
   }
 }

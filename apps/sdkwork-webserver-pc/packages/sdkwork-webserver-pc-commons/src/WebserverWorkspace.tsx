@@ -120,13 +120,13 @@ export function WebserverWorkspace({
     translateWebserver(locale, key, values);
   const entries = useMemo(() => {
     const availableEntries = modules.flatMap((module) => module.entries);
+    // Both surfaces enforce each entry's declared permission: a console page
+    // whose data calls the backend would reject is hidden, not rendered as an
+    // empty or failing page.
     return availableEntries
-      .filter((entry) =>
-        surface === "app-console"
-        || hasWebserverPermission(permissionScope, entry.permission),
-      )
+      .filter((entry) => hasWebserverPermission(permissionScope, entry.permission))
       .sort((a, b) => a.order - b.order);
-  }, [modules, permissionScope, surface]);
+  }, [modules, permissionScope]);
   const basePath = surface === "backend-admin" ? "/admin" : "/console";
   // Modules group the same flat resource routes into header tabs; the sidebar
   // then lists only the active module's entries. A surface that resolves to a
@@ -225,8 +225,11 @@ export function WebserverWorkspace({
 }
 
 function SurfaceAccessState({ locale }: { locale: WebserverLocale }) {
-  const t = (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
-    translateWebserver(locale, key, values)
+  const t = useMemo(
+    () => (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
+      translateWebserver(locale, key, values)
+    ),
+    [locale],
   );
   return (
     <section className="surface-access-state" role="alert">
@@ -444,6 +447,9 @@ function ResourcePage({
 
   useEffect(() => {
     void load();
+  // `load` is recreated per render and closes over the current filters/cursor;
+  // listing it would refetch on every render. These keys are the read triggers.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorized, entry.resource, page, pageSize]);
 
   useEffect(() => {
@@ -844,8 +850,11 @@ function ActionDialog({
   onRefresh(): void;
   selected?: Record<string, unknown>;
 }) {
-  const t = (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
-    translateWebserver(locale, key, values)
+  const t = useMemo(
+    () => (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
+      translateWebserver(locale, key, values)
+    ),
+    [locale],
   );
   const [body, setBody] = useState<Record<string, unknown>>(() => initialActionBody(action, selected));
   const [confirmed, setConfirmed] = useState(false);
@@ -939,6 +948,9 @@ function ActionDialog({
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
+  // `closeDialog` is recreated per render; rebinding the key listener for a new
+  // function identity would not change behaviour.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action.dismissibleWhileBusy, busy, onClose, onRefresh]);
 
   useEffect(() => () => abortControllerRef.current?.abort(), []);
@@ -974,7 +986,7 @@ function ActionDialog({
     return () => {
       active = false;
     };
-  }, [action, selected]);
+  }, [action, selected, t]);
 
   async function executeAction(): Promise<void> {
     if (submitInFlightRef.current) return;
@@ -1197,8 +1209,11 @@ function PaginatedField({
   selectedItem?: Record<string, unknown>;
   value: unknown;
 }) {
-  const t = (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
-    translateWebserver(locale, key, values)
+  const t = useMemo(
+    () => (key: WebserverMessageKey, values: Record<string, string | number> = {}) => (
+      translateWebserver(locale, key, values)
+    ),
+    [locale],
   );
   const inputId = useId();
   const [page, setPage] = useState(1);
@@ -1254,7 +1269,7 @@ function PaginatedField({
       active = false;
       abortController.abort();
     };
-  }, [loadPage, name, page, requestVersion, selectedItem]);
+  }, [loadPage, name, page, requestVersion, selectedItem, t]);
 
   useEffect(() => {
     const selectedSet = new Set(selectedValues);
@@ -1269,7 +1284,7 @@ function PaginatedField({
       }
       return next;
     });
-  }, [optionPage.options, selectedValueKey]);
+  }, [optionPage.options, selectedValueKey, selectedValues]);
 
   const displayedOptions = useMemo(() => {
     const currentValues = new Set(optionPage.options.map((option) => String(optionValue(option))));
@@ -1280,7 +1295,7 @@ function PaginatedField({
       }),
       ...optionPage.options,
     ];
-  }, [optionPage.options, selectedOptions, selectedValueKey]);
+  }, [optionPage.options, selectedOptions, selectedValues]);
   const selectedSet = new Set(selectedValues);
   const selectionFull = maximumSelections !== undefined && selectedValues.length >= maximumSelections;
   const stateMessage = busy

@@ -98,7 +98,7 @@ public class ClusterApi {
     }
 
     /// List webserver process instances with liveness state
-    public func clustersInstancesList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, hostId: String? = nil, status: Int? = nil, healthState: String? = nil, joinMode: Int? = nil, syncStatus: Int? = nil, labels: String? = nil, search: String? = nil, buildVersion: String? = nil) async throws -> ClustersInstancesListResponse? {
+    public func clustersInstancesList(pageSize: Int? = nil, cursor: String? = nil, clusterId: String? = nil, hostId: String? = nil, status: Int? = nil, healthState: String? = nil, joinMode: Int? = nil, syncStatus: Int? = nil, labels: String? = nil, q: String? = nil, buildVersion: String? = nil) async throws -> ClustersInstancesListResponse? {
         let query = buildQueryString([
             QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "cursor", value: cursor, style: "form", explode: true, allowReserved: false, contentType: nil),
@@ -109,7 +109,7 @@ public class ClusterApi {
             QueryParameterSpec(name: "join_mode", value: joinMode, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "sync_status", value: syncStatus, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "labels", value: labels, style: "form", explode: true, allowReserved: false, contentType: nil),
-            QueryParameterSpec(name: "search", value: search, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "q", value: q, style: "form", explode: true, allowReserved: false, contentType: nil),
             QueryParameterSpec(name: "build_version", value: buildVersion, style: "form", explode: true, allowReserved: false, contentType: nil)
         ])
         return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances"), query), responseType: ClustersInstancesListResponse.self)

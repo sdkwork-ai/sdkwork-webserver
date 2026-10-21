@@ -48,7 +48,9 @@ pub use runtime_shutdown::{request_shutdown, shutdown_reason, wait_for_shutdown,
 // integration point instead of depending on repository crates directly
 // (API_ASSEMBLY_SPEC §4/§6).
 pub use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
-pub use sdkwork_intelligence_webserver_repository_sqlx::resolution_cache_from_shared_pool;
+pub use sdkwork_intelligence_webserver_repository_sqlx::{
+    resolution_cache_from_shared_pool, wechat_verification_by_hostname_lookup,
+};
 
 pub fn assembly_route_count() -> usize {
     generated::ROUTE_CRATE_COUNT

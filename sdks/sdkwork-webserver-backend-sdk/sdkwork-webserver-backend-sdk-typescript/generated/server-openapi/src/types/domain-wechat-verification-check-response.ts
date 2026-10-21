@@ -1,14 +1,14 @@
 export interface DomainWechatVerificationCheckResponse {
-  /** 是否有任一协议取回了 2xx 响应 */
+  /** Whether any protocol fetched a 2xx response. */
   reachable: boolean;
-  /** 取回内容是否与保存的文件逐字节一致 */
+  /** Whether the fetched content matches the stored file byte for byte. */
   matched: boolean;
-  /** 命中方案的 HTTP 状态码 */
+  /** HTTP status code of the matched attempt. */
   statusCode?: number;
-  /** 命中方案(https 或 http) */
+  /** Matched scheme (https or http). */
   scheme?: string;
-  /** 未通过时的一句话事实 */
+  /** One-line fact when the check did not pass. */
   detail?: string;
-  /** 自检时间 */
+  /** Time of the check. */
   checkedAt: string;
 }

@@ -6,6 +6,7 @@ pub mod dto;
 pub mod internal_ports;
 pub mod metrics;
 pub mod observability;
+pub mod plugins;
 pub mod problem;
 pub mod provider;
 pub mod tunnel;
@@ -20,6 +21,7 @@ pub use cluster::*;
 pub use dto::*;
 pub use internal_ports::*;
 pub use metrics::*;
+pub use plugins::*;
 pub use problem::{WebServiceError, WebServiceErrorKind, WebServiceResult};
 pub use provider::*;
 pub use sdkwork_webserver_core::{

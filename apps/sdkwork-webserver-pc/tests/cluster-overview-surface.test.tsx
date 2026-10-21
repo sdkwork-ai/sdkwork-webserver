@@ -218,7 +218,10 @@ describe("cluster overview states", () => {
     const alert = await screen.findByRole("alert");
     expect(container.firstElementChild?.className).toBe("cluster-overview-surface");
     expect(alert.textContent).toContain("集群概览不可用");
-    expect(alert.textContent).toContain("cluster plane unavailable");
+    // Raw transport sentences are not operator-facing copy: the shared
+    // formatter replaces them with the localized generic failure.
+    expect(alert.textContent).not.toContain("cluster plane unavailable");
+    expect(alert.textContent).toContain("操作未能完成");
     // No counters and no ledger on a page that never got a reading.
     expect(screen.queryByText("最近事件")).toBeNull();
   });

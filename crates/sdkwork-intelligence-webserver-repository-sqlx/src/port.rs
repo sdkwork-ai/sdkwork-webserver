@@ -22,19 +22,20 @@ use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateClusterRequest, CreateDeploymentRequest, CreateDomainRequest,
     CreateEnvVariableRequest, CreateHealthCheckRequest, CreateListenerCertificateBindingRequest,
     CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePlatformTargetRequest,
-    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreatePluginRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
     CreateServerResponse, CreateSourceVersionRequest, DeploymentPage, DeploymentResponse,
     DomainDnsRecordPage, DomainDnsRecordResponse, DomainPage, DomainResponse, EnvVariablePage, EnvVariableResponse,
     HealthCheckPage, HealthCheckResponse, IssueCertificateRequest, ListApplicationsQuery,
     ListAuditLogsQuery, ListNginxConfigsQuery, ListRootDomainsQuery,
     ListenerCertificateBindingPage, ListenerCertificateBindingResponse, NginxConfigPage,
-    NginxConfigResponse, NginxStatusResponse, PlatformTargetPage, PlatformTargetResponse,
-    RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
+    NginxConfigResponse, NginxConfigRevisionPage, NginxConfigRevisionResponse, NginxStatusResponse,
+    PlatformTargetPage, PlatformTargetResponse,
+    PluginPage, PluginResponse, RevokeCertificateRequest, RootDomainPage, RootDomainResponse, RuntimeAssignment,
     RuntimeAssignmentDelivery, RuntimeObservation, ServerPage, SourceVersionPage,
     SourceVersionResponse, TlsCertificateAssignmentMaterial, UpdateApplicationRequest,
     UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
     UpdateDomainApplicationBindingRequest, UpdateEnvVariableRequest, UpdateNginxConfigRequest,
-    UpdateRootDomainRequest,
+    UpdatePluginRequest, UpdateRootDomainRequest,
 };
 use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
 
@@ -164,6 +165,58 @@ impl WebRepositoryPort for WebRepository {
     ) -> WebServiceResult<PlatformTargetResponse> {
         self.retrieve_platform_target_repo(tenant_id, application_id, platform_target_id)
             .await
+    }
+
+    async fn create_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        request: &CreatePluginRequest,
+    ) -> WebServiceResult<PluginResponse> {
+        self.create_plugin_repo(tenant_id, user_id, request).await
+    }
+
+    async fn list_plugins(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        page: i32,
+        page_size: i32,
+        status: Option<&str>,
+        keyword: Option<&str>,
+    ) -> WebServiceResult<PluginPage> {
+        self.list_plugins_repo(tenant_id, user_id, page, page_size, status, keyword)
+            .await
+    }
+
+    async fn retrieve_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        plugin_id: &str,
+    ) -> WebServiceResult<PluginResponse> {
+        self.retrieve_plugin_repo(tenant_id, user_id, plugin_id)
+            .await
+    }
+
+    async fn update_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        plugin_id: &str,
+        request: &UpdatePluginRequest,
+    ) -> WebServiceResult<PluginResponse> {
+        self.update_plugin_repo(tenant_id, user_id, plugin_id, request)
+            .await
+    }
+
+    async fn delete_plugin(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        plugin_id: &str,
+    ) -> WebServiceResult<()> {
+        self.delete_plugin_repo(tenant_id, user_id, plugin_id).await
     }
 
     async fn list_domains(
@@ -426,6 +479,15 @@ impl WebRepositoryPort for WebRepository {
         page_size: i32,
     ) -> WebServiceResult<DomainPage> {
         self.list_managed_domains_repo(tenant_id, page, page_size)
+            .await
+    }
+
+    async fn retrieve_managed_domain(
+        &self,
+        tenant_id: i64,
+        domain_id: &str,
+    ) -> WebServiceResult<DomainResponse> {
+        self.retrieve_managed_domain_repo(tenant_id, domain_id)
             .await
     }
 
@@ -872,6 +934,37 @@ impl WebRepositoryPort for WebRepository {
         config_id: &str,
     ) -> WebServiceResult<NginxConfigResponse> {
         self.retrieve_nginx_config_repo(tenant_id, config_id).await
+    }
+
+    async fn list_nginx_config_revisions(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<NginxConfigRevisionPage> {
+        self.list_nginx_config_revisions_repo(tenant_id, config_id, page, page_size)
+            .await
+    }
+
+    async fn retrieve_nginx_config_revision(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<NginxConfigRevisionResponse> {
+        self.retrieve_nginx_config_revision_repo(tenant_id, config_id, version_no)
+            .await
+    }
+
+    async fn rollback_nginx_config_revision(
+        &self,
+        tenant_id: Option<i64>,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<NginxConfigResponse> {
+        self.rollback_nginx_config_revision_repo(tenant_id, config_id, version_no)
+            .await
     }
 
     async fn update_nginx_config(

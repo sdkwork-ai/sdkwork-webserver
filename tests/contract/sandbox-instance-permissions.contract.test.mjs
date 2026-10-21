@@ -101,12 +101,10 @@ test('the sibling sandbox route planes demand no web-domain permission code', ()
   }
   for (const file of manifests) {
     const source = read(file);
-    assert.ok(
-      !/with_required_permission\s*\(/u.test(source),
-      `${path.relative(WORKSPACE_ROOT, file)} declares a per-route permission; the sandbox ` +
-        'surface is machine-gated, so a web.* enforcement point cannot return without ' +
-        're-materializing this module catalog first',
-    );
+    // The sandbox module may enforce its own `sandbox.*` codes on its routes
+    // (it now declares `sandbox.instances.*` constants); what it must never do
+    // is demand a code from this module's `web.*` catalog, because that would
+    // need this module's catalog re-materialized first.
     assert.ok(
       !/\bweb\.[a-z]+\.[a-z_]+\b/u.test(source),
       `${path.relative(WORKSPACE_ROOT, file)} names a web.* permission code literally`,

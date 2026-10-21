@@ -148,7 +148,7 @@ func (a *ClusterApi) ClustersHostsDelete(hostId string, idempotencyKey string) (
 }
 
 // List webserver process instances with liveness state
-func (a *ClusterApi) ClustersInstancesList(pageSize *int, cursor *string, clusterId *string, hostId *string, status *int, healthState *string, joinMode *int, syncStatus *int, labels *string, search *string, buildVersion *string) (sdktypes.ClustersInstancesListResponse, error) {
+func (a *ClusterApi) ClustersInstancesList(pageSize *int, cursor *string, clusterId *string, hostId *string, status *int, healthState *string, joinMode *int, syncStatus *int, labels *string, q *string, buildVersion *string) (sdktypes.ClustersInstancesListResponse, error) {
     query := BuildQueryString([]QueryParameterSpec{
         {Name: "page_size", Value: func() interface{} { if pageSize == nil { return nil }; return *pageSize }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "cursor", Value: func() interface{} { if cursor == nil { return nil }; return *cursor }(), Style: "form", Explode: true, AllowReserved: false},
@@ -159,7 +159,7 @@ func (a *ClusterApi) ClustersInstancesList(pageSize *int, cursor *string, cluste
         {Name: "join_mode", Value: func() interface{} { if joinMode == nil { return nil }; return *joinMode }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "sync_status", Value: func() interface{} { if syncStatus == nil { return nil }; return *syncStatus }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "labels", Value: func() interface{} { if labels == nil { return nil }; return *labels }(), Style: "form", Explode: true, AllowReserved: false},
-        {Name: "search", Value: func() interface{} { if search == nil { return nil }; return *search }(), Style: "form", Explode: true, AllowReserved: false},
+        {Name: "q", Value: func() interface{} { if q == nil { return nil }; return *q }(), Style: "form", Explode: true, AllowReserved: false},
         {Name: "build_version", Value: func() interface{} { if buildVersion == nil { return nil }; return *buildVersion }(), Style: "form", Explode: true, AllowReserved: false},
     })
     raw, err := a.client.Get(AppendQueryString(BackendApiPath("/clusters/instances"), query), nil, nil)

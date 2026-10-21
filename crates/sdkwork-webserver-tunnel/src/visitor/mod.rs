@@ -78,6 +78,13 @@ impl VisitorProtocol {
 /// dropped: a relay must not turn UDP loss into unbounded memory growth.
 const DATAGRAM_QUEUE: usize = 256;
 
+/// Aggregate bytes one datagram listener may buffer across all its clients.
+/// The per-client queue is counted in packets, so 256 × max payload × N clients
+/// is unbounded in bytes; this budget is charged per queued datagram and
+/// released when the framed packet has been written. Datagrams that cannot get
+/// budget are dropped, never queued.
+const DATAGRAM_BUFFER_BUDGET_KIB: usize = 8 * 1024;
+
 /// How long a local datagram client may stay silent before its tunnel stream
 /// is released. Long enough for a NAT mapping and a request/response pause,
 /// short enough that idle clients do not accumulate streams.
@@ -467,6 +474,7 @@ async fn datagram_listener_loop(
 
     let clients: DatagramClients =
         Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+    let datagram_budget = Arc::new(tokio::sync::Semaphore::new(DATAGRAM_BUFFER_BUDGET_KIB));
     let mut buffer = vec![0_u8; sdkwork_webserver_tunnel_protocol::MAX_PACKET_PAYLOAD];
     let mut generation = 0_u64;
     loop {
@@ -485,21 +493,36 @@ async fn datagram_listener_loop(
                 continue;
             }
         };
-        let payload = buffer[..length].to_vec();
+        let mut payload = Some(buffer[..length].to_vec());
 
         // Send through the existing client's channel when it is alive.
         let mut sent = false;
         {
             let mut guard = clients.lock().await;
             if let Some(client) = guard.get(&peer) {
-                match client.sender.try_send(payload.clone()) {
+                let Some(bytes) = payload.take() else {
+                    continue;
+                };
+                let Some(budget) = reserve_datagram_budget(&datagram_budget, bytes.len()) else {
+                    // The listener's buffered-byte budget is exhausted; UDP
+                    // datagrams are dropped rather than buffered without bound.
+                    continue;
+                };
+                match client.sender.try_send(DatagramFrame {
+                    payload: bytes,
+                    _budget: budget,
+                }) {
                     Ok(()) => sent = true,
                     // Full queue: the tunnel is slower than this client. Drop
                     // the newest datagram instead of growing an unbounded
                     // buffer.
-                    Err(mpsc::error::TrySendError::Full(_)) => sent = true,
+                    Err(mpsc::error::TrySendError::Full(frame)) => {
+                        sent = true;
+                        drop(frame);
+                    }
                     // The writer task is gone; the entry is stale.
-                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                    Err(mpsc::error::TrySendError::Closed(frame)) => {
+                        payload = Some(frame.payload);
                         guard.remove(&peer);
                     }
                 }
@@ -508,6 +531,9 @@ async fn datagram_listener_loop(
         if sent {
             continue;
         }
+        let Some(payload) = payload else {
+            continue;
+        };
 
         // First datagram from this client (or the previous stream ended):
         // open a stream and start its two pumps.
@@ -550,8 +576,14 @@ async fn datagram_listener_loop(
 
         generation += 1;
         let generation = generation;
-        let (sender, receiver) = mpsc::channel::<Vec<u8>>(DATAGRAM_QUEUE);
-        let _ = sender.try_send(payload);
+        let Some(budget) = reserve_datagram_budget(&datagram_budget, payload.len()) else {
+            continue;
+        };
+        let (sender, receiver) = mpsc::channel::<DatagramFrame>(DATAGRAM_QUEUE);
+        let _ = sender.try_send(DatagramFrame {
+            payload,
+            _budget: budget,
+        });
         clients
             .lock()
             .await
@@ -580,7 +612,26 @@ struct DatagramClient {
     /// replaced it for the same client address.
     generation: u64,
     /// Datagrams waiting to be written to the tunnel.
-    sender: mpsc::Sender<Vec<u8>>,
+    sender: mpsc::Sender<DatagramFrame>,
+}
+
+/// One queued datagram plus its share of the listener's byte budget. The
+/// permit is released only after the framed packet has been written (or the
+/// datagram is dropped), so the budget measures buffered bytes, not lifetime.
+struct DatagramFrame {
+    payload: Vec<u8>,
+    _budget: tokio::sync::OwnedSemaphorePermit,
+}
+
+/// Charge one datagram's buffered bytes to the listener budget. `None` means
+/// the listener is already holding its allowed bytes and this datagram must be
+/// dropped (UDP semantics), never queued.
+fn reserve_datagram_budget(
+    budget: &Arc<tokio::sync::Semaphore>,
+    payload_bytes: usize,
+) -> Option<tokio::sync::OwnedSemaphorePermit> {
+    let kib = payload_bytes.div_ceil(1024).max(1).min(u32::MAX as usize) as u32;
+    Arc::clone(budget).try_acquire_many_owned(kib).ok()
 }
 
 /// Splits one client's stream into a write pump and a reply pump.
@@ -592,7 +643,7 @@ fn spawn_datagram_client(
     peer: SocketAddr,
     generation: u64,
     stream: Box<dyn TunnelStream>,
-    receiver: mpsc::Receiver<Vec<u8>>,
+    receiver: mpsc::Receiver<DatagramFrame>,
     stop: watch::Receiver<bool>,
     metrics: Arc<TunnelMetrics>,
 ) {
@@ -637,12 +688,12 @@ fn spawn_datagram_client(
         let mut receiver = receiver;
         let mut stop = stop;
         loop {
-            let payload = tokio::select! {
+            let frame = tokio::select! {
                 biased;
                 _ = stop.changed() => break,
                 received = tokio::time::timeout(DATAGRAM_IDLE_TIMEOUT, receiver.recv()) => {
                     match received {
-                        Ok(Some(payload)) => payload,
+                        Ok(Some(frame)) => frame,
                         // Channel closed: the listener is gone.
                         Ok(None) => break,
                         // Idle: release the tunnel stream.
@@ -650,10 +701,11 @@ fn spawn_datagram_client(
                     }
                 }
             };
+            let payload = &frame.payload;
             let mut framed = bytes::BytesMut::with_capacity(
                 payload.len() + sdkwork_webserver_tunnel_protocol::PACKET_LENGTH_BYTES,
             );
-            if sdkwork_webserver_tunnel_protocol::encode_packet(&payload, &mut framed).is_err() {
+            if sdkwork_webserver_tunnel_protocol::encode_packet(payload, &mut framed).is_err() {
                 continue;
             }
             if writer.write_all(&framed).await.is_err() || writer.flush().await.is_err() {
@@ -1041,5 +1093,22 @@ mod tests {
         backoff.reset_on_success();
         assert!(backoff.next().as_secs_f64() <= 1.2);
         assert_eq!(backoff.initial(), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn datagram_budget_is_charged_in_kib_and_released_on_drop() {
+        let budget = Arc::new(tokio::sync::Semaphore::new(2));
+        let first = reserve_datagram_budget(&budget, 1).expect("one KiB fits");
+        let second = reserve_datagram_budget(&budget, 1024).expect("second KiB fits");
+        assert!(
+            reserve_datagram_budget(&budget, 1).is_none(),
+            "a third datagram must be dropped when the listener budget is full"
+        );
+        drop(first);
+        assert!(
+            reserve_datagram_budget(&budget, 1024).is_some(),
+            "releasing a written datagram frees its bytes for the next one"
+        );
+        drop(second);
     }
 }

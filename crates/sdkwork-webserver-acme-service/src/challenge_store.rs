@@ -85,10 +85,16 @@ impl ChallengeStore {
         if validate_token(token).is_err() {
             return;
         }
-        if let Ok(mut guard) = self.tokens.write() {
-            guard.remove(token);
-            remove_challenge_file(challenge_path(webroot, token).as_deref());
+        // The map mutation and the filesystem unlink are deliberately split:
+        // `remove_file` can block on a slow or wedged webroot, and holding the
+        // store's write lock across it serialized every concurrent HTTP-01
+        // lookup (a read lock) behind that syscall, stalling CA validation.
+        {
+            if let Ok(mut guard) = self.tokens.write() {
+                guard.remove(token);
+            }
         }
+        remove_challenge_file(challenge_path(webroot, token).as_deref());
     }
 
     pub fn challenge_dir(webroot: &Path) -> PathBuf {
@@ -129,16 +135,18 @@ impl ChallengeStore {
         token: &str,
         generation: u64,
     ) -> AcmeServiceResult<()> {
-        let mut guard = self
-            .tokens
-            .write()
-            .map_err(|_| AcmeServiceError::Internal("challenge store lock poisoned".to_string()))?;
-        let published = guard
-            .get_mut(token)
-            .filter(|entry| entry.generation == generation)
-            .map(|entry| entry.ready = true)
-            .is_some();
+        let published = {
+            let mut guard = self.tokens.write().map_err(|_| {
+                AcmeServiceError::Internal("challenge store lock poisoned".to_string())
+            })?;
+            guard
+                .get_mut(token)
+                .filter(|entry| entry.generation == generation)
+                .map(|entry| entry.ready = true)
+                .is_some()
+        };
         if !published {
+            // Unlink after the guard is released (see `clear_token`).
             remove_challenge_file(challenge_path(webroot, token).as_deref());
             return Err(AcmeServiceError::Internal(
                 "ACME challenge registration was cancelled before publication".to_string(),
@@ -159,14 +167,25 @@ impl ChallengeStore {
     }
 
     fn clear_generation_and_file(&self, webroot: Option<&Path>, token: &str, generation: u64) {
-        if let Ok(mut guard) = self.tokens.write() {
+        let removed = {
+            let Ok(mut guard) = self.tokens.write() else {
+                return;
+            };
             if guard
                 .get(token)
                 .is_some_and(|entry| entry.generation == generation)
             {
                 guard.remove(token);
-                remove_challenge_file(challenge_path(webroot, token).as_deref());
+                true
+            } else {
+                false
             }
+        };
+        // Release the write lock before the unlink: this runs from
+        // `ChallengeLease::drop` inside async issuance, where a blocking
+        // `remove_file` under the lock would stall every challenge lookup.
+        if removed {
+            remove_challenge_file(challenge_path(webroot, token).as_deref());
         }
     }
 }

@@ -12,6 +12,13 @@ use sdkwork_webserver_core::nginx::{
     expand_includes, parse_nginx_config, NginxDirective, NginxParseError,
 };
 
+/// nginx treats `\` as an escape introducer, so a native Windows path in a
+/// directive does not name the file the test created. Tests spell paths the way
+/// a portable nginx configuration must: with forward slashes.
+fn nginx_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 fn parse(text: &str) -> Result<Vec<NginxDirective>, NginxParseError> {
     parse_nginx_config(text, Path::new("edge.conf"))
 }
@@ -231,7 +238,7 @@ fn included_files_keep_block_context() {
     .unwrap();
     let text = format!(
         "server {{\n    listen 80;\n    server_name inc.example.com;\n    include {};\n}}\n",
-        root.path().join("frag.conf").display()
+        nginx_path(&root.path().join("frag.conf"))
     );
     let parsed = parse_nginx_config(&text, Path::new("main.conf")).expect("parse");
     let mut budget = 16;

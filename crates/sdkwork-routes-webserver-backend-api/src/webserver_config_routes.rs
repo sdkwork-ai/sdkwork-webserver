@@ -19,7 +19,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Response,
     routing::get,
     Extension, Json, Router,
@@ -93,15 +93,22 @@ pub fn webserver_config_service_from_env() -> Result<WebserverConfigService, Web
 async fn list_webserver_configs(
     State(state): State<WebserverConfigState>,
     context: Option<Extension<WebBackendRequestContext>>,
+    Query(query): Query<CatalogPageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
     require_platform_operator(&context, "the Web Server configuration surface")?;
     let catalog = state
         .service
-        .catalog()
+        .catalog_page(query.page, query.page_size)
         .await
         .map_err(webserver_config_error)?;
     Ok(ok_json(&catalog))
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogPageQuery {
+    page: Option<i32>,
+    page_size: Option<i32>,
 }
 
 async fn read_webserver_config(

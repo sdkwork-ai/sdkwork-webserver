@@ -10,4 +10,6 @@ export const webserverShellApplicationEnUs = {
   "shell.status.loadingRuntime": "Loading SDKWork Web Server",
   "shell.status.loadingWorkspace": "Loading workspace",
   "shell.error.runtimeUnavailable": "Runtime configuration could not be loaded.",
+  "shell.error.workspaceUnavailable":
+    "The workspace could not be loaded. Reload the page or sign in again.",
 } as const;

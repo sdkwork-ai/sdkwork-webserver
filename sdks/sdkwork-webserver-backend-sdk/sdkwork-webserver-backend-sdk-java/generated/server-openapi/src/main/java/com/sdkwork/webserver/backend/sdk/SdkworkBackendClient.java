@@ -3,6 +3,7 @@ package com.sdkwork.webserver.backend.sdk;
 import com.sdkwork.common.core.Types;
 import com.sdkwork.webserver.backend.sdk.http.HttpClient;
 import com.sdkwork.webserver.backend.sdk.api.ApplicationApi;
+import com.sdkwork.webserver.backend.sdk.api.PluginApi;
 import com.sdkwork.webserver.backend.sdk.api.ApplicationDomainApi;
 import com.sdkwork.webserver.backend.sdk.api.CertificateApi;
 import com.sdkwork.webserver.backend.sdk.api.DomainApi;
@@ -23,6 +24,7 @@ import com.sdkwork.webserver.backend.sdk.api.MetricsSummaryApi;
 public class SdkworkBackendClient {
     private final HttpClient httpClient;
     private ApplicationApi application;
+    private PluginApi plugin;
     private ApplicationDomainApi applicationDomain;
     private CertificateApi certificate;
     private DomainApi domain;
@@ -43,6 +45,7 @@ public class SdkworkBackendClient {
     public SdkworkBackendClient(String baseUrl) {
         this.httpClient = new HttpClient(baseUrl);
         this.application = new ApplicationApi(httpClient);
+        this.plugin = new PluginApi(httpClient);
         this.applicationDomain = new ApplicationDomainApi(httpClient);
         this.certificate = new CertificateApi(httpClient);
         this.domain = new DomainApi(httpClient);
@@ -64,6 +67,7 @@ public class SdkworkBackendClient {
     public SdkworkBackendClient(Types.SdkConfig config) {
         this.httpClient = new HttpClient(config);
         this.application = new ApplicationApi(httpClient);
+        this.plugin = new PluginApi(httpClient);
         this.applicationDomain = new ApplicationDomainApi(httpClient);
         this.certificate = new CertificateApi(httpClient);
         this.domain = new DomainApi(httpClient);
@@ -84,6 +88,10 @@ public class SdkworkBackendClient {
 
     public ApplicationApi getApplication() {
         return this.application;
+    }
+
+    public PluginApi getPlugin() {
+        return this.plugin;
     }
 
     public ApplicationDomainApi getApplicationDomain() {

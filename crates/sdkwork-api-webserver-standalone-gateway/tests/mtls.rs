@@ -17,7 +17,7 @@ use rcgen::{
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::{net::TcpStream, sync::oneshot};
 
 fn free_port() -> u16 {
@@ -199,7 +199,7 @@ async fn required_client_auth_accepts_trusted_certificates_and_rejects_missing_o
     let directory = tempfile::tempdir().expect("temp dir");
     let port = free_port();
     let ca = write_test_ca(directory.path(), "client-ca");
-    let (server_cert, server_key, _, _) =
+    let (_server_cert, _server_key, _, _) =
         write_signed_identity(directory.path(), "server", &["mtls.localhost"], &ca, false);
     let (trusted_cert, trusted_key, _, _) =
         write_signed_identity(directory.path(), "trusted-client", &["client-a"], &ca, true);
@@ -267,7 +267,7 @@ async fn optional_client_auth_allows_certificate_less_handshakes() {
     let directory = tempfile::tempdir().expect("temp dir");
     let port = free_port();
     let ca = write_test_ca(directory.path(), "client-ca");
-    let (server_cert, server_key, _, _) =
+    let (_server_cert, _server_key, _, _) =
         write_signed_identity(directory.path(), "server", &["mtls.localhost"], &ca, false);
 
     let config_path = write_mtls_config(directory.path(), port, "optional");
@@ -293,7 +293,7 @@ async fn stream_tls_terminate_requires_client_certificates_when_configured() {
     let port = free_port();
     let upstream_port = free_port();
     let ca = write_test_ca(directory.path(), "stream-ca");
-    let (_server_cert, _server_key, server_der, _) = write_signed_identity(
+    let (_server_cert, _server_key, _server_der, _) = write_signed_identity(
         directory.path(),
         "stream-server",
         &["localhost"],

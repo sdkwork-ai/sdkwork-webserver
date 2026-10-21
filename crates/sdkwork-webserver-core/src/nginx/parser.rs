@@ -620,6 +620,13 @@ mod tests {
         parse_nginx_config(text, Path::new("test.conf")).expect("parse")
     }
 
+    /// nginx treats `\` as an escape introducer, so a native Windows path in a
+    /// directive does not name the file the test created. Tests spell paths the
+    /// way a portable nginx configuration must: with forward slashes.
+    fn nginx_test_path(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
     #[test]
     fn parses_server_upstream_and_location_blocks() {
         let directives = parse(
@@ -724,7 +731,10 @@ server {
         let directory = tempfile::tempdir().expect("temp dir");
         std::fs::write(directory.path().join("a.conf"), "server { listen 1; }\n").unwrap();
         std::fs::write(directory.path().join("b.conf"), "server { listen 2; }\n").unwrap();
-        let text = format!("include {};\n", directory.path().join("*.conf").display());
+        let text = format!(
+            "include {};\n",
+            nginx_test_path(&directory.path().join("*.conf"))
+        );
         let parsed = parse_nginx_config(&text, Path::new("main.conf")).expect("parse");
         let mut budget = 16;
         let mut stack = Vec::new();
@@ -832,7 +842,7 @@ server {
         std::fs::write(directory.path().join("other.txt"), "ignore\n").unwrap();
         let pattern = directory.path().join("site-?.conf");
         let parsed = parse_nginx_config(
-            &format!("include {};\n", pattern.display()),
+            &format!("include {};\n", nginx_test_path(&pattern)),
             Path::new("main.conf"),
         )
         .expect("parse");
@@ -843,7 +853,7 @@ server {
         assert_eq!(expanded.len(), 2);
         let pattern = directory.path().join("site-[ab].conf");
         let parsed = parse_nginx_config(
-            &format!("include {};\n", pattern.display()),
+            &format!("include {};\n", nginx_test_path(&pattern)),
             Path::new("main.conf"),
         )
         .expect("parse");
@@ -858,7 +868,7 @@ server {
         let parsed = parse_nginx_config(
             &format!(
                 "include {};\n",
-                directory.path().join("missing-*.conf").display()
+                nginx_test_path(&directory.path().join("missing-*.conf"))
             ),
             Path::new("main.conf"),
         )
@@ -901,7 +911,7 @@ server {
             &format!(
                 "include {};
 ",
-                root.path().join("sites-*/*.conf").display()
+                nginx_test_path(&root.path().join("sites-*/*.conf"))
             ),
             Path::new("main.conf"),
         )

@@ -1,0 +1,16 @@
+package com.sdkwork.webserver.backend.sdk
+
+data class UpdatePluginRequest(
+    val displayName: String? = null,
+    val summary: String? = null,
+    val version: String? = null,
+    val categoryId: String? = null,
+    val supportedHostTools: List<String>? = null,
+    val contributedCapabilities: List<String>? = null,
+    val gitRepository: String? = null,
+    val gitRef: String? = null,
+    val artifactRef: String? = null,
+    val checksumSha256: String? = null,
+    val archiveFileName: String? = null,
+    val status: String? = null
+)

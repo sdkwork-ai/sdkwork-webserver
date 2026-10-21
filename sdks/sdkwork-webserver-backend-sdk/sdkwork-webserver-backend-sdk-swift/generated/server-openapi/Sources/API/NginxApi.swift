@@ -62,6 +62,25 @@ public class NginxApi {
         return try await client.post(ApiPaths.backendPath("/nginx/etc/\(serializePathParameter(configId, PathParameterSpec(name: "configId", style: "simple", explode: false)))/deploy"), body: nil, params: nil, headers: requestHeaders, responseType: ConfigsDeployResponse.self)
     }
 
+    /// List an Nginx configuration's revisions
+    public func configsRevisionsList(configId: String, page: Int? = nil, pageSize: Int? = nil) async throws -> ConfigsRevisionsListResponse? {
+        let query = buildQueryString([
+            QueryParameterSpec(name: "page", value: page, style: "form", explode: true, allowReserved: false, contentType: nil),
+            QueryParameterSpec(name: "page_size", value: pageSize, style: "form", explode: true, allowReserved: false, contentType: nil)
+        ])
+        return try await client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/nginx/etc/\(serializePathParameter(configId, PathParameterSpec(name: "configId", style: "simple", explode: false)))/revisions"), query), responseType: ConfigsRevisionsListResponse.self)
+    }
+
+    /// Retrieve one Nginx configuration revision
+    public func configsRevisionsRetrieve(configId: String, versionNo: Int) async throws -> ConfigsRevisionsRetrieveResponse? {
+        return try await client.get(ApiPaths.backendPath("/nginx/etc/\(serializePathParameter(configId, PathParameterSpec(name: "configId", style: "simple", explode: false)))/revisions/\(serializePathParameter(versionNo, PathParameterSpec(name: "versionNo", style: "simple", explode: false)))"), responseType: ConfigsRevisionsRetrieveResponse.self)
+    }
+
+    /// Roll an Nginx configuration back to a revision
+    public func configsRevisionsRollback(configId: String, versionNo: Int) async throws -> ConfigsRevisionsRollbackResponse? {
+        return try await client.post(ApiPaths.backendPath("/nginx/etc/\(serializePathParameter(configId, PathParameterSpec(name: "configId", style: "simple", explode: false)))/revisions/\(serializePathParameter(versionNo, PathParameterSpec(name: "versionNo", style: "simple", explode: false)))/rollback"), body: nil, responseType: ConfigsRevisionsRollbackResponse.self)
+    }
+
     /// Reload Nginx
     public func reload(idempotencyKey: String) async throws -> ReloadResponse? {
         let requestHeaders = buildRequestHeaders(

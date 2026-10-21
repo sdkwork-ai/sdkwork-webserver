@@ -678,7 +678,7 @@ function RootDomainLedger({
             remove: (id) => client.domain.rootDomains.wechatVerification.delete(id),
             retrieve: (id) => client.domain.rootDomains.wechatVerification.retrieve(id),
             upsert: (id, body) =>
-              client.domain.rootDomains.wechatVerification.upsert(id, body, {
+              client.domain.rootDomains.wechatVerification.update(id, body, {
                 idempotencyKey: newIdempotencyKey(),
               }),
           }}
@@ -957,6 +957,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
   // 解析概要 per hostname row: one zone-wide snapshot read, grouped by the
   // matched subdomain id the snapshot rows carry.
   const [resolutionGroups, setResolutionGroups] = useState<Map<string, DomainDnsRecordResponse[]>>(new Map());
+  const [resolutionTruncated, setResolutionTruncated] = useState(false);
   // 微信认证文件对话框:子域名行与根域名行管理同一个根域名文件。
   const [verifyFileHostname, setVerifyFileHostname] = useState<ApplicationDomainResponse>();
   // The ledger's own cloud-account sync: the one gesture here that touches
@@ -1000,24 +1001,44 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
 
   // The summary tracks the same refresh gesture as the ledger but not the
   // pagination, and a failed summary read degrades the column to "-" rather
-  // than blanking rows the server answered.
+  // than blanking rows the server answered. It walks pages rather than trusting
+  // the first 200: a zone larger than one page would otherwise show a per-name
+  // DNS summary that silently omits everything past page one.
   useEffect(() => {
     let active = true;
-    void client.domain.rootDomains.dnsRecords
-      .list(rootDomainId, { page: 1, pageSize: 200 })
-      .then((result) => {
+    const pageSize = 200;
+    const maxPages = 20;
+    void (async () => {
+      const records: DomainDnsRecordResponse[] = [];
+      let truncated = false;
+      for (let page = 1; page <= maxPages; page += 1) {
+        const result = await client.domain.rootDomains.dnsRecords.list(rootDomainId, {
+          page,
+          pageSize,
+        });
+        records.push(...result.items);
+        if (result.pageInfo.hasMore !== true) break;
+        if (page === maxPages) truncated = true;
+      }
+      return { records, truncated };
+    })()
+      .then(({ records, truncated }) => {
         if (!active) return;
         const groups = new Map<string, DomainDnsRecordResponse[]>();
-        for (const record of result.items) {
+        for (const record of records) {
           if (record.domainId === undefined) continue;
           const bucket = groups.get(record.domainId);
           if (bucket === undefined) groups.set(record.domainId, [record]);
           else bucket.push(record);
         }
         setResolutionGroups(groups);
+        setResolutionTruncated(truncated);
       })
       .catch(() => {
-        if (active) setResolutionGroups(new Map());
+        if (active) {
+          setResolutionGroups(new Map());
+          setResolutionTruncated(false);
+        }
       });
     return () => {
       active = false;
@@ -1152,6 +1173,11 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
         </div>
       ) : null}
       {syncSummary ? <p className="form-hint">{syncSummary}</p> : null}
+      {resolutionTruncated ? (
+        <p className="warning" role="status">
+          {t("resource.domains.dnsSummaryTruncated")}
+        </p>
+      ) : null}
 
       {hostnames === null && !error ? (
         <div className="resource-loading" role="status">
@@ -1363,7 +1389,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
             remove: (id) => client.domain.rootDomains.wechatVerification.delete(id),
             retrieve: (id) => client.domain.rootDomains.wechatVerification.retrieve(id),
             upsert: (id, body) =>
-              client.domain.rootDomains.wechatVerification.upsert(id, body, {
+              client.domain.rootDomains.wechatVerification.update(id, body, {
                 idempotencyKey: newIdempotencyKey(),
               }),
           }}
@@ -2311,19 +2337,21 @@ function RootDomainHostnameDetail({ locale }: { locale: WebserverLocale }) {
   const [hostname, setHostname] = useState<ApplicationDomainResponse>();
 
   // Two reads, each settling on its own: the zone names the footer note and
-  // the subdomain names the header. A failed read must not blank the other.
+  // the hostname names the header. A failed read must not blank the other.
+  // The hostname is fetched by id: scanning a page of the subdomain list
+  // silently blanked every hostname past that page's size.
   useEffect(() => {
     let active = true;
     void Promise.allSettled([
       client.domain.rootDomains.retrieve(rootDomainId),
-      client.domain.rootDomains.subdomains.list(rootDomainId, { page: 1, pageSize: PAGE_SIZE }),
+      client.domain.retrieve(hostnameId),
     ]).then(([rootOutcome, hostnameOutcome]) => {
       if (!active) return;
       if (rootOutcome.status === "fulfilled") {
         setRoot(rootOutcome.value);
       }
       if (hostnameOutcome.status === "fulfilled") {
-        setHostname(hostnameOutcome.value.items.find((row) => row.id === hostnameId));
+        setHostname(hostnameOutcome.value);
       }
     });
     return () => {

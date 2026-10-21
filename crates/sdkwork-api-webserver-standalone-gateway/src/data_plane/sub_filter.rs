@@ -47,7 +47,11 @@ impl Drop for BufferBudgetGuard {
 }
 
 fn reserve_buffer_budget() -> Option<BufferBudgetGuard> {
-    let share = MAX_SUB_FILTER_BODY_BYTES;
+    // `apply_sub_filters` allocates the rewritten body while the source buffer
+    // is still alive, so one substitution transiently holds two full bodies.
+    // Reserve that worst case; under-reserving would let the stated aggregate
+    // cap be exceeded by 2x during the rewrite.
+    let share = MAX_SUB_FILTER_BODY_BYTES.saturating_mul(2);
     let mut current = BUFFERED_BYTES.load(Ordering::Relaxed);
     loop {
         if current + share > MAXIMUM_AGGREGATE_BUFFERED_BYTES {

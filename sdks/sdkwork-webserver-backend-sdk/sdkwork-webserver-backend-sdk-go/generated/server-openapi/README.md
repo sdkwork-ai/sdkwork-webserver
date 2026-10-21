@@ -56,6 +56,7 @@ client.SetHeader("X-Custom-Header", "value")
 ## API Modules
 
 - `client.Application` - application API
+- `client.Plugin` - plugin API
 - `client.ApplicationDomain` - application_domain API
 - `client.Certificate` - certificate API
 - `client.Domain` - domain API
@@ -88,6 +89,24 @@ params := map[string]interface{}{
     "q": "q",
 }
 result, err := client.Application.ApplicationsList(params)
+if err != nil {
+    panic(err)
+}
+fmt.Println(result)
+```
+
+### plugin
+
+```go
+// List the caller's plugin catalog
+params := map[string]interface{}{
+    "page": 1,
+    "page_size": 2,
+    "status": "draft",
+    "q": "q",
+    "owner_id": "owner_id",
+}
+result, err := client.Plugin.PluginsList(params)
 if err != nil {
     panic(err)
 }
@@ -229,7 +248,11 @@ fmt.Println(result)
 
 ```go
 // List the managed Web Server configuration catalog
-result, err := client.WebserverConfig.WebserverConfigsList()
+params := map[string]interface{}{
+    "page": 1,
+    "page_size": 2,
+}
+result, err := client.WebserverConfig.WebserverConfigsList(params)
 if err != nil {
     panic(err)
 }
@@ -285,7 +308,11 @@ fmt.Println(result)
 
 ```go
 // List the tunnel connector machines this gateway manages
-result, err := client.Tunnel.MachinesList()
+params := map[string]interface{}{
+    "page": 1,
+    "page_size": 2,
+}
+result, err := client.Tunnel.MachinesList(params)
 if err != nil {
     panic(err)
 }

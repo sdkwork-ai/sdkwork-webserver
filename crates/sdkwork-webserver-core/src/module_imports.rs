@@ -716,7 +716,7 @@ fn resolve_and_connect(authority: &str) -> bool {
     let Ok(mut addrs) = authority.to_socket_addrs() else {
         return false;
     };
-    addrs.any(|addr| tcp_reachable(addr))
+    addrs.any(tcp_reachable)
 }
 
 fn tcp_reachable(addr: SocketAddr) -> bool {

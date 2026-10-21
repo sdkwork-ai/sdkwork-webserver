@@ -73,6 +73,11 @@ pub struct DirectoryListing {
     pub path: String,
     pub parent_path: Option<String>,
     pub entries: Vec<ServerEntry>,
+    /// True when the directory has more children than `maximumEntries`.
+    /// The listing is capped, so this flag is the only way a client can tell a
+    /// complete listing from a truncated one.
+    #[serde(default)]
+    pub truncated: bool,
 }
 
 /// A file content response.
@@ -162,24 +167,28 @@ impl ServerFilesService {
         let root = self.root.clone();
         let maximum_entries = self.config.maximum_entries;
         let target_root = resolved.clone();
-        let (listed, listing_io_error) = tokio::task::spawn_blocking(move || {
+        let (listed, listing_io_error, truncated) = tokio::task::spawn_blocking(move || {
             let mut entries = Vec::new();
             let mut io_error: Option<std::io::Error> = None;
+            let mut truncated = false;
             match super::contained_io::open_contained(&root, &display_path(&target_root)) {
                 Ok(super::contained_io::ContainedTarget::Directory(directory)) => {
                     let parent = target_root.clone();
                     // cap-std's `entries()` is fallible up front (unlike
                     // `std::fs::read_dir`); iterate the `ReadDir`, not the
                     // `Result`.
-                    let read_dir = match directory.entries() {
+                    let mut read_dir = match directory.entries() {
                         Ok(read_dir) => read_dir,
                         Err(error) => {
                             io_error = Some(error);
-                            return (Ok(entries), io_error);
+                            return (Ok(entries), io_error, false);
                         }
                     };
-                    for entry in read_dir {
+                    while let Some(entry) = read_dir.next() {
                         if entries.len() >= maximum_entries {
+                            // One extra probe distinguishes "exactly at the
+                            // cap" from "more children exist".
+                            truncated = read_dir.next().is_some();
                             break;
                         }
                         let entry = match entry {
@@ -233,9 +242,9 @@ impl ServerFilesService {
                         "browse target is not a directory",
                     ));
                 }
-                Err(error) => return (Err(error), None),
+                Err(error) => return (Err(error), None, false),
             }
-            (Ok(entries), io_error)
+            (Ok(entries), io_error, truncated)
         })
         .await
         .map_err(|error| BrowseDirectoryError::Io {
@@ -255,6 +264,7 @@ impl ServerFilesService {
             path: display_path(&resolved),
             parent_path,
             entries,
+            truncated,
         })
     }
 

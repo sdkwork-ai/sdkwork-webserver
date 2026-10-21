@@ -101,7 +101,9 @@ async fn wait_until_ready(port: u16) {
                 .is_ok()
             {
                 let mut response = Vec::new();
-                if stream.read_to_end(&mut response).await.is_ok()
+                if timeout(Duration::from_secs(2), stream.read_to_end(&mut response))
+                    .await
+                    .is_ok_and(|read| read.is_ok())
                     && response.starts_with(b"HTTP/1.1 200")
                 {
                     return;
@@ -186,10 +188,16 @@ async fn handles_expect_continue_and_rejects_unsupported_expectations() {
     assert_eq!(informational, b"HTTP/1.1 100 Continue\r\n\r\n");
     stream.write_all(b"four").await.expect("write request body");
     let mut final_response = Vec::new();
-    stream
-        .read_to_end(&mut final_response)
-        .await
-        .expect("read final response");
+    // `Connection: close` promises the server closes after the final response;
+    // bound the read so a close regression fails the test instead of hanging
+    // the whole suite.
+    timeout(
+        Duration::from_secs(3),
+        stream.read_to_end(&mut final_response),
+    )
+    .await
+    .expect("final response terminates the connection")
+    .expect("read final response");
     assert!(final_response.starts_with(b"HTTP/1.1 200"));
     assert!(final_response.ends_with(b"accepted"));
 

@@ -8,18 +8,19 @@ use sdkwork_webserver_contract::{
     ClusterInstanceResponse, ClusterOverviewResponse, ClusterPage, ClusterResponse,
     ClusterSyncManifest, CreateApplicationRequest, CreateClusterRequest,
     CreateDomainDnsRecordRequest, CreateDomainRequest, CreateListenerCertificateBindingRequest,
-    CreateManagedDomainRequest, CreateNginxConfigRequest, CreateRootDomainHostnameRequest,
-    CreateRootDomainRequest, CreateServerRequest, CreateSourceVersionRequest,
-    CreateTunnelMachineRouteRequest, DomainDnsRecordStatusRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePluginRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, CreateTunnelMachineRouteRequest, DomainDnsRecordStatusRequest,
     EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse,
     ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
-    ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListRootDomainsQuery, MetricsSeriesWindow,
-    MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds, MetricsWindowRequest,
-    SetTunnelMachineEnabledRequest, TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse,
-    TrafficUsageWindow, TunnelMachineListResponse, TunnelMachineResponse,
-    TunnelMachineRouteDeclarationResponse, UpdateApplicationRequest, UpdateCertificateRequest,
-    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
-    UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest,
+    ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListPluginsQuery, ListRootDomainsQuery,
+    MetricsSeriesWindow, MetricsSummaryQuery, MetricsSummaryResponse, MetricsWindowBounds,
+    MetricsWindowRequest, PluginPage, PluginResponse, SetTunnelMachineEnabledRequest,
+    TrafficUsageStatisticsQuery, TrafficUsageStatisticsResponse, TrafficUsageWindow,
+    TunnelMachineListResponse, TunnelMachineResponse, TunnelMachineRouteDeclarationResponse,
+    UpdateApplicationRequest, UpdateCertificateRequest, UpdateClusterHostRequest,
+    UpdateClusterInstanceRequest, UpdateClusterRequest, UpdateDomainApplicationBindingRequest,
+    UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdatePluginRequest,
     UpdateRootDomainRequest, WebAppApi, WebAppRequestContext, WebAppResourceScope, WebBackendApi,
     WebBackendRequestContext, WebServiceError, WebServiceResult, DEFAULT_TRAFFIC_USAGE_TOP_APPS,
     DEFAULT_TRAFFIC_USAGE_WINDOW_DAYS, MAX_TRAFFIC_USAGE_TOP_APPS, MAX_TRAFFIC_USAGE_WINDOW_DAYS,
@@ -191,6 +192,19 @@ impl WebService {
             .filter(|tenant_id| *tenant_id > 0)
             .ok_or(WebServiceError::validation(
                 "tenant context is required for backend operations",
+            ))
+    }
+
+    /// Owner-scoped collections (the plugin catalog) need an authenticated
+    /// IAM subject: a tenant-wide operator with no user id has no personal
+    /// catalog to read or write, so the request fails closed instead of
+    /// writing an owner-less row.
+    fn require_backend_operator(context: &WebBackendRequestContext) -> WebServiceResult<i64> {
+        context
+            .operator_id
+            .filter(|operator_id| *operator_id > 0)
+            .ok_or(WebServiceError::validation(
+                "an authenticated operator is required for owner-scoped operations",
             ))
     }
 
@@ -1030,6 +1044,17 @@ impl WebBackendApi for WebService {
             .await
     }
 
+    async fn retrieve_managed_domain(
+        &self,
+        context: &WebBackendRequestContext,
+        domain_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.repository
+            .retrieve_managed_domain(tenant_id, domain_id)
+            .await
+    }
+
     async fn create_managed_domain(
         &self,
         context: &WebBackendRequestContext,
@@ -1518,6 +1543,43 @@ impl WebBackendApi for WebService {
             .await
     }
 
+    async fn list_nginx_config_revisions(
+        &self,
+        context: &WebBackendRequestContext,
+        config_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> WebServiceResult<sdkwork_webserver_contract::NginxConfigRevisionPage> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.repository
+            .list_nginx_config_revisions(Some(tenant_id), config_id, page, page_size)
+            .await
+    }
+
+    async fn retrieve_nginx_config_revision(
+        &self,
+        context: &WebBackendRequestContext,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<sdkwork_webserver_contract::NginxConfigRevisionResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.repository
+            .retrieve_nginx_config_revision(Some(tenant_id), config_id, version_no)
+            .await
+    }
+
+    async fn rollback_nginx_config_revision(
+        &self,
+        context: &WebBackendRequestContext,
+        config_id: &str,
+        version_no: i32,
+    ) -> WebServiceResult<sdkwork_webserver_contract::NginxConfigResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        self.repository
+            .rollback_nginx_config_revision(Some(tenant_id), config_id, version_no)
+            .await
+    }
+
     async fn update_nginx_config(
         &self,
         context: &WebBackendRequestContext,
@@ -1619,6 +1681,7 @@ impl WebBackendApi for WebService {
         &self,
         context: &WebBackendRequestContext,
     ) -> WebServiceResult<sdkwork_webserver_contract::NginxStatusResponse> {
+        self.require_nginx_edge()?;
         let tenant_id = Self::require_backend_tenant(context)?;
         let mut response = self
             .repository
@@ -1944,9 +2007,11 @@ impl WebBackendApi for WebService {
     async fn list_tunnel_machines(
         &self,
         context: &WebBackendRequestContext,
+        page: i32,
+        page_size: i32,
     ) -> WebServiceResult<TunnelMachineListResponse> {
         require_tunnel_operator(context)?;
-        crate::tunnel_machines::list_machines().await
+        crate::tunnel_machines::list_machines_page(page, page_size).await
     }
 
     async fn retrieve_tunnel_machine(
@@ -2048,6 +2113,82 @@ impl WebBackendApi for WebService {
         let windows = resolve_metrics_windows();
         let series = resolve_metrics_series_window(query)?;
         self.read_metrics_summary(None, &windows, &series).await
+    }
+
+    async fn list_plugins(
+        &self,
+        context: &WebBackendRequestContext,
+        query: &ListPluginsQuery,
+    ) -> WebServiceResult<PluginPage> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let owner_id = match query.owner_id {
+            // Cross-owner review is a platform-operator capability; a
+            // tenant-bound caller cannot widen its own catalog read.
+            Some(requested) => {
+                require_platform_operator_tenant(context)?;
+                requested
+            }
+            None => Self::require_backend_operator(context)?,
+        };
+        self.repository
+            .list_plugins(
+                tenant_id,
+                owner_id,
+                query.page,
+                query.page_size,
+                query.status.as_deref(),
+                query.q.as_deref(),
+            )
+            .await
+    }
+
+    async fn create_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        request: &CreatePluginRequest,
+    ) -> WebServiceResult<PluginResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let owner_id = Self::require_backend_operator(context)?;
+        self.repository
+            .create_plugin(tenant_id, owner_id, request)
+            .await
+    }
+
+    async fn retrieve_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        plugin_id: &str,
+    ) -> WebServiceResult<PluginResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let owner_id = Self::require_backend_operator(context)?;
+        self.repository
+            .retrieve_plugin(tenant_id, owner_id, plugin_id)
+            .await
+    }
+
+    async fn update_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        plugin_id: &str,
+        request: &UpdatePluginRequest,
+    ) -> WebServiceResult<PluginResponse> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let owner_id = Self::require_backend_operator(context)?;
+        self.repository
+            .update_plugin(tenant_id, owner_id, plugin_id, request)
+            .await
+    }
+
+    async fn delete_plugin(
+        &self,
+        context: &WebBackendRequestContext,
+        plugin_id: &str,
+    ) -> WebServiceResult<()> {
+        let tenant_id = Self::require_backend_tenant(context)?;
+        let owner_id = Self::require_backend_operator(context)?;
+        self.repository
+            .delete_plugin(tenant_id, owner_id, plugin_id)
+            .await
     }
 }
 

@@ -5,4 +5,6 @@ export interface ServerDirectoryListing {
   path: string;
   parentPath: string | null;
   entries: ServerEntry[];
+  /** True when the directory has more children than the deployment's maximumEntries cap; the listing is truncated. */
+  truncated?: boolean;
 }

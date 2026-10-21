@@ -6,6 +6,7 @@ namespace SDKWork.WebserverBackendSdk.Api
     public static class Api
     {
         public static ApplicationApi? Application { get; set; }
+        public static PluginApi? Plugin { get; set; }
         public static ApplicationDomainApi? ApplicationDomain { get; set; }
         public static CertificateApi? Certificate { get; set; }
         public static DomainApi? Domain { get; set; }

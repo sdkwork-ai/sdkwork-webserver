@@ -50,7 +50,7 @@ export class ApplicationDomainApplicationsDomainsApi {
   }
 
 /** Unbind an application public domain */
-  async delete(applicationId: string, domainId: string | number, params: ApplicationDomainApplicationsDomainsDeleteParams, requestOptions?: ApiRequestOptions): Promise<void> {
+  async delete(applicationId: string, domainId: string, params: ApplicationDomainApplicationsDomainsDeleteParams, requestOptions?: ApiRequestOptions): Promise<void> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
@@ -61,7 +61,7 @@ export class ApplicationDomainApplicationsDomainsApi {
   }
 
 /** Create or check an application-domain ownership challenge */
-  async verify(applicationId: string, domainId: string | number, params: ApplicationDomainApplicationsDomainsVerifyParams, requestOptions?: ApiRequestOptions): Promise<DomainVerifyResponse> {
+  async verify(applicationId: string, domainId: string, params: ApplicationDomainApplicationsDomainsVerifyParams, requestOptions?: ApiRequestOptions): Promise<DomainVerifyResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },

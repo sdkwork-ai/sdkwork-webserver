@@ -4,7 +4,7 @@ use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::{io::AsyncReadExt, io::AsyncWriteExt, net::TcpStream, sync::oneshot};
 
 fn free_port() -> u16 {

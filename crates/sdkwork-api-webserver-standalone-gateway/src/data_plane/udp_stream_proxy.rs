@@ -74,9 +74,26 @@ struct UdpSessions {
     /// Datagrams from a pending address are dropped (UDP senders retransmit);
     /// without this guard every retransmission would spawn a second setup.
     pending: HashMap<SocketAddr, Instant>,
+    /// Last full idle scan. Reaping on every datagram turns the packet path
+    /// into an O(sessions) scan behind one mutex.
+    last_reap: Option<Instant>,
 }
 
 impl UdpSessions {
+    /// Reap at most a few times per timeout window instead of on every
+    /// datagram. The interval is bounded so a long proxy timeout still clears
+    /// departed sessions promptly enough for the key budget.
+    fn reap_if_due(&mut self, now: Instant, proxy_timeout: Duration) {
+        let interval = (proxy_timeout / 4).clamp(Duration::from_secs(1), Duration::from_secs(30));
+        if self
+            .last_reap
+            .is_none_or(|last| now.saturating_duration_since(last) >= interval)
+        {
+            self.last_reap = Some(now);
+            self.reap(now, proxy_timeout);
+        }
+    }
+
     fn reap(&mut self, now: Instant, proxy_timeout: Duration) {
         // Idle sessions older than proxy_timeout are reaped; the session's
         // own forwarder also stops after the same window.
@@ -137,7 +154,7 @@ pub(crate) async fn serve_udp_stream_listener(
                     let mut state = shared
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    state.reap(now, proxy_timeout);
+                    state.reap_if_due(now, proxy_timeout);
                     match state.sessions.get(&client) {
                         Some(session) => {
                             if let Ok(mut guard) = session.lock() {

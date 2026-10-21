@@ -68,7 +68,7 @@ export function ServedCertificateAdminSurface({ locale, resource }: ServedCertif
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
-  }, [client, page]);
+  }, [client]);
 
   useEffect(() => {
     void load();

@@ -112,7 +112,7 @@ impl VerificationReport {
     /// Sorts findings so an operator reads the blocking ones first.
     fn sort(&mut self) {
         self.findings
-            .sort_by(|left, right| right.severity.cmp(&left.severity));
+            .sort_by_key(|finding| std::cmp::Reverse(finding.severity));
     }
 }
 
@@ -142,7 +142,7 @@ pub fn verify_config(config: &TunnelConfig, check_environment: bool) -> Verifica
     for (index, template) in routes.iter().enumerate() {
         verify_template(template, index, check_environment, &mut report);
     }
-    verify_route_interactions(&routes, &mut report);
+    verify_route_interactions(routes, &mut report);
 
     if let Some(gateway) = config.gateway.as_ref() {
         if gateway.route_port_min > gateway.route_port_max {

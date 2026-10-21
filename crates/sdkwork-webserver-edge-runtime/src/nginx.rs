@@ -395,6 +395,16 @@ fn validate_candidate_content(content: &str) -> EdgeRuntimeResult<()> {
             "nginx candidate exceeds {MAX_NGINX_CONFIG_BYTES} bytes"
         )));
     }
+    // The activation gate is enforced here, at the one place every staged
+    // site fragment passes through, rather than only on the operator admin
+    // surface. A tenant-supplied `deploy_app.nginx_conf` reaches this crate
+    // through the app-domain fallback sink, so scanning only in the service
+    // would leave an SSRF / arbitrary-include primitive on the shared edge.
+    if let Some(risk) = sdkwork_webserver_core::scan_nginx_directive_risks(content).first() {
+        return Err(EdgeRuntimeError::Nginx(format!(
+            "nginx configuration is not approved for activation: {risk}"
+        )));
+    }
     Ok(())
 }
 

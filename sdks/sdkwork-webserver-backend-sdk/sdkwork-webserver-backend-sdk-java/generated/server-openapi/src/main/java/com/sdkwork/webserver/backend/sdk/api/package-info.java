@@ -4,6 +4,7 @@
 package com.sdkwork.webserver.backend.sdk.api;
 
 import com.sdkwork.webserver.backend.sdk.api.ApplicationApi;
+import com.sdkwork.webserver.backend.sdk.api.PluginApi;
 import com.sdkwork.webserver.backend.sdk.api.ApplicationDomainApi;
 import com.sdkwork.webserver.backend.sdk.api.CertificateApi;
 import com.sdkwork.webserver.backend.sdk.api.DomainApi;

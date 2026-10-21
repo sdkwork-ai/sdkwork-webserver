@@ -123,6 +123,18 @@ pub struct WebserverConfigEntry {
 pub struct WebserverConfigCatalog {
     pub config_root: String,
     pub items: Vec<WebserverConfigEntry>,
+    /// True when the deployment has more catalog entries than
+    /// `maximumEntries`; `items` is the capped prefix.
+    #[serde(default)]
+    pub truncated: bool,
+    /// Present only when the caller requested a page; absent keeps the
+    /// historical “whole catalog” response.
+    #[serde(
+        rename = "pageInfo",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub page_info: Option<sdkwork_utils_rust::PageInfo>,
 }
 
 /// A configuration file content response.
@@ -221,6 +233,20 @@ impl WebserverConfigService {
     /// configs. Symlinks and dotfiles are never listed, so only regular,
     /// intentional configuration files are addressable.
     pub async fn catalog(&self) -> Result<WebserverConfigCatalog, WebserverConfigError> {
+        self.catalog_page(None, None).await
+    }
+
+    /// Enumerate the catalog, optionally over one offset page.
+    ///
+    /// `None`/`None` keeps the historical whole-catalog response. When a page
+    /// is requested the collected (already capped) set is sliced; a truncated
+    /// cap is reported through `truncated` and `hasMore`, and the exact totals
+    /// are omitted because the cap makes them unknowable.
+    pub async fn catalog_page(
+        &self,
+        page: Option<i32>,
+        page_size: Option<i32>,
+    ) -> Result<WebserverConfigCatalog, WebserverConfigError> {
         let mut items = Vec::new();
 
         // Default config: regular files directly in the config root.
@@ -255,11 +281,46 @@ impl WebserverConfigService {
                 .cmp(&right.kind.order())
                 .then_with(|| left.path.cmp(&right.path))
         });
+        // The collectors admit one entry past the cap so this flag can tell a
+        // complete catalog from a capped one instead of silently dropping.
+        let truncated = items.len() > self.config.maximum_entries;
         items.truncate(self.config.maximum_entries);
+
+        let (page_info, items) = match (page, page_size) {
+            (None, None) => (None, items),
+            (page, page_size) => {
+                let page = page.unwrap_or(1).max(1);
+                let page_size = page_size.unwrap_or(200).clamp(1, 200);
+                let total = items.len();
+                let offset = usize::try_from(page - 1)
+                    .unwrap_or(usize::MAX)
+                    .saturating_mul(usize::try_from(page_size).unwrap_or(usize::MAX));
+                let items = items
+                    .into_iter()
+                    .skip(offset)
+                    .take(usize::try_from(page_size).unwrap_or(usize::MAX))
+                    .collect::<Vec<_>>();
+                let total_pages = total.div_ceil(usize::try_from(page_size).unwrap_or(1));
+                let page_info = sdkwork_utils_rust::PageInfo {
+                    mode: sdkwork_utils_rust::PageMode::Offset,
+                    page: Some(page),
+                    page_size: Some(page_size),
+                    total_items: (!truncated).then(|| total.to_string()),
+                    total_pages: (!truncated)
+                        .then(|| i32::try_from(total_pages).ok())
+                        .flatten(),
+                    next_cursor: None,
+                    has_more: Some(truncated || offset.saturating_add(items.len()) < total),
+                };
+                (Some(page_info), items)
+            }
+        };
 
         Ok(WebserverConfigCatalog {
             config_root: self.config.config_root.clone(),
             items,
+            truncated,
+            page_info,
         })
     }
 
@@ -469,7 +530,7 @@ impl WebserverConfigService {
         relative_prefix: &str,
         items: &mut Vec<WebserverConfigEntry>,
     ) -> Result<(), WebserverConfigError> {
-        if items.len() >= self.config.maximum_entries {
+        if items.len() > self.config.maximum_entries {
             return Ok(());
         }
         if !directory.is_dir() {
@@ -480,7 +541,7 @@ impl WebserverConfigService {
             Err(_) => return Ok(()),
         };
         while let Ok(Some(entry)) = read_dir.next_entry().await {
-            if items.len() >= self.config.maximum_entries {
+            if items.len() > self.config.maximum_entries {
                 return Ok(());
             }
             let Ok(metadata) = entry.metadata().await else {
@@ -543,7 +604,7 @@ impl WebserverConfigService {
         };
         let mut scanned = 0usize;
         while let Ok(Some(module)) = read_dir.next_entry().await {
-            if scanned >= MAX_MODULE_SCAN_ROOTS || items.len() >= self.config.maximum_entries {
+            if scanned >= MAX_MODULE_SCAN_ROOTS || items.len() > self.config.maximum_entries {
                 return Ok(());
             }
             let Ok(metadata) = module.metadata().await else {
@@ -650,7 +711,7 @@ async fn prune_backups(directory: PathBuf, file_name: &str) {
     if backups.len() <= BACKUP_RETENTION {
         return;
     }
-    backups.sort_by(|left, right| right.1.cmp(&left.1));
+    backups.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     for (name, _) in backups.into_iter().skip(BACKUP_RETENTION) {
         let _ = tokio::fs::remove_file(directory.join(name)).await;
     }
@@ -923,5 +984,26 @@ mod tests {
             .map(|entry| entry.name.clone())
             .collect();
         assert_eq!(names, vec!["config.toml".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn catalog_page_slices_with_offset_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        write_file(&root.join("a.toml"), "a\n").await;
+        write_file(&root.join("b.toml"), "b\n").await;
+        write_file(&root.join("c.toml"), "c\n").await;
+        let service = service_for(root, None);
+
+        let page = service.catalog_page(Some(2), Some(1)).await.unwrap();
+        assert_eq!(page.items.len(), 1);
+        let page_info = page.page_info.expect("explicit page carries pageInfo");
+        assert_eq!(page_info.page, Some(2));
+        assert_eq!(page_info.page_size, Some(1));
+        assert_eq!(page_info.total_items.as_deref(), Some("3"));
+        assert_eq!(page_info.has_more, Some(true));
+
+        let last = service.catalog_page(Some(3), Some(1)).await.unwrap();
+        assert_eq!(last.page_info.expect("pageInfo").has_more, Some(false));
     }
 }

@@ -393,6 +393,8 @@ export const webserverWorkspaceEnUs = {
     "No cloud account can serve this root domain: bind one to it, or configure a DNS cloud account that covers its zone on this edge.",
   "resource.domains.dnsNoRecords":
     "No resolution-record snapshot yet. Sync through the cloud account to read one from the provider.",
+  "resource.domains.dnsSummaryTruncated":
+    "The per-hostname DNS summary covers the first 4,000 records; refine or sync again to see the rest.",
   "resource.domains.dnsSyncedSummary": "Synced {syncedAt} · {provider} · {count} records",
   // The Aliyun-style management plane on the resolution page: add/edit row,
   // per-record pause, delete, and the two filters the provider consoles offer.
@@ -485,6 +487,8 @@ export const webserverWorkspaceEnUs = {
   "resource.certificates.hostnamePickerTitle": "Choose hostnames",
   "resource.certificates.rootDomainSelect": "Root domain",
   "resource.certificates.hostnameCandidates": "Declared hostnames in this root domain",
+  "resource.certificates.hostnameCandidatesTruncated":
+    "Showing the first 2,000 hostnames only. Narrow the root domain to see the rest.",
   "resource.certificates.hostnamesLoading": "Loading hostnames…",
   "resource.certificates.noRootDomains": "No root domain is available",
   "resource.certificates.noHostnamesInRootDomain": "This root domain has no hostnames yet",

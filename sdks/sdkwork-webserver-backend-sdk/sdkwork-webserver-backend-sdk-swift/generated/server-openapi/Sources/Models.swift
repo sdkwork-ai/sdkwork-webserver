@@ -80,10 +80,12 @@ public struct TunnelMachineResponse: Codable {
 
 public struct TunnelMachineListResponse: Codable {
     public let machines: [TunnelMachineResponse]?
+    public let pageInfo: PageInfo?
 
 
-    public init(machines: [TunnelMachineResponse]? = nil) {
+    public init(machines: [TunnelMachineResponse]? = nil, pageInfo: PageInfo? = nil) {
         self.machines = machines
+        self.pageInfo = pageInfo
     }
 }
 
@@ -498,6 +500,113 @@ public struct ApplicationResponse: Codable {
     }
 }
 
+public struct PluginResponse: Codable {
+    public let id: String?
+    public let pluginKey: String?
+    public let displayName: String?
+    public let summary: String?
+    public let version: String?
+    public let categoryId: String?
+    public let supportedHostTools: [String]?
+    public let contributedCapabilities: [String]?
+    public let sourceKind: String?
+    public let gitRepository: String?
+    public let gitRef: String?
+    public let artifactRef: String?
+    public let checksumSha256: String?
+    public let archiveFileName: String?
+    public let status: String?
+    public let createdAt: String?
+    public let updatedAt: String?
+
+
+    public init(id: String? = nil, pluginKey: String? = nil, displayName: String? = nil, summary: String? = nil, version: String? = nil, categoryId: String? = nil, supportedHostTools: [String]? = nil, contributedCapabilities: [String]? = nil, sourceKind: String? = nil, gitRepository: String? = nil, gitRef: String? = nil, artifactRef: String? = nil, checksumSha256: String? = nil, archiveFileName: String? = nil, status: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
+        self.pluginKey = pluginKey
+        self.displayName = displayName
+        self.summary = summary
+        self.version = version
+        self.categoryId = categoryId
+        self.supportedHostTools = supportedHostTools
+        self.contributedCapabilities = contributedCapabilities
+        self.sourceKind = sourceKind
+        self.gitRepository = gitRepository
+        self.gitRef = gitRef
+        self.artifactRef = artifactRef
+        self.checksumSha256 = checksumSha256
+        self.archiveFileName = archiveFileName
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct CreatePluginRequest: Codable {
+    public let pluginKey: String?
+    public let displayName: String?
+    public let summary: String?
+    public let version: String?
+    public let categoryId: String?
+    public let supportedHostTools: [String]?
+    public let contributedCapabilities: [String]?
+    public let sourceKind: String?
+    public let gitRepository: String?
+    public let gitRef: String?
+    public let artifactRef: String?
+    public let checksumSha256: String?
+    public let archiveFileName: String?
+    public let status: String?
+
+
+    public init(pluginKey: String? = nil, displayName: String? = nil, summary: String? = nil, version: String? = nil, categoryId: String? = nil, supportedHostTools: [String]? = nil, contributedCapabilities: [String]? = nil, sourceKind: String? = nil, gitRepository: String? = nil, gitRef: String? = nil, artifactRef: String? = nil, checksumSha256: String? = nil, archiveFileName: String? = nil, status: String? = nil) {
+        self.pluginKey = pluginKey
+        self.displayName = displayName
+        self.summary = summary
+        self.version = version
+        self.categoryId = categoryId
+        self.supportedHostTools = supportedHostTools
+        self.contributedCapabilities = contributedCapabilities
+        self.sourceKind = sourceKind
+        self.gitRepository = gitRepository
+        self.gitRef = gitRef
+        self.artifactRef = artifactRef
+        self.checksumSha256 = checksumSha256
+        self.archiveFileName = archiveFileName
+        self.status = status
+    }
+}
+
+public struct UpdatePluginRequest: Codable {
+    public let displayName: String?
+    public let summary: String?
+    public let version: String?
+    public let categoryId: String?
+    public let supportedHostTools: [String]?
+    public let contributedCapabilities: [String]?
+    public let gitRepository: String?
+    public let gitRef: String?
+    public let artifactRef: String?
+    public let checksumSha256: String?
+    public let archiveFileName: String?
+    public let status: String?
+
+
+    public init(displayName: String? = nil, summary: String? = nil, version: String? = nil, categoryId: String? = nil, supportedHostTools: [String]? = nil, contributedCapabilities: [String]? = nil, gitRepository: String? = nil, gitRef: String? = nil, artifactRef: String? = nil, checksumSha256: String? = nil, archiveFileName: String? = nil, status: String? = nil) {
+        self.displayName = displayName
+        self.summary = summary
+        self.version = version
+        self.categoryId = categoryId
+        self.supportedHostTools = supportedHostTools
+        self.contributedCapabilities = contributedCapabilities
+        self.gitRepository = gitRepository
+        self.gitRef = gitRef
+        self.artifactRef = artifactRef
+        self.checksumSha256 = checksumSha256
+        self.archiveFileName = archiveFileName
+        self.status = status
+    }
+}
+
 public struct CreateApplicationDomainRequest: Codable {
     public let hostname: String?
     public let isPrimary: Bool?
@@ -607,6 +716,51 @@ public struct RootDomainResponse: Codable {
         self.activeDeploymentCount = activeDeploymentCount
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+}
+
+public struct DomainWechatVerificationResponse: Codable {
+    public let rootDomainId: String?
+    public let fileName: String?
+    public let content: String?
+    public let updatedAt: String?
+
+
+    public init(rootDomainId: String? = nil, fileName: String? = nil, content: String? = nil, updatedAt: String? = nil) {
+        self.rootDomainId = rootDomainId
+        self.fileName = fileName
+        self.content = content
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct UpsertDomainWechatVerificationRequest: Codable {
+    public let fileName: String?
+    public let content: String?
+
+
+    public init(fileName: String? = nil, content: String? = nil) {
+        self.fileName = fileName
+        self.content = content
+    }
+}
+
+public struct DomainWechatVerificationCheckResponse: Codable {
+    public let reachable: Bool?
+    public let matched: Bool?
+    public let statusCode: Int?
+    public let scheme: String?
+    public let detail: String?
+    public let checkedAt: String?
+
+
+    public init(reachable: Bool? = nil, matched: Bool? = nil, statusCode: Int? = nil, scheme: String? = nil, detail: String? = nil, checkedAt: String? = nil) {
+        self.reachable = reachable
+        self.matched = matched
+        self.statusCode = statusCode
+        self.scheme = scheme
+        self.detail = detail
+        self.checkedAt = checkedAt
     }
 }
 
@@ -1211,6 +1365,42 @@ public struct NginxConfigResponse: Codable {
     }
 }
 
+public struct NginxConfigRevisionSummary: Codable {
+    public let versionNo: Int?
+    public let configName: String?
+    public let configHash: String?
+    public let createdBy: String?
+    public let createdAt: String?
+
+
+    public init(versionNo: Int? = nil, configName: String? = nil, configHash: String? = nil, createdBy: String? = nil, createdAt: String? = nil) {
+        self.versionNo = versionNo
+        self.configName = configName
+        self.configHash = configHash
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+    }
+}
+
+public struct NginxConfigRevisionResponse: Codable {
+    public let versionNo: Int?
+    public let configName: String?
+    public let configContent: String?
+    public let configHash: String?
+    public let createdBy: String?
+    public let createdAt: String?
+
+
+    public init(versionNo: Int? = nil, configName: String? = nil, configContent: String? = nil, configHash: String? = nil, createdBy: String? = nil, createdAt: String? = nil) {
+        self.versionNo = versionNo
+        self.configName = configName
+        self.configContent = configContent
+        self.configHash = configHash
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+    }
+}
+
 public struct NginxConfigPage: Codable {
     public let items: [NginxConfigResponse]?
     public let total: String?
@@ -1369,13 +1559,15 @@ public struct ServerDirectoryListing: Codable {
     public let path: String?
     public let parentPath: String?
     public let entries: [ServerEntry]?
+    public let truncated: Bool?
 
 
-    public init(nodeId: String? = nil, path: String? = nil, parentPath: String? = nil, entries: [ServerEntry]? = nil) {
+    public init(nodeId: String? = nil, path: String? = nil, parentPath: String? = nil, entries: [ServerEntry]? = nil, truncated: Bool? = nil) {
         self.nodeId = nodeId
         self.path = path
         self.parentPath = parentPath
         self.entries = entries
+        self.truncated = truncated
     }
 }
 
@@ -1416,11 +1608,15 @@ public struct ServerFileContent: Codable {
 public struct WebserverConfigCatalog: Codable {
     public let configRoot: String?
     public let items: [WebserverConfigEntry]?
+    public let truncated: Bool?
+    public let pageInfo: PageInfo?
 
 
-    public init(configRoot: String? = nil, items: [WebserverConfigEntry]? = nil) {
+    public init(configRoot: String? = nil, items: [WebserverConfigEntry]? = nil, truncated: Bool? = nil, pageInfo: PageInfo? = nil) {
         self.configRoot = configRoot
         self.items = items
+        self.truncated = truncated
+        self.pageInfo = pageInfo
     }
 }
 
@@ -2366,6 +2562,58 @@ public struct ApplicationsCreateResponse201: Codable {
     }
 }
 
+public struct PluginsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct PluginsCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct PluginsRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct PluginsUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
 public struct ApplicationsRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
@@ -2613,6 +2861,45 @@ public struct RootDomainsDnsRecordsStatusUpdateResponse: Codable {
     }
 }
 
+public struct RootDomainsWechatVerificationRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsWechatVerificationUpdateResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct RootDomainsWechatVerificationCheckResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
 public struct RootDomainsDnsRecordsSyncResponse: Codable {
     public let code: Int?
     public let data: Any?
@@ -2640,6 +2927,19 @@ public struct DomainsListResponse: Codable {
 }
 
 public struct DomainsCreateResponse201: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct DomainsRetrieveResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -2913,6 +3213,45 @@ public struct ConfigsValidateResponse: Codable {
 }
 
 public struct ConfigsDeployResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ConfigsRevisionsListResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ConfigsRevisionsRetrieveResponse: Codable {
+    public let code: Int?
+    public let data: Any?
+    public let traceId: String?
+
+
+    public init(code: Int? = nil, data: Any? = nil, traceId: String? = nil) {
+        self.code = code
+        self.data = data
+        self.traceId = traceId
+    }
+}
+
+public struct ConfigsRevisionsRollbackResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

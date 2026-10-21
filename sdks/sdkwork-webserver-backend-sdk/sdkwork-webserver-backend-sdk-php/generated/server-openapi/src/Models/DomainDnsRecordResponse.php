@@ -11,13 +11,13 @@ final class DomainDnsRecordResponse
     /** Absolute record owner inside the zone, e.g. `www.example.com`. */
     public ?string $recordName = null;
 
-    /** Zone-relative 主机记录 (`@` for the apex, `www`, `*`). */
+    /** Zone-relative record owner (`@` for the apex, `www`, `*`). */
     public ?string $host = null;
 
     /** Record type as the provider spells it (A, AAAA, CNAME, TXT, MX). */
     public ?string $recordType = null;
 
-    /** Record content — the resolution IP for A/AAAA, the target for CNAME/MX. */
+    /** Record content - the resolution IP for A/AAAA, the target for CNAME/MX. */
     public ?string $recordValue = null;
 
     public ?int $ttlSeconds = null;

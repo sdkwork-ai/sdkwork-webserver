@@ -43,10 +43,15 @@ pub(crate) struct PreparedStreamListener {
     proxy_protocol: bool,
     round_robin: Arc<AtomicUsize>,
     tls: Option<StreamTlsMode>,
+    /// Built once at listener preparation. Rebuilding the SNI resolver and
+    /// re-reading the certificate files for every accepted connection put
+    /// filesystem I/O on the connection path and scaled with connection rate.
+    tls_acceptor: Option<TlsAcceptor>,
 }
 
 pub(crate) async fn prepare_stream_listener(
     config: &StreamServerConfig,
+    generation: &Arc<super::runtime::RuntimeGeneration>,
 ) -> Result<PreparedStreamListener, DataPlaneError> {
     let address = format!("{}:{}", config.bind, config.port);
     let socket = TcpListener::bind(&address)
@@ -61,6 +66,26 @@ pub(crate) async fn prepare_stream_listener(
             listener_id: config.id.clone(),
             source,
         })?;
+    // Stream listeners are fixed for the process lifetime (reloads take effect
+    // per connection for targets, not for the listener socket/TLS material), so
+    // a bad certificate is a startup error rather than a per-connection log.
+    let tls_acceptor = match config.tls.as_ref() {
+        Some(StreamTlsMode::Terminate {
+            certificate_ref,
+            client_auth,
+        }) => {
+            let resolved = resolve_stream_client_auth(generation, &config.id, client_auth.as_ref());
+            Some(
+                build_stream_tls_acceptor(generation, certificate_ref, resolved.as_ref()).map_err(
+                    |detail| DataPlaneError::StreamTlsMaterial {
+                        stream_id: config.id.clone(),
+                        detail,
+                    },
+                )?,
+            )
+        }
+        _ => None,
+    };
     tracing::info!(
         stream_id = %config.id,
         address = %local,
@@ -74,6 +99,31 @@ pub(crate) async fn prepare_stream_listener(
         proxy_protocol: config.proxy_protocol,
         round_robin: Arc::new(AtomicUsize::new(0)),
         tls: config.tls.clone(),
+        tls_acceptor,
+    })
+}
+
+/// Resolve the stream listener's client-auth CA paths from the generation.
+fn resolve_stream_client_auth(
+    generation: &super::runtime::RuntimeGeneration,
+    stream_id: &str,
+    client_auth: Option<&sdkwork_webserver_core::ClientAuthConfig>,
+) -> Option<sdkwork_webserver_core::ClientAuthConfig> {
+    client_auth.map(|auth| {
+        let resolved = generation
+            .app
+            .stream_client_auth_ca_paths(stream_id)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| auth.ca_certificate_files.clone());
+        sdkwork_webserver_core::ClientAuthConfig {
+            mode: auth.mode,
+            ca_certificate_files: resolved,
+        }
     })
 }
 
@@ -101,6 +151,15 @@ pub(crate) async fn serve_stream_listener(
             changed = shutdown.changed() => {
                 if changed.is_err() || *shutdown.borrow() {
                     break;
+                }
+            }
+            // Reap completed connection tasks while accepting. Without this
+            // arm `JoinSet` keeps every finished task's output until shutdown,
+            // so memory grew with the total number of closed stream
+            // connections instead of the concurrent count.
+            joined = tasks.join_next(), if !tasks.is_empty() => {
+                if let Some(Err(error)) = joined {
+                    tracing::warn!(stream_id = %listener.id, error = %error, "stream connection task failed");
                 }
             }
             accepted = listener.socket.accept() => {
@@ -142,6 +201,7 @@ pub(crate) async fn serve_stream_listener(
                 let proxy_timeout = listener.proxy_timeout;
                 let proxy_protocol = listener.proxy_protocol;
                 let tls = listener.tls.clone();
+                let tls_acceptor = listener.tls_acceptor.clone();
                 tasks.spawn(async move {
                     let result = serve_stream_connection(
                         runtime,
@@ -153,6 +213,7 @@ pub(crate) async fn serve_stream_listener(
                         proxy_protocol,
                         maximum_age,
                         tls.as_ref(),
+                        tls_acceptor.as_ref(),
                     )
                     .await;
                     drop(permit);
@@ -205,6 +266,7 @@ async fn serve_stream_connection(
     proxy_protocol: bool,
     maximum_age: Duration,
     tls: Option<&StreamTlsMode>,
+    tls_acceptor: Option<&TlsAcceptor>,
 ) -> Result<(), ()> {
     let generation = runtime.current();
     let stream_config = generation
@@ -238,37 +300,15 @@ async fn serve_stream_connection(
             }
             Ok(())
         }
-        Some(StreamTlsMode::Terminate {
-            certificate_ref,
-            client_auth,
-        }) => {
+        Some(StreamTlsMode::Terminate { .. }) => {
             let local = downstream.local_addr().unwrap_or(peer);
-            let resolved_client_auth = client_auth.as_ref().map(|auth| {
-                let resolved = generation
-                    .app
-                    .stream_client_auth_ca_paths(stream_id)
-                    .map(|paths| {
-                        paths
-                            .iter()
-                            .map(|path| path.to_string_lossy().into_owned())
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_else(|| auth.ca_certificate_files.clone());
-                sdkwork_webserver_core::ClientAuthConfig {
-                    mode: auth.mode,
-                    ca_certificate_files: resolved,
-                }
-            });
-            let acceptor = match build_stream_tls_acceptor(
-                &generation,
-                certificate_ref,
-                resolved_client_auth.as_ref(),
-            ) {
-                Ok(acceptor) => acceptor,
-                Err(error) => {
-                    tracing::warn!(stream_id, peer = %peer, error = %error, "stream TLS acceptor failed");
-                    return Err(());
-                }
+            let Some(acceptor) = tls_acceptor else {
+                tracing::warn!(
+                    stream_id,
+                    peer = %peer,
+                    "stream TLS acceptor was not prepared for a terminate listener"
+                );
+                return Err(());
             };
             let tls_downstream = match acceptor.accept(downstream).await {
                 Ok(stream) => stream,
@@ -600,7 +640,7 @@ async fn send_proxy_protocol_v1(
     upstream: &TcpStream,
     peer: SocketAddr,
 ) -> std::io::Result<()> {
-    let local = downstream.local_addr().unwrap_or_else(|_| peer);
+    let local = downstream.local_addr().unwrap_or(peer);
     send_proxy_protocol_v1_addrs(peer, local, upstream).await
 }
 

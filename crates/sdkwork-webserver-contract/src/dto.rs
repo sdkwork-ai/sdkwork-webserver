@@ -1742,9 +1742,31 @@ pub struct NginxConfigResponse {
     pub config_name: String,
     #[serde(rename = "configType")]
     pub config_type: i32,
+    #[serde(
+        rename = "configContent",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub config_content: String,
+    #[serde(rename = "configHash")]
+    pub config_hash: String,
     #[serde(rename = "isActive")]
     pub is_active: bool,
+    /// Monotonic content-revision counter for this config row. It is bumped on
+    /// every content update; `version` remains the optimistic-lock column.
+    #[serde(rename = "versionNo")]
+    pub version_no: i32,
+    #[serde(
+        rename = "deployedAt",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub deployed_at: Option<String>,
     pub status: i32,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1754,6 +1776,47 @@ pub struct NginxConfigPage {
     pub total: i64,
     pub page: i32,
     pub page_size: i32,
+}
+
+/// One nginx config revision without its body, for the paginated history list.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NginxConfigRevisionSummary {
+    #[serde(rename = "versionNo")]
+    pub version_no: i32,
+    #[serde(rename = "configName")]
+    pub config_name: String,
+    #[serde(rename = "configHash")]
+    pub config_hash: String,
+    #[serde(rename = "createdBy", default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NginxConfigRevisionPage {
+    pub items: Vec<NginxConfigRevisionSummary>,
+    #[serde(with = "sdkwork_utils_rust::serde_int64")]
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
+/// One nginx config revision including its immutable body.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct NginxConfigRevisionResponse {
+    #[serde(rename = "versionNo")]
+    pub version_no: i32,
+    #[serde(rename = "configName")]
+    pub config_name: String,
+    #[serde(rename = "configContent")]
+    pub config_content: String,
+    #[serde(rename = "configHash")]
+    pub config_hash: String,
+    #[serde(rename = "createdBy", default, skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

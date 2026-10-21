@@ -2,6 +2,12 @@
 
 Local contracts for `sdkwork-webserver`.
 
+Composition closure for the seven same-origin building blocks (webserver backend/internal, IAM,
+Drive, Skills, MCP, Sandbox, Deployments) is verified by `pnpm check:composable-architecture`,
+which runs the component-port, permission, Rust/frontend composition, resolved-graph, and app SDK
+consumer-import validators. `component.spec.json` declares the hosting component, its ports, SDK
+dependencies, dependency API surfaces, and the commands that prove the contract.
+
 - `component.spec.json`: component identity and verification entrypoints
 - `topology.spec.json`: runtime topology profile vocabulary and env bindings
 - `sdkwork.webserver.config.schema.json`: authored application Web Server configuration authority

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
 if TYPE_CHECKING:
+    from .page_info import PageInfo
     from .webserver_config_entry import WebserverConfigEntry
 
 
@@ -10,3 +11,5 @@ if TYPE_CHECKING:
 class WebserverConfigCatalog:
     config_root: str
     items: List[WebserverConfigEntry]
+    truncated: Optional[bool] = None
+    page_info: Optional[PageInfo] = None

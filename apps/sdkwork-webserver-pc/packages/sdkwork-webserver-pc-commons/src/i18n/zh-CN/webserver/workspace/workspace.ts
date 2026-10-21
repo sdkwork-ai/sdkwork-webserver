@@ -376,6 +376,7 @@ export const webserverWorkspaceZhCn = {
   "resource.domains.dnsNoCloudAccount":
     "没有云账号可以服务该根域名：请为其绑定云账号，或在本边缘配置覆盖该 Zone 的 DNS 云账号。",
   "resource.domains.dnsNoRecords": "尚无解析记录快照。通过云账号同步即可从服务商读取。",
+  "resource.domains.dnsSummaryTruncated": "每个主机的解析概要仅统计前 4,000 条记录，请缩小范围或重新同步查看其余项。",
   "resource.domains.dnsSyncedSummary": "同步于 {syncedAt} · {provider} · {count} 条记录",
   // 对齐阿里云解析设置页：添加记录内联行、行内编辑、暂停解析、删除与过滤。
   "resource.domains.dnsRecordHost": "主机记录",
@@ -463,6 +464,7 @@ export const webserverWorkspaceZhCn = {
   "resource.certificates.hostnamePickerTitle": "选择域名",
   "resource.certificates.rootDomainSelect": "根域名",
   "resource.certificates.hostnameCandidates": "该根域名下已声明的主机名",
+  "resource.certificates.hostnameCandidatesTruncated": "仅显示前 2,000 个主机名，请缩小根域名范围查看其余项。",
   "resource.certificates.hostnamesLoading": "正在读取主机名…",
   "resource.certificates.noRootDomains": "没有可用的根域名",
   "resource.certificates.noHostnamesInRootDomain": "该根域名下还没有主机名",

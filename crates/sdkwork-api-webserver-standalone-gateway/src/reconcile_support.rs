@@ -10,7 +10,8 @@
 //! posture (log and continue, never fail the boot over bookkeeping rows) and
 //! prevents their preconditions from drifting apart.
 
-use sdkwork_database_id::SnowflakeIdGenerator;
+use sdkwork_database_id::{NodeAllocatorConfig, SnowflakeIdGenerator, SnowflakeNodeAllocator};
+use sdkwork_database_sqlx::DatabasePool;
 use sdkwork_webserver_core::web_platform_operator_tenant_id;
 use sqlx::PgPool;
 
@@ -55,14 +56,12 @@ pub(crate) struct StartupReconcileContext {
 /// over a bookkeeping row would turn a missing inventory into an outage.
 #[cfg(feature = "management")]
 pub(crate) async fn startup_reconcile_context(operation: &str) -> Option<StartupReconcileContext> {
-    let pool = match sdkwork_database_sqlx::process_shared_database_pool() {
-        Some(sdkwork_database_sqlx::DatabasePool::Postgres(pool, _)) => pool,
-        None => {
-            tracing::warn!(
-                "the shared database pool is unavailable; {operation} was not reconciled"
-            );
-            return None;
-        }
+    let Some(database_pool) = sdkwork_database_sqlx::process_shared_database_pool() else {
+        tracing::warn!("the shared database pool is unavailable; {operation} was not reconciled");
+        return None;
+    };
+    let pool = match &database_pool {
+        DatabasePool::Postgres(pool, _) => pool.clone(),
     };
     let tenant_id = match web_platform_operator_tenant_id().parse::<i64>() {
         Ok(tenant_id) => tenant_id,
@@ -74,18 +73,13 @@ pub(crate) async fn startup_reconcile_context(operation: &str) -> Option<Startup
             return None;
         }
     };
-    let id_generator = match std::env::var("SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID") {
-        Ok(value) => match value.parse::<u16>() {
-            Ok(node_id) => match SnowflakeIdGenerator::new(node_id) {
-                Ok(generator) => generator,
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        "invalid snowflake node id; {operation} was not reconciled"
-                    );
-                    return None;
-                }
-            },
+    // An explicit non-zero node id wins; otherwise share the same registry
+    // lease allocator the management runtime uses, so reconciliation does not
+    // generate row ids on a node that collides with the main process.
+    let configured_node_id = match std::env::var("SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID") {
+        Ok(value) => match value.trim().parse::<u16>() {
+            Ok(0) => None,
+            Ok(node_id) => Some(node_id),
             Err(error) => {
                 tracing::warn!(
                     error = %error,
@@ -94,11 +88,36 @@ pub(crate) async fn startup_reconcile_context(operation: &str) -> Option<Startup
                 return None;
             }
         },
-        Err(_) => {
-            tracing::warn!(
-                "SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID is required to allocate inventory ids; {operation} was not reconciled"
-            );
-            return None;
+        Err(_) => None,
+    };
+    let id_generator = match configured_node_id {
+        Some(node_id) => match SnowflakeIdGenerator::new(node_id) {
+            Ok(generator) => generator,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "invalid snowflake node id; {operation} was not reconciled"
+                );
+                return None;
+            }
+        },
+        None => {
+            let service_name = "sdkwork-webserver";
+            match SnowflakeNodeAllocator::allocate_process_generator(
+                &database_pool,
+                &NodeAllocatorConfig::from_service_name(service_name),
+            )
+            .await
+            {
+                Ok((generator, _lease)) => generator,
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "snowflake node id is not configured and the node registry allocation failed; {operation} was not reconciled"
+                    );
+                    return None;
+                }
+            }
         }
     };
     Some(StartupReconcileContext {

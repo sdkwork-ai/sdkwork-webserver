@@ -173,14 +173,14 @@ impl WebService {
                         return Ok(DomainWechatVerificationCheckResponse {
                             reachable: true,
                             matched: true,
-                            status_code: Some(i32::try_from(status).unwrap_or_default()),
+                            status_code: Some(i32::from(status)),
                             scheme: Some(scheme.to_owned()),
                             detail: None,
                             checked_at,
                         });
                     }
                     if reachable.is_none() {
-                        reachable = Some((i32::try_from(status).unwrap_or_default(), scheme));
+                        reachable = Some((i32::from(status), scheme));
                     }
                     details.push(format!(
                         "{scheme}: reachable (HTTP {status}) but content differs from the stored file"

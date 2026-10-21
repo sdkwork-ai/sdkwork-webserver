@@ -253,7 +253,6 @@ pub fn verify_command(arguments: &[String]) -> Result<(), String> {
     // gateway, as the right user, through the right resolver.
     let mut endpoints: Vec<String> = Vec::new();
     let mut dns_server: Option<String> = None;
-    let mut dial_local_addr: Option<std::net::IpAddr> = None;
     let mut user: Option<String> = None;
     let mut login_fail_exit = false;
     // FRP `transport.dialServerLocalIP`: the egress address for dialing the

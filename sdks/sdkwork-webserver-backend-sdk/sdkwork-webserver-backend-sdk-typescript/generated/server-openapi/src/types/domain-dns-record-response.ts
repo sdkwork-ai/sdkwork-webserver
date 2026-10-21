@@ -2,11 +2,11 @@ export interface DomainDnsRecordResponse {
   id: string;
   /** Absolute record owner inside the zone, e.g. `www.example.com`. */
   recordName: string;
-  /** Zone-relative 主机记录 (`@` for the apex, `www`, `*`). */
+  /** Zone-relative record owner (`@` for the apex, `www`, `*`). */
   host: string;
   /** Record type as the provider spells it (A, AAAA, CNAME, TXT, MX). */
   recordType: string;
-  /** Record content — the resolution IP for A/AAAA, the target for CNAME/MX. */
+  /** Record content - the resolution IP for A/AAAA, the target for CNAME/MX. */
   recordValue: string;
   ttlSeconds?: number;
   /** Priority for the record types that carry one (MX, SRV). */

@@ -626,18 +626,20 @@ async fn route_admitted_request(
             return auth_basic_challenge_response(realm);
         }
     }
-    if !selected.route.limit_req.is_empty() {
-        let limit_req = state.runtime.limit_req.load();
-        if limit_req.admit(client_ip, &selected.route.limit_req) == LimitReqDecision::Reject {
-            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-                return response;
-            }
-            state
-                .runtime
-                .metrics
-                .record_request_rejection(RequestRejection::RateLimited);
-            return limit_req_rejected_response(request.version());
+    if !selected.route.limit_req.is_empty()
+        && generation
+            .limit_req
+            .admit(client_ip, &selected.route.limit_req)
+            == LimitReqDecision::Reject
+    {
+        if let Some(response) = classify_request(&state, admitted, false, request.version()) {
+            return response;
         }
+        state
+            .runtime
+            .metrics
+            .record_request_rejection(RequestRejection::RateLimited);
+        return limit_req_rejected_response(request.version());
     }
     // nginx error_page applies to generated errors; keep the request
     // identity for the internal redirect before any dispatch consumes the
@@ -648,10 +650,8 @@ async fn route_admitted_request(
         } else {
             Some((request.method().clone(), request.headers().clone()))
         };
-    let limit_conn_lease = match state
-        .runtime
+    let limit_conn_lease = match generation
         .limit_conn
-        .load()
         .admit(client_ip, &selected.route.limit_conn)
     {
         Ok(lease) => lease,
@@ -1179,13 +1179,10 @@ async fn resolve_error_pages(
     let mut pages: &[ErrorPageConfig] = pages;
     let mut hops = 0usize;
     loop {
-        let Some(entry) = pages
+        let entry = pages
             .iter()
             .rev()
-            .find(|page| page.codes.contains(&current_status.as_u16()))
-        else {
-            return None;
-        };
+            .find(|page| page.codes.contains(&current_status.as_u16()))?;
         let (hop_response, target_status, next_pages) = run_error_page_hop(
             state,
             generation,

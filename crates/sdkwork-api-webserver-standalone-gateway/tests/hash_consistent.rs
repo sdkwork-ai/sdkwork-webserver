@@ -2,7 +2,7 @@
 //! lands on the same target, and the consistent ring keeps existing keys on
 //! their targets when the target set changes.
 
-use std::{fs, net::TcpListener, path::PathBuf, sync::Arc, time::Duration};
+use std::{fs, net::TcpListener, path::PathBuf, time::Duration};
 
 use sdkwork_api_webserver_standalone_gateway::run_data_plane_until;
 use sdkwork_webserver_core::load_and_compile_webserver_config;

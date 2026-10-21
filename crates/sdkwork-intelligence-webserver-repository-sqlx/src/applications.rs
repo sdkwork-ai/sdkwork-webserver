@@ -55,7 +55,7 @@ impl WebRepository {
                AND ($2 IS NULL OR s.status = $2)
                AND ($3 IS NULL OR s.application_type = $3)
                AND ($4 IS NULL OR s.site_type = $4)
-               AND ($5 IS NULL OR a.name LIKE $5 ESCAPE '\' OR a.slug LIKE $5 ESCAPE '\')
+               AND ($5 IS NULL OR a.name LIKE $5 ESCAPE '\\' OR a.slug LIKE $5 ESCAPE '\\')
                AND ($6 IS NULL OR (a.data_scope = 3 AND a.user_id = $6))";
         let list_sql = format!(
             "{APPLICATION_SELECT}
@@ -63,7 +63,7 @@ impl WebRepository {
                AND ($2 IS NULL OR s.status = $2)
                AND ($3 IS NULL OR s.application_type = $3)
                AND ($4 IS NULL OR s.site_type = $4)
-               AND ($5 IS NULL OR a.name LIKE $5 ESCAPE '\' OR a.slug LIKE $5 ESCAPE '\')
+               AND ($5 IS NULL OR a.name LIKE $5 ESCAPE '\\' OR a.slug LIKE $5 ESCAPE '\\')
                AND ($6 IS NULL OR (a.data_scope = 3 AND a.user_id = $6))
              ORDER BY a.updated_at DESC, a.id DESC LIMIT $7 OFFSET $8"
         );
@@ -224,7 +224,7 @@ impl WebRepository {
         .await
         .map_err(|error| store_error("count tenant webserver_application", error))?;
         if live_applications >= capacity {
-            return Err(WebServiceError::conflict(&format!(
+            return Err(WebServiceError::conflict(format!(
                 "tenant already owns {live_applications} applications; the per-tenant capacity is {capacity}"
             )));
         }

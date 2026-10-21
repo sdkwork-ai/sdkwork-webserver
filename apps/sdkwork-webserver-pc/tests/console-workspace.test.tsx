@@ -40,7 +40,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * mounts the Deployments pages here rather than the admin ones.
  */
 const consoleModules = [deliveryModule, pluginsModule, skillsModule, mcpModule];
-const appUserPermissionScope = ["web.applications.*", "web.certificates.*"];
+// The console enforces each entry's declared permission. This fixture is the
+// scope of a user granted every console module the tests mount; a narrower
+// scope is covered by the hiding test below.
+const appUserPermissionScope = [
+  "deploy.apps.read",
+  "deploy.domainZones.read",
+  "deploy.certificates.read",
+  "web.plugins.read",
+  "skills.marketplace.read",
+  "mcp.marketplace.read",
+];
 
 function bridgedRenderers(): Partial<Record<WebserverResourceKey, ReactNode>> {
   const tokenManager = createTokenManager({ accessToken: "test-access-token", authToken: "test-auth-token" });
@@ -157,11 +167,11 @@ describe("console workspace access", () => {
     expect(onSignOut).toHaveBeenCalledOnce();
   });
 
-  it("allows any authenticated user to browse console pages without IAM resource scopes", () => {
+  it("hides console entries the permission scope does not grant", () => {
     stubEmptyListResponse();
     renderWorkspace("/console/apps", {}, [], vi.fn(), "en-US", bridgedRenderers());
 
-    expect(screen.getByRole("link", { name: "Applications" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Applications" })).toBeNull();
     expect(screen.queryByText("This feature is not authorized")).toBeNull();
   });
 

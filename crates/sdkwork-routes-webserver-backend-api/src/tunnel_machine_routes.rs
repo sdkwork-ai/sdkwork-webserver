@@ -7,7 +7,7 @@
 //! the service's concern, not this layer's.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Response,
     Extension, Json,
 };
@@ -22,9 +22,15 @@ use sdkwork_routes_webserver_common::{created_resource, no_content, ok_resource,
 pub(crate) async fn list_tunnel_machines(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
+    Query(query): Query<crate::routes::PageQuery>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
-    ok_resource(state.api.list_tunnel_machines(&context).await)
+    ok_resource(
+        state
+            .api
+            .list_tunnel_machines(&context, query.page, query.page_size)
+            .await,
+    )
 }
 
 pub(crate) async fn retrieve_tunnel_machine(

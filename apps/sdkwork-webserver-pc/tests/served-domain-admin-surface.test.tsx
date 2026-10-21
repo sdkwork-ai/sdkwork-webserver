@@ -297,6 +297,8 @@ function stubClient(): Stubs {
     Promise.resolve({ ...DNS_RECORDS[0], recordStatus: body.enabled ? "ENABLED" : "DISABLED" }));
   const syncDnsRecords = vi.fn().mockResolvedValue(DNS_SYNC_RESULT);
   const retrieveRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
+  const retrieveDomain = vi.fn().mockImplementation((id: string) =>
+    Promise.resolve(SUBDOMAINS.find((row) => row.id === id) ?? SUBDOMAINS[0]));
   const updateRootDomain = vi.fn().mockResolvedValue(ROOTS[0]);
   const deleteCertificate = vi.fn().mockResolvedValue(undefined);
   const renewCertificate = vi.fn().mockResolvedValue(undefined);
@@ -327,6 +329,7 @@ function stubClient(): Stubs {
     domain: {
       delete: deleteDomain,
       list: vi.fn().mockResolvedValue(page(SUBDOMAINS)),
+      retrieve: retrieveDomain,
       // The ownership challenge: the Domains ledger's own verify action, which is
       // the only step that turns a declared hostname into a coverable one.
       verify: verifyDomain,
@@ -689,6 +692,7 @@ describe("served domain admin surface", () => {
     const row = (await screen.findByText("sdkwork.com")).closest("tr");
     const actions = Array.from(row?.querySelectorAll(".row-actions > *") ?? []);
     expect(actions.map((node) => node.getAttribute("aria-label"))).toEqual([
+      "Verification file · sdkwork.com",
       "DNS resolution · sdkwork.com",
       "Hostnames · sdkwork.com",
       "Certificates · sdkwork.com",
@@ -696,14 +700,15 @@ describe("served domain admin surface", () => {
       "Pause sdkwork.com",
       "Delete sdkwork.com",
     ]);
-    // The first three carry words; the console's rules size the column for
+    // The first four carry words; the console's rules size the column for
     // text actions plus the lifecycle/destructive glyphs, and a bare
     // globe/certificate glyph there is exactly the defect the console's own
     // comment warns about.
     expect(actions[0]?.className).toContain("table-action-text");
     expect(actions[1]?.className).toContain("table-action-text");
     expect(actions[2]?.className).toContain("table-action-text");
-    expect(actions[3]?.className).not.toContain("table-action-text");
+    expect(actions[3]?.className).toContain("table-action-text");
+    expect(actions[4]?.className).not.toContain("table-action-text");
   });
 
   it("links the request-certificate action at the certificate ledger, scoped to that root", async () => {

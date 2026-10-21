@@ -14,7 +14,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as SyncMutex};
 use std::time::{Duration, Instant};
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use hashlink::LinkedHashMap;
 use sdkwork_webserver_contract::provider::{WebsiteProviderError, WebsiteProviderErrorKind};
@@ -174,7 +173,9 @@ pub fn classify_host(hostname: &str, suffixes: &[String]) -> HostClass {
 
 #[derive(Clone)]
 struct CacheEntry {
-    descriptor: Option<Value>,
+    /// Shared so a cache hit is a pointer bump; the JSON tree is parsed and
+    /// hashed once per resolution, not cloned per request.
+    descriptor: Option<Arc<Value>>,
     descriptor_sha256: Option<String>,
     attribution: Option<crate::usage_metering::UsageAttribution>,
     /// The app's nginx-compatible site configuration, cached so the edge sink
@@ -202,16 +203,17 @@ const MAXIMUM_FALLBACK_CACHE_ENTRIES: usize = 4096;
 /// 至多一次按摘要判等的重新物化。
 const MAXIMUM_NGINX_APPLICATION_LEDGER_ENTRIES: usize = 4096;
 
-/// 清扫过期条目并在达到上限时按到期时间驱逐最早条目，返回更新后的地图。
+/// 清扫过期条目并在达到上限时按到期时间驱逐最早条目。
 ///
-/// 抽成自由函数以便对"清扫 + 驱逐"行为直接做单元测试（与
-/// `data_plane::wechat_verify` 的缓存同款约束）。
+/// 原地更新调用方已加锁的 map：每次解析都克隆整张表会让插入变成 O(n) 拷贝，
+/// 在主机多样性攻击下把缓存本身变成放大器。抽成自由函数以便直接测试
+/// “清扫 + 驱逐”行为（与 `data_plane::wechat_verify` 的缓存同款约束）。
 fn remember_resolution(
-    mut cache: HashMap<String, Arc<CacheEntry>>,
+    cache: &mut HashMap<String, Arc<CacheEntry>>,
     hostname: String,
     entry: Arc<CacheEntry>,
     now: Instant,
-) -> HashMap<String, Arc<CacheEntry>> {
+) {
     cache.retain(|_, cached| cached.expires_at > now);
     if cache.len() >= MAXIMUM_FALLBACK_CACHE_ENTRIES && !cache.contains_key(&hostname) {
         let mut by_expiry: Vec<(String, Instant)> = cache
@@ -225,7 +227,6 @@ fn remember_resolution(
         }
     }
     cache.insert(hostname, entry);
-    cache
 }
 
 /// Resolves unmatched hosts through the Deploy control plane and serves the
@@ -236,7 +237,7 @@ pub struct DeployFallbackResolver {
     config: Arc<AppDomainFallbackConfig>,
     lookup: Arc<dyn DeployServerLookup>,
     environment: WebsiteRuntimeEnvironment,
-    cache: ArcSwap<HashMap<String, Arc<CacheEntry>>>,
+    cache: SyncMutex<HashMap<String, Arc<CacheEntry>>>,
     /// Compiled sites keyed by descriptor SHA-256 (LRU, bounded). This is
     /// both the recompilation fast path and the per-request correctness
     /// anchor: requests execute against the pinned compiled set, so a
@@ -297,7 +298,7 @@ impl DeployFallbackResolver {
             config,
             lookup,
             environment,
-            cache: ArcSwap::from_pointee(HashMap::new()),
+            cache: SyncMutex::new(HashMap::new()),
             compiled_sites: SyncMutex::new(LinkedHashMap::new()),
             activation: Mutex::new(()),
             generation: AtomicU64::new(0),
@@ -433,8 +434,11 @@ impl DeployFallbackResolver {
     /// Deploy control plane (tenant/app/binding for usage metering).
     pub fn attribution(&self, hostname: &str) -> Option<crate::usage_metering::UsageAttribution> {
         let hostname = hostname.trim().to_ascii_lowercase();
-        self.cache
-            .load()
+        let cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        cache
             .get(&hostname)
             .and_then(|entry| entry.attribution.clone())
     }
@@ -478,7 +482,13 @@ impl DeployFallbackResolver {
             }
         }
         let now = Instant::now();
-        let cached = self.cache.load().get(&hostname).cloned();
+        let cached = {
+            let cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            cache.get(&hostname).cloned()
+        };
         let (descriptor, descriptor_sha256, attribution, nginx_conf) = match cached {
             // Negative cache hit: the host was recently resolved to nothing;
             // do not hit the Deploy lookup again inside the negative TTL.
@@ -546,7 +556,7 @@ impl DeployFallbackResolver {
                                 server.nginx_conf_sha256,
                             );
                             (
-                                Some(server.descriptor_json),
+                                Some(Arc::new(server.descriptor_json)),
                                 Some(server.descriptor_sha256),
                                 attribution,
                                 nginx_conf,
@@ -561,22 +571,28 @@ impl DeployFallbackResolver {
                             (None, None, None, None)
                         }
                     };
-                    self.cache.store(Arc::new(remember_resolution(
-                        (**self.cache.load()).clone(),
-                        hostname.clone(),
-                        Arc::new(CacheEntry {
-                            descriptor: descriptor.clone(),
-                            descriptor_sha256: descriptor_sha256.clone(),
-                            attribution: attribution.clone(),
-                            nginx_conf: nginx_conf.clone(),
-                            expires_at: if descriptor.is_some() {
-                                now + Duration::from_millis(self.config.cache_ttl_ms)
-                            } else {
-                                now + Duration::from_millis(self.config.negative_cache_ttl_ms)
-                            },
-                        }),
-                        now,
-                    )));
+                    {
+                        let mut cache = self
+                            .cache
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        remember_resolution(
+                            &mut cache,
+                            hostname.clone(),
+                            Arc::new(CacheEntry {
+                                descriptor: descriptor.clone(),
+                                descriptor_sha256: descriptor_sha256.clone(),
+                                attribution: attribution.clone(),
+                                nginx_conf: nginx_conf.clone(),
+                                expires_at: if descriptor.is_some() {
+                                    now + Duration::from_millis(self.config.cache_ttl_ms)
+                                } else {
+                                    now + Duration::from_millis(self.config.negative_cache_ttl_ms)
+                                },
+                            }),
+                            now,
+                        );
+                    }
                     (descriptor, descriptor_sha256, attribution, nginx_conf)
                 }
             };
@@ -617,7 +633,7 @@ impl DeployFallbackResolver {
                 Some(compiled) => compiled,
                 None => {
                     let compiled = match self
-                        .compile_site_async(descriptor.clone(), Some(descriptor_sha256.clone()))
+                        .compile_site_async((*descriptor).clone(), Some(descriptor_sha256.clone()))
                         .await
                     {
                         Ok(compiled) => compiled,
@@ -666,22 +682,7 @@ impl DeployFallbackResolver {
         cache.insert(descriptor_sha256, compiled);
     }
 
-    fn compile_site(
-        &self,
-        descriptor_json: Value,
-        expected_sha256: Option<&str>,
-    ) -> Result<Arc<CompiledWebsiteRuntimeSet>, WebsiteDeliveryError> {
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
-        compile_site_snapshot(
-            generation,
-            self.runtime_registry_node_uuid(),
-            self.environment,
-            descriptor_json,
-            expected_sha256.map(str::to_owned),
-        )
-    }
-
-    /// [`DeployFallbackResolver::compile_site`] off the async worker: the
+    /// [`DeployFallbackResolver::compile_site_async`] off the async worker: the
     /// descriptor parse, canonical hashing, and route-index build are pure CPU
     /// work. The website path already compiles the same shape on the blocking
     /// pool; running this inline under the activation mutex parks an async
@@ -872,8 +873,8 @@ mod tests {
         let mut cache = HashMap::new();
         // 超出上限一截的不同主机名全部写入。
         for index in 0..(MAXIMUM_FALLBACK_CACHE_ENTRIES + 64) {
-            cache = remember_resolution(
-                cache,
+            remember_resolution(
+                &mut cache,
                 format!("host-{index}.example.com"),
                 Arc::new(entry(now + Duration::from_secs(60))),
                 now,
@@ -895,8 +896,8 @@ mod tests {
             "live.example.com".to_owned(),
             Arc::new(entry(now + Duration::from_secs(60))),
         );
-        let cache = remember_resolution(
-            cache,
+        remember_resolution(
+            &mut cache,
             "fresh.example.com".to_owned(),
             Arc::new(entry(now + Duration::from_secs(60))),
             now + Duration::from_secs(1),

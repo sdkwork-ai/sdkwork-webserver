@@ -45,6 +45,16 @@ pub async fn bootstrap_web_database(pool: DatabasePool) -> Result<WebDatabaseHos
         .execute(&mut *lock_tx)
         .await
         .map_err(|error| format!("configure Web database bootstrap lock: {error}"))?;
+    // This transaction stays idle while `run_web_database_bootstrap` executes on
+    // other pool connections. The pool default (60 s) would make PostgreSQL
+    // terminate this session in the middle of a longer migration, silently
+    // releasing the advisory lock and letting a second migrator run concurrently.
+    sqlx::query("SET LOCAL idle_in_transaction_session_timeout = 0")
+        .execute(&mut *lock_tx)
+        .await
+        .map_err(|error| {
+            format!("configure Web database bootstrap idle-in-transaction guard: {error}")
+        })?;
     sqlx::query("SELECT pg_advisory_xact_lock($1)")
         .bind(BOOTSTRAP_LOCK_KEY)
         .execute(&mut *lock_tx)

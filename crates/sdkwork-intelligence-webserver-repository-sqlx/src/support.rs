@@ -1,7 +1,7 @@
 use super::{EnginePool, EngineRow};
 use sdkwork_database_id::{uuid_v4, uuid_v4_with_prefix, SnowflakeIdGenerator};
 use sdkwork_utils_rust::crypto::sha256_hash;
-use sdkwork_webserver_contract::WebServiceError;
+use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
 use sqlx::{Error as SqlxError, Row};
 
 pub(crate) fn now_rfc3339() -> String {
@@ -12,8 +12,7 @@ pub(crate) fn now_rfc3339() -> String {
 /// filter: the caller's keyword becomes a literal substring pattern, with
 /// backslash, percent, and underscore escaped so a keyword of `"%"` filters on
 /// a literal percent sign instead of matching every row.
-pub(crate) fn like_contains_pattern(keyword: &str) -> String {
-    let escaped = keyword
+pub(crate) fn like_contains_pattern(keyword: &str) -> String {    let escaped = keyword
         .replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_");
@@ -41,6 +40,50 @@ pub(crate) fn store_error(context: &str, error: SqlxError) -> WebServiceError {
 
 pub(crate) fn is_unique_violation(error: &SqlxError) -> bool {
     matches!(error, SqlxError::Database(database) if database.code().as_deref() == Some("23505"))
+}
+
+/// Retry a transaction body whose failure is worth re-running: PostgreSQL
+/// serialization failures (`40001`) and deadlock victims (`40P01`) are
+/// transient by definition, and lock/statement timeouts (`55P03`/`57014`) can
+/// succeed once the competing transaction finishes. `store_error` maps all of
+/// these to `DatabaseUnavailable`, which is also what a pool timeout maps to;
+/// retrying that is harmless because the attempt is capped.
+///
+/// Only wrap an operation whose *whole* body is one atomic transaction and that
+/// is safe to re-run from the start: the failed attempt rolled back, and any id
+/// generated inside it is regenerated. The caller's idempotency key (where the
+/// operation has one) makes a replay return the committed result instead of
+/// inserting twice.
+pub(crate) async fn retry_transient_transaction<T, F, Fut>(
+    mut operation: F,
+) -> WebServiceResult<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = WebServiceResult<T>>,
+{
+    const MAX_ATTEMPTS: u32 = 3;
+    let mut attempt = 1_u32;
+    loop {
+        match operation().await {
+            Err(WebServiceError::DatabaseUnavailable) if attempt < MAX_ATTEMPTS => {
+                // Small exponential backoff plus sub-millisecond jitter so two
+                // contending writers do not retry in lockstep.
+                let jitter = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|elapsed| u64::from(elapsed.subsec_nanos() % 7))
+                    .unwrap_or(0);
+                let backoff_ms = 20 * u64::from(attempt) + jitter;
+                tracing::warn!(
+                    attempt,
+                    backoff_ms,
+                    "transient database transaction failure; retrying"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                attempt += 1;
+            }
+            other => return other,
+        }
+    }
 }
 
 pub(crate) fn pagination(page: i32, page_size: i32) -> Result<(i32, i32, i64), WebServiceError> {
@@ -104,9 +147,15 @@ fn cursor_hmac_secret() -> &'static str {
         .as_str()
 }
 
-pub(crate) fn encode_keyset_cursor(created_at: &str, id: i64) -> String {
+/// Encodes a keyset cursor bound to the operation and tenant that issued it.
+///
+/// The scope is part of the signed payload, so a cursor minted for one list
+/// (or one tenant) cannot be replayed against another: the decode below returns
+/// `None` when the caller's scope differs, and the route layer turns that into
+/// a validation error rather than silently continuing another collection.
+pub(crate) fn encode_keyset_cursor(scope: &str, created_at: &str, id: i64) -> String {
     use base64::Engine as _;
-    let payload = format!("v1|{created_at}|{id}");
+    let payload = format!("v1|{scope}|{created_at}|{id}");
     let signature = sdkwork_utils_rust::crypto::hmac_sha256(
         payload.as_bytes(),
         cursor_hmac_secret().as_bytes(),
@@ -115,30 +164,35 @@ pub(crate) fn encode_keyset_cursor(created_at: &str, id: i64) -> String {
         .encode(format!("{payload}|{signature}").as_bytes())
 }
 
-/// Decodes a keyset cursor produced by [`encode_keyset_cursor`]; returns
-/// `None` for malformed, oversized, unsigned, or out-of-range tokens so
-/// callers fail closed.
-pub(crate) fn decode_keyset_cursor(token: &str) -> Option<(String, i64)> {
+/// Decodes a keyset cursor produced by [`encode_keyset_cursor`] for the given
+/// scope; returns `None` for malformed, oversized, unsigned, out-of-range, or
+/// scope-mismatched tokens so callers fail closed.
+pub(crate) fn decode_keyset_cursor(scope: &str, token: &str) -> Option<(String, i64)> {
     use base64::Engine as _;
-    if token.is_empty() || token.len() > 512 {
+    if token.is_empty() || token.len() > 512 || !valid_cursor_scope(scope) {
         return None;
     }
     let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(token.as_bytes())
         .ok()?;
     let payload = std::str::from_utf8(&decoded).ok()?;
-    let mut parts = payload.splitn(4, '|');
+    let mut parts = payload.splitn(5, '|');
     let version = parts.next()?;
+    let payload_scope = parts.next()?;
     let created_at = parts.next()?;
     let id = parts.next()?;
     let signature = parts.next()?;
-    if version != "v1" || created_at.is_empty() || created_at.len() > 64 {
+    if version != "v1"
+        || payload_scope != scope
+        || created_at.is_empty()
+        || created_at.len() > 64
+    {
         return None;
     }
     // Integrity first: an unsigned or tampered tuple never reaches the
     // query layer (constant-time compare via the shared utils).
     let expected = sdkwork_utils_rust::crypto::hmac_sha256(
-        format!("v1|{created_at}|{id}").as_bytes(),
+        format!("v1|{payload_scope}|{created_at}|{id}").as_bytes(),
         cursor_hmac_secret().as_bytes(),
     );
     if !sdkwork_utils_rust::crypto::secure_compare(signature, &expected) {
@@ -152,6 +206,17 @@ pub(crate) fn decode_keyset_cursor(token: &str) -> Option<(String, i64)> {
         return None;
     }
     Some((created_at.to_string(), id))
+}
+
+/// A scope is a bounded ASCII label such as `certificates:410001`; the `|`
+/// separator and control bytes are rejected so the signed payload stays
+/// unambiguous.
+fn valid_cursor_scope(scope: &str) -> bool {
+    !scope.is_empty()
+        && scope.len() <= 128
+        && scope
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() && byte != b'|')
 }
 
 pub(crate) fn next_id(generator: &SnowflakeIdGenerator) -> Result<i64, WebServiceError> {
@@ -350,27 +415,97 @@ mod tests {
 
     #[test]
     fn keyset_cursors_round_trip_and_reject_tampering() {
-        let token = super::encode_keyset_cursor("2027-01-01T00:00:00Z", 42);
+        let scope = "certificates:410001";
+        let token = super::encode_keyset_cursor(scope, "2027-01-01T00:00:00Z", 42);
         assert_eq!(
-            super::decode_keyset_cursor(&token),
+            super::decode_keyset_cursor(scope, &token),
             Some(("2027-01-01T00:00:00Z".to_owned(), 42))
         );
+        // A cursor minted for one operation/tenant must not continue another.
+        assert!(super::decode_keyset_cursor("deployments:410001", &token).is_none());
+        assert!(super::decode_keyset_cursor("certificates:999999", &token).is_none());
 
         // A legacy unsigned tuple must fail closed.
         let unsigned = {
             use base64::Engine as _;
             base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode("v1|2027-01-01T00:00:00Z|42".as_bytes())
+                .encode(format!("v1|{scope}|2027-01-01T00:00:00Z|42").as_bytes())
         };
-        assert!(super::decode_keyset_cursor(&unsigned).is_none());
+        assert!(super::decode_keyset_cursor(scope, &unsigned).is_none());
 
         // Tampering with any tuple field breaks the HMAC.
         let forged = {
             use base64::Engine as _;
-            base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode("v1|2027-01-01T00:00:00Z|43|deadbeef".as_bytes())
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+                format!("v1|{scope}|2027-01-01T00:00:00Z|43|deadbeef").as_bytes(),
+            )
         };
-        assert!(super::decode_keyset_cursor(&forged).is_none());
-        assert!(super::decode_keyset_cursor("").is_none());
+        assert!(super::decode_keyset_cursor(scope, &forged).is_none());
+        assert!(super::decode_keyset_cursor(scope, "").is_none());
+    }
+}
+
+#[cfg(test)]
+mod transaction_retry_tests {
+    use super::retry_transient_transaction;
+    use sdkwork_webserver_contract::{WebServiceError, WebServiceResult};
+    use std::sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    };
+
+    #[tokio::test]
+    async fn retries_transient_failures_and_returns_the_committed_result() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let counter = Arc::clone(&attempts);
+        let result: WebServiceResult<u32> = retry_transient_transaction(move || {
+            let counter = Arc::clone(&counter);
+            async move {
+                let attempt = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                if attempt < 3 {
+                    Err(WebServiceError::DatabaseUnavailable)
+                } else {
+                    Ok(attempt)
+                }
+            }
+        })
+        .await;
+        assert_eq!(result.expect("third attempt commits"), 3);
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn non_transient_failures_are_not_retried() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let counter = Arc::clone(&attempts);
+        let result: WebServiceResult<()> = retry_transient_transaction(move || {
+            let counter = Arc::clone(&counter);
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err(WebServiceError::conflict("slug already exists"))
+            }
+        })
+        .await;
+        assert!(matches!(result, Err(WebServiceError::Conflict(_))));
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn retries_are_bounded() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let counter = Arc::clone(&attempts);
+        let result: WebServiceResult<()> = retry_transient_transaction(move || {
+            let counter = Arc::clone(&counter);
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err(WebServiceError::DatabaseUnavailable)
+            }
+        })
+        .await;
+        assert!(matches!(
+            result,
+            Err(WebServiceError::DatabaseUnavailable)
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
 }

@@ -45,10 +45,25 @@ async fn write_atomic(
             .await
             .map_err(|error| format!("create {}: {error}", parent.display()))?;
     }
-    let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
+    let temporary = path.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        sdkwork_utils_rust::uuid()
+    ));
     {
         use tokio::io::AsyncWriteExt;
-        let mut file = tokio::fs::File::create(&temporary)
+        // Create the staging file with its final mode from the first byte. A
+        // `create` under the process umask followed by a later chmod leaves a
+        // window where a private key is readable by other local users (and a
+        // crash in that window can leave it readable permanently).
+        let mut options = tokio::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            options.mode(mode);
+        }
+        let mut file = options
+            .open(&temporary)
             .await
             .map_err(|error| format!("create {}: {error}", temporary.display()))?;
         file.write_all(bytes)

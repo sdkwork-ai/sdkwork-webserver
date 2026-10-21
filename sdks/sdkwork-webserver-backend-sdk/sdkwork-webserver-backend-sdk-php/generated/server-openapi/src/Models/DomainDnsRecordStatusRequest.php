@@ -6,7 +6,7 @@ namespace SDKWork\Webserver\BackendSdk\Models;
 
 final class DomainDnsRecordStatusRequest
 {
-    /** `true` resumes the record; `false` pauses it (暂停解析). */
+    /** `true` resumes the record; `false` pauses it (paused resolution). */
     public ?bool $enabled = null;
 
     public function __construct(array $data = [])

@@ -51,6 +51,7 @@ client.SetHeader("X-Custom-Header", "value");
 ## API Modules
 
 - `client.Application` - application API
+- `client.Plugin` - plugin API
 - `client.ApplicationDomain` - application_domain API
 - `client.Certificate` - certificate API
 - `client.Domain` - domain API
@@ -84,6 +85,22 @@ var query = new Dictionary<string, object>
     ["q"] = "q",
 };
 var result = await client.Application.ApplicationsListAsync(query);
+Console.WriteLine(result);
+```
+
+### plugin
+
+```csharp
+// List the caller's plugin catalog
+var query = new Dictionary<string, object>
+{
+    ["page"] = 1,
+    ["page_size"] = 2,
+    ["status"] = "draft",
+    ["q"] = "q",
+    ["owner_id"] = "1",
+};
+var result = await client.Plugin.PluginsListAsync(query);
 Console.WriteLine(result);
 ```
 
@@ -202,7 +219,12 @@ Console.WriteLine(result);
 
 ```csharp
 // List the managed Web Server configuration catalog
-var result = await client.WebserverConfig.WebserverConfigsListAsync();
+var query = new Dictionary<string, object>
+{
+    ["page"] = 1,
+    ["page_size"] = 2,
+};
+var result = await client.WebserverConfig.WebserverConfigsListAsync(query);
 Console.WriteLine(result);
 ```
 
@@ -248,7 +270,12 @@ Console.WriteLine(result);
 
 ```csharp
 // List the tunnel connector machines this gateway manages
-var result = await client.Tunnel.MachinesListAsync();
+var query = new Dictionary<string, object>
+{
+    ["page"] = 1,
+    ["page_size"] = 2,
+};
+var result = await client.Tunnel.MachinesListAsync(query);
 Console.WriteLine(result);
 ```
 

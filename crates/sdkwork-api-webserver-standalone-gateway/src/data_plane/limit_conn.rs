@@ -19,6 +19,9 @@ use sdkwork_webserver_core::{LimitConnConfig, LimitConnZoneConfig};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum LimitConnDecision {
+    /// Used as the `Err` sentinel that releases a tracked connection without
+    /// rejecting it; the condition is matched but never constructed.
+    #[allow(dead_code)]
     Allow,
     Reject,
 }
@@ -57,55 +60,45 @@ impl LimitConnRuntime {
         client_ip: IpAddr,
         rules: &[LimitConnConfig],
     ) -> Result<ConnectionLease, LimitConnDecision> {
-        let mut acquired: Vec<&str> = Vec::with_capacity(rules.len());
+        // A location may carry several `limit_conn` directives (one per zone).
+        // One slot is taken in every zone, so the lease must remember every
+        // zone it touched: releasing only the first one leaked the remaining
+        // slots permanently and turned a multi-rule location into a 503 after
+        // `maxConnections` requests for that key.
+        let mut acquired: Vec<Arc<Mutex<ZoneState>>> = Vec::with_capacity(rules.len());
         for rule in rules {
             let Some(zone) = self.zones.get(&rule.zone) else {
                 // Semantic validation should reject unknown zones; fail closed.
-                for zone_name in &acquired {
-                    self.release(zone_name, client_ip);
-                }
+                release_all(&acquired, client_ip);
                 return Err(LimitConnDecision::Reject);
             };
             let Ok(mut state) = zone.lock() else {
-                for zone_name in &acquired {
-                    self.release(zone_name, client_ip);
-                }
+                release_all(&acquired, client_ip);
                 return Err(LimitConnDecision::Reject);
             };
-            if !state.try_acquire(client_ip, rule.max_connections) {
-                for zone_name in &acquired {
-                    self.release(zone_name, client_ip);
-                }
+            let admitted = state.try_acquire(client_ip, rule.max_connections);
+            // Drop the guard before any rollback: a rule list that repeats the
+            // same zone would otherwise try to re-lock the mutex this thread
+            // still holds and deadlock the request.
+            drop(state);
+            if !admitted {
+                release_all(&acquired, client_ip);
                 return Err(LimitConnDecision::Reject);
             }
-            acquired.push(rule.zone.as_str());
+            acquired.push(Arc::clone(zone));
         }
-        let Some(first) = rules.first() else {
-            return Ok(ConnectionLease {
-                zone: None,
-                client_ip,
-            });
-        };
-        let zone = self.zones.get(&first.zone).expect("checked zone");
         Ok(ConnectionLease {
-            zone: Some(zone.clone()),
+            zones: acquired,
             client_ip,
         })
     }
+}
 
-    /// Release one connection slot for a key (rollback and drop path).
-    fn release(&self, zone_name: &str, client_ip: IpAddr) {
-        let Some(zone) = self.zones.get(zone_name) else {
-            return;
-        };
-        let Ok(mut state) = zone.lock() else {
-            return;
-        };
-        if let Some(count) = state.entries.get_mut(&client_ip) {
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                state.entries.remove(&client_ip);
-            }
+/// Roll back every slot a rejected admission already took.
+fn release_all(zones: &[Arc<Mutex<ZoneState>>], client_ip: IpAddr) {
+    for zone in zones {
+        if let Ok(mut state) = zone.lock() {
+            state.release_slot(client_ip);
         }
     }
 }
@@ -127,27 +120,30 @@ impl ZoneState {
         self.entries.insert(client_ip, 1);
         true
     }
+
+    fn release_slot(&mut self, client_ip: IpAddr) {
+        if let Some(count) = self.entries.get_mut(&client_ip) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.entries.remove(&client_ip);
+            }
+        }
+    }
 }
 
-/// Releases its connection slot on drop. `zone == None` is the no-op lease
-/// used when no rule matched, so the response body wrapper stays simple.
+/// Releases its connection slots on drop — one counter per zone the request
+/// was admitted against. An empty `zones` vector is the no-op lease used when
+/// no rule matched, so the response body wrapper stays simple.
 pub(super) struct ConnectionLease {
-    zone: Option<Arc<Mutex<ZoneState>>>,
+    zones: Vec<Arc<Mutex<ZoneState>>>,
     client_ip: IpAddr,
 }
 
 impl Drop for ConnectionLease {
     fn drop(&mut self) {
-        let Some(zone) = &self.zone else {
-            return;
-        };
-        let Ok(mut state) = zone.lock() else {
-            return;
-        };
-        if let Some(count) = state.entries.get_mut(&self.client_ip) {
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                state.entries.remove(&self.client_ip);
+        for zone in &self.zones {
+            if let Ok(mut state) = zone.lock() {
+                state.release_slot(self.client_ip);
             }
         }
     }
@@ -196,6 +192,99 @@ mod tests {
             key: "$binary_remote_addr".to_owned(),
             max_keys: 16,
         }
+    }
+
+    fn named_zone(name: &str) -> LimitConnZoneConfig {
+        LimitConnZoneConfig {
+            name: name.to_owned(),
+            key: "$binary_remote_addr".to_owned(),
+            max_keys: 16,
+        }
+    }
+
+    /// Current counted connections for one key in one zone.
+    fn counted(runtime: &LimitConnRuntime, zone_name: &str, ip: IpAddr) -> u32 {
+        runtime
+            .zones
+            .get(zone_name)
+            .and_then(|zone| zone.lock().ok())
+            .and_then(|state| state.entries.get(&ip).copied())
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn dropping_a_lease_releases_every_admitted_zone() {
+        // A location may carry more than one `limit_conn` directive. Both
+        // slots must be returned when the response body completes; releasing
+        // only the first zone leaked the rest forever.
+        let runtime = LimitConnRuntime::from_zones(&[named_zone("perip"), named_zone("perserver")]);
+        let rules = [
+            LimitConnConfig {
+                zone: "perip".to_owned(),
+                max_connections: 1,
+            },
+            LimitConnConfig {
+                zone: "perserver".to_owned(),
+                max_connections: 1,
+            },
+        ];
+        let ip = IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4));
+        let lease = runtime.admit(ip, &rules).expect("multi-zone admit");
+        assert_eq!(counted(&runtime, "perip", ip), 1);
+        assert_eq!(counted(&runtime, "perserver", ip), 1);
+        drop(lease);
+        assert_eq!(counted(&runtime, "perip", ip), 0);
+        assert_eq!(
+            counted(&runtime, "perserver", ip),
+            0,
+            "the second zone's slot must be released too"
+        );
+        // Both zones admit again after the release.
+        runtime.admit(ip, &rules).expect("both zones free again");
+    }
+
+    #[test]
+    fn a_later_rule_rejection_rolls_back_every_taken_slot() {
+        let runtime = LimitConnRuntime::from_zones(&[
+            LimitConnZoneConfig {
+                name: "tight".to_owned(),
+                key: "$binary_remote_addr".to_owned(),
+                max_keys: 16,
+            },
+            LimitConnZoneConfig {
+                name: "blocked".to_owned(),
+                key: "$binary_remote_addr".to_owned(),
+                max_keys: 0,
+            },
+        ]);
+        let ip = IpAddr::V4(Ipv4Addr::new(5, 6, 7, 8));
+        let rules = [
+            LimitConnConfig {
+                zone: "tight".to_owned(),
+                max_connections: 8,
+            },
+            LimitConnConfig {
+                zone: "blocked".to_owned(),
+                max_connections: 8,
+            },
+        ];
+        // `max_keys == 0` is clamped to 1, so the first key is admitted; a
+        // second client is rejected by the zone-capacity rule and must not
+        // leave the first zone's permit behind.
+        let first = runtime
+            .admit(ip, &rules)
+            .expect("first key fills the blocked zone");
+        let second_ip = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
+        assert!(matches!(
+            runtime.admit(second_ip, &rules),
+            Err(LimitConnDecision::Reject)
+        ));
+        assert_eq!(
+            counted(&runtime, "tight", second_ip),
+            0,
+            "a rejected later rule must roll back the earlier zone"
+        );
+        drop(first);
     }
 
     #[test]

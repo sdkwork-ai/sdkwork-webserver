@@ -23,6 +23,13 @@ use sdkwork_webserver_core::nginx::{
 };
 use tempfile::TempDir;
 
+/// nginx treats `\` as an escape introducer, so a native Windows path in a
+/// directive does not name the file the test created. Tests spell paths the way
+/// a portable nginx configuration must: with forward slashes.
+fn nginx_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
 /// Parse + materialize + validate one configuration text.
 fn materialize(text: &str) -> Result<WebServerAppConfig, NginxConfigError> {
     let parsed = parse_nginx_config(text, Path::new("site.conf")).expect("parse");
@@ -1121,7 +1128,7 @@ server {{
     location /private {{ return 200 "closed"; }}
 }}
 "#,
-            directory.path().join("htpasswd").display()
+            nginx_path(&directory.path().join("htpasswd"))
         ),
         Path::new("site.conf"),
     )
@@ -1193,7 +1200,7 @@ server {{
     }}
 }}
 "#,
-            webroot = webroot.display(),
+            webroot = nginx_path(&webroot),
         ),
     )
     .expect("write config");
@@ -1215,7 +1222,7 @@ server {{
             .acme_http_01
             .as_ref()
             .map(|acme| acme.webroot.as_str()),
-        Some(webroot.to_string_lossy().as_ref())
+        Some(nginx_path(&webroot).as_str())
     );
     let served = compiled
         .acme_webroot(&listener.id)
@@ -1550,7 +1557,7 @@ fn include_missing_and_cycle_fail_closed() {
 
     std::fs::write(root.path().join("loop.conf"), "include loop.conf;\n").unwrap();
     let parsed = parse_nginx_config(
-        &format!("include {};\n", root.path().join("loop.conf").display()),
+        &format!("include {};\n", nginx_path(&root.path().join("loop.conf"))),
         Path::new("main.conf"),
     )
     .expect("parse");
@@ -1745,5 +1752,33 @@ fn load_report_skips_unmaterializable_site_files_with_diagnostics() {
         report.skipped[0].1.contains("named location"),
         "{:?}",
         report.skipped
+    );
+}
+
+#[test]
+fn accepted_but_unenforced_nginx_directives_surface_a_diagnostic() {
+    let directory = TempDir::new().expect("temp dir");
+    let config = directory.path().join("gzip.conf");
+    std::fs::write(
+        &config,
+        r#"
+server {
+    listen 8080;
+    server_name gzip.example.com;
+    gzip_static on;
+    location / { return 200 "ok"; }
+}
+"#,
+    )
+    .expect("write config");
+
+    let report = load_nginx_compat(&config, "diagnostics").expect("load config");
+    assert!(
+        report.ignored.iter().any(|diagnostic| {
+            diagnostic.message.contains("gzip_static")
+                && diagnostic.message.contains("not enforced")
+        }),
+        "an accepted-but-unenforced directive must warn instead of silently doing nothing: {:?}",
+        report.ignored
     );
 }

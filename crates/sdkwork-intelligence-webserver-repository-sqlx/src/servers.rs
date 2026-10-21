@@ -46,7 +46,7 @@ impl WebRepository {
             .map_err(|error| store_error("map webserver_server count", error))?;
 
         let rows = sqlx::query(
-            "SELECT uuid, name, host, tenant_scope_hash, ssh_port, status,
+            "SELECT id, uuid, name, host, tenant_scope_hash, ssh_port, status,
                     CAST(metadata AS TEXT) AS metadata,
                     CAST(updated_at AS TEXT) AS updated_at,
                     CAST(created_at AS TEXT) AS created_at
@@ -68,11 +68,34 @@ impl WebRepository {
             })?);
         }
 
+        // First page: exact total plus the keyset continuation (see the
+        // deployment list for the same contract). Without the minted cursor
+        // `page` is refused for this collection and rows beyond `page_size`
+        // were unreachable.
+        let has_more = total > offset.saturating_add(items.len() as i64);
+        let next_cursor = if has_more {
+            let last = rows.last().ok_or_else(|| {
+                WebServiceError::Internal("empty server page with has_more".to_string())
+            })?;
+            let updated_at = cursor_instant_from_row(last, "updated_at")
+                .map_err(|error| store_error("map webserver_server cursor instant", error))?;
+            let id: i64 = last
+                .try_get("id")
+                .map_err(|error| store_error("map webserver_server cursor id", error))?;
+            Some(encode_keyset_cursor(
+                &format!("servers:{tenant_id}"),
+                &updated_at,
+                id,
+            ))
+        } else {
+            None
+        };
+
         Ok(ServerPage {
             items,
             total,
-            next_cursor: None,
-            has_more: None,
+            next_cursor,
+            has_more: Some(has_more),
         })
     }
 
@@ -89,8 +112,9 @@ impl WebRepository {
                 "page_size must be between 1 and 200",
             ));
         }
-        let (cursor_updated_at, cursor_id) = decode_keyset_cursor(cursor)
-            .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
+        let (cursor_updated_at, cursor_id) =
+            decode_keyset_cursor(&format!("servers:{tenant_id}"), cursor)
+                .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
         let sql = "SELECT uuid, name, host, tenant_scope_hash, ssh_port, status,
                     CAST(metadata AS TEXT) AS metadata,
                     CAST(updated_at AS TEXT) AS updated_at,
@@ -125,7 +149,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_server cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&updated_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    &format!("servers:{tenant_id}"),
+                    &updated_at,
+                    id,
+                ))
             })
             .transpose()?;
         Ok(ServerPage {

@@ -116,10 +116,17 @@ export function isSandboxDeletable(state: SandboxInstanceState): boolean {
   return state !== "active";
 }
 
-/** `totalItems` is an `int64` wire string; an unparsable value must not become NaN rows. */
+/**
+ * `totalItems` is an `int64` wire string. The pager's `rowCount` is a
+ * `number`, so an out-of-range total is clamped to `Number.MAX_SAFE_INTEGER`
+ * instead of being silently rounded (which would display a wrong count).
+ */
 export function sandboxTotalItems(pageInfo: SandboxInstancePageInfo | undefined): number {
-  const parsed = Number.parseInt(pageInfo?.totalItems ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  const raw = pageInfo?.totalItems;
+  if (typeof raw !== "string" || !/^(0|[1-9]\d*)$/u.test(raw)) return 0;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed)) return Number.MAX_SAFE_INTEGER;
+  return parsed;
 }
 
 /**

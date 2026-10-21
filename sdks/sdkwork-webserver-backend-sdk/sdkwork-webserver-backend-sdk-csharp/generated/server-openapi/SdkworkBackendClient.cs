@@ -10,6 +10,7 @@ namespace SDKWork.WebserverBackendSdk
         private readonly SdkHttpClient _httpClient;
 
         public ApplicationApi Application { get; }
+        public PluginApi Plugin { get; }
         public ApplicationDomainApi ApplicationDomain { get; }
         public CertificateApi Certificate { get; }
         public DomainApi Domain { get; }
@@ -31,6 +32,7 @@ namespace SDKWork.WebserverBackendSdk
         {
             _httpClient = new SdkHttpClient(baseUrl);
             Application = new ApplicationApi(_httpClient);
+            Plugin = new PluginApi(_httpClient);
             ApplicationDomain = new ApplicationDomainApi(_httpClient);
             Certificate = new CertificateApi(_httpClient);
             Domain = new DomainApi(_httpClient);
@@ -53,6 +55,7 @@ namespace SDKWork.WebserverBackendSdk
         {
             _httpClient = new SdkHttpClient(config);
             Application = new ApplicationApi(_httpClient);
+            Plugin = new PluginApi(_httpClient);
             ApplicationDomain = new ApplicationDomainApi(_httpClient);
             Certificate = new CertificateApi(_httpClient);
             Domain = new DomainApi(_httpClient);

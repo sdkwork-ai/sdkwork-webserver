@@ -104,7 +104,7 @@ public class ClusterApi {
     }
 
     /** List webserver process instances with liveness state */
-    public ClustersInstancesListResponse clustersInstancesList(Integer pageSize, String cursor, String clusterId, String hostId, Integer status, String healthState, Integer joinMode, Integer syncStatus, String labels, String search, String buildVersion) throws Exception {
+    public ClustersInstancesListResponse clustersInstancesList(Integer pageSize, String cursor, String clusterId, String hostId, Integer status, String healthState, Integer joinMode, Integer syncStatus, String labels, String q, String buildVersion) throws Exception {
         String query = buildQueryString(List.of(
             new QueryParameterSpec("page_size", pageSize, "form", true, false, null),
             new QueryParameterSpec("cursor", cursor, "form", true, false, null),
@@ -115,7 +115,7 @@ public class ClusterApi {
             new QueryParameterSpec("join_mode", joinMode, "form", true, false, null),
             new QueryParameterSpec("sync_status", syncStatus, "form", true, false, null),
             new QueryParameterSpec("labels", labels, "form", true, false, null),
-            new QueryParameterSpec("search", search, "form", true, false, null),
+            new QueryParameterSpec("q", q, "form", true, false, null),
             new QueryParameterSpec("build_version", buildVersion, "form", true, false, null)
         ));
         Object raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/clusters/instances"), query));

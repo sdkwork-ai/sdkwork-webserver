@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "language": "rust",
   "sdkType": "backend",
-  "packageName": "sdkwork-webserver-backend-sdk",
-  "transportPackageName": "sdkwork-webserver-backend-sdk",
-  "consumerPackageName": "sdkwork-webserver-backend-sdk",
+  "packageName": "sdkwork-webserver-backend-sdk-generated-rust",
+  "transportPackageName": "sdkwork-webserver-backend-sdk-generated-rust",
+  "consumerPackageName": "sdkwork-webserver-backend-sdk-generated-rust",
   "generator": "@sdkwork/sdk-generator",
   "capabilities": {
     "supportsGeneratedTests": true,

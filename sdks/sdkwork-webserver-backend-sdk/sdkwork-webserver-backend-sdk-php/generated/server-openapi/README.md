@@ -51,6 +51,7 @@ $client->setHeader('X-Custom-Header', 'value');
 ## API Modules
 
 - `$client->application` - application API
+- `$client->plugin` - plugin API
 - `$client->applicationDomain` - application_domain API
 - `$client->certificate` - certificate API
 - `$client->domain` - domain API
@@ -78,6 +79,17 @@ $client->setHeader('X-Custom-Header', 'value');
 // List managed applications
 $params = ['page' => 1, 'page_size' => 2, 'application_type' => 'WEB', 'site_type' => 4, 'status' => 5, 'q' => 'q'];
 $result = $client->application->applicationsList($params);
+var_dump($result);
+```
+
+### plugin
+
+```php
+<?php
+
+// List the caller's plugin catalog
+$params = ['page' => 1, 'page_size' => 2, 'status' => 'draft', 'q' => 'q', 'owner_id' => '1'];
+$result = $client->plugin->pluginsList($params);
 var_dump($result);
 ```
 
@@ -187,7 +199,8 @@ var_dump($result);
 <?php
 
 // List the managed Web Server configuration catalog
-$result = $client->webserverConfig->webserverConfigsList();
+$params = ['page' => 1, 'page_size' => 2];
+$result = $client->webserverConfig->webserverConfigsList($params);
 var_dump($result);
 ```
 
@@ -229,7 +242,8 @@ var_dump($result);
 <?php
 
 // List the tunnel connector machines this gateway manages
-$result = $client->tunnel->machinesList();
+$params = ['page' => 1, 'page_size' => 2];
+$result = $client->tunnel->machinesList($params);
 var_dump($result);
 ```
 

@@ -8,6 +8,9 @@ use SDKWork\Webserver\BackendSdk\Models\ConfigsCreateResponse201;
 use SDKWork\Webserver\BackendSdk\Models\ConfigsDeployResponse;
 use SDKWork\Webserver\BackendSdk\Models\ConfigsListResponse;
 use SDKWork\Webserver\BackendSdk\Models\ConfigsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsRevisionsListResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsRevisionsRetrieveResponse;
+use SDKWork\Webserver\BackendSdk\Models\ConfigsRevisionsRollbackResponse;
 use SDKWork\Webserver\BackendSdk\Models\ConfigsUpdateResponse;
 use SDKWork\Webserver\BackendSdk\Models\ConfigsValidateResponse;
 use SDKWork\Webserver\BackendSdk\Models\CreateNginxConfigRequest;
@@ -99,6 +102,35 @@ final class NginxApi extends BaseApi
             'headers' => $requestHeaders,
         ]);
         return is_array($result) ? ConfigsDeployResponse::fromArray($result) : null;
+    }
+
+    /** List an Nginx configuration's revisions */
+    public function configsRevisionsList(string $configId, ?int $page = null, ?int $pageSize = null): ?ConfigsRevisionsListResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/nginx/etc/{configId}/revisions', ['configId' => $this->serializePathParameter($configId, new PathParameterSpec('configId', 'simple', false))]);
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? ConfigsRevisionsListResponse::fromArray($result) : null;
+    }
+
+    /** Retrieve one Nginx configuration revision */
+    public function configsRevisionsRetrieve(string $configId, int $versionNo): ?ConfigsRevisionsRetrieveResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}', ['configId' => $this->serializePathParameter($configId, new PathParameterSpec('configId', 'simple', false)), 'versionNo' => $this->serializePathParameter($versionNo, new PathParameterSpec('versionNo', 'simple', false))]);
+        $result = $this->client->request('GET', $path, []);
+        return is_array($result) ? ConfigsRevisionsRetrieveResponse::fromArray($result) : null;
+    }
+
+    /** Roll an Nginx configuration back to a revision */
+    public function configsRevisionsRollback(string $configId, int $versionNo): ?ConfigsRevisionsRollbackResponse
+    {
+        $path = $this->interpolatePath('/backend/v3/api/nginx/etc/{configId}/revisions/{versionNo}/rollback', ['configId' => $this->serializePathParameter($configId, new PathParameterSpec('configId', 'simple', false)), 'versionNo' => $this->serializePathParameter($versionNo, new PathParameterSpec('versionNo', 'simple', false))]);
+        $result = $this->client->request('POST', $path, []);
+        return is_array($result) ? ConfigsRevisionsRollbackResponse::fromArray($result) : null;
     }
 
     /** Reload Nginx */

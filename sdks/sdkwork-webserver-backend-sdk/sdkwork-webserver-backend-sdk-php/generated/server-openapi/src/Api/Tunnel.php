@@ -14,9 +14,14 @@ use SDKWork\Webserver\BackendSdk\Models\TunnelMachinesRoutesCreateResponse201;
 final class TunnelApi extends BaseApi
 {
     /** List the tunnel connector machines this gateway manages */
-    public function machinesList(): ?TunnelMachinesListResponse
+    public function machinesList(?int $page = null, ?int $pageSize = null): ?TunnelMachinesListResponse
     {
         $path = '/backend/v3/api/tunnel_machines';
+        $query = $this->buildQueryString([
+            new QueryParameterSpec('page', $page, 'form', true, false, null),
+            new QueryParameterSpec('page_size', $pageSize, 'form', true, false, null),
+        ]);
+        $path = $this->appendQueryString($path, $query);
         $result = $this->client->request('GET', $path, []);
         return is_array($result) ? TunnelMachinesListResponse::fromArray($result) : null;
     }

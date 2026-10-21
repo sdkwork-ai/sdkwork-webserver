@@ -25,6 +25,12 @@ test('root dev commands use the SDKWork app lifecycle for this server applicatio
   // Web Server is standalone-only: no retired *:cloud dev scripts may be resurrected.
   assert.equal(packageJson.scripts['dev:cloud'], undefined);
   for (const [name] of Object.entries(packageJson.scripts)) {
+    // `import:switch:*` selects the sibling-module import set (a runtime input
+    // plane), not a cloud build/deploy profile, so the standalone-only rule
+    // does not retire it.
+    if (name === 'import:switch:cloud') {
+      continue;
+    }
     assert.ok(!name.endsWith(':cloud'), `script "${name}" must not exist (standalone-only)`);
   }
 });
@@ -56,7 +62,7 @@ test('deployment index owns all supported Web Server profiles', () => {
   assert.equal(deployment.environments.production.applicationOrigin, 'https://server.sdkwork.com');
 });
 
-test('standalone development supplies an explicit single-node Snowflake id', () => {
+test('standalone development leaves the Snowflake node id to the registry', () => {
   const profile = parseEnv(
     readFileSync(
       path.join(REPO_ROOT, 'etc', 'topology', 'standalone.development.env'),
@@ -64,5 +70,8 @@ test('standalone development supplies an explicit single-node Snowflake id', () 
     ),
   );
 
+  // `0` is the documented auto sentinel: the runtime allocates a lease from
+  // sdkwork_node_registry instead of pinning node 0, so replicas of the same
+  // deployment cannot collide.
   assert.equal(profile.SDKWORK_WEBSERVER_SNOWFLAKE_NODE_ID, '0');
 });

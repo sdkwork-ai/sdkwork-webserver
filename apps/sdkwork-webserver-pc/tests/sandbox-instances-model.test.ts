@@ -470,3 +470,18 @@ describe("sandbox model stays a faithful echo of the Rust authority", () => {
     expect(serviceSource).toMatch(/!matches!\(self, Self::Active\)/);
   });
 });
+
+describe("sandbox totalItems int64 handling", () => {
+  it("clamps a total beyond Number.MAX_SAFE_INTEGER instead of rounding it", () => {
+    expect(sandboxTotalItems({ totalItems: "9007199254740993" })).toBe(
+      Number.MAX_SAFE_INTEGER,
+    );
+  });
+
+  it("keeps in-range totals and rejects malformed values", () => {
+    expect(sandboxTotalItems({ totalItems: "42" })).toBe(42);
+    expect(sandboxTotalItems({ totalItems: "0042" })).toBe(0);
+    expect(sandboxTotalItems({ totalItems: "-1" })).toBe(0);
+    expect(sandboxTotalItems(undefined)).toBe(0);
+  });
+});

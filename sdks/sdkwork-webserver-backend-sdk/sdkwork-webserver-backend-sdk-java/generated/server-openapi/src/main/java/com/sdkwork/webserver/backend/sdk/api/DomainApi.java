@@ -135,6 +135,34 @@ public class DomainApi {
         return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsStatusUpdateResponse>() {});
     }
 
+    /** Read the root domain's WeChat MP domain-ownership verification file */
+    public RootDomainsWechatVerificationRetrieveResponse rootDomainsWechatVerificationRetrieve(String rootDomainId) throws Exception {
+        Object raw = client.get(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file"));
+        return client.convertValue(raw, new TypeReference<RootDomainsWechatVerificationRetrieveResponse>() {});
+    }
+
+    /** Upload (or wholly replace) the root domain's WeChat verification file */
+    public RootDomainsWechatVerificationUpdateResponse rootDomainsWechatVerificationUpdate(String rootDomainId, UpsertDomainWechatVerificationRequest body, String idempotencyKey) throws Exception {
+        Map<String, String> requestHeaders = buildRequestHeaders(
+                Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
+                Map.of()
+        );
+        Object raw = client.put(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<RootDomainsWechatVerificationUpdateResponse>() {});
+    }
+
+    /** Delete the root domain's WeChat verification file */
+    public Void rootDomainsWechatVerificationDelete(String rootDomainId) throws Exception {
+        client.delete(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file"));
+        return null;
+    }
+
+    /** Self-check the root domain's WeChat verification file */
+    public RootDomainsWechatVerificationCheckResponse rootDomainsWechatVerificationCheck(String rootDomainId) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file/check"), null);
+        return client.convertValue(raw, new TypeReference<RootDomainsWechatVerificationCheckResponse>() {});
+    }
+
     /** Sync a root-domain Zone's resolution records through its cloud account */
     public RootDomainsDnsRecordsSyncResponse rootDomainsDnsRecordsSync(String rootDomainId, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
@@ -163,6 +191,12 @@ public class DomainApi {
         );
         Object raw = client.post(ApiPaths.backendPath("/domains"), body, null, requestHeaders, "application/json");
         return client.convertValue(raw, new TypeReference<DomainsCreateResponse201>() {});
+    }
+
+    /** Retrieve one tenant custom domain asset */
+    public DomainsRetrieveResponse domainsRetrieve(String domainId) throws Exception {
+        Object raw = client.get(ApiPaths.backendPath("/domains/" + serializePathParameter(domainId, new PathParameterSpec("domainId", "simple", false)) + ""));
+        return client.convertValue(raw, new TypeReference<DomainsRetrieveResponse>() {});
     }
 
     /** Delete an unbound tenant custom domain asset */

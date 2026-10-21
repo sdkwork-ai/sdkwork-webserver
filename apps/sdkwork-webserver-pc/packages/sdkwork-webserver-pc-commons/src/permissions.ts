@@ -80,15 +80,20 @@ export function hasWebserverPermission(
   return hasPermissionInScope(permissionScope, requiredPermission);
 }
 
-/** Console pages are reachable for any authenticated user; admin keeps IAM checks. */
+/**
+ * Whether one workspace entry or route may render for this permission scope.
+ *
+ * Both surfaces enforce the entry's declared permission. The console used to
+ * return `true` for every authenticated user, which rendered pages whose data
+ * calls the backend then rejected (or, worse, pages that only looked empty).
+ * Hiding an entry the scope does not grant is the honest answer; a `*` grant or
+ * the specific code still opens it.
+ */
 export function canAccessWebserverResource(
-  surface: "app-console" | "backend-admin",
+  _surface: "app-console" | "backend-admin",
   permissionScope: readonly string[],
   requiredPermission: string,
 ): boolean {
-  if (surface === "app-console") {
-    return true;
-  }
   return hasWebserverPermission(permissionScope, requiredPermission);
 }
 

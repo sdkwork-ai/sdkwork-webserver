@@ -8,7 +8,8 @@ use sqlx::Row;
 use super::support::{
     cursor_instant_from_row, decode_keyset_cursor, encode_keyset_cursor, instant_from_row,
     instant_write_expression, is_unique_violation, new_uuid, next_id, now_rfc3339,
-    optional_instant_from_row, pagination, resolve_site_internal_id, sha256_hex, store_error,
+    optional_instant_from_row, pagination, resolve_site_internal_id,
+    retry_transient_transaction, sha256_hex, store_error,
 };
 
 struct DeploymentIdempotencyLookup<'a> {
@@ -152,13 +153,36 @@ impl WebRepository {
             })?);
         }
 
+        // The first request carries the exact total *and* the keyset
+        // continuation for the next page: `page` is refused for this
+        // collection, so a first page without a minted cursor made rows beyond
+        // `page_size` unreachable. `has_more` is exact against the total.
+        let has_more = total > offset.saturating_add(items.len() as i64);
+        let next_cursor = if has_more {
+            let last = rows.last().ok_or_else(|| {
+                WebServiceError::Internal("empty deployment page with has_more".to_string())
+            })?;
+            let created_at = cursor_instant_from_row(last, "created_at")
+                .map_err(|error| store_error("map webserver_deployment cursor instant", error))?;
+            let id: i64 = last
+                .try_get("id")
+                .map_err(|error| store_error("map webserver_deployment cursor id", error))?;
+            Some(encode_keyset_cursor(
+                &format!("deployments:{tenant_id}"),
+                &created_at,
+                id,
+            ))
+        } else {
+            None
+        };
+
         Ok(DeploymentPage {
             items,
             total,
             page,
             page_size,
-            next_cursor: None,
-            has_more: None,
+            next_cursor,
+            has_more: Some(has_more),
         })
     }
 
@@ -178,8 +202,9 @@ impl WebRepository {
                 "page_size must be between 1 and 200",
             ));
         }
-        let (cursor_created_at, cursor_id) = decode_keyset_cursor(cursor)
-            .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
+        let (cursor_created_at, cursor_id) =
+            decode_keyset_cursor(&format!("deployments:{tenant_id}"), cursor)
+                .ok_or_else(|| WebServiceError::validation("cursor is invalid"))?;
         let sql = format!(
             "{DEPLOYMENT_LIST_SELECT}
              WHERE deployment.tenant_id = $1 AND deployment.site_id = $2
@@ -214,7 +239,11 @@ impl WebRepository {
                 let id: i64 = last
                     .try_get("id")
                     .map_err(|error| store_error("map webserver_deployment cursor id", error))?;
-                Ok::<_, WebServiceError>(encode_keyset_cursor(&created_at, id))
+                Ok::<_, WebServiceError>(encode_keyset_cursor(
+                    &format!("deployments:{tenant_id}"),
+                    &created_at,
+                    id,
+                ))
             })
             .transpose()?;
         Ok(DeploymentPage {
@@ -228,6 +257,19 @@ impl WebRepository {
     }
 
     pub(super) async fn create_deployment_repo(
+        &self,
+        tenant_id: i64,
+        site_id: &str,
+        actor_id: Option<i64>,
+        request: &CreateDeploymentRequest,
+    ) -> WebServiceResult<DeploymentResponse> {
+        retry_transient_transaction(|| {
+            self.create_deployment_once(tenant_id, site_id, actor_id, request)
+        })
+        .await
+    }
+
+    async fn create_deployment_once(
         &self,
         tenant_id: i64,
         site_id: &str,

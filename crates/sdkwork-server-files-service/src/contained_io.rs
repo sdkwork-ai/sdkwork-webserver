@@ -48,7 +48,7 @@ pub(crate) fn open_contained(
     let mut directory = root_dir;
     for component in parents {
         let metadata = directory
-            .symlink_metadata(&component)
+            .symlink_metadata(component)
             .map_err(|_| PathContainmentError::Unresolvable)?;
         if metadata.file_type().is_symlink() {
             return Err(PathContainmentError::EscapesRoot);
@@ -57,18 +57,18 @@ pub(crate) fn open_contained(
             return Err(PathContainmentError::InvalidPath);
         }
         directory = directory
-            .open_dir_nofollow(&component)
+            .open_dir_nofollow(component)
             .map_err(|_| PathContainmentError::Unresolvable)?;
     }
     let metadata = directory
-        .symlink_metadata(&last)
+        .symlink_metadata(last)
         .map_err(|_| PathContainmentError::Unresolvable)?;
     if metadata.file_type().is_symlink() {
         return Err(PathContainmentError::EscapesRoot);
     }
     if metadata.is_dir() {
         let opened = directory
-            .open_dir_nofollow(&last)
+            .open_dir_nofollow(last)
             .map_err(|_| PathContainmentError::Unresolvable)?;
         return Ok(ContainedTarget::Directory(opened));
     }
@@ -78,7 +78,7 @@ pub(crate) fn open_contained(
     let mut options = cap_fs_ext::OpenOptions::new();
     options.read(true).follow(cap_fs_ext::FollowSymlinks::No);
     let file = directory
-        .open_with(&last, &options)
+        .open_with(last, &options)
         .map_err(|_| PathContainmentError::Unresolvable)?
         .into_std();
     let metadata = file

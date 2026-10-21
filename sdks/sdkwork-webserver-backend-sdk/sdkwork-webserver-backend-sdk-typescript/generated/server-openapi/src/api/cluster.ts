@@ -127,7 +127,7 @@ export interface ClusterInstancesListParams {
   joinMode?: number;
   syncStatus?: number;
   labels?: string;
-  search?: string;
+  q?: string;
   buildVersion?: string;
 }
 
@@ -163,7 +163,7 @@ export class ClusterInstancesApi {
       { name: 'join_mode', value: params?.joinMode, style: 'form', explode: true, allowReserved: false },
       { name: 'sync_status', value: params?.syncStatus, style: 'form', explode: true, allowReserved: false },
       { name: 'labels', value: params?.labels, style: 'form', explode: true, allowReserved: false },
-      { name: 'search', value: params?.search, style: 'form', explode: true, allowReserved: false },
+      { name: 'q', value: params?.q, style: 'form', explode: true, allowReserved: false },
       { name: 'build_version', value: params?.buildVersion, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: ClusterInstanceResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/clusters/instances`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });

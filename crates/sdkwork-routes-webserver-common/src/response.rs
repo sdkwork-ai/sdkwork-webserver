@@ -9,8 +9,8 @@ use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
     ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage, DeploymentPage,
     DnsAccountPage, DomainDnsRecordPage, DomainPage, ListenerCertificateBindingPage,
-    NginxConfigPage, PlatformTargetPage, RootDomainPage, ServerPage, SourceVersionPage,
-    WebServiceResult,
+    NginxConfigPage, NginxConfigRevisionPage, NginxConfigRevisionResponse, PlatformTargetPage,
+    PluginPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
 
@@ -97,8 +97,37 @@ pub fn ok_application_page(
     }
 }
 
+pub fn ok_nginx_config_revision_page(
+    result: WebServiceResult<NginxConfigRevisionPage>,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page) => Ok(envelope(
+            StatusCode::OK,
+            build_page_data(page.items, page.page, page.page_size, page.total),
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub fn ok_nginx_config_revision(
+    result: WebServiceResult<NginxConfigRevisionResponse>,
+) -> Result<Response, WebApiError> {
+    ok_resource(result)
+}
+
+pub fn ok_plugin_page(result: WebServiceResult<PluginPage>) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page) => Ok(envelope(
+            StatusCode::OK,
+            build_page_data(page.items, page.page, page.page_size, page.total),
+        )),
+        Err(error) => Err(error.into()),
+    }
+}
+
 pub fn ok_deployment_page(
     result: WebServiceResult<DeploymentPage>,
+    cursor_request: bool,
 ) -> Result<Response, WebApiError> {
     match result {
         Ok(page) => {
@@ -106,7 +135,7 @@ pub fn ok_deployment_page(
             // last page; the cursor contract must never fall back to offset
             // `pageInfo` (which would report a misleading `page=0` and
             // `totalItems="0"` on the final page).
-            let payload = if page.has_more.is_some() {
+            let payload = if cursor_request {
                 SdkWorkPageData {
                     items: page.items,
                     page_info: PageInfo {
@@ -120,7 +149,15 @@ pub fn ok_deployment_page(
                     },
                 }
             } else {
-                build_page_data(page.items, page.page, page.page_size, page.total)
+                // The first (no-cursor) request of a cursor-declared list:
+                // keep the exact total *and* publish the keyset continuation.
+                let mut page_info = offset_page_info(page.page, page.page_size, page.total);
+                page_info.next_cursor = page.next_cursor;
+                page_info.has_more = page.has_more.or(page_info.has_more);
+                SdkWorkPageData {
+                    items: page.items,
+                    page_info,
+                }
             };
             Ok(envelope(StatusCode::OK, payload))
         }
@@ -130,12 +167,11 @@ pub fn ok_deployment_page(
 
 pub fn ok_source_version_page(
     result: WebServiceResult<SourceVersionPage>,
+    cursor_request: bool,
 ) -> Result<Response, WebApiError> {
     match result {
         Ok(page) => {
-            // Cursor mode (including the last page) is identified by
-            // `has_more: Some`; see `ok_deployment_page`.
-            let payload = if page.has_more.is_some() {
+            let payload = if cursor_request {
                 SdkWorkPageData {
                     items: page.items,
                     page_info: PageInfo {
@@ -149,7 +185,13 @@ pub fn ok_source_version_page(
                     },
                 }
             } else {
-                build_page_data(page.items, page.page, page.page_size, page.total)
+                let mut page_info = offset_page_info(page.page, page.page_size, page.total);
+                page_info.next_cursor = page.next_cursor;
+                page_info.has_more = page.has_more.or(page_info.has_more);
+                SdkWorkPageData {
+                    items: page.items,
+                    page_info,
+                }
             };
             Ok(envelope(StatusCode::OK, payload))
         }
@@ -246,37 +288,29 @@ pub const BOUNDED_COLLECTION_MAXIMUM_PAGE_SIZE: i32 = 100;
 
 pub fn ok_certificate_page(
     result: WebServiceResult<CertificatePage>,
-    page: i32,
+    _page: i32,
     page_size: i32,
-    cursor_request: bool,
+    _cursor_request: bool,
 ) -> Result<Response, WebApiError> {
     match result {
         Ok(page_data) => {
-            // The page-one offset read carries the exact total, the exact
-            // `has_more`, and the minted keyset continuation together; the
-            // request that follows a cursor gets the pure cursor payload with
-            // no total (a deep keyset page must not pay for a COUNT).
-            let payload = if cursor_request {
-                SdkWorkPageData {
-                    items: page_data.items,
-                    page_info: PageInfo {
-                        mode: PageMode::Cursor,
-                        page: None,
-                        page_size: Some(page_size),
-                        total_items: None,
-                        total_pages: None,
-                        next_cursor: page_data.next_cursor,
-                        has_more: page_data.has_more,
-                    },
-                }
-            } else {
-                let mut page_info = offset_page_info(page, page_size, page_data.total);
-                page_info.next_cursor = page_data.next_cursor;
-                page_info.has_more = page_data.has_more.or(page_info.has_more);
-                SdkWorkPageData {
-                    items: page_data.items,
-                    page_info,
-                }
+            // The operation is declared cursor mode, so every response carries
+            // `mode: "cursor"` and a `nextCursor`. A client that branched on
+            // `mode` used to switch to `page=2`, which this collection refuses.
+            // The collection grows with every issuance, so neither page carries
+            // a total: counting it scanned the whole filtered set and the
+            // cursor contract does not require `totalItems`.
+            let payload = SdkWorkPageData {
+                items: page_data.items,
+                page_info: PageInfo {
+                    mode: PageMode::Cursor,
+                    page: None,
+                    page_size: Some(page_size),
+                    total_items: None,
+                    total_pages: None,
+                    next_cursor: page_data.next_cursor,
+                    has_more: page_data.has_more,
+                },
             };
             Ok(envelope(StatusCode::OK, payload))
         }
@@ -342,13 +376,11 @@ pub fn ok_server_page(
     result: WebServiceResult<ServerPage>,
     page: i32,
     page_size: i32,
+    cursor_request: bool,
 ) -> Result<Response, WebApiError> {
     match result {
         Ok(page_data) => {
-            // Cursor mode (including the last page) is identified by
-            // `has_more: Some`, never by `next_cursor`; see
-            // `ok_deployment_page`.
-            let payload = if page_data.has_more.is_some() {
+            let payload = if cursor_request {
                 SdkWorkPageData {
                     items: page_data.items,
                     page_info: PageInfo {
@@ -362,7 +394,13 @@ pub fn ok_server_page(
                     },
                 }
             } else {
-                build_page_data(page_data.items, page, page_size, page_data.total)
+                let mut page_info = offset_page_info(page, page_size, page_data.total);
+                page_info.next_cursor = page_data.next_cursor;
+                page_info.has_more = page_data.has_more.or(page_info.has_more);
+                SdkWorkPageData {
+                    items: page_data.items,
+                    page_info,
+                }
             };
             Ok(envelope(StatusCode::OK, payload))
         }

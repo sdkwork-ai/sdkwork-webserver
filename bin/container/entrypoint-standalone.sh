@@ -1193,7 +1193,10 @@ export_platform_api_gateway_runtime_env() {
     allowed_hosts="$(discover_module_api_gateway_allowed_hosts)"
   fi
   export SDKWORK_API_CLOUD_GATEWAY_ALLOWED_HOSTS="${allowed_hosts}"
-  export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}"
+  # `SDKWORK_CORS_ALLOWED_ORIGINS` is deliberately NOT set here: the embedded
+  # gateway's loopback allowlist is scoped to its own child process in
+  # `start_bundled_module_api_gateway`, so it cannot overwrite this Web
+  # Server's management-plane production allowlist.
   export SDKWORK_API_CLOUD_GATEWAY_MIGRATE_ON_START="${SDKWORK_MODULE_API_GATEWAY_MIGRATE_ON_START:-true}"
   export SDKWORK_API_CLOUD_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET="${SDKWORK_MODULE_API_GATEWAY_PROVISION_IAM_SIGNING_MASTER_SECRET:-true}"
   export SDKWORK_IAM_SIGNING_MASTER_SECRET_FILE="${SDKWORK_IAM_SIGNING_MASTER_SECRET_FILE:-${PLATFORM_GATEWAY_SECRETS_ROOT}/iam-signing-master.key}"
@@ -1321,9 +1324,25 @@ start_bundled_module_api_gateway() {
     }
   fi
   log "starting bundled module API gateway (${PLATFORM_GATEWAY_BINARY}) on ${SDKWORK_API_CLOUD_GATEWAY_BIND}"
+  # The embedded module gateway has its own browser-origin allowlist (loopback
+  # dev ports in the shipped carriers). Scope it to the gateway child only:
+  # exporting it globally would replace the Web Server management API's
+  # production allowlist with loopback origins, and would trust any local
+  # process on that port cross-origin.
+  bundled_previous_cors_set=false
+  if [ "${SDKWORK_CORS_ALLOWED_ORIGINS+set}" = set ]; then
+    bundled_previous_cors_set=true
+    bundled_previous_cors="${SDKWORK_CORS_ALLOWED_ORIGINS}"
+  fi
+  export SDKWORK_CORS_ALLOWED_ORIGINS="${SDKWORK_MODULE_API_GATEWAY_CORS_ALLOWED_ORIGINS:-${SDKWORK_CORS_ALLOWED_ORIGINS:-}}"
   run_as_service_user "${PLATFORM_GATEWAY_BINARY}" \
     > "${SDKWORK_MODULE_API_GATEWAY_LOG_FILE:-/var/lib/sdkwork/webserver/module-api-gateway.log}" 2>&1 &
   PLATFORM_GATEWAY_PID=$!
+  if [ "${bundled_previous_cors_set}" = true ]; then
+    export SDKWORK_CORS_ALLOWED_ORIGINS="${bundled_previous_cors}"
+  else
+    unset SDKWORK_CORS_ALLOWED_ORIGINS
+  fi
   wait_for_module_api_gateway
 }
 

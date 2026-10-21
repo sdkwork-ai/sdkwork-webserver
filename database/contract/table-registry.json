@@ -51,6 +51,12 @@
       "lifecycle_status": "active"
     },
     {
+      "table_name": "webserver_nginx_config_revision",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
       "table_name": "webserver_certificate",
       "owner": "web-platform",
       "compliance_level": "L2",
@@ -202,6 +208,18 @@
     },
     {
       "table_name": "webserver_application_host",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_domain_wechat_verification",
+      "owner": "web-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "webserver_plugin",
       "owner": "web-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"

@@ -62,6 +62,7 @@ client.getHttpClient().setHeader("X-Custom-Header", "value");
 ## API Modules
 
 - `client.getApplication()` - application API
+- `client.getPlugin()` - plugin API
 - `client.getApplicationDomain()` - application_domain API
 - `client.getCertificate()` - certificate API
 - `client.getDomain()` - domain API
@@ -93,6 +94,20 @@ params.put("site_type", 4);
 params.put("status", 5);
 params.put("q", "q");
 ApplicationsListResponse result = client.getApplication().applicationsList(params);
+System.out.println(result);
+```
+
+### plugin
+
+```java
+// List the caller's plugin catalog
+Map<String, Object> params = new LinkedHashMap<>();
+params.put("page", 1);
+params.put("page_size", 2);
+params.put("status", "draft");
+params.put("q", "q");
+params.put("owner_id", "1");
+PluginsListResponse result = client.getPlugin().pluginsList(params);
 System.out.println(result);
 ```
 
@@ -197,7 +212,10 @@ System.out.println(result);
 
 ```java
 // List the managed Web Server configuration catalog
-WebserverConfigsListResponse result = client.getWebserverConfig().webserverConfigsList();
+Map<String, Object> params = new LinkedHashMap<>();
+params.put("page", 1);
+params.put("page_size", 2);
+WebserverConfigsListResponse result = client.getWebserverConfig().webserverConfigsList(params);
 System.out.println(result);
 ```
 
@@ -239,7 +257,10 @@ System.out.println(result);
 
 ```java
 // List the tunnel connector machines this gateway manages
-TunnelMachinesListResponse result = client.getTunnel().machinesList();
+Map<String, Object> params = new LinkedHashMap<>();
+params.put("page", 1);
+params.put("page_size", 2);
+TunnelMachinesListResponse result = client.getTunnel().machinesList(params);
 System.out.println(result);
 ```
 

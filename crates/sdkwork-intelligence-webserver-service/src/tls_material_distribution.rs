@@ -126,6 +126,13 @@ impl WebService {
         let Some(node_uuid) = config.node_uuid.clone().filter(|_| config.enabled()) else {
             return Ok(());
         };
+        // Acquire the cross-process distribution lock BEFORE reading the
+        // projection. Reading first and locking at publish time lets a
+        // publisher that read an older assignment set write it after a newer
+        // publisher already wrote the newer snapshot. Serializing the read
+        // with the write makes every publication reflect the assignments as of
+        // the moment the lock was granted.
+        let lock = acquire_distribution_lock(&config.material_root).await?;
         let assignments = self
             .repository
             .load_node_tls_certificate_assignments(&node_uuid)
@@ -133,12 +140,12 @@ impl WebService {
         if assignments.is_empty() {
             return Ok(());
         }
-        // File-system publication (distribution lock, material writes,
-        // fsync, stale pruning) is blocking work: run it on the blocking
-        // thread pool so tokio worker threads never stall on disk I/O under
-        // concurrent control-plane traffic.
+        // File-system publication (material writes, fsync, stale pruning) is
+        // blocking work: run it on the blocking thread pool so tokio worker
+        // threads never stall on disk I/O. The guard moves into the blocking
+        // task, so the lock is released off the async worker as well.
         tokio::task::spawn_blocking(move || {
-            publish_node_tls_material_blocking(&config, &assignments)
+            publish_node_tls_material_with_lock(&config, &assignments, lock)
         })
         .await
         .map_err(|error| {
@@ -147,11 +154,41 @@ impl WebService {
     }
 }
 
+/// Acquire the distribution lock without blocking the async runtime.
+async fn acquire_distribution_lock(
+    material_root: &std::path::Path,
+) -> WebServiceResult<DistributionLock> {
+    let material_root = material_root.to_path_buf();
+    tokio::task::spawn_blocking(move || DistributionLock::acquire(&material_root))
+        .await
+        .map_err(|error| {
+            WebServiceError::Internal(format!("join TLS distribution lock acquisition: {error}"))
+        })?
+}
+
 /// Synchronous projection of the node TLS runtime snapshot. Executed on the
 /// blocking thread pool by [`WebService::publish_node_tls_material`].
+/// Test-only wrapper that mirrors the production ordering (validate, lock,
+/// publish). Production acquires the lock before reading the projection, so it
+/// calls [`publish_node_tls_material_with_lock`] directly.
+#[cfg(test)]
 fn publish_node_tls_material_blocking(
     config: &TlsMaterialDistributionConfig,
     assignments: &[TlsCertificateAssignmentMaterial],
+) -> WebServiceResult<()> {
+    // Validate before creating the material root or the lock file: an unsafe
+    // uuid must leave the filesystem untouched.
+    for assignment in assignments {
+        validate_version_uuid(&assignment.version_uuid)?;
+    }
+    let lock = DistributionLock::acquire(&config.material_root)?;
+    publish_node_tls_material_with_lock(config, assignments, lock)
+}
+
+fn publish_node_tls_material_with_lock(
+    config: &TlsMaterialDistributionConfig,
+    assignments: &[TlsCertificateAssignmentMaterial],
+    _lock: DistributionLock,
 ) -> WebServiceResult<()> {
     let node_uuid = config.node_uuid.as_deref().ok_or_else(|| {
         WebServiceError::Internal(
@@ -162,18 +199,12 @@ fn publish_node_tls_material_blocking(
     // arrives from a database column with no shape constraint. Validating here
     // rather than only inside `build_snapshot` matters because that check runs
     // after the projection has already written: an unsafe uuid would already
-    // have chosen its own write target. Nothing is created before this pass,
-    // not even the material root or the distribution lock.
+    // have chosen its own write target. The distribution lock (and its parent
+    // directory) is already held at this point; no certificate material has
+    // been written.
     for assignment in assignments {
         validate_version_uuid(&assignment.version_uuid)?;
     }
-    let _lock = DistributionLock::acquire(&config.material_root)?;
-    create_private_directory(&config.material_root).map_err(|error| {
-        WebServiceError::Internal(format!(
-            "create TLS material root {}: {error}",
-            config.material_root.display()
-        ))
-    })?;
     for assignment in assignments {
         write_material_files(&config.material_root, assignment)?;
     }

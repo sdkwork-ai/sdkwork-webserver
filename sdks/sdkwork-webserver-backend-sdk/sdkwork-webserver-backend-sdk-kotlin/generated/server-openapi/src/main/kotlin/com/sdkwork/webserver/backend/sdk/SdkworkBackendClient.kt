@@ -3,6 +3,7 @@ package com.sdkwork.webserver.backend.sdk
 import com.sdkwork.common.core.SdkConfig
 import com.sdkwork.webserver.backend.sdk.http.HttpClient
 import com.sdkwork.webserver.backend.sdk.api.ApplicationApi
+import com.sdkwork.webserver.backend.sdk.api.PluginApi
 import com.sdkwork.webserver.backend.sdk.api.ApplicationDomainApi
 import com.sdkwork.webserver.backend.sdk.api.CertificateApi
 import com.sdkwork.webserver.backend.sdk.api.DomainApi
@@ -24,6 +25,7 @@ open class SdkworkBackendClient {
     private val httpClient: HttpClient
 
     lateinit var application: ApplicationApi
+    lateinit var plugin: PluginApi
     lateinit var applicationDomain: ApplicationDomainApi
     lateinit var certificate: CertificateApi
     lateinit var domain: DomainApi
@@ -44,6 +46,7 @@ open class SdkworkBackendClient {
     constructor(baseUrl: String) {
         this.httpClient = HttpClient(baseUrl)
         application = ApplicationApi(httpClient)
+        plugin = PluginApi(httpClient)
         applicationDomain = ApplicationDomainApi(httpClient)
         certificate = CertificateApi(httpClient)
         domain = DomainApi(httpClient)
@@ -65,6 +68,7 @@ open class SdkworkBackendClient {
     constructor(config: SdkConfig) {
         this.httpClient = HttpClient(config)
         application = ApplicationApi(httpClient)
+        plugin = PluginApi(httpClient)
         applicationDomain = ApplicationDomainApi(httpClient)
         certificate = CertificateApi(httpClient)
         domain = DomainApi(httpClient)

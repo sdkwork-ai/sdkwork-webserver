@@ -69,6 +69,28 @@ class NginxApi(private val client: HttpClient) {
         return client.convertValue(raw, object : TypeReference<ConfigsDeployResponse>() {})
     }
 
+    /** List an Nginx configuration's revisions */
+    suspend fun configsRevisionsList(configId: String, page: Int? = null, pageSize: Int? = null): ConfigsRevisionsListResponse? {
+        val query = buildQueryString(listOf(
+            QueryParameterSpec("page", page, "form", true, false, null),
+            QueryParameterSpec("page_size", pageSize, "form", true, false, null)
+        ))
+        val raw = client.get(ApiPaths.appendQueryString(ApiPaths.backendPath("/nginx/etc/${serializePathParameter(configId, PathParameterSpec("configId", "simple", false))}/revisions"), query))
+        return client.convertValue(raw, object : TypeReference<ConfigsRevisionsListResponse>() {})
+    }
+
+    /** Retrieve one Nginx configuration revision */
+    suspend fun configsRevisionsRetrieve(configId: String, versionNo: Int): ConfigsRevisionsRetrieveResponse? {
+        val raw = client.get(ApiPaths.backendPath("/nginx/etc/${serializePathParameter(configId, PathParameterSpec("configId", "simple", false))}/revisions/${serializePathParameter(versionNo, PathParameterSpec("versionNo", "simple", false))}"))
+        return client.convertValue(raw, object : TypeReference<ConfigsRevisionsRetrieveResponse>() {})
+    }
+
+    /** Roll an Nginx configuration back to a revision */
+    suspend fun configsRevisionsRollback(configId: String, versionNo: Int): ConfigsRevisionsRollbackResponse? {
+        val raw = client.post(ApiPaths.backendPath("/nginx/etc/${serializePathParameter(configId, PathParameterSpec("configId", "simple", false))}/revisions/${serializePathParameter(versionNo, PathParameterSpec("versionNo", "simple", false))}/rollback"), null)
+        return client.convertValue(raw, object : TypeReference<ConfigsRevisionsRollbackResponse>() {})
+    }
+
     /** Reload Nginx */
     suspend fun reload(idempotencyKey: String): ReloadResponse? {
         val requestHeaders = buildRequestHeaders(

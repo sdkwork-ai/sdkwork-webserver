@@ -6,4 +6,5 @@ type ServerDirectoryListing struct {
 	Path string `json:"path"`
 	ParentPath string `json:"parentPath"`
 	Entries []ServerEntry `json:"entries"`
+	Truncated bool `json:"truncated"`
 }

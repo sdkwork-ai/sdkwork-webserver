@@ -74,7 +74,7 @@ impl AcceptRetryPolicy {
             return false;
         }
         self.consecutive_failures += 1;
-        if self.consecutive_failures <= 3 || self.consecutive_failures % 100 == 0 {
+        if self.consecutive_failures <= 3 || self.consecutive_failures.is_multiple_of(100) {
             tracing::warn!(
                 failures = self.consecutive_failures,
                 error = %error,

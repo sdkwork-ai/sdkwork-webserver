@@ -1,47 +1,42 @@
-# WEB Database Module
+# Web Server Database Module
 
 Canonical lifecycle assets for the `sdkwork-webserver` PostgreSQL control-plane authority.
 
-- moduleId: `web`
+- moduleId: `webserver`
 - serviceCode: `WEB`
 - owner: `web-platform`
 - databaseRole: `authoritative-server`
 - engine: PostgreSQL 16 or later
 - required extensions: none
-- tablePrefix: `web_`
+- tablePrefix: `webserver_`
 
 ## Initialization State
 
-This module is in initialization state for greenfield PostgreSQL deployments:
+- `baselineStrategy`: committed primary baseline
+- baseline: `database/ddl/baseline/postgres/0001_webserver_baseline.sql` (full PostgreSQL DDL snapshot)
+- ordered migration range: `0005_webserver_application` through
+  `0029_webserver_nginx_config_revision`
+- consolidation level: the baseline is the consolidated pre-launch snapshot; the ordered post-baseline
+  migrations remain the load-bearing upgrade path and are replayed idempotently by the lifecycle on a
+  fresh install, so both a baseline-only and a baseline-plus-migrations database converge on the same
+  schema and migration history.
 
-1. `database/ddl/baseline/postgres/0001_webserver_baseline.sql` is the full PostgreSQL DDL snapshot.
-2. `database/migrations/postgres/` contains checksum-tracked forward migrations for every schema
-   change made after the initial baseline. Existing databases must never be upgraded by replaying
-   or editing the baseline.
-3. Production and staging use explicit migration commands; `lifecycle.autoMigrate` defaults to `false`.
-4. `pnpm db:drift:check` verifies the deployed schema before release.
+`0005`–`0012` upgrade databases created before the Website control plane, `application_type`, the
+`webserver_` table prefix and the cluster plane. `0013`–`0026` complete the application kind checks,
+runtime assignments, certificate lifecycle, node WeChat verification and their indexes. `0027` closes
+the tenant-integrity audit findings: tenant-scoped business tables no longer default to tenant `0`,
+site/root-domain children carry tenant-bound composite foreign keys, application slugs and active
+nginx configurations are unique through partial indexes, and the cluster admin listings gain the
+tenant-leading indexes their predicates seek. `0028` adds the per-owner plugin catalog
+(`webserver_plugin`): tenant/user scoping, one active plugin key per owner, draft/active status,
+git/archive source fields, and checksum/plugin-key checks. `0029` adds
+`webserver_nginx_config_revision`: one immutable snapshot per `(config_id, version_no)`, so the
+revision counter written by nginx config updates has readable, restorable history.
 
-The pre-launch reconciliation migration
-(`0001_web_schema_hardening`, plus `0002` env-variable rotation and `0003`
-certificate lifecycle completion) upgrades databases initialized before the
-Website runtime control plane and `application_type` were added. It preserves
-existing sites as `WEB` and refuses to invent tenant-scope hashes for legacy
-Web Nodes; operators must supply those hashes from their authoritative tenant
-assignments before rerunning the migration. `0004_web_list_index_hardening`
-adds the tenant-prefixed list-query indexes.
-
-SQLite is not an authoritative server engine or deployment profile. This Web Server repository
-does not provide a server-side SQLite repository or SQLite release profile. Any future SQLite
-fixture must be declared separately as `client-local`; it cannot be used as server parity evidence,
-an authority fallback, or a rollback target.
-
-## Initialization state
-
-This module is in **initialization state** for greenfield deployments:
-
-1. **Baseline** — `database/ddl/baseline/{engine}/0001_webserver_baseline.sql` contains the full DDL snapshot.
-2. **Migrations** — `database/migrations/{engine}/` is reserved for post-GA incremental schema changes only. It is intentionally empty at initialization.
-3. **Drift** — run `pnpm db:drift:check` before release.
+SQLite is not an authoritative server engine or deployment profile. This Web Server repository does
+not provide a server-side SQLite repository or SQLite release profile. Any future SQLite fixture must
+be declared separately as `client-local`; it cannot be used as server parity evidence, an authority
+fallback, or a rollback target.
 
 ## Commands
 

@@ -15,7 +15,6 @@ management = [
   "dep:sdkwork-api-sandbox-assembly",
   "dep:sdkwork-database-sqlx",
   "dep:sdkwork-database-id",
-  "dep:sdkwork-intelligence-webserver-repository-sqlx",
   "dep:psl",
   "dep:sdkwork-web-axum",
   "dep:sdkwork-web-contract",
@@ -100,10 +99,9 @@ sdkwork-database-id = { workspace = true, optional = true }
 # The WeChat verification files the Web Server control plane registers live in
 # `webserver_domain_wechat_verification`; the edge answers
 # `https://<hostname>/MP_verify_*.txt` straight from that table
-# (`src/data_plane/wechat_verify.rs`), so the data plane reads it through the
-# repository crate that owns the table instead of duplicating the SQL locally.
-# Management-plane only: the read needs the shared control-plane pool.
-sdkwork-intelligence-webserver-repository-sqlx = { workspace = true, optional = true }
+# (`src/data_plane/wechat_verify.rs`). The lookup is re-exported by the owner API
+# assembly (`sdkwork-api-webserver-assembly`), so the gateway never depends on
+# the repository crate directly (API_ASSEMBLY_SPEC §4/§6).
 # Served hostnames fold to their registrable root the same way the Deployments
 # domain plane folds them.
 psl = { workspace = true, optional = true }

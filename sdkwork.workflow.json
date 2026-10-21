@@ -221,11 +221,6 @@
         "run": "node scripts/webserver-sbom.mjs validate"
       },
       {
-        "name": "Validate web standards",
-        "shell": "pwsh",
-        "run": "pnpm verify"
-      },
-      {
         "name": "Validate disposable PostgreSQL",
         "shell": "pwsh",
         "run": "pnpm test:postgres:required"
@@ -239,6 +234,11 @@
         "name": "Validate PostgreSQL streaming failover",
         "shell": "pwsh",
         "run": "pnpm test:postgres:ha"
+      },
+      {
+        "name": "Validate web standards",
+        "shell": "pwsh",
+        "run": "pnpm verify"
       },
       {
         "name": "Reject generated contract drift",

@@ -213,9 +213,11 @@ class TunnelMachineResponse {
 
 class TunnelMachineListResponse {
   final List<TunnelMachineResponse>? machines;
+  final PageInfo? pageInfo;
 
   TunnelMachineListResponse({
-    this.machines
+    this.machines,
+    this.pageInfo
   });
 
   factory TunnelMachineListResponse.fromJson(Map<String, dynamic> json) {
@@ -232,6 +234,10 @@ class TunnelMachineListResponse {
       })())
             .whereType<TunnelMachineResponse>()
             .toList();
+      })(),
+      pageInfo: (() {
+        final map = _sdkworkAsMap(json['pageInfo']);
+        return map == null ? null : PageInfo.fromJson(map);
       })()
     );
   }
@@ -239,6 +245,7 @@ class TunnelMachineListResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'machines': machines?.map((item) => item.toJson()).toList(),
+      'pageInfo': pageInfo?.toJson(),
     };
   }
 }
@@ -1212,6 +1219,280 @@ class ApplicationResponse {
   }
 }
 
+class PluginResponse {
+  final String? id;
+  final String? pluginKey;
+  final String? displayName;
+  final String? summary;
+  final String? version;
+  final String? categoryId;
+  final List<String>? supportedHostTools;
+  final List<String>? contributedCapabilities;
+  final String? sourceKind;
+  final String? gitRepository;
+  final String? gitRef;
+  final String? artifactRef;
+  final String? checksumSha256;
+  final String? archiveFileName;
+  final String? status;
+  final String? createdAt;
+  final String? updatedAt;
+
+  PluginResponse({
+    this.id,
+    this.pluginKey,
+    this.displayName,
+    this.summary,
+    this.version,
+    this.categoryId,
+    this.supportedHostTools,
+    this.contributedCapabilities,
+    this.sourceKind,
+    this.gitRepository,
+    this.gitRef,
+    this.artifactRef,
+    this.checksumSha256,
+    this.archiveFileName,
+    this.status,
+    this.createdAt,
+    this.updatedAt
+  });
+
+  factory PluginResponse.fromJson(Map<String, dynamic> json) {
+    return PluginResponse(
+      id: json['id']?.toString(),
+      pluginKey: json['pluginKey']?.toString(),
+      displayName: json['displayName']?.toString(),
+      summary: json['summary']?.toString(),
+      version: json['version']?.toString(),
+      categoryId: json['categoryId']?.toString(),
+      supportedHostTools: (() {
+        final list = _sdkworkAsList(json['supportedHostTools']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      contributedCapabilities: (() {
+        final list = _sdkworkAsList(json['contributedCapabilities']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      sourceKind: json['sourceKind']?.toString(),
+      gitRepository: json['gitRepository']?.toString(),
+      gitRef: json['gitRef']?.toString(),
+      artifactRef: json['artifactRef']?.toString(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      archiveFileName: json['archiveFileName']?.toString(),
+      status: json['status']?.toString(),
+      createdAt: json['createdAt']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'pluginKey': pluginKey,
+      'displayName': displayName,
+      'summary': summary,
+      'version': version,
+      'categoryId': categoryId,
+      'supportedHostTools': supportedHostTools?.map((item) => item).toList(),
+      'contributedCapabilities': contributedCapabilities?.map((item) => item).toList(),
+      'sourceKind': sourceKind,
+      'gitRepository': gitRepository,
+      'gitRef': gitRef,
+      'artifactRef': artifactRef,
+      'checksumSha256': checksumSha256,
+      'archiveFileName': archiveFileName,
+      'status': status,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class CreatePluginRequest {
+  final String? pluginKey;
+  final String? displayName;
+  final String? summary;
+  final String? version;
+  final String? categoryId;
+  final List<String>? supportedHostTools;
+  final List<String>? contributedCapabilities;
+  final String? sourceKind;
+  final String? gitRepository;
+  final String? gitRef;
+  final String? artifactRef;
+  final String? checksumSha256;
+  final String? archiveFileName;
+  final String? status;
+
+  CreatePluginRequest({
+    this.pluginKey,
+    this.displayName,
+    this.summary,
+    this.version,
+    this.categoryId,
+    this.supportedHostTools,
+    this.contributedCapabilities,
+    this.sourceKind,
+    this.gitRepository,
+    this.gitRef,
+    this.artifactRef,
+    this.checksumSha256,
+    this.archiveFileName,
+    this.status
+  });
+
+  factory CreatePluginRequest.fromJson(Map<String, dynamic> json) {
+    return CreatePluginRequest(
+      pluginKey: json['pluginKey']?.toString(),
+      displayName: json['displayName']?.toString(),
+      summary: json['summary']?.toString(),
+      version: json['version']?.toString(),
+      categoryId: json['categoryId']?.toString(),
+      supportedHostTools: (() {
+        final list = _sdkworkAsList(json['supportedHostTools']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      contributedCapabilities: (() {
+        final list = _sdkworkAsList(json['contributedCapabilities']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      sourceKind: json['sourceKind']?.toString(),
+      gitRepository: json['gitRepository']?.toString(),
+      gitRef: json['gitRef']?.toString(),
+      artifactRef: json['artifactRef']?.toString(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      archiveFileName: json['archiveFileName']?.toString(),
+      status: json['status']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'pluginKey': pluginKey,
+      'displayName': displayName,
+      'summary': summary,
+      'version': version,
+      'categoryId': categoryId,
+      'supportedHostTools': supportedHostTools?.map((item) => item).toList(),
+      'contributedCapabilities': contributedCapabilities?.map((item) => item).toList(),
+      'sourceKind': sourceKind,
+      'gitRepository': gitRepository,
+      'gitRef': gitRef,
+      'artifactRef': artifactRef,
+      'checksumSha256': checksumSha256,
+      'archiveFileName': archiveFileName,
+      'status': status,
+    };
+  }
+}
+
+class UpdatePluginRequest {
+  final String? displayName;
+  final String? summary;
+  final String? version;
+  final String? categoryId;
+  final List<String>? supportedHostTools;
+  final List<String>? contributedCapabilities;
+  final String? gitRepository;
+  final String? gitRef;
+  final String? artifactRef;
+  final String? checksumSha256;
+  final String? archiveFileName;
+  final String? status;
+
+  UpdatePluginRequest({
+    this.displayName,
+    this.summary,
+    this.version,
+    this.categoryId,
+    this.supportedHostTools,
+    this.contributedCapabilities,
+    this.gitRepository,
+    this.gitRef,
+    this.artifactRef,
+    this.checksumSha256,
+    this.archiveFileName,
+    this.status
+  });
+
+  factory UpdatePluginRequest.fromJson(Map<String, dynamic> json) {
+    return UpdatePluginRequest(
+      displayName: json['displayName']?.toString(),
+      summary: json['summary']?.toString(),
+      version: json['version']?.toString(),
+      categoryId: json['categoryId']?.toString(),
+      supportedHostTools: (() {
+        final list = _sdkworkAsList(json['supportedHostTools']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      contributedCapabilities: (() {
+        final list = _sdkworkAsList(json['contributedCapabilities']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      gitRepository: json['gitRepository']?.toString(),
+      gitRef: json['gitRef']?.toString(),
+      artifactRef: json['artifactRef']?.toString(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      archiveFileName: json['archiveFileName']?.toString(),
+      status: json['status']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'displayName': displayName,
+      'summary': summary,
+      'version': version,
+      'categoryId': categoryId,
+      'supportedHostTools': supportedHostTools?.map((item) => item).toList(),
+      'contributedCapabilities': contributedCapabilities?.map((item) => item).toList(),
+      'gitRepository': gitRepository,
+      'gitRef': gitRef,
+      'artifactRef': artifactRef,
+      'checksumSha256': checksumSha256,
+      'archiveFileName': archiveFileName,
+      'status': status,
+    };
+  }
+}
+
 class CreateApplicationDomainRequest {
   final String? hostname;
   final bool? isPrimary;
@@ -1444,6 +1725,102 @@ class RootDomainResponse {
       'activeDeploymentCount': activeDeploymentCount,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
+    };
+  }
+}
+
+class DomainWechatVerificationResponse {
+  final String? rootDomainId;
+  final String? fileName;
+  final String? content;
+  final String? updatedAt;
+
+  DomainWechatVerificationResponse({
+    this.rootDomainId,
+    this.fileName,
+    this.content,
+    this.updatedAt
+  });
+
+  factory DomainWechatVerificationResponse.fromJson(Map<String, dynamic> json) {
+    return DomainWechatVerificationResponse(
+      rootDomainId: json['rootDomainId']?.toString(),
+      fileName: json['fileName']?.toString(),
+      content: json['content']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'rootDomainId': rootDomainId,
+      'fileName': fileName,
+      'content': content,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class UpsertDomainWechatVerificationRequest {
+  final String? fileName;
+  final String? content;
+
+  UpsertDomainWechatVerificationRequest({
+    this.fileName,
+    this.content
+  });
+
+  factory UpsertDomainWechatVerificationRequest.fromJson(Map<String, dynamic> json) {
+    return UpsertDomainWechatVerificationRequest(
+      fileName: json['fileName']?.toString(),
+      content: json['content']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'fileName': fileName,
+      'content': content,
+    };
+  }
+}
+
+class DomainWechatVerificationCheckResponse {
+  final bool? reachable;
+  final bool? matched;
+  final int? statusCode;
+  final String? scheme;
+  final String? detail;
+  final String? checkedAt;
+
+  DomainWechatVerificationCheckResponse({
+    this.reachable,
+    this.matched,
+    this.statusCode,
+    this.scheme,
+    this.detail,
+    this.checkedAt
+  });
+
+  factory DomainWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
+    return DomainWechatVerificationCheckResponse(
+      reachable: json['reachable'] is bool ? json['reachable'] : null,
+      matched: json['matched'] is bool ? json['matched'] : null,
+      statusCode: json['statusCode'] is int ? json['statusCode'] : null,
+      scheme: json['scheme']?.toString(),
+      detail: json['detail']?.toString(),
+      checkedAt: json['checkedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'reachable': reachable,
+      'matched': matched,
+      'statusCode': statusCode,
+      'scheme': scheme,
+      'detail': detail,
+      'checkedAt': checkedAt,
     };
   }
 }
@@ -2752,6 +3129,82 @@ class NginxConfigResponse {
   }
 }
 
+class NginxConfigRevisionSummary {
+  final int? versionNo;
+  final String? configName;
+  final String? configHash;
+  final String? createdBy;
+  final String? createdAt;
+
+  NginxConfigRevisionSummary({
+    this.versionNo,
+    this.configName,
+    this.configHash,
+    this.createdBy,
+    this.createdAt
+  });
+
+  factory NginxConfigRevisionSummary.fromJson(Map<String, dynamic> json) {
+    return NginxConfigRevisionSummary(
+      versionNo: json['versionNo'] is int ? json['versionNo'] : null,
+      configName: json['configName']?.toString(),
+      configHash: json['configHash']?.toString(),
+      createdBy: json['createdBy']?.toString(),
+      createdAt: json['createdAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'versionNo': versionNo,
+      'configName': configName,
+      'configHash': configHash,
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+class NginxConfigRevisionResponse {
+  final int? versionNo;
+  final String? configName;
+  final String? configContent;
+  final String? configHash;
+  final String? createdBy;
+  final String? createdAt;
+
+  NginxConfigRevisionResponse({
+    this.versionNo,
+    this.configName,
+    this.configContent,
+    this.configHash,
+    this.createdBy,
+    this.createdAt
+  });
+
+  factory NginxConfigRevisionResponse.fromJson(Map<String, dynamic> json) {
+    return NginxConfigRevisionResponse(
+      versionNo: json['versionNo'] is int ? json['versionNo'] : null,
+      configName: json['configName']?.toString(),
+      configContent: json['configContent']?.toString(),
+      configHash: json['configHash']?.toString(),
+      createdBy: json['createdBy']?.toString(),
+      createdAt: json['createdAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'versionNo': versionNo,
+      'configName': configName,
+      'configContent': configContent,
+      'configHash': configHash,
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+    };
+  }
+}
+
 class NginxConfigPage {
   final List<NginxConfigResponse>? items;
   final String? total;
@@ -3102,12 +3555,14 @@ class ServerDirectoryListing {
   final String? path;
   final String? parentPath;
   final List<ServerEntry>? entries;
+  final bool? truncated;
 
   ServerDirectoryListing({
     this.nodeId,
     this.path,
     this.parentPath,
-    this.entries
+    this.entries,
+    this.truncated
   });
 
   factory ServerDirectoryListing.fromJson(Map<String, dynamic> json) {
@@ -3127,7 +3582,8 @@ class ServerDirectoryListing {
       })())
             .whereType<ServerEntry>()
             .toList();
-      })()
+      })(),
+      truncated: json['truncated'] is bool ? json['truncated'] : null
     );
   }
 
@@ -3137,6 +3593,7 @@ class ServerDirectoryListing {
       'path': path,
       'parentPath': parentPath,
       'entries': entries?.map((item) => item.toJson()).toList(),
+      'truncated': truncated,
     };
   }
 }
@@ -3216,10 +3673,14 @@ class ServerFileContent {
 class WebserverConfigCatalog {
   final String? configRoot;
   final List<WebserverConfigEntry>? items;
+  final bool? truncated;
+  final PageInfo? pageInfo;
 
   WebserverConfigCatalog({
     this.configRoot,
-    this.items
+    this.items,
+    this.truncated,
+    this.pageInfo
   });
 
   factory WebserverConfigCatalog.fromJson(Map<String, dynamic> json) {
@@ -3237,6 +3698,11 @@ class WebserverConfigCatalog {
       })())
             .whereType<WebserverConfigEntry>()
             .toList();
+      })(),
+      truncated: json['truncated'] is bool ? json['truncated'] : null,
+      pageInfo: (() {
+        final map = _sdkworkAsMap(json['pageInfo']);
+        return map == null ? null : PageInfo.fromJson(map);
       })()
     );
   }
@@ -3245,6 +3711,8 @@ class WebserverConfigCatalog {
     return <String, dynamic>{
       'configRoot': configRoot,
       'items': items?.map((item) => item.toJson()).toList(),
+      'truncated': truncated,
+      'pageInfo': pageInfo?.toJson(),
     };
   }
 }
@@ -5541,6 +6009,118 @@ class ApplicationsCreateResponse201 {
   }
 }
 
+class PluginsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  PluginsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory PluginsListResponse.fromJson(Map<String, dynamic> json) {
+    return PluginsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PluginsCreateResponse201 {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  PluginsCreateResponse201({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory PluginsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return PluginsCreateResponse201(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PluginsRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  PluginsRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory PluginsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return PluginsRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class PluginsUpdateResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  PluginsUpdateResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory PluginsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return PluginsUpdateResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
 class ApplicationsRetrieveResponse {
   final int? code;
   final dynamic data;
@@ -6073,6 +6653,90 @@ class RootDomainsDnsRecordsStatusUpdateResponse {
   }
 }
 
+class RootDomainsWechatVerificationRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  RootDomainsWechatVerificationRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory RootDomainsWechatVerificationRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsWechatVerificationRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsWechatVerificationUpdateResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  RootDomainsWechatVerificationUpdateResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory RootDomainsWechatVerificationUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsWechatVerificationUpdateResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class RootDomainsWechatVerificationCheckResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  RootDomainsWechatVerificationCheckResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory RootDomainsWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsWechatVerificationCheckResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
 class RootDomainsDnsRecordsSyncResponse {
   final int? code;
   final dynamic data;
@@ -6142,6 +6806,34 @@ class DomainsCreateResponse201 {
 
   factory DomainsCreateResponse201.fromJson(Map<String, dynamic> json) {
     return DomainsCreateResponse201(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DomainsRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  DomainsRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory DomainsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return DomainsRetrieveResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -6730,6 +7422,90 @@ class ConfigsDeployResponse {
 
   factory ConfigsDeployResponse.fromJson(Map<String, dynamic> json) {
     return ConfigsDeployResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ConfigsRevisionsListResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ConfigsRevisionsListResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ConfigsRevisionsListResponse.fromJson(Map<String, dynamic> json) {
+    return ConfigsRevisionsListResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ConfigsRevisionsRetrieveResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ConfigsRevisionsRetrieveResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ConfigsRevisionsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ConfigsRevisionsRetrieveResponse(
+      code: json['code'] is int ? json['code'] : null,
+      data: _sdkworkAsMap(json['data']),
+      traceId: json['traceId']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ConfigsRevisionsRollbackResponse {
+  final int? code;
+  final dynamic data;
+  final String? traceId;
+
+  ConfigsRevisionsRollbackResponse({
+    this.code,
+    this.data,
+    this.traceId
+  });
+
+  factory ConfigsRevisionsRollbackResponse.fromJson(Map<String, dynamic> json) {
+    return ConfigsRevisionsRollbackResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
