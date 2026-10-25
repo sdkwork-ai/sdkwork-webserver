@@ -14,7 +14,7 @@ goals:
   - Import public HTTPS Git repositories on the server through the Drive uploader service with the same bounded application-source policy as browser-selected sources.
   - Keep source versions and release records as separate resources so one stored source version can be released, audited, or rolled back independently.
   - Retain the newest five ready source artifacts by default, allow a bounded per-application override, and preserve release audit records when old artifacts are pruned.
-  - Discover and report `sdkwork.app.config.json` and `etc/sdkwork.deployment.config.json` from each stored source version.
+  - Discover and report `agent.app.config.json` and `etc/sdkwork.deployment.config.json` from each stored source version.
   - Apply one bounded application-source policy to browser directory packages and uploaded ZIP archives before Drive extraction.
   - Keep source preparation, upload, archive inspection, and extraction cancellable or fail-closed without allowing duplicate UI submission.
   - Persist a stable Drive resource URI, package size, lowercase SHA-256 digest, source type, original source reference, environment, version metadata, and idempotency key without storing signed URLs, object keys, or provider credentials.

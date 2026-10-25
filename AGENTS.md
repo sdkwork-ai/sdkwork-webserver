@@ -20,12 +20,12 @@ Canonical SDKWORK specs path from this root:
 - `../sdkwork-specs/NAMING_SPEC.md`
 Do not copy root standard text into this repository. If these relative paths do not resolve, stop and report the broken workspace layout.
 ## Application Identity
-Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API inventory, release metadata, packaging capability, or app-owned capabilities. Read `etc/` for concrete environment, bind, upstream, runtime, and deployment values. The app manifest is not runtime configuration authority.
+Read `agent.app.config.json` for Web Server identity, registration, SDK/API inventory, release metadata, packaging capability, or app-owned capabilities. Read `etc/` for concrete environment, bind, upstream, runtime, and deployment values. The app manifest is not runtime configuration authority.
 ## Deployment Profile (Standalone-Only)
 > Manual note — keep this section when AGENTS.md is regenerated.
 `sdkwork-webserver` is **standalone-only** (`SDKWORK_WEBSERVER_SPEC.md` §17.4) and is the **only** public reverse-proxy edge (`SDKWORK_WEBSERVER_SPEC.md` §0.1, `NGINX_SPEC.md` §0):
 - Stock OpenResty/nginx and `/etc/nginx` `MUST NOT` serve SDKWork public domains. Uninstall host nginx (`bin/host/uninstall-wsl-nginx.sh`); `install-wsl-nginx.sh` is retired and only invokes uninstall. Docker development publishes host `:80`/`:443`.
-- `sdkwork.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]`; there is no cloud build, cloud package, or cloud runtime-env surface in this repository.
+- `agent.app.config.json` declares `runtime.supportedDeploymentProfiles = ["standalone"]`; there is no cloud build, cloud package, or cloud runtime-env surface in this repository.
 - Its browser applications (`apps/sdkwork-webserver-pc`, `apps/sdkwork-webserver-h5`) build with the canonical runner at `build:pc|h5:<env>` only (no `:cloud` variants). Every SDK API base URL is the same-origin root `/` (`browserOriginMode = same-origin`); the gateway serves the SPAs and the API on one origin.
 - Release packaging (`scripts/webserver-release.mjs`, deb/rpm) produces standalone server packages only; `--deployment-profile cloud` is rejected.
 - The nginx-compatible **module import plane** (`imports.d`, `SDKWORK_WEBSERVER_SPEC.md` §17.3) is a separate concept from the webserver's own build mode: it still materializes both `standalone` and `cloud` import sets for the imported sibling modules (default active set `cloud`) so the edge startup mode can switch freely. Sidecars are inputs to the Rust data plane, not a stock nginx process.
@@ -34,7 +34,7 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 ## Local Dictionary Structure
 - `AGENTS.md`: repository agent entrypoint and relative SDKWork spec index.
 - `CLAUDE.md`, `GEMINI.md`, `CODEX.md`: compatibility shims that point to `AGENTS.md`.
-- `sdkwork.app.config.json`: Web Server application identity, runtime, release, and capability metadata.
+- `agent.app.config.json`: Web Server application identity, runtime, release, and capability metadata.
 - `etc/`: Web Server deployment/runtime profiles, application ingress configuration, upstream targets, and safe local examples.
 - `sdkwork.workflow.json`: GitHub packaging/release workflow manifest.
 - `.github/workflows/package.yml`: thin reusable workflow call only.
@@ -55,13 +55,13 @@ Read `sdkwork.app.config.json` for Web Server identity, registration, SDK/API in
 <!-- SDKWORK-PROGRESSIVE-LOADING: v1 -->
 Use dynamic progressive loading for the current task: resolve the selected root and task category before reading broad source context.
 1. Read this `AGENTS.md` routing material and classify the owned surface.
-2. Read `sdkwork.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.
+2. Read `agent.app.config.json`, module `specs/`, repository/application `specs/`, and `.sdkwork/` only when the task reaches the contract each item governs.
 3. Locate only the relevant task-matrix row or navigation heading in `../sdkwork-specs/README.md`; do not load the full catalog.
 4. Read only the task-specific global spec sections selected by that route, then inspect implementation files.
 <!-- /SDKWORK-PROGRESSIVE-LOADING: v1 -->
 Use dynamic progressive loading:
 1. Read this `AGENTS.md` and any nearer component-level `AGENTS.md`.
-2. Read `sdkwork.app.config.json` only when app behavior, runtime config, SDK wiring, release, packaging, or app-owned capabilities are touched.
+2. Read `agent.app.config.json` only when app behavior, runtime config, SDK wiring, release, packaging, or app-owned capabilities are touched.
 3. Read local `specs/README.md` and `specs/component.spec.json` only when the task touches that local contract.
 4. Read `../sdkwork-specs/README.md`, then only the task-specific root specs.
 5. Inspect implementation files after the dictionary and relevant specs are clear.

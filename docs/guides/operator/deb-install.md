@@ -133,7 +133,7 @@ injects it into the served `index.html` as an inline script.
 
 - **Test package**: the installer generates a locally provisioned unsigned
   fixture JWT (`@sdkwork/iam-credential-entry` dev-bootstrap shape, claims
-  from `sdkwork.app.config.json` backend identity). The test IAM resolver
+  from `agent.app.config.json` backend identity). The test IAM resolver
   accepts it through the development authentication fallback, so the login
   page renders immediately after install.
 - **Production package**: the installer intentionally leaves the token unset —

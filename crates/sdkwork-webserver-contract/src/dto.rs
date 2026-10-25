@@ -880,7 +880,7 @@ pub struct SourceVersionConfigSnapshot {
 }
 
 fn default_app_config_path() -> String {
-    "sdkwork.app.config.json".to_string()
+    "agent.app.config.json".to_string()
 }
 
 fn default_deployment_config_path() -> String {

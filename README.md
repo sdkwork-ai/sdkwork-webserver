@@ -37,7 +37,7 @@ pnpm verify
 
 `pnpm dev` is server-only and selects `standalone.development`. `pnpm dev:cloud` starts only the
 local Web Node Daemon against explicit remote development surfaces. Release packages remain
-disabled in `sdkwork.app.config.json` until publication and production evidence are approved.
+disabled in `agent.app.config.json` until publication and production evidence are approved.
 
 ## Documentation
 

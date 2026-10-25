@@ -22,7 +22,7 @@ Normative host layout, ownership, and permissions are owned by
 - PostgreSQL reachable from the host (the standalone production profile requires a real
   database; see `../database/README.md` and `ENVIRONMENT_SPEC.md` section 7).
 - SHA-256 checksums and signatures from the release (checksums are mandatory per
-  `sdkwork.app.config.json` security metadata).
+  `agent.app.config.json` security metadata).
 
 ## 2. Extract The Package
 

@@ -159,10 +159,10 @@ describe('upload declaration conformance', () => {
   it('declaration appId matches the application config', () => {
     // §18.4: the declaration must match the config, not merely a local constant.
     const config = JSON.parse(
-      fs.readFileSync(path.join(appRoot, 'sdkwork.app.config.json'), 'utf8'),
+      fs.readFileSync(path.join(appRoot, 'agent.app.config.json'), 'utf8'),
     );
     const appId = config.backend?.appId ?? config.app?.key;
-    expect(appId, 'sdkwork.app.config.json does not declare an app identity').toBeTruthy();
+    expect(appId, 'agent.app.config.json does not declare an app identity').toBeTruthy();
     expect(loadDeclaration().appId).toBe(appId);
   });
 

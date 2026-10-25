@@ -98,7 +98,7 @@ $ curl -s http://127.0.0.1:18080/            # production 边缘
 
 | 版本来源 | 值 |
 | --- | --- |
-| `sdkwork.app.config.json` `release.currentVersion` | **0.1.5** |
+| `agent.app.config.json` `release.currentVersion` | **0.1.5** |
 | 部署根 `bundle/manifest.json` / `bundle/image.env` | **0.1.5** |
 | 部署根 `bundle/release-state/development/current.json` | **0.1.4** |
 | 仓库 `deployments/docker/env/*.env`（被 gitignore 的本地操作面） | **0.1.2** |
@@ -207,7 +207,7 @@ production  FAIL config :: configuration drift: PLACEHOLDER WEBSERVER_REDIS_PASS
 4. **CORS 白名单规模差异**：dev/test/staging = 569 条、demo = 568、production = **297**。可能合理（生产不列 console 主机），建议确认不是遗漏。
 5. **静态节点号与租约空间重叠**：网关容器带 `SDKWORK_IM_ID_NODE_ID=2`（静态），而注册表中 `node_id=2` 当前由 `sdkwork-skills` **租约**持有。需确认静态编号与租约分配是否共用同一 ID 空间——若共用，同 node_id 的两个生成器存在 ID 冲突风险。
 6. **门禁工具在本机不可用**：`check-unified-postgres-profile.mjs` 在全工作区模式下无法完成（240s 超时后被杀，EXIT=143），不能作为本地回归手段。`check-embedded-self-loop.mjs` 全量跑约 **1h19m** 才出结果（见 §5.3），同样不宜作本地回归。
-7. **构建暂存目录残留 1.3GB，并被门禁误判为「部署面」**：`.sdkwork/runtime/docker-standalone-context/`（1.3GB，`.sdkwork/.gitignore:4` 已忽略、未跟踪）是 0.1.5 镜像构建的 stage context 残留。内容经核对是**构建后的最终快照**（`sdkwork.app.config.json` = 0.1.5、entrypoint 含 3 参修复、0005 校验和 = `7c3dad54…` 与线上契约一致），因此**无正确性风险**；但两个副效应需处理：① 它让 `audit-app-iam-integration` 把该目录当成一个「应用部署面」审计并报 `missing authBoundary`（见 §5.3 假阳性）；② 后续若直接复用该目录 `docker build` 而不重新生成，会烘焙旧快照。
+7. **构建暂存目录残留 1.3GB，并被门禁误判为「部署面」**：`.sdkwork/runtime/docker-standalone-context/`（1.3GB，`.sdkwork/.gitignore:4` 已忽略、未跟踪）是 0.1.5 镜像构建的 stage context 残留。内容经核对是**构建后的最终快照**（`agent.app.config.json` = 0.1.5、entrypoint 含 3 参修复、0005 校验和 = `7c3dad54…` 与线上契约一致），因此**无正确性风险**；但两个副效应需处理：① 它让 `audit-app-iam-integration` 把该目录当成一个「应用部署面」审计并报 `missing authBoundary`（见 §5.3 假阳性）；② 后续若直接复用该目录 `docker build` 而不重新生成，会烘焙旧快照。
 8. **`check-embedded-self-loop` 的 2 条违规位于 agent 暂存目录，非真实部署**：两条命中都在 `sdkwork-api-cloud-gateway/.workbuddy/{backup/cors-20260911,tmp/deployed}/webserver-compose/docker-compose.bundle-gateway.yml`——`.workbuddy/` 被 `sdkwork-api-cloud-gateway/.gitignore:88` 忽略，目录 mtime **11:17–11:26**，与 P0-3 中「11:37–11:42 绕过 bin/ 的整批重部署」属**同一会话时段**，是该会话把 webserver-compose 副本暂存到网关仓留下的产物。反过来说明 `.workbuddy/` 暂存区会污染全工作区门禁（见 §5.4 盲点 4）。
 
 ---
@@ -285,7 +285,7 @@ production  FAIL config :: configuration drift: PLACEHOLDER WEBSERVER_REDIS_PASS
 | 优先级 | 动作 |
 | --- | --- |
 | **立即** | ~~为 `app_shell` 的令牌注入加上与数据面一致的环境门禁（仅 development/dev）；同时让 `ensure_credential_entry_bootstrap_token` 在 staging/demo/production 不签发（或改为按需签发 + 短 TTL 自动刷新）。修好前不要在 production 暴露该控制台入口。~~ **已完成（2026-09-15 复核，见 §2 P0-1 处置状态）**；TTL 自动刷新仍为待办。 |
-| **立即** | 补齐版本一致性守卫：`bin/docker-deploy.sh` 解析出的 tag 必须与 `sdkwork.app.config.json release.currentVersion` 一致，否则 fail-fast；把仓库 `deployments/docker/env/*.env` 的 IMAGE_TAG 复位到 0.1.5 并重发五环境。 |
+| **立即** | 补齐版本一致性守卫：`bin/docker-deploy.sh` 解析出的 tag 必须与 `agent.app.config.json release.currentVersion` 一致，否则 fail-fast；把仓库 `deployments/docker/env/*.env` 的 IMAGE_TAG 复位到 0.1.5 并重发五环境。 |
 | **高** | 让 upgrade 也写 release 台账（补齐四环境的 rollback 能力）；并把「绕过 bin/ 的实际部署」纳入可检测范围（例如部署面落地一次性 nonce/证据标记）。 |
 | **高** | 节点租约自愈：心跳被 fence 后允许重新分配，或让 `/readyz` 不因该依赖永久 fail-closed；补注册表 GC。 |
 | **高** | 统一 `/healthz` 与 `/readyz` 语义：边缘就绪必须传递后端网关的就绪状态。 |

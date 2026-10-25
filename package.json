@@ -123,7 +123,7 @@
     "test:contracts": "node --test tests/contract/*.contract.test.mjs",
     "test:contract:iam-application-bootstrap": "node --test scripts/dev/sdkwork-webserver-iam-application-bootstrap-standard.test.mjs",
     "check:client-native-roots": "node --experimental-strip-types --test \"apps/sdkwork-webserver-harmony-mobile/tests/*.test.mjs\" \"apps/sdkwork-webserver-flutter-mobile/tests/*.test.mjs\"",
-    "admin:bootstrap:app": "node ../sdkwork-iam/scripts/bootstrap/bootstrap-app.mjs --config sdkwork.app.config.json",
+    "admin:bootstrap:app": "node ../sdkwork-iam/scripts/bootstrap/bootstrap-app.mjs --config agent.app.config.json",
     "admin:reset:dev": "node scripts/reset-admin-account.mjs --mode dev --environment development",
     "admin:reset:test": "node scripts/reset-admin-account.mjs --mode release --environment test",
     "admin:reset:staging": "node scripts/reset-admin-account.mjs --mode release --environment staging",

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "kind": "sdkwork.app",
+  "kind": "agent.app",
   "app": {
     "key": "sdkwork-webserver-harmony-mobile",
     "name": "SDKWork Webserver HarmonyOS Mobile",

@@ -5,7 +5,7 @@
 ## 1. 构建与打包
 
 ```bash
-bin/docker-image.sh build                       # tag 取自 sdkwork.app.config.json
+bin/docker-image.sh build                       # tag 取自 agent.app.config.json
 bin/docker-image.sh save -o dist/image.tar.gz   # 产出 .tar.gz + .sha256
 bin/apps-package.sh pc production               # 浏览器产物
 bin/apps-package.sh h5 production

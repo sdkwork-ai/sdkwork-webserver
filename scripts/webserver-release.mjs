@@ -150,7 +150,7 @@ const BINARIES = [
   'sdkwork-webserver-certificate-worker',
 ];
 const PACKAGE_ASSETS = [
-  { source: 'sdkwork.app.config.json', target: 'sdkwork.app.config.json' },
+  { source: 'agent.app.config.json', target: 'agent.app.config.json' },
   {
     source: 'specs/iam.module.manifest.json',
     target: 'specs/iam.module.manifest.json',
@@ -479,7 +479,7 @@ function ensureCriticalSources() {
 }
 
 function resolveVersion(settings) {
-  const manifestPath = path.join(REPO_ROOT, 'sdkwork.app.config.json');
+  const manifestPath = path.join(REPO_ROOT, 'agent.app.config.json');
   const manifestText = readSmallText(manifestPath, MAX_MANIFEST_BYTES, 'application manifest');
   const manifest = JSON.parse(manifestText);
   const packageVersion = process.env.SDKWORK_PACKAGE_VERSION?.trim();

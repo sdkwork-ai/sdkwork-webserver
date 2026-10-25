@@ -19,8 +19,8 @@ import {
 const CRITICAL_SOURCE_FILES = [
   '.env.postgres.example',
   'Cargo.toml',
-  'sdkwork.app.config.json',
-  'apps/sdkwork-webserver-pc/sdkwork.app.config.json',
+  'agent.app.config.json',
+  'apps/sdkwork-webserver-pc/agent.app.config.json',
   'crates/sdkwork-api-webserver-standalone-gateway/Cargo.toml',
   'crates/sdkwork-api-webserver-standalone-gateway/src/main.rs',
   'scripts/lib/webserver-topology.mjs',

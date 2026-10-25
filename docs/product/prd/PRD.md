@@ -86,7 +86,7 @@ store; it must not create a second synchronization loop or a second authority.
 - V1 does not promise compatibility with arbitrary Nginx third-party dynamic modules.
 - V1 does not implement OpenResty/Lua, Perl modules, Nginx mail proxy, or Nginx Plus proprietary features.
 - V1 does not treat arbitrary raw Nginx text as executable by the Rust engine.
-- V1 does not store certificate private keys, tokens, passwords, or credentials in `sdkwork.app.config.json` or committed Web Server configuration.
+- V1 does not store certificate private keys, tokens, passwords, or credentials in `agent.app.config.json` or committed Web Server configuration.
 - V1 does not require the request data plane to query PostgreSQL, Redis, ACME, DNS control APIs, or the management control plane for every request.
 - V1 does not allow per-application code to bypass the Web Server compiler with handwritten runtime routes.
 - V1 does not guarantee byte-for-byte identical Nginx-generated error pages; protocol behavior and configured routing semantics are the compatibility target.
@@ -154,7 +154,7 @@ Health or SLO checks detect a failed canary. The control plane stops rollout, re
 
 ## 7. Functional Requirements
 
-- `PRD-FR-001`: Every Web application root must own `sdkwork.app.config.json` and a referenced `sdkwork.webserver.config.json` at the standard app-local path.
+- `PRD-FR-001`: Every Web application root must own `agent.app.config.json` and a referenced `sdkwork.webserver.config.json` at the standard app-local path.
 - `PRD-FR-002`: The compiler must validate syntax, schema, references, listener conflicts, domain conflicts, route ambiguity, filesystem boundaries, TLS dependencies, upstream reachability policy, and resource budgets before publication.
 - `PRD-FR-003`: The Rust engine must implement deterministic virtual-host and route selection compatible with the declared Nginx profile.
 - `PRD-FR-004`: Production public listeners must support HTTPS and must not activate when required certificate material is unavailable, invalid, expired, mismatched, or unreadable.

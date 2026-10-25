@@ -41,7 +41,7 @@ Host Ubuntu nginx is **not** used — uninstall with `uninstall-wsl-nginx.sh`.
 
 ```bash
 # 0. Build the canonical image once (MODULE_BIN_SPEC.md)
-#    The tag defaults to sdkwork.app.config.json release.currentVersion.
+#    The tag defaults to agent.app.config.json release.currentVersion.
 bin/docker-image.sh build
 
 # 1. Provision host-system PostgreSQL/Redis for every lifecycle environment

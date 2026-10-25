@@ -9,10 +9,10 @@ Resolve this standards root once for the current task:
 - `../../../sdkwork-specs/AGENTS_SPEC.md`
 Read only the relevant README task-matrix row or navigation heading, then load the selected authority sections. Do not copy global standard bodies into this application. If these relative paths do not resolve, stop and report the broken workspace layout.
 ## Application Identity
-Read `sdkwork.app.config.json` for H5 application identity, SDK inventory, release metadata, packaging, and app-owned capabilities. Read `../../sdkwork.app.config.json` for repository-wide Web Server identity. This is the H5 Adaptive Web surface for Web Server: public-origin selection follows `../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1 (mobile → H5, fallback PC). Concrete browser runtime values come from this application's `etc/` profiles and materialized runtime-env output; neither app manifest is runtime configuration authority.
+Read `agent.app.config.json` for H5 application identity, SDK inventory, release metadata, packaging, and app-owned capabilities. Read `../../agent.app.config.json` for repository-wide Web Server identity. This is the H5 Adaptive Web surface for Web Server: public-origin selection follows `../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2.1 (mobile → H5, fallback PC). Concrete browser runtime values come from this application's `etc/` profiles and materialized runtime-env output; neither app manifest is runtime configuration authority.
 ## Local Dictionary Structure
 - `AGENTS.md`: application agent entrypoint and relative SDKWork spec index.
-- `sdkwork.app.config.json`: H5 application identity and capability metadata.
+- `agent.app.config.json`: H5 application identity and capability metadata.
 - `specs/`: application composition contract.
 - `src/`: thin H5 shell and adaptive web surface composition.
 - `etc/`: deployable-root source configuration for browser profiles.

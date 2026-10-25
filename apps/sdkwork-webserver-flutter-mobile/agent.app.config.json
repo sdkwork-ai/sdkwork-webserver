@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "kind": "sdkwork.app",
+  "kind": "agent.app",
   "app": {
     "key": "sdkwork-webserver-flutter-mobile",
     "name": "SDKWork Webserver Flutter Mobile",

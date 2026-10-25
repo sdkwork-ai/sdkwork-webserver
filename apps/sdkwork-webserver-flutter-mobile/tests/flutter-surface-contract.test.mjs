@@ -156,7 +156,7 @@ for (const requiredPath of [
   ".gitignore",
   ".env.example",
   "pubspec.yaml",
-  "sdkwork.app.config.json",
+  "agent.app.config.json",
   "specs/component.spec.json",
   ".sdkwork/README.md",
   ".sdkwork/skills/README.md",
@@ -528,9 +528,9 @@ assert.equal(
 
 // --- 7. App manifest -------------------------------------------------------
 
-const manifest = JSON.parse(mustExist("sdkwork.app.config.json"));
+const manifest = JSON.parse(mustExist("agent.app.config.json"));
 assert.equal(manifest.schemaVersion, 3, "the manifest must use App Standard v3");
-assert.equal(manifest.kind, "sdkwork.app");
+assert.equal(manifest.kind, "agent.app");
 assert.equal(
   manifest.app?.appType,
   "APP_FLUTTER",
@@ -994,7 +994,7 @@ const backendScope = new Set(
 for (const route of routes) {
   assert.ok(
     backendScope.has(route.permissionHint),
-    `sdkwork.app.config.json backend.accessTokenPermissionScope must include ${route.permissionHint}`,
+    `agent.app.config.json backend.accessTokenPermissionScope must include ${route.permissionHint}`,
   );
 }
 

@@ -18,7 +18,7 @@
 | 上一版 | `…:0.1.7` id `0e8419a4ce13`（路由已修、静态内容未切） |
 | server 归档 | `dist/release/sdkwork-webserver-linux-x64-standalone-server-0.1.8.tar.gz`，`bytes=72369229 entries=634` |
 | 入口脚本 sha256 | 0.1.6 `b4c9c1da…`｜0.1.7 `9ac902f9…`｜**0.1.8 `df21fb0a1a45812011a0f3270aada146c9fd9526ff0b509caee72977249659e2`**（镜像内 `/usr/local/bin/sdkwork-webserver-entrypoint` 与仓库源**逐字节一致**） |
-| 版本清单 | `sdkwork.app.config.json` → `release.currentVersion=0.1.8`、`latest.BETA=0.1.8` |
+| 版本清单 | `agent.app.config.json` → `release.currentVersion=0.1.8`、`latest.BETA=0.1.8` |
 | 规范 | `../sdkwork-specs/SDKWORK_WEBSERVER_SPEC.md` §17.3.2 新增/收窄 3 条 Rules |
 
 ### 最终舰队状态（五实例完全一致）
@@ -265,7 +265,7 @@ production 实测 start 16:33:12 → 校验 16:33:38 → `serving merged module-
 
 | 版本源 | 值 |
 | --- | --- |
-| `sdkwork.app.config.json` → `release.currentVersion` | **0.1.8** ← `bin/docker-deploy.sh` 的默认 tag 取此处 |
+| `agent.app.config.json` → `release.currentVersion` | **0.1.8** ← `bin/docker-deploy.sh` 的默认 tag 取此处 |
 | 运行容器实际镜像 | **0.1.8** |
 | bundle `image.env` | 0.1.7 |
 | bundle `manifest.json` (`imageTag`) | 0.1.7 |

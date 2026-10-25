@@ -75,7 +75,7 @@ PG_MAX_CONNECTIONS=200
 
 ### 2.3 版本号与产物不一致
 
-`sdkwork.app.config.json` 的 `release.currentVersion` 是 `0.1.0`，但已构建产物、安装 bundle、
+`agent.app.config.json` 的 `release.currentVersion` 是 `0.1.0`，但已构建产物、安装 bundle、
 四份 env 的 `SDKWORK_WEBSERVER_IMAGE_TAG` 全是 `0.1.1`。重新打包会回落成 `0.1.0`，制造漂移。
 
 已把 `currentVersion` / `latest.BETA` 提到 `0.1.1`，并补一条 0.1.1 release note（原 0.1.0 条目

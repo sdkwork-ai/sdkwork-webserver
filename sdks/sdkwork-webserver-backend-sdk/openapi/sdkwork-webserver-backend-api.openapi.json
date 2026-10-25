@@ -11097,7 +11097,7 @@
         "properties": {
           "appConfigPath": {
             "type": "string",
-            "default": "sdkwork.app.config.json"
+            "default": "agent.app.config.json"
           },
           "deploymentConfigPath": {
             "type": "string",

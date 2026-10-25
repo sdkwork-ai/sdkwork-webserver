@@ -14,7 +14,7 @@ task-matrix row first and do not copy global normative bodies locally.
 
 ## Application Identity
 
-Read `sdkwork.app.config.json` only for application identity, SDK/API inventory,
+Read `agent.app.config.json` only for application identity, SDK/API inventory,
 release metadata, packaging, or app-owned capabilities. Runtime values belong to
 source configuration under `env/` and `config/`, not to the application
 declaration.

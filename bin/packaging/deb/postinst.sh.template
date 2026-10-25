@@ -116,7 +116,7 @@ done
 # 5b2. Credential-entry bootstrap Access-Token (0600, sdkwork-owned) for the
 #      PC login page. The test environment uses a locally generated unsigned
 #      fixture JWT (`@sdkwork/iam-credential-entry` dev-bootstrap shape,
-#      claims per sdkwork.app.config.json backend identity); the gateway
+#      claims per agent.app.config.json backend identity); the gateway
 #      injects it into the served index.html only when the documented
 #      isolated-runner opt-in is set. Staging, demo, and production MUST
 #      provision this token from a private secret source (iam-credential-entry

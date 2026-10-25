@@ -18,7 +18,7 @@
     "status": "active",
     "manifests": [
       "package.json",
-      "sdkwork.app.config.json",
+      "agent.app.config.json",
       "project.config.json",
       "specs/component.spec.json"
     ]
@@ -158,6 +158,6 @@
   "metadata": {
     "managedBy": "sdkwork-webserver",
     "standardVersion": "2026-09-17",
-    "appTypeNote": "PlusProjectType exposes no native mini program value, so sdkwork.app.config.json#app.appType uses APP_UNIAPP while runtime.framework stays mp-weixin."
+    "appTypeNote": "PlusProjectType exposes no native mini program value, so agent.app.config.json#app.appType uses APP_UNIAPP while runtime.framework stays mp-weixin."
   }
 }

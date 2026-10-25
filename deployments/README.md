@@ -41,7 +41,7 @@ is claimed until the corresponding artifact, digest, signature, SBOM, provenance
 evidence exists.
 
 Runtime values come from `etc/topology/*.env` and the deployment platform's secret manager.
-`sdkwork.app.config.json` declares identity and release capability, not concrete runtime configuration.
+`agent.app.config.json` declares identity and release capability, not concrete runtime configuration.
 
 ## Validation
 

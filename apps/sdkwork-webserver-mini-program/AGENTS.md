@@ -18,12 +18,12 @@ Read only the relevant README task-matrix row or navigation heading, then load t
 
 ## Application Identity
 
-Read `sdkwork.app.config.json` for mini program application identity, SDK inventory, release metadata, and app-owned capabilities. Read `../../sdkwork.app.config.json` for repository-wide Web Server identity. This is the WeChat mini program surface for Web Server: package taxonomy and root layout follow `../../../sdkwork-specs/MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`. Concrete runtime values come from this application's `config/mini-program/` profiles and the runtime bundle materialized by `scripts/build-runtime.mjs`; neither app manifest is runtime configuration authority.
+Read `agent.app.config.json` for mini program application identity, SDK inventory, release metadata, and app-owned capabilities. Read `../../agent.app.config.json` for repository-wide Web Server identity. This is the WeChat mini program surface for Web Server: package taxonomy and root layout follow `../../../sdkwork-specs/MINI_PROGRAM_APP_ARCHITECTURE_SPEC.md`. Concrete runtime values come from this application's `config/mini-program/` profiles and the runtime bundle materialized by `scripts/build-runtime.mjs`; neither app manifest is runtime configuration authority.
 
 ## Local Dictionary Structure
 
 - `AGENTS.md`: application agent entrypoint and relative SDKWork spec index.
-- `sdkwork.app.config.json`: mini program application identity and capability metadata.
+- `agent.app.config.json`: mini program application identity and capability metadata.
 - `specs/`: application composition contract.
 - `src/`: thin native mini program root — `app.js`/`app.json`/`app.wxss`, `bootstrap/`, and platform pages that only bind the runtime bundle.
 - `packages/`: the `sdkwork-webserver-mp-*` package family (`core`, `commons`, `shell`, `host`, `applications`) that owns all business code.

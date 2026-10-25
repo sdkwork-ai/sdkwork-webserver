@@ -18,7 +18,7 @@ identity and delegation.
 | `apps-static-deploy.sh` | build + package (tar.gz+sha256) + publish static dist to a target host (`wsl` / `ssh://…`), with extraction, integrity verification, atomic `current` switch and quick rollback; implementation in `bin/lib/apps-static-deploy.sh` |
 
 Declared app types: `pc,h5,server`. Default image tag comes from
-`sdkwork.app.config.json` → `release.currentVersion`.
+`agent.app.config.json` → `release.currentVersion`.
 
 ## Sibling-module static builds (`apps-static-build.sh`)
 

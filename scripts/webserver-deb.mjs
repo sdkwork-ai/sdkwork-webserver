@@ -302,8 +302,8 @@ async function assembleDebStage(settings) {
   }
   // App identity and content evidence.
   writeFileSync(
-    path.join(libRoot, 'sdkwork.app.config.json'),
-    readFileSync(path.join(extractedRoot, 'sdkwork.app.config.json')),
+    path.join(libRoot, 'agent.app.config.json'),
+    readFileSync(path.join(extractedRoot, 'agent.app.config.json')),
     { mode: 0o644 },
   );
   writeFileSync(
@@ -528,20 +528,20 @@ const DEBIAN_PACKAGE_IDS = Object.freeze({
   production: 'linux-ubuntu-x64-standalone-server-deb',
 });
 
-// Keep sdkwork.app.config.json installConfig checksums in sync with the built
+// Keep agent.app.config.json installConfig checksums in sync with the built
 // artifact (security.checksumRequired for enabled packages).
 function updateAppManifestChecksum(settings, debPath, { skip = false } = {}) {
   if (skip) {
     return;
   }
-  const manifestPath = path.join(REPO_ROOT, 'sdkwork.app.config.json');
+  const manifestPath = path.join(REPO_ROOT, 'agent.app.config.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const packageId = DEBIAN_PACKAGE_IDS[settings.environment];
   const pkg = manifest?.artifacts?.installConfig?.packages?.find(
     (candidate) => candidate.id === packageId,
   );
   if (!pkg) {
-    throw new Error(`sdkwork.app.config.json is missing package ${packageId}`);
+    throw new Error(`agent.app.config.json is missing package ${packageId}`);
   }
   pkg.checksumAlgorithm = 'sha256';
   pkg.checksum = sha256File(debPath);

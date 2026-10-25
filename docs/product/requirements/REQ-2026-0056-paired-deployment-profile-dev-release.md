@@ -52,7 +52,7 @@ verification:
 
 ## Runtime Profile Boundary
 
-`sdkwork.app.config.json` declares that the application supports `standalone` and `cloud`; it does
+`agent.app.config.json` declares that the application supports `standalone` and `cloud`; it does
 not own concrete origins, ports, credentials, or process plans. `etc/sdkwork.deployment.config.json`
 selects the typed profile. Bare `pnpm dev` enters `standalone.development`. `pnpm dev:cloud` resolves
 `etc/topology/cloud.development.env`, resolves the explicit remote application/backend/platform

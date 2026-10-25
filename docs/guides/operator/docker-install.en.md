@@ -102,7 +102,7 @@ Notes:
 ## 5. Per-Environment Command Reference (copy-paste ready)
 
 > Every block below can be copied and run as-is. Replace `<version>` with the
-> real version (current value: `sdkwork.app.config.json` →
+> real version (current value: `agent.app.config.json` →
 > `release.currentVersion`; **omit `--image-tag` to use it automatically**),
 > replace `ops@10.0.0.8` with your remote Ubuntu host, and note that `--host`
 > defaults to `wsl` (local WSL) when omitted. Any mutating command accepts

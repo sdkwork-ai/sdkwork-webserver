@@ -19,7 +19,7 @@ const APP_ROOT = fileURLToPath(new URL(".", import.meta.url));
 /** Repository root that owns `.sdkwork.local.env` and the surface manifests. */
 const REPO_ROOT = path.resolve(APP_ROOT, "../..");
 /** Surface manifest that owns the credential-entry bootstrap identity. */
-const APP_MANIFEST_PATH = path.join(APP_ROOT, "sdkwork.app.config.json");
+const APP_MANIFEST_PATH = path.join(APP_ROOT, "agent.app.config.json");
 // The config is compiled by vitest into a cache directory, so import.meta.url
 // cannot locate package roots; resolve the runtime singletons through the
 // package working directory instead. The working directory is stable for

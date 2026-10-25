@@ -112,7 +112,7 @@ fn repository_packaging_is_deterministic_and_detects_standard_configuration() {
     let root = TempDir::new().unwrap();
     std::fs::create_dir_all(root.path().join("etc")).unwrap();
     std::fs::write(root.path().join("index.html"), "hello").unwrap();
-    std::fs::write(root.path().join("sdkwork.app.config.json"), "{}").unwrap();
+    std::fs::write(root.path().join("agent.app.config.json"), "{}").unwrap();
     std::fs::write(root.path().join("etc/sdkwork.deployment.config.json"), "{}").unwrap();
     let first = package_repository(root.path()).unwrap();
     let second = package_repository(root.path()).unwrap();

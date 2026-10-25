@@ -19,7 +19,7 @@
     "manifests": [
       "oh-package.json5",
       "build-profile.json5",
-      "sdkwork.app.config.json",
+      "agent.app.config.json",
       "specs/component.spec.json"
     ]
   },

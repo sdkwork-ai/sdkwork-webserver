@@ -11,4 +11,4 @@ startup. The Rust gateway delegates reconciliation to
 
 Use `pnpm check:iam-application-bootstrap` for the repository contract. The privileged
 `pnpm admin:bootstrap:app` command exists for an operator to provision a remote/cloud environment
-from `sdkwork.app.config.json`; it is not invoked by browser startup or `dev:cloud`.
+from `agent.app.config.json`; it is not invoked by browser startup or `dev:cloud`.

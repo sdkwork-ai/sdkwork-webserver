@@ -53,7 +53,7 @@ does not transfer business ownership from Drive, Knowledgebase, or Deploy.
 
 | Concern | Authority | Web Server responsibility |
 | --- | --- | --- |
-| Application identity and release declaration | `sdkwork.app.config.json` | Declare server identity, profiles, package capability, release channel, and required security evidence. |
+| Application identity and release declaration | `agent.app.config.json` | Declare server identity, profiles, package capability, release channel, and required security evidence. |
 | Concrete runtime values | `etc/` and `specs/topology.spec.json` | Bind environment, profile, listener, upstream, assignment source, and recovery paths. |
 | Authored local Web Server config | `specs/sdkwork.webserver.config.schema.json` | Validate listeners, virtual hosts, routes, local static roots, upstreams, limits, and TLS selection. |
 | Website domain/resource runtime | `specs/sdkwork.website-runtime.descriptor.schema.json` | Consume immutable Deploy-compiled Site/Binding/Variant/Resource/Mount policy. |
@@ -210,7 +210,7 @@ ownership belong to Deploy/KMS/secret infrastructure.
 | `SDKWORK_WEBSERVER_TLS_RUNTIME_POLL_INTERVAL_MS` | TLS candidate poll interval. | Bounded to 250..60000 ms. |
 | `SDKWORK_WEBSERVER_TLS_RUNTIME_RECOVERY_DIRECTORY` | TLS A/B recovery. | Required for staging/production native TLS. |
 
-Concrete examples live in `etc/data-plane/`. `sdkwork.app.config.json` remains identity and release
+Concrete examples live in `etc/data-plane/`. `agent.app.config.json` remains identity and release
 metadata; it is not a runtime-secret or environment-value authority.
 
 ## 7. Deployment Model
@@ -247,7 +247,7 @@ current SDKWork Deploy validator. Every profile present in each v2 manifest was 
 | Measure | Result |
 | --- | ---: |
 | SDKWork repositories | 92 |
-| Repositories with `sdkwork.app.config.json` | 58 |
+| Repositories with `agent.app.config.json` | 58 |
 | Repositories with `specs/topology.spec.json` | 51 |
 | Repositories with `sdkwork.workflow.json` | 47 |
 | Repositories with `deployments/deploy.yaml` | 27 |

@@ -46,11 +46,11 @@ const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'produ
 
 function appVersion() {
   const manifest = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.app.config.json'), 'utf8'),
+    readFileSync(path.join(REPO_ROOT, 'agent.app.config.json'), 'utf8'),
   );
   const version = manifest?.release?.currentVersion;
   if (typeof version !== 'string' || version.length === 0) {
-    throw new Error('sdkwork.app.config.json release.currentVersion is missing');
+    throw new Error('agent.app.config.json release.currentVersion is missing');
   }
   return version;
 }
@@ -120,7 +120,7 @@ Options:
   --environment <env>          Lifecycle environment of the packaged static
                                bundle (development|test|staging|production).
                                Default: production
-  --version <semver>           Default: sdkwork.app.config.json release.currentVersion
+  --version <semver>           Default: agent.app.config.json release.currentVersion
   --tag <image-tag>            Default: release version
   --skip-release-build         Do not invoke release packaging when the archive is missing
   --no-pull                    Do not force docker build --pull; reuse the local base image

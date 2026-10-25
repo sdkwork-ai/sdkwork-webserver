@@ -60,7 +60,7 @@ worked around.
    `workflow:materialize-client-env` script. The five `env/sdkwork.*.json` files
    are therefore hand-maintained against the repository deployment index today,
    and `tests/flutter-surface-contract.test.mjs` §5 is what keeps them honest.
-5. **Signing profile.** `sdkwork.app.config.json` declares
+5. **Signing profile.** `agent.app.config.json` declares
    `signatureRequired: false` while `checksumRequired` and `sbomRequired` are
    `true`. That is a declared gap, not a decision: no signing profile reference
    exists yet, so the manifest must not claim one.
@@ -162,7 +162,7 @@ restored file SHA256-verified. The full table lives in
 | `check-i18n-standard` | yes (`.dart` is in `SOURCE_EXTENSIONS` and `LITERAL_SCAN_EXTENSIONS`) | itself |
 | `check-component-port-bindings` | yes (reads `component.spec.json`, not sources) | itself |
 | `check-permission-composition` | yes (reads `component.spec.json`) | itself |
-| `check-app-manifest-standard` / `-deployment-standard` | yes (reads `sdkwork.app.config.json` and `etc/`) | itself |
+| `check-app-manifest-standard` / `-deployment-standard` | yes (reads `agent.app.config.json` and `etc/`) | itself |
 | `check-source-config-standard` | yes (config and env files) | itself |
 | `check-frontend-composition` | no (`/\.(?:ts\|tsx\|js\|jsx)$/` only) | contract test §9 import direction |
 | `check-application-layering` | no (`.java/.js/.jsx/.ts/.tsx` only) | contract test §9 import direction |

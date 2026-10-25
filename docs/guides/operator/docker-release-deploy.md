@@ -104,7 +104,7 @@ sha256sum --check "sdkwork-webserver-linux-x64-standalone-server-${VERSION}.tar.
 ├── Dockerfile.release         # 容器镜像定义
 ├── docker-compose.release.yml # 编排（含自带 PG/Redis 的选项）
 ├── docker/entrypoint-release.sh # 容器入口
-└── sdkwork.app.config.json
+└── agent.app.config.json
 ```
 
 > **凭据不入包**：`etc/` 下只有模板与 schema，真实密码一律通过运行时挂载的

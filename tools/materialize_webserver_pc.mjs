@@ -509,7 +509,7 @@ function permissionComposition(definition) {
   return {
     inheritanceMode: "module-catalog-with-overrides",
     moduleCatalogRefs,
-    bootstrapAccessTokenScope: { inheritFrom: "sdkwork.app.config.json#backend.accessTokenPermissionScope", supplement: [], overrideReplace: false },
+    bootstrapAccessTokenScope: { inheritFrom: "agent.app.config.json#backend.accessTokenPermissionScope", supplement: [], overrideReplace: false },
     routePermissionHints: { inheritFromOpenApi: true, inheritFromModuleManifests: true, overrides: [] },
     consumerPolicy: { forbidLocalPermissionCatalogForDependencyDomains: true, allowExplicitOverridesOnly: true, allowFrontendHintsWithoutServerDuplication: true },
   };

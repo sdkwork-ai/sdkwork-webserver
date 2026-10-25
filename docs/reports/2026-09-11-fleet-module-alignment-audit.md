@@ -29,7 +29,7 @@ export function listWorkspaceRepositoryRoots(workspaceRoot, { prefix = 'sdkwork-
 | --- | --- | --- |
 | 目录名 `sdkwork-*` | 100 | 全部 |
 | 其中根有 `AGENTS.md`（**受治理**） | **100** | 权威口径 |
-| 其中有 `sdkwork.app.config.json`（产品身份） | 79 | **旧门禁口径** |
+| 其中有 `agent.app.config.json`（产品身份） | 79 | **旧门禁口径** |
 
 **21 个受治理仓此前对所有 manifest-keyed 门禁不可见**：
 `app-topology、catalog、comments、connect、core、database、fs、id、integration、log、miniapp-engine、rpc-framework、sdk-commons、simulator、skills-private、specs、superpowers、test、ui、utils、zip`。
@@ -58,11 +58,11 @@ export function listWorkspaceRepositoryRoots(workspaceRoot, { prefix = 'sdkwork-
 
 ### 2.1 `check-script-placement` 作用域过窄（已修）
 
-`findModules()` 原用 `sdkwork.app.config.json` 判定"是不是模块"→ 21 仓被跳过。
+`findModules()` 原用 `agent.app.config.json` 判定"是不是模块"→ 21 仓被跳过。
 
 修法（`sdkwork-specs/tools/check-script-placement.mjs`）：
 1. `findModules()` 改为调用权威 `listWorkspaceRepositoryRoots()`；AGENTS-only 仓进审计，offFleet（有 manifest 无前缀：hub-installer、magic-studio、magic-studio-v2）仍只列不审。
-2. 输出文案修正：`skipped (no sdkwork.app.config.json)` → `not governed (manifest but no sdkwork- prefix, listed only)`。
+2. 输出文案修正：`skipped (no agent.app.config.json)` → `not governed (manifest but no sdkwork- prefix, listed only)`。
 
 ### 2.2 `check-script-placement` 主遍历不剪构建产物（已修）
 

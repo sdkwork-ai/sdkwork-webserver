@@ -46,7 +46,7 @@ install -m 0755 bin/sdkwork-webserver-agent \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
 install -m 0755 bin/sdkwork-webserver-certificate-worker \
   %{buildroot}/usr/lib/sdkwork/webserver/bin/
-install -m 0644 sdkwork.app.config.json package.manifest.json \
+install -m 0644 agent.app.config.json package.manifest.json \
   %{buildroot}/usr/lib/sdkwork/webserver/
 # Service-local runtime inputs (database contract, specs) stay under the
 # application root; IAM/Drive module trees are runtime-mutated (registry
@@ -199,7 +199,7 @@ done
 # 5b. Credential-entry bootstrap Access-Token (0600, sdkwork-owned) for the
 #     PC login page. The test environment uses a locally generated unsigned
 #     fixture JWT (`@sdkwork/iam-credential-entry` dev-bootstrap shape,
-#     claims per sdkwork.app.config.json backend identity); the gateway
+#     claims per agent.app.config.json backend identity); the gateway
 #     injects it into the served index.html only when the documented
 #     isolated-runner opt-in is set. Staging, demo, and production MUST
 #     provision this token from a private secret source (iam-credential-entry

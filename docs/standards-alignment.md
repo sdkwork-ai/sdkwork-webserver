@@ -262,7 +262,7 @@ PodDisruptionBudget, non-root execution, read-only root filesystem, dropped capa
 secret-manager references.
 
 The host-native `.deb`/`.rpm` server package declarations (test + production,
-Ubuntu and RHEL) in `sdkwork.app.config.json` are `enabled: true` with pinned
+Ubuntu and RHEL) in `agent.app.config.json` are `enabled: true` with pinned
 SHA-256 checksums; the two archive declarations (x64/arm64 `.tar.gz`) remain
 disabled with `releaseBuildDeferred: true`. Archive packaging, checksum,
 Sigstore, CycloneDX, x64/arm64 smoke, database recovery, and HA workflow steps

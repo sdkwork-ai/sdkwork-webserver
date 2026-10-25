@@ -375,7 +375,7 @@ fn package_repository(repository_root: &Path) -> WebServiceResult<PackagedReposi
     let config_snapshot = SourceVersionConfigSnapshot {
         app_config_detected: files
             .iter()
-            .any(|(path, _)| path == "sdkwork.app.config.json"),
+            .any(|(path, _)| path == "agent.app.config.json"),
         deployment_config_detected: files
             .iter()
             .any(|(path, _)| path == "etc/sdkwork.deployment.config.json"),

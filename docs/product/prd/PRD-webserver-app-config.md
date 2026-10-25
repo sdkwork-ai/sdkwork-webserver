@@ -17,13 +17,13 @@ Every independently hosted Web application root must contain:
 
 ```text
 apps/<app-root>/
-  sdkwork.app.config.json
+  agent.app.config.json
   config/
     webserver/
       sdkwork.webserver.config.json
 ```
 
-- `sdkwork.app.config.json` remains the application identity, release, platform, media, artifact, and publication authority.
+- `agent.app.config.json` remains the application identity, release, platform, media, artifact, and publication authority.
 - `sdkwork.webserver.config.json` is the authored traffic-serving authority.
 - Generated Nginx files, compiled Rust snapshots, runtime secrets, live certificates, node state, logs, and databases must not be committed into the app root.
 - The app manifest references the Web Server contract through a standardized `runtime.webServer` object. Adding this object requires coordinated changes to `APP_MANIFEST_SPEC.md`, its JSON Schema, validator, initializer, full example, and projection tooling.
@@ -69,7 +69,7 @@ Rules:
 
 - Unknown fields are rejected unless explicitly allowed inside a bounded metadata extension object.
 - IDs are stable lower-kebab-case identifiers unique within the application configuration.
-- `appKey` must exactly match the owning `sdkwork.app.config.json` application key.
+- `appKey` must exactly match the owning `agent.app.config.json` application key.
 - References must resolve inside the same compiled application configuration or through an approved external resource reference type.
 - Secrets and secret values are forbidden. Only secret, KMS, certificate, Drive artifact, or discovery resource references are allowed.
 - Configuration must declare explicit limits; an omitted limit resolves to a documented bounded default, never infinity.

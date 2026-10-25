@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
  *    permission catalog materialization, not the bootstrap token scope). The
  *    console menu's visibility gate (`web.sandbox.read`) is the code's one
  *    remaining consumer, so it must stay active and grantable;
- *  - `sdkwork.app.config.json`'s bootstrap access token scope must stay
+ *  - `agent.app.config.json`'s bootstrap access token scope must stay
  *    minimal and must not duplicate module catalogs.
  */
 
@@ -87,7 +87,7 @@ function consoleMenuSandboxCodes() {
 }
 
 const manifest = readJson(path.join(REPO_ROOT, 'specs/iam.module.manifest.json'));
-const appConfig = readJson(path.join(REPO_ROOT, 'sdkwork.app.config.json'));
+const appConfig = readJson(path.join(REPO_ROOT, 'agent.app.config.json'));
 const catalog = new Map(manifest.permissions.catalog.map((entry) => [entry.code, entry]));
 
 test('the sibling sandbox route planes demand no web-domain permission code', () => {

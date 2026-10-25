@@ -119,7 +119,7 @@ function sha256File(filePath) {
 function resolveVersion(settings) {
   const manifest = JSON.parse(
     readSmallText(
-      path.join(REPO_ROOT, 'sdkwork.app.config.json'),
+      path.join(REPO_ROOT, 'agent.app.config.json'),
       MAX_CHECKSUM_BYTES * 1024,
       'application manifest',
     ),

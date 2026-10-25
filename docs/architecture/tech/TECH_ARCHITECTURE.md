@@ -349,7 +349,7 @@ The request path does not call management services or repositories. Management r
 
 ## 4. Configuration And Contract Ownership
 
-- `sdkwork.app.config.json` remains application identity and release authority.
+- `agent.app.config.json` remains application identity and release authority.
 - `specs/sdkwork.webserver.config.schema.json` is the local machine contract for application Web
   Server configuration; the app manifest remains identity/release metadata rather than runtime
   configuration authority.

@@ -445,20 +445,20 @@ function validateRpm(settings) {
   return rpmPath;
 }
 
-// Keep sdkwork.app.config.json installConfig checksums in sync with the built
+// Keep agent.app.config.json installConfig checksums in sync with the built
 // artifact (security.checksumRequired for enabled packages).
 function updateAppManifestChecksum(settings, rpmPath, { skip = false } = {}) {
   if (skip) {
     return;
   }
-  const manifestPath = path.join(REPO_ROOT, 'sdkwork.app.config.json');
+  const manifestPath = path.join(REPO_ROOT, 'agent.app.config.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const packageId = RPM_PACKAGE_IDS[settings.environment];
   const pkg = manifest?.artifacts?.installConfig?.packages?.find(
     (candidate) => candidate.id === packageId,
   );
   if (!pkg) {
-    throw new Error(`sdkwork.app.config.json is missing package ${packageId}`);
+    throw new Error(`agent.app.config.json is missing package ${packageId}`);
   }
   pkg.checksumAlgorithm = 'sha256';
   pkg.checksum = sha256File(rpmPath);

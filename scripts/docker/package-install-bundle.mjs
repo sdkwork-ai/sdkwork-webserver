@@ -45,11 +45,11 @@ const DEFAULT_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'product
 
 function appVersion() {
   const manifest = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.app.config.json'), 'utf8'),
+    readFileSync(path.join(REPO_ROOT, 'agent.app.config.json'), 'utf8'),
   );
   const version = manifest?.release?.currentVersion;
   if (typeof version !== 'string' || version.length === 0) {
-    throw new Error('sdkwork.app.config.json release.currentVersion is missing');
+    throw new Error('agent.app.config.json release.currentVersion is missing');
   }
   return version;
 }
@@ -94,7 +94,7 @@ function printHelp() {
 Build the unified install image and package the self-contained install bundle.
 
 Options:
-  --version <semver>          Default: sdkwork.app.config.json release.currentVersion
+  --version <semver>          Default: agent.app.config.json release.currentVersion
   --tag <image-tag>           Default: release version
   --out <dir>                 Output root (default: dist/docker-install)
   --skip-image-build          Require an already-built image; do not invoke docker build

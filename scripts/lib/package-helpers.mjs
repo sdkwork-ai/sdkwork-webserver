@@ -14,11 +14,11 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 /// Reads the release version from the application manifest.
 export function appVersion() {
   const manifest = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.app.config.json'), 'utf8'),
+    readFileSync(path.join(REPO_ROOT, 'agent.app.config.json'), 'utf8'),
   );
   const version = manifest?.release?.currentVersion;
   if (typeof version !== 'string' || version.length === 0) {
-    throw new Error('sdkwork.app.config.json release.currentVersion is missing');
+    throw new Error('agent.app.config.json release.currentVersion is missing');
   }
   return version;
 }

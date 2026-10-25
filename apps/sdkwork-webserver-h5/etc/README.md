@@ -2,7 +2,7 @@
 
 `sdkwork.deployment.config.json` delegates runtime topology and deployment ownership to the enclosing Web Server application. The PC surface keeps only browser runtime sources and materialization metadata; it does not copy the parent topology profiles or start a second gateway.
 
-Supported environments are `development`, `test`, `staging`, and `production`. Browser runtime sources use `browser/runtime-env.<deployment-profile>.<environment>.json` when a profile needs distinct values and otherwise fall back to `browser/runtime-env.<environment>.json`. Every selected source must declare the requested `deploymentProfile` and `environment`; `sdkwork.app.config.json` remains application identity metadata and is not a runtime-value source.
+Supported environments are `development`, `test`, `staging`, and `production`. Browser runtime sources use `browser/runtime-env.<deployment-profile>.<environment>.json` when a profile needs distinct values and otherwise fall back to `browser/runtime-env.<environment>.json`. Every selected source must declare the requested `deploymentProfile` and `environment`; `agent.app.config.json` remains application identity metadata and is not a runtime-value source.
 
 Browser profiles declare separate authenticated API authorities. `appApiBaseUrl` owns Web Server tenant operations, `backendApiBaseUrl` owns the lazy admin surface, `appbaseAppApiBaseUrl` owns IAM bootstrap, and `driveAppApiBaseUrl` owns application-package upload. The Console shares one bootstrap TokenManager across the Web and Drive App SDK clients.
 

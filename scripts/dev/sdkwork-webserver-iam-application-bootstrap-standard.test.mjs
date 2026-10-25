@@ -15,8 +15,8 @@ function readJson(relativePath) {
 }
 
 test('credential entry uses the PC manifest identity in every client profile', () => {
-  const rootManifest = readJson('sdkwork.app.config.json');
-  const pcManifest = readJson('apps/sdkwork-webserver-pc/sdkwork.app.config.json');
+  const rootManifest = readJson('agent.app.config.json');
+  const pcManifest = readJson('apps/sdkwork-webserver-pc/agent.app.config.json');
   const topology = readJson('specs/topology.spec.json');
 
   assert.equal(rootManifest.backend.appId, 'sdkwork-webserver');

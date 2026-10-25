@@ -9,10 +9,10 @@ Resolve this standards root once for the current task:
 - `../../../sdkwork-specs/AGENTS_SPEC.md`
 Read only the relevant README task-matrix row or navigation heading, then load the selected authority sections. Do not copy global standard bodies into this application. If these relative paths do not resolve, stop and report the broken workspace layout.
 ## Application Identity
-Read `sdkwork.app.config.json` for PC application identity, SDK inventory, release metadata, packaging, and app-owned capabilities. Read `../../sdkwork.app.config.json` for repository-wide Web Server identity. Concrete browser runtime values come from this application's `etc/` profiles and materialized runtime-env output; neither app manifest is runtime configuration authority.
+Read `agent.app.config.json` for PC application identity, SDK inventory, release metadata, packaging, and app-owned capabilities. Read `../../agent.app.config.json` for repository-wide Web Server identity. Concrete browser runtime values come from this application's `etc/` profiles and materialized runtime-env output; neither app manifest is runtime configuration authority.
 ## Local Dictionary Structure
 - `AGENTS.md`: application agent entrypoint and relative SDKWork spec index.
-- `sdkwork.app.config.json`: PC application identity and capability metadata.
+- `agent.app.config.json`: PC application identity and capability metadata.
 - `specs/`: application composition contract.
 - `packages/`: PC core, commons, console, admin, shell, and capability packages; each authored package owns `specs/component.spec.json`.
 - `src/`: thin browser bootstrap and app/console/admin surface composition.

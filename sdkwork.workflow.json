@@ -6,7 +6,7 @@
     "name": "SDKWork Web Server",
     "repository": "sdkwork-ai/sdkwork-webserver",
     "sourcePath": ".",
-    "configPath": "sdkwork.app.config.json"
+    "configPath": "agent.app.config.json"
   },
   "release": {
     "artifactPrefix": "sdkwork-webserver",

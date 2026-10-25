@@ -51,7 +51,7 @@ Guides: [`deb-install.md`](./deb-install.md), [`bare-metal-install.md`](./bare-m
 | Credential-entry bootstrap token | `/etc/sdkwork/webserver/secrets/credential-entry-bootstrap-access-token` | `0600` |
 | Binaries + module assets | `/usr/lib/sdkwork/webserver/` | `root:root` |
 | Gateway binary | `/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway` | `0755` |
-| App identity | `/usr/lib/sdkwork/webserver/sdkwork.app.config.json` | |
+| App identity | `/usr/lib/sdkwork/webserver/agent.app.config.json` | |
 | DB contract (Web) | `/usr/lib/sdkwork/webserver/database/` | |
 | Specs | `/usr/lib/sdkwork/webserver/specs/` | |
 | **PC SPA** | `/usr/share/sdkwork/webserver/web/pc/` | packaged build |

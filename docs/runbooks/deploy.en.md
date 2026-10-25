@@ -6,7 +6,7 @@ Environments: `development|test|staging|demo|production`. Commands default to th
 ## 1. Build and package
 
 ```bash
-bin/docker-image.sh build                       # tag from sdkwork.app.config.json
+bin/docker-image.sh build                       # tag from agent.app.config.json
 bin/docker-image.sh save -o dist/image.tar.gz   # emits .tar.gz + .sha256
 bin/apps-package.sh pc production               # browser artifacts
 bin/apps-package.sh h5 production

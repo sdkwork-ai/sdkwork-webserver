@@ -94,7 +94,7 @@ assert.equal(
 for (const requiredPath of [
   "AGENTS.md",
   "README.md",
-  "sdkwork.app.config.json",
+  "agent.app.config.json",
   "specs/component.spec.json",
   "oh-package.json5",
   "build-profile.json5",
@@ -314,9 +314,9 @@ for (const hostFile of hostConfigFiles) {
 
 // --- 7. App manifest -------------------------------------------------------
 
-const manifest = JSON.parse(mustExist("sdkwork.app.config.json"));
+const manifest = JSON.parse(mustExist("agent.app.config.json"));
 assert.equal(manifest.schemaVersion, 3, "the manifest must use App Standard v3");
-assert.equal(manifest.kind, "sdkwork.app");
+assert.equal(manifest.kind, "agent.app");
 assert.equal(manifest.app?.appType, "APP_HARMONY", "a HarmonyOS root must declare appType APP_HARMONY");
 assert.equal(manifest.app?.versionSource, "oh-package.json5");
 assert.equal(manifest.app?.identifiers?.bundleId, manifest.app?.identifiers?.packageName);

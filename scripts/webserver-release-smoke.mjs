@@ -126,7 +126,7 @@ function resolveArtifact(settings) {
     throw new Error('--deployment-profile must be standalone or cloud');
   }
   const manifest = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.app.config.json'), 'utf8'),
+    readFileSync(path.join(REPO_ROOT, 'agent.app.config.json'), 'utf8'),
   );
   const packageVersion = process.env.SDKWORK_PACKAGE_VERSION?.trim();
   const compatibilityVersion = process.env.SDKWORK_RELEASE_VERSION?.trim();

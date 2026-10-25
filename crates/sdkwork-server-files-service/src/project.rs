@@ -49,7 +49,7 @@ const MARKERS: &[(ProjectType, &[&str])] = &[
     (ProjectType::RustBackend, &["Cargo.toml", "Cargo.lock"]),
     (
         ProjectType::SdkworkWorkspace,
-        &["sdkwork.app.config.json", "sdkwork.workflow.json"],
+        &["agent.app.config.json", "sdkwork.workflow.json"],
     ),
     (ProjectType::H5App, &["uni.scss", "project.config.json"]),
     (ProjectType::PcApp, &["webpack.config.js"]),
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn detects_sdkwork_workspace() {
-        let result = classify_entry_names(&["sdkwork.app.config.json".to_string()]);
+        let result = classify_entry_names(&["agent.app.config.json".to_string()]);
         assert_eq!(result.project_type, ProjectType::SdkworkWorkspace);
         assert!(result.is_project_root);
     }

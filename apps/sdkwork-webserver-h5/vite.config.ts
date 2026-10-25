@@ -17,7 +17,7 @@ const APP_ROOT = fileURLToPath(new URL(".", import.meta.url));
 /** Repository root that owns `.sdkwork.local.env` and the surface manifests. */
 const REPO_ROOT = path.resolve(APP_ROOT, "../..");
 /** Surface manifest that owns the credential-entry bootstrap identity. */
-const APP_MANIFEST_PATH = path.join(APP_ROOT, "sdkwork.app.config.json");
+const APP_MANIFEST_PATH = path.join(APP_ROOT, "agent.app.config.json");
 // RUNTIME_DIRECTORY_SPEC.md section "JavaScript tool cache" / ADR-20260730:
 // shared Vite caches live below `node_modules/.vite/<surface-id>/`. The adaptive
 // development ingress only routes a `/node_modules/.vite/<surface-id>/` request

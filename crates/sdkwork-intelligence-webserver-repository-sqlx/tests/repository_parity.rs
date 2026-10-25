@@ -3648,7 +3648,7 @@ fn test_source_version_request(index: usize) -> CreateSourceVersionRequest {
         artifact_size: 1024 + index as i64,
         artifact_hash: format!("{index:064x}"),
         config_snapshot: SourceVersionConfigSnapshot {
-            app_config_path: "sdkwork.app.config.json".to_owned(),
+            app_config_path: "agent.app.config.json".to_owned(),
             deployment_config_path: "etc/sdkwork.deployment.config.json".to_owned(),
             app_config_detected: true,
             deployment_config_detected: true,

@@ -31,7 +31,7 @@ const PACKAGE_FILES = new Map([
   ['bin/sdkwork-webserver-node-daemon', 'canonical node daemon fixture\n'],
   ['bin/sdkwork-webserver-agent', 'node daemon fixture\n'],
   ['bin/sdkwork-webserver-certificate-worker', 'certificate worker fixture\n'],
-  ['sdkwork.app.config.json', '{}\n'],
+  ['agent.app.config.json', '{}\n'],
   ['specs/iam.module.manifest.json', '{}\n'],
   ['specs/sdkwork.webserver.config.schema.json', '{}\n'],
   ['etc/examples/sdkwork.webserver.config.json', '{}\n'],
@@ -663,7 +663,7 @@ async function createFixture(options) {
   }
   if (options.symbolicLink) {
     const linkPath = path.join(stageRoot, 'etc', 'unsafe-link');
-    symlinkSync('../sdkwork.app.config.json', linkPath, 'file');
+    symlinkSync('../agent.app.config.json', linkPath, 'file');
     additionalEntries.push('sdkwork-webserver/etc/unsafe-link');
   }
   const additionalFiles = additionalEntries.map((entry) => entry);
@@ -685,7 +685,7 @@ async function createFixture(options) {
   }
   const entries = archiveEntryWalkOrder(orderedFiles, [...orderedDirectories]);
   if (options.duplicateEntry) {
-    entries.push('sdkwork-webserver/sdkwork.app.config.json');
+    entries.push('sdkwork-webserver/agent.app.config.json');
   }
 
   mkdirSync(OUTPUT_ROOT, { recursive: true });

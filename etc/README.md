@@ -15,7 +15,7 @@ tracked environment files:
 | `cloud.staging` | `topology/cloud.staging.env` |
 | `cloud.production` | `topology/cloud.production.env` |
 
-`sdkwork.app.config.json` owns application identity and release declarations only. Concrete binds,
+`agent.app.config.json` owns application identity and release declarations only. Concrete binds,
 origins, API surface URLs, database selection, upstream targets, and deployment profile values are
 owned by `etc/` and `specs/topology.spec.json`.
 

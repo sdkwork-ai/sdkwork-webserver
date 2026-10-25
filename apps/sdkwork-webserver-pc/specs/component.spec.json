@@ -14,7 +14,7 @@
     "generated": false,
     "private": true,
     "status": "active",
-    "manifests": ["package.json", "sdkwork.app.config.json", "specs/component.spec.json"]
+    "manifests": ["package.json", "agent.app.config.json", "specs/component.spec.json"]
   },
   "canonicalSpecs": [
     { "file": "SOUL.md", "path": "../../../sdkwork-specs/SOUL.md", "purpose": "SDKWork execution principles." },
