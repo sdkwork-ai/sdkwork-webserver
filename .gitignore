@@ -127,3 +127,13 @@ tmp_*.py
 # as untracked on every watch run.
 tmp_poll*.js
 tmp_poll*.json
+
+# ---- auto-audited: local artifacts that must never be committed ----
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.tmp
+*.temp
+.next/

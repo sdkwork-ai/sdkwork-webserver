@@ -48,11 +48,11 @@ trace:
     - PNPM_SCRIPT_SPEC.md
   components:
     - scripts/postgres-ha-verify.mjs
-    - sdkwork.workflow.json
+    - agent.workflow.json
 verification:
   - node --test tests/contract/postgres-ha.contract.test.mjs
   - pnpm test:postgres:ha
-  - node ../sdkwork-github-workflow/scripts/sdkwork-workflow.mjs validate --config sdkwork.workflow.json
+  - node ../sdkwork-github-workflow/scripts/agent-workflow.mjs validate --config agent.workflow.json
   - node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix web
   - pnpm verify
   - git diff --check

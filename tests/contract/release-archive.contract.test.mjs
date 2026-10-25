@@ -731,7 +731,7 @@ test('workspace and workflow close the frozen release dependency graph', () => {
   const packageJson = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
   const workspace = parseYaml(readFileSync(path.join(REPO_ROOT, 'pnpm-workspace.yaml'), 'utf8'));
   const lockfile = parseYaml(readFileSync(path.join(REPO_ROOT, 'pnpm-lock.yaml'), 'utf8'));
-  const workflow = JSON.parse(readFileSync(path.join(REPO_ROOT, 'sdkwork.workflow.json'), 'utf8'));
+  const workflow = JSON.parse(readFileSync(path.join(REPO_ROOT, 'agent.workflow.json'), 'utf8'));
   const thinWorkflow = readFileSync(path.join(REPO_ROOT, '.github/workflows/package.yml'), 'utf8');
 
   // The frozen `tar` version is read from the lockfile rather than restated

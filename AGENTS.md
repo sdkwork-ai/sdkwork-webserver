@@ -36,7 +36,7 @@ Read `agent.app.config.json` for Web Server identity, registration, SDK/API inve
 - `CLAUDE.md`, `GEMINI.md`, `CODEX.md`: compatibility shims that point to `AGENTS.md`.
 - `agent.app.config.json`: Web Server application identity, runtime, release, and capability metadata.
 - `etc/`: Web Server deployment/runtime profiles, application ingress configuration, upstream targets, and safe local examples.
-- `sdkwork.workflow.json`: GitHub packaging/release workflow manifest.
+- `agent.workflow.json`: GitHub packaging/release workflow manifest.
 - `.github/workflows/package.yml`: thin reusable workflow call only.
 - `.sdkwork/`: repository/application AI workspace metadata.
 - `specs/`: local application/component contracts.
@@ -238,7 +238,7 @@ Sibling SDKWork repositories are consumed through a dual-track model that MUST s
   `../sdkwork-*` relative path, and consumed with `workspace:*` in `package.json`. Never use
   `file:`/`link:`/git-URL specifiers for SDKWork sibling packages in any environment.
 - **CI / release packaging**: git-repository dependency checkout. Every sibling referenced by the
-  local workspace MUST have a matching `dependencies[]` entry in `sdkwork.workflow.json` so CI
+  local workspace MUST have a matching `dependencies[]` entry in `agent.workflow.json` so CI
   clones the sibling into the same `../sdkwork-*` relative layout (`GITHUB_WORKFLOW_SPEC.md`).
   `package.json` is never rewritten for CI.
 Import rules for sibling SDKWork packages:

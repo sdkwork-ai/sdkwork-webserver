@@ -28,7 +28,7 @@ const CANARY_TENANT_ID = '9600';
 
 const CRITICAL_SOURCE_FILES = Object.freeze([
   'package.json',
-  'sdkwork.workflow.json',
+  'agent.workflow.json',
   BASELINE_PATH,
 ]);
 

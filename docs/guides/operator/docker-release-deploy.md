@@ -45,7 +45,7 @@ curl -fsS http://127.0.0.1:8080/healthz
 
 ## 1. 获取 release 产物
 
-每个 release 为每个平台包提供 4 类附件（实测命名，源自 `sdkwork.workflow.json` 的 `outputGlobs`）：
+每个 release 为每个平台包提供 4 类附件（实测命名，源自 `agent.workflow.json` 的 `outputGlobs`）：
 
 | 附件后缀 | 用途 |
 | --- | --- |

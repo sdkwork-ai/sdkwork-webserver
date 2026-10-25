@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const WORKFLOW = path.join(REPO_ROOT, 'sdkwork.workflow.json');
+const WORKFLOW = path.join(REPO_ROOT, 'agent.workflow.json');
 
 // Six platform jobs each check out the sibling repositories next to this one and
 // run the same filtered build. The dependency chain writes into shared `dist/`

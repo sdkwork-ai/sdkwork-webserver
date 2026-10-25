@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const WORKFLOW_CONFIG = path.join(REPO_ROOT, 'sdkwork.workflow.json');
+const WORKFLOW_CONFIG = path.join(REPO_ROOT, 'agent.workflow.json');
 
 function readWorkflowConfig() {
   return JSON.parse(readFileSync(WORKFLOW_CONFIG, 'utf8'));

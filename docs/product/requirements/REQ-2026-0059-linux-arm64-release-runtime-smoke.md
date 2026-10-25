@@ -45,12 +45,12 @@ trace:
   components:
     - scripts/webserver-release.mjs
     - scripts/webserver-release-smoke.mjs
-    - sdkwork.workflow.json
+    - agent.workflow.json
     - tests/contract/deployment-profile-commands.contract.test.mjs
     - tests/contract/release-archive.contract.test.mjs
 verification:
   - node --test tests/contract/deployment-profile-commands.contract.test.mjs tests/contract/release-archive.contract.test.mjs
-  - node ../sdkwork-github-workflow/scripts/sdkwork-workflow.mjs validate --config sdkwork.workflow.json
+  - node ../sdkwork-github-workflow/scripts/agent-workflow.mjs validate --config agent.workflow.json
   - Linux arm64 release package and validation for standalone and cloud
   - Linux arm64 extract/ELF identity/validate/start/readiness/HTTP/HTTPS/stop/cleanup smoke for standalone and cloud
   - pnpm verify

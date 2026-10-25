@@ -39,11 +39,11 @@ trace:
     - PNPM_SCRIPT_SPEC.md
   components:
     - scripts/database-recovery-verify.mjs
-    - sdkwork.workflow.json
+    - agent.workflow.json
 verification:
   - node --test tests/contract/database-recovery.contract.test.mjs
   - pnpm test:database:recovery
-  - node ../sdkwork-github-workflow/scripts/sdkwork-workflow.mjs validate --config sdkwork.workflow.json
+  - node ../sdkwork-github-workflow/scripts/agent-workflow.mjs validate --config agent.workflow.json
   - git diff --check
 ```
 

@@ -289,7 +289,7 @@ pnpm test:database:recovery
 pnpm test:postgres:ha
 node ..\sdkwork-specs\tools\deployctl.mjs validate --root . --profile cloud.production
 node ..\sdkwork-specs\tools\deployctl.mjs validate --root . --profile standalone.production
-node ..\sdkwork-github-workflow\scripts\sdkwork-workflow.mjs validate --config sdkwork.workflow.json
+node ..\sdkwork-github-workflow\scripts\agent-workflow.mjs validate --config agent.workflow.json
 ```
 
 Current verification state (updated 2026-10-21; run the commands below before citing any of it):

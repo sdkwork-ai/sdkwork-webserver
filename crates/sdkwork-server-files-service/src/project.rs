@@ -49,7 +49,7 @@ const MARKERS: &[(ProjectType, &[&str])] = &[
     (ProjectType::RustBackend, &["Cargo.toml", "Cargo.lock"]),
     (
         ProjectType::SdkworkWorkspace,
-        &["agent.app.config.json", "sdkwork.workflow.json"],
+        &["agent.app.config.json", "agent.workflow.json"],
     ),
     (ProjectType::H5App, &["uni.scss", "project.config.json"]),
     (ProjectType::PcApp, &["webpack.config.js"]),

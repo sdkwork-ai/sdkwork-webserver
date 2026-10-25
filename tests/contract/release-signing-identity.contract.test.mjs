@@ -77,7 +77,7 @@ test('signing still rejects every identity outside the pinned organization and r
 });
 
 test('installer packaging steps are guarded against a foreign runner architecture', () => {
-  const config = JSON.parse(readFileSync(path.join(REPO_ROOT, 'sdkwork.workflow.json'), 'utf8'));
+  const config = JSON.parse(readFileSync(path.join(REPO_ROOT, 'agent.workflow.json'), 'utf8'));
   const guarded = config.lifecycle.package.filter((step) =>
     /SDKWORK_PACKAGE_ARCHITECTURE/u.test(step.run),
   );

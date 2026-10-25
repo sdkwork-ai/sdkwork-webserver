@@ -27,7 +27,7 @@ acceptance_criteria:
   - PostgreSQL lifecycle/seed/drift runs first, public schema is reset fail-closed, and Repository parity then runs against an empty schema.
   - Both cargo invocations select the exact ignored test and include --ignored --exact so neither suite can silently remain skipped.
   - Child commands have finite timeouts, captured Docker diagnostics are capped at 64 KiB, and finally cleanup force-removes the container.
-  - sdkwork.workflow.json installs the locked pnpm workspace, declares every direct sibling build dependency including sdkwork-iam, and runs test:postgres:required during release validation.
+  - agent.workflow.json installs the locked pnpm workspace, declares every direct sibling build dependency including sdkwork-iam, and runs test:postgres:required during release validation.
   - The single thin package workflow handles pull_request, main push, tags, releases, and manual dispatch while continuing to call only the pinned reusable sdkwork-package workflow.
   - Release validation rejects generated contract drift after workspace and PostgreSQL verification.
 non_functional_requirements:
@@ -48,7 +48,7 @@ trace:
     - TEST_SPEC.md
     - SECURITY_SPEC.md
   components:
-    - sdkwork.workflow.json
+    - agent.workflow.json
     - .github/workflows/package.yml
     - scripts/postgres-ci-verify.mjs
     - crates/sdkwork-webserver-database-host
@@ -56,7 +56,7 @@ trace:
 verification:
   - node --test tests/contract/postgres-ci.contract.test.mjs
   - pnpm test:postgres:required
-  - node ../sdkwork-github-workflow/scripts/sdkwork-workflow.mjs validate --config sdkwork.workflow.json
+  - node ../sdkwork-github-workflow/scripts/agent-workflow.mjs validate --config agent.workflow.json
   - node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix web
   - node ../sdkwork-specs/tools/check-agent-workflow-standard.mjs --root .
   - pnpm verify
@@ -76,7 +76,7 @@ Passing this requirement proves PostgreSQL 16.9 lifecycle and Repository behavio
 - `scripts/postgres-ci-verify.mjs` owns one digest-pinned PostgreSQL 16.9 Alpine container with a unique name, `--rm`, loopback-only random port, no volume, test-only credentials, a 60-second readiness deadline, 15-minute child deadlines, 64-KiB captured-output ceilings, and unconditional bounded cleanup even when container startup fails or times out.
 - The runner verifies tracked build-critical Cargo, baseline, lifecycle-test, and Repository-test sources before execution and uses exact structured child arguments without a shell.
 - Lifecycle/seed/drift and Repository parity run sequentially through their existing ignored-test safety boundary. A fail-closed `DROP SCHEMA public CASCADE; CREATE SCHEMA public` separates them, while both Rust suites independently reject non-empty schemas.
-- `sdkwork.workflow.json` now declares the previously missing direct `sdkwork-iam` sibling dependency, installs with `pnpm install --frozen-lockfile`, runs normal workspace verification, runs mandatory PostgreSQL verification, and rejects generated drift before packaging completes.
+- `agent.workflow.json` now declares the previously missing direct `sdkwork-iam` sibling dependency, installs with `pnpm install --frozen-lockfile`, runs normal workspace verification, runs mandatory PostgreSQL verification, and rejects generated drift before packaging completes.
 - `.github/workflows/package.yml` remains one thin pinned reusable-workflow call and now covers pull requests and main pushes in addition to tags, releases, and manual dispatch. Pull requests use the head SHA as the safe package-run tag, and GitHub Release publishing stays disabled outside release/tag events.
 - The root `test:postgres:required` script and `postgres-ci.contract.test.mjs` make the image digest, exact ignored tests, dependency closure, lifecycle steps, thin workflow ownership, and trigger coverage executable.
 
@@ -84,7 +84,7 @@ Passing this requirement proves PostgreSQL 16.9 lifecycle and Repository behavio
 
 - `pnpm test:postgres:required` passes against the pinned PostgreSQL image: lifecycle/seed/drift and full PostgreSQL repository parity each execute and pass after a fail-closed schema reset.
 - `node --test tests/contract/postgres-ci.contract.test.mjs` passes 2/2.
-- `sdkwork-workflow.mjs validate --config sdkwork.workflow.json` passes.
+- `agent-workflow.mjs validate --config agent.workflow.json` passes.
 - SDKWork pnpm-script and agent/workflow standard validators pass; the workflow validator confirms exactly one compliant packaging workflow.
 - The disposable container is absent after verification, proving normal-path cleanup.
 - Final `pnpm verify` passes after the PostgreSQL gate changes, including Rust workspace tests, 21 Node contract tests, API materialization, SDKWork standards checks, topology/database validation, and cloud gateway validation.

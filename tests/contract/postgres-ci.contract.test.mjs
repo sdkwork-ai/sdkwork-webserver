@@ -55,7 +55,7 @@ test('workflow contract makes PostgreSQL verification a PR and release gate', ()
     'node scripts/postgres-ci-verify.mjs',
   );
 
-  const manifest = JSON.parse(readFileSync(path.join(REPO_ROOT, 'sdkwork.workflow.json'), 'utf8'));
+  const manifest = JSON.parse(readFileSync(path.join(REPO_ROOT, 'agent.workflow.json'), 'utf8'));
   assert.ok(manifest.dependencies.some((dependency) => dependency.id === 'sdkwork-iam'));
   assert.ok(
     manifest.lifecycle.install.some((step) => step.run === 'pnpm install --frozen-lockfile'),
@@ -73,7 +73,7 @@ test('workflow contract makes PostgreSQL verification a PR and release gate', ()
     workflow.jobs.package.uses,
     'sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@bfe420b79d3c584d246f9691c8374b24534c3365',
   );
-  assert.equal(workflow.jobs.package.with.config_path, 'sdkwork.workflow.json');
+  assert.equal(workflow.jobs.package.with.config_path, 'agent.workflow.json');
   // `GITHUB_WORKFLOW_SPEC` requires the packaging entrypoint to stay thin: one
   // reusable job, no local `runs-on`/steps. Version resolution therefore belongs
   // to the reused packaging workflow; this repository forwards the dispatch

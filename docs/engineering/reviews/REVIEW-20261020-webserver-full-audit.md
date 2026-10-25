@@ -17,7 +17,7 @@ Authorities: `docs/product/prd/PRD.md`、`docs/architecture/tech/TECH_ARCHITECTU
    上传/证明/发布之前终止，没有任何可发布工件（证据：仓库根目录 6 个 `tmp_poll_*.json` 运行快照）。
 2. **`pnpm verify` 在本仓库不能通过**：`check-api-operation-patterns` 因 `PUT verification_file`
    的 operationId 动作不是 `update` 而退出 1；该门禁被 `_sdkwork:check → _sdkwork:verify →
-   sdkwork.workflow.json` 的 `pnpm verify` 步骤引用。**本次已修复并复验通过。**
+   agent.workflow.json` 的 `pnpm verify` 步骤引用。**本次已修复并复验通过。**
 3. **生成 SDK 与契约漂移**：backend SDK 的 12 个语言目标在审计开始时与生成器输出不一致
    （dart/python/go/java/kotlin/swift/csharp/flutter/rust/php/ruby），生成物并非“全部由生成器拥有”。
    **本次已全量再生成并复验通过。**
@@ -110,7 +110,7 @@ DDL/迁移/仓储，也没有任何文档声称 Web Server 支持 SQLite。**Pos
   `:61-71` 在 `init()` 后断言 `pending.is_empty()`、`migrate()==0`。而
   `sdkwork-database-lifecycle/orchestrator.rs:42-59` 的 `init()` 只应用 baseline、不写迁移历史，
   `plan_migrations()` 会返回 22 个迁移；`scripts/postgres-ci-verify.mjs:36-47` 正是运行该测试，
-  `sdkwork.workflow.json` 把 `pnpm test:postgres:required` 设为强制 validate 步骤。
+  `agent.workflow.json` 把 `pnpm test:postgres:required` 设为强制 validate 步骤。
 - 影响：唯一的真实 PG 生命周期证据要么红、要么从未执行；release 可以在没有 PG 证据的情况下被声称通过。
 - 修复：按 `DATABASE_FRAMEWORK_SPEC.md` §7.5（fresh install = baseline + 全部有序迁移，迁移是
   load-bearing 的升级路径）把测试改为：init 后断言 pending 非空 → `migrate()` 返回全部 pending
@@ -294,8 +294,8 @@ DDL/迁移/仓储，也没有任何文档声称 Web Server 支持 SQLite。**Pos
 ### 4.8 测试 / CI
 | # | 问题 | 证据 | 状态 |
 | --- | --- | --- | --- |
-| T1 | 唯一 CI 工作流无独立 test job；测试只在打包 validate 中执行，且 validate 已红 | `.github/workflows/package.yml`；`sdkwork.workflow.json:202-248` | **reviewed exception**：`sdkwork.workflow.json` 的 validate 阶段包含 `pnpm verify`（`_sdkwork:test` 全量 Rust + 契约 + IAM 模板）与 `git diff --exit-code`；独立 test job 会被 GITHUB_WORKFLOW_SPEC 的薄入口规则拒绝。validate 的本地等价命令已全绿（Windows 宿主仅 shell-portability 由 Linux 执行），不再是“已红” |
-| T2 | PG 必需门禁排在已失败的 `pnpm verify` 之后，从未执行 | `sdkwork.workflow.json:226,231` | **已修复**：DB/恢复/HA 前移；lifecycle 与 parity 已在真实 PG 18.3 上通过 |
+| T1 | 唯一 CI 工作流无独立 test job；测试只在打包 validate 中执行，且 validate 已红 | `.github/workflows/package.yml`；`agent.workflow.json:202-248` | **reviewed exception**：`agent.workflow.json` 的 validate 阶段包含 `pnpm verify`（`_sdkwork:test` 全量 Rust + 契约 + IAM 模板）与 `git diff --exit-code`；独立 test job 会被 GITHUB_WORKFLOW_SPEC 的薄入口规则拒绝。validate 的本地等价命令已全绿（Windows 宿主仅 shell-portability 由 Linux 执行），不再是“已红” |
+| T2 | PG 必需门禁排在已失败的 `pnpm verify` 之后，从未执行 | `agent.workflow.json:226,231` | **已修复**：DB/恢复/HA 前移；lifecycle 与 parity 已在真实 PG 18.3 上通过 |
 | T3 | HA/恢复“真实演练”测试只对脚本源码做正则匹配 | `tests/contract/postgres-ha.contract.test.mjs:41-52`；`database-recovery.contract.test.mjs:43-53` | 待修 |
 | T4 | 事务/租户隔离/幂等/keyset/回滚全部压在 1 个 3,700 行 `#[ignore]` 测试里 | `repository_parity.rs:172-174` | **已执行通过**；为可定位失败补充了带幂等键的错误上下文，并修复了 4 处过期 fixture（续期 lead 时间依赖、未验证域名、重复指纹、非 hex 标记） |
 | T5 | 每个路由的未认证/无权限 HTTP 契约测试缺失（仅 manifest 元数据断言） | `route_manifest_contract.rs`；`internal_routes.rs:299-316` 仅 internal | **部分修复**：新增 HTTP 级测试 `backend_framework_rejects_unauthenticated_requests`，无凭据请求在双 token surface 上必须返回 401；manifest 契约继续覆盖授权模式/权限。逐路由的参数化 HTTP 矩阵仍未建立 |
@@ -459,7 +459,7 @@ pnpm --dir apps/sdkwork-webserver-pc typecheck
 | 修复 | 文件 | 验证 |
 | --- | --- | --- |
 | PostgreSQL 生命周期测试对齐框架语义（baseline + 全部迁移 = fresh install） | `crates/sdkwork-webserver-database-host/tests/postgres_lifecycle.rs` | 测试逻辑编译通过；断言 pending 非空 → migrate 全部 → pending 空 → drift clean |
-| CI validate 顺序：DB/恢复/HA 前移，避免被无关失败掩盖 | `sdkwork.workflow.json` | JSON 结构校验通过 |
+| CI validate 顺序：DB/恢复/HA 前移，避免被无关失败掩盖 | `agent.workflow.json` | JSON 结构校验通过 |
 | Nginx 接受但未执行的指令产生显式诊断（含 file:line） | `core/src/nginx/mapping.rs`、`core/src/nginx/load.rs`、`core/src/config/source.rs`、gateway `main.rs` | 新增 `accepted_but_unenforced_directives_are_reported`；`cargo test -p sdkwork-webserver-core --lib nginx::load` 2/2 通过 |
 | nginx edge 关闭时不再在 HTTP 面伪造 validate/reload/status 成功 | `service/src/nginx_ops.rs`、`service/src/backend.rs` | service 46/46 通过 |
 | 过期/未生效 TLS 叶证书拒绝激活 | `data_plane/tls_material.rs` | 测试改为断言拒绝；4/4 通过 |
@@ -1158,7 +1158,7 @@ p99 ~3.6 ms、10 分钟 soak 24,549,146 请求 0 失败、10k 路由 33 ms、15k
 
 ## 66. 第五十六轮：CI 测试门禁澄清（T1 reviewed exception）（2026-10-21）
 
-- 复核 `sdkwork.workflow.json`：validate 阶段顺序为 archive validate/signature/smoke/SBOM →
+- 复核 `agent.workflow.json`：validate 阶段顺序为 archive validate/signature/smoke/SBOM →
   `pnpm test:postgres:required` → recovery → HA → **`pnpm verify`** → `git diff --exit-code`。
   `pnpm verify` 内含 `_sdkwork:test`（`cargo test --workspace` + 契约 + IAM 模板），所以测试并非
   “没有被 CI 执行”，而是作为打包 validate 的一部分执行。

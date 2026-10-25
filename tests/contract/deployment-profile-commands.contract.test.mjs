@@ -128,7 +128,7 @@ test('release smoke fails before archive access on a mismatched host architectur
 });
 
 test('release workflow and archive implementation preserve immutable bounded package contracts', () => {
-  const workflow = readJson('sdkwork.workflow.json');
+  const workflow = readJson('agent.workflow.json');
   // The build pipeline owns additional generator steps; assert that the
   // release build step is present instead of pinning its position.
   assert.ok(

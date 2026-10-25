@@ -65,7 +65,7 @@ test('PostgreSQL HA drill is mandatory in root and release verification', () => 
   assert.match(packageJson.scripts['_sdkwork:verify'], /pnpm run _sdkwork:test/u);
 
   const workflow = JSON.parse(
-    readFileSync(path.join(REPO_ROOT, 'sdkwork.workflow.json'), 'utf8'),
+    readFileSync(path.join(REPO_ROOT, 'agent.workflow.json'), 'utf8'),
   );
   const haIndex = workflow.lifecycle.validate.findIndex(
     (step) => step.run === 'pnpm test:postgres:ha',

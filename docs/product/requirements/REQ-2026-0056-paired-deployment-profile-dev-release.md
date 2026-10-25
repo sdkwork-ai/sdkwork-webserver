@@ -40,11 +40,11 @@ trace:
     - scripts/webserver-release.mjs
     - etc/sdkwork.deployment.config.json
     - specs/topology.spec.json
-    - sdkwork.workflow.json
+    - agent.workflow.json
 verification:
   - node --test tests/contract/deployment-profile-commands.contract.test.mjs tests/contract/dev-runner.contract.test.mjs
-  - node ../sdkwork-github-workflow/scripts/sdkwork-workflow.mjs validate --config sdkwork.workflow.json
-  - node ../sdkwork-github-workflow/scripts/sdkwork-workflow.mjs matrix --config sdkwork.workflow.json --json
+  - node ../sdkwork-github-workflow/scripts/agent-workflow.mjs validate --config agent.workflow.json
+  - node ../sdkwork-github-workflow/scripts/agent-workflow.mjs matrix --config agent.workflow.json --json
   - node ../sdkwork-specs/tools/check-source-config-standard.mjs --root .
   - node ../sdkwork-specs/tools/check-pnpm-script-standard.mjs --root . --product-prefix web
   - pnpm verify

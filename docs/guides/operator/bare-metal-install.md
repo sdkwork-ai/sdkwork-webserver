@@ -16,7 +16,7 @@ Normative host layout, ownership, and permissions are owned by
 ## 1. Prerequisites
 
 - The release archive for the target architecture (`linux-x64-standalone-server-tar-gz` or
-  `linux-arm64-standalone-server-tar-gz`), built and attested per `sdkwork.workflow.json`.
+  `linux-arm64-standalone-server-tar-gz`), built and attested per `agent.workflow.json`.
 - A dedicated non-root service identity. The SDKWork convention is a `sdkwork` system user;
   the service must never run as `root` (`PRD-production-operations.md`).
 - PostgreSQL reachable from the host (the standalone production profile requires a real

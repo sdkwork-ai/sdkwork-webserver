@@ -249,7 +249,7 @@ current SDKWork Deploy validator. Every profile present in each v2 manifest was 
 | SDKWork repositories | 92 |
 | Repositories with `agent.app.config.json` | 58 |
 | Repositories with `specs/topology.spec.json` | 51 |
-| Repositories with `sdkwork.workflow.json` | 47 |
+| Repositories with `agent.workflow.json` | 47 |
 | Repositories with `deployments/deploy.yaml` | 27 |
 | Repositories with PC root | 61 |
 | Repositories with H5 root | 23 |
