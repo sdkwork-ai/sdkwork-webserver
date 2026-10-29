@@ -64,7 +64,7 @@ const ORACLE_UPSTREAM_PORT = ORACLE_PORT + 2;
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_UPSTREAM_PORT = GATEWAY_PORT + 2;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
-const CASE_FLOOR = 182;
+const CASE_FLOOR = 236;
 /**
  * The exact nginx build the committed oracle was captured from. Bump it only
  * together with a fresh `--refresh-oracle` capture and the per-slice note in
@@ -368,9 +368,13 @@ async function main() {
   const logPath = path.join(root, 'tmp', 'nginx-differential-http-gateway.log');
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logHandle = fs.openSync(logPath, 'w');
+  // The autoindex fixture pins `autoindex_localtime on`; nginx runs with
+  // TZ=UTC (run-nginx.sh) so the gateway must see the same zone for the
+  // rendered mtimes to be the compared contract rather than a host artefact.
   const gateway = spawn(binary, ['serve-nginx', GATEWAY_CONF], {
     cwd: root,
     stdio: ['ignore', logHandle, logHandle],
+    env: { ...process.env, TZ: 'UTC' },
   });
 
   let exitCode = 1;

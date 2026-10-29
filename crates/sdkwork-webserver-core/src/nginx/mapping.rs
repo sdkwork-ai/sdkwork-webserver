@@ -48,12 +48,12 @@ use crate::config::{
     format_proxy_set_header_entry_with_maps, hostname_upstream_allowed_cidrs,
     map_variables::{map_result_name, validate_map_definitions, validate_map_source},
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
-    validate_proxy_pass_template_with_maps, CachePolicyConfig, ConfigDiagnostic,
-    CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GzipStaticMode,
-    IfModifiedSinceMode, MapConfig, MapEntryConfig, MimeTypeConfig, ProxyRedirectPolicyConfig,
-    ProxyResponsePolicyConfig, ProxyRewriteRuleConfig, RedirectPolicyConfig, StreamTargetConfig,
-    StreamTlsMode, TlsVersion, WebServerAppConfig, WebServerConfigError,
-    ACME_HTTP_01_CHALLENGE_PREFIX,
+    validate_proxy_pass_template_with_maps, AutoindexConfig, AutoindexFormat, CachePolicyConfig,
+    CharsetConfig, ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode,
+    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig, MapEntryConfig,
+    MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
+    RedirectPolicyConfig, StreamTargetConfig, StreamTlsMode, TlsVersion, WebServerAppConfig,
+    WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
 use super::parser::NginxDirective;
@@ -73,7 +73,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "keepalive_requests",
     "server_tokens",
     "log_format",
-    "charset",
     "events",
     "so_keepalive",
     "resolver",
@@ -111,9 +110,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "send_timeout",
     "sendfile_max_chunk",
     "fastcgi_read_timeout",
-    "gzip_comp_level",
-    "gzip_proxied",
-    "gzip_disable",
     "open_file_cache",
     "open_file_cache_valid",
     "open_file_cache_min_uses",
@@ -132,10 +128,10 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_headers_hash_max_size",
     "proxy_headers_hash_bucket_size",
     "gzip_http_version",
+    "gzip_comp_level",
     "gzip_buffers",
     "gzip_window",
     "charset_map",
-    "source_charset",
     "keepalive_disable",
     "keepalive_time",
     "lingering_time",
@@ -160,7 +156,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "ssl_conf_command",
     "proxy_pass_header",
     "accept_mutex_delay",
-    "charset_types",
     "ssl_buffer_size",
     "proxy_ssl_protocols",
     "proxy_ssl_ciphers",
@@ -192,7 +187,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     // `expires` / `etag` / `if_modified_since` are NOT here: they compile to
     // `CachePolicyConfig` on the route or virtual host so the data plane can
     // emit the freshness headers instead of dropping the operator's policy.
-    "autoindex",
     // events / OS tuning
     "use",
     "accept_mutex",
@@ -345,6 +339,14 @@ pub fn materialize_nginx_app(
             "gzip_min_length" => mapper.materialize_gzip_min_length(directive)?,
             "gzip_vary" => mapper.materialize_gzip_vary(directive)?,
             "gzip_static" => mapper.materialize_gzip_static(directive)?,
+            "gzip_disable" => {
+                let (patterns, msie6) = parse_gzip_disable(directive)?;
+                mapper.http_gzip_refinements.disable = patterns;
+                mapper.http_gzip_refinements.disable_msie6 = msie6;
+            }
+            "gzip_proxied" => {
+                mapper.http_gzip_refinements.proxied = Some(parse_gzip_proxied(directive)?);
+            }
             "proxy_cache_path" => mapper.materialize_proxy_cache_path(directive)?,
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
             "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
@@ -484,6 +486,37 @@ pub fn materialize_nginx_app(
                 mapper.http_ignore_invalid_headers =
                     Some(parse_on_off(directive, "ignore_invalid_headers")?);
             }
+            // nginx charset family: header-level behaviour is executed; the
+            // `charset_map` table itself stays accepted-unenforced (byte
+            // transcoding is out of scope).
+            "charset" => {
+                mapper.http_charset.charset = Some(parse_charset_value(directive, true)?);
+            }
+            "charset_types" => {
+                mapper.http_charset.types = Some(parse_charset_types(directive)?);
+            }
+            "source_charset" => {
+                mapper.http_charset.source_charset = Some(parse_charset_value(directive, true)?);
+            }
+            "override_charset" => {
+                mapper.http_charset.override_charset =
+                    Some(parse_on_off(directive, "override_charset")?);
+            }
+            // nginx autoindex family.
+            "autoindex" => {
+                mapper.http_autoindex.enabled = Some(parse_on_off(directive, "autoindex")?);
+            }
+            "autoindex_exact_size" => {
+                mapper.http_autoindex.exact_size =
+                    Some(parse_on_off(directive, "autoindex_exact_size")?);
+            }
+            "autoindex_localtime" => {
+                mapper.http_autoindex.localtime =
+                    Some(parse_on_off(directive, "autoindex_localtime")?);
+            }
+            "autoindex_format" => {
+                mapper.http_autoindex.format = Some(parse_autoindex_format(directive)?);
+            }
             "stream" | "events" | "http" => {}
             name if ACCEPTED_IGNORED.contains(&name) => {}
             name if UNSUPPORTED_SECURITY.contains(&name) => {
@@ -614,6 +647,16 @@ struct LocationExtras {
     internal: bool,
     /// Location-level proxy response-header directives.
     proxy_response: ProxyResponseDirectives,
+    /// Location-level nginx charset-family declarations.
+    charset: CharsetDeclarations,
+    /// Location-level nginx gzip refinement declarations.
+    gzip_refinements: GzipRefinementDeclarations,
+    /// Location-level nginx autoindex-family declarations.
+    autoindex: AutoindexDeclarations,
+    /// nginx `empty_gif` location handler.
+    empty_gif: bool,
+    /// nginx `stub_status` location handler.
+    stub_status: bool,
 }
 
 /// Resolved nginx `ssl_protocols` policy as an inclusive version window.
@@ -891,6 +934,22 @@ struct Mapper<'a> {
     http_underscores_in_headers: Option<bool>,
     /// http-level `ignore_invalid_headers` declaration (nginx default `on`).
     http_ignore_invalid_headers: Option<bool>,
+    /// http-level gzip refinement declarations (`gzip_comp_level`,
+    /// `gzip_disable`, `gzip_proxied`), inherited by every server.
+    http_gzip_refinements: GzipRefinementDeclarations,
+    /// Gzip refinement declarations resolved for the server currently being
+    /// materialized (http ⊕ server); locations overlay this.
+    server_gzip_refinements: GzipRefinementDeclarations,
+    /// http-level nginx autoindex-family declarations, inherited by every server.
+    http_autoindex: AutoindexDeclarations,
+    /// Autoindex-family declarations resolved for the server currently being
+    /// materialized (http ⊕ server); locations overlay this.
+    server_autoindex: AutoindexDeclarations,
+    /// http-level nginx charset-family declarations, inherited by every server.
+    http_charset: CharsetDeclarations,
+    /// Charset-family declarations resolved for the server currently being
+    /// materialized (http ⊕ server); locations overlay this.
+    server_charset: CharsetDeclarations,
     /// http-level `set_real_ip_from` / `real_ip_header` /
     /// `real_ip_recursive` settings inherited by every server.
     http_real_ip: RealIpSettings,
@@ -958,6 +1017,12 @@ impl<'a> Mapper<'a> {
             http_merge_slashes: None,
             http_underscores_in_headers: None,
             http_ignore_invalid_headers: None,
+            http_charset: CharsetDeclarations::default(),
+            server_charset: CharsetDeclarations::default(),
+            http_autoindex: AutoindexDeclarations::default(),
+            server_autoindex: AutoindexDeclarations::default(),
+            http_gzip_refinements: GzipRefinementDeclarations::default(),
+            server_gzip_refinements: GzipRefinementDeclarations::default(),
             http_real_ip: RealIpSettings::default(),
             real_ip_by_listener: HashMap::new(),
             listeners: Vec::new(),
@@ -1425,6 +1490,8 @@ impl<'a> Mapper<'a> {
         let mut server_merge_slashes: Option<bool> = None;
         let mut server_underscores_in_headers: Option<bool> = None;
         let mut server_ignore_invalid_headers: Option<bool> = None;
+        let mut server_charset = CharsetDeclarations::default();
+        let mut server_autoindex = AutoindexDeclarations::default();
         // nginx http-level gzip state snapshot: server-level `gzip*`
         // directives overlay it (single-value on/off inherits; the type list
         // and min length replace when declared).
@@ -1440,6 +1507,7 @@ impl<'a> Mapper<'a> {
         let mut server_gzip_min_length: Option<u64> = None;
         let mut server_gzip_vary: Option<bool> = None;
         let mut server_gzip_static: Option<GzipStaticMode> = None;
+        let mut server_gzip_refinements = GzipRefinementDeclarations::default();
         let mut server_mime_types: Option<Vec<MimeTypeConfig>> = None;
         let mut server_default_type: Option<String> = None;
         let mut server_rewrite_rules: Vec<Value> = Vec::new();
@@ -1586,6 +1654,32 @@ impl<'a> Mapper<'a> {
                 "ignore_invalid_headers" => {
                     server_ignore_invalid_headers =
                         Some(parse_on_off(child, "ignore_invalid_headers")?);
+                }
+                "charset" => {
+                    server_charset.charset = Some(parse_charset_value(child, true)?);
+                }
+                "charset_types" => {
+                    server_charset.types = Some(parse_charset_types(child)?);
+                }
+                "source_charset" => {
+                    server_charset.source_charset = Some(parse_charset_value(child, true)?);
+                }
+                "override_charset" => {
+                    server_charset.override_charset =
+                        Some(parse_on_off(child, "override_charset")?);
+                }
+                "autoindex" => {
+                    server_autoindex.enabled = Some(parse_on_off(child, "autoindex")?);
+                }
+                "autoindex_exact_size" => {
+                    server_autoindex.exact_size =
+                        Some(parse_on_off(child, "autoindex_exact_size")?);
+                }
+                "autoindex_localtime" => {
+                    server_autoindex.localtime = Some(parse_on_off(child, "autoindex_localtime")?);
+                }
+                "autoindex_format" => {
+                    server_autoindex.format = Some(parse_autoindex_format(child)?);
                 }
                 "access_log"
                 | "error_log"
@@ -1742,6 +1836,14 @@ impl<'a> Mapper<'a> {
                 }
                 "gzip_static" => {
                     server_gzip_static = Some(parse_gzip_static(child)?);
+                }
+                "gzip_disable" => {
+                    let (patterns, msie6) = parse_gzip_disable(child)?;
+                    server_gzip_refinements.disable = patterns;
+                    server_gzip_refinements.disable_msie6 = msie6;
+                }
+                "gzip_proxied" => {
+                    server_gzip_refinements.proxied = Some(parse_gzip_proxied(child)?);
                 }
                 "rewrite" => {
                     server_rewrite_rules.push(parse_rewrite_rule(child)?);
@@ -1927,6 +2029,21 @@ impl<'a> Mapper<'a> {
             .unwrap_or(self.http_underscores_in_headers.unwrap_or(false));
         let effective_ignore_invalid_headers = server_ignore_invalid_headers
             .unwrap_or(self.http_ignore_invalid_headers.unwrap_or(true));
+        // nginx charset family: http declarations are inherited by the server
+        // and handed down to locations through `self.server_charset`.
+        self.server_charset = self.http_charset.clone().overlay(server_charset);
+        let effective_charset = self.server_charset.resolve();
+        // nginx autoindex family: http declarations are inherited by the
+        // server and handed down to locations through `self.server_autoindex`.
+        self.server_autoindex = self.http_autoindex.clone().overlay(server_autoindex);
+        let effective_autoindex = self.server_autoindex.resolve();
+        // nginx gzip refinements: http ⊕ server declarations are handed down to
+        // locations through `self.server_gzip_refinements`.
+        self.server_gzip_refinements = self
+            .http_gzip_refinements
+            .clone()
+            .overlay(server_gzip_refinements.clone());
+        let effective_gzip_refinements = self.server_gzip_refinements.resolve();
 
         let mut listener_refs = Vec::new();
         for spec in &listen_specs {
@@ -2116,6 +2233,7 @@ impl<'a> Mapper<'a> {
             || server_gzip_min_length.is_some()
             || server_gzip_vary.is_some()
             || server_gzip_static.is_some()
+            || !self.server_gzip_refinements.is_empty()
         {
             let enabled = server_gzip.unwrap_or(http_gzip.0);
             let mut types = server_gzip_types.unwrap_or_else(|| http_gzip.1.clone());
@@ -2132,13 +2250,15 @@ impl<'a> Mapper<'a> {
             let min_length = server_gzip_min_length.unwrap_or(http_gzip.2);
             let vary = server_gzip_vary.unwrap_or(http_gzip_vary);
             let static_files = server_gzip_static.unwrap_or(http_gzip_static);
-            virtual_host["compression"] = json!({
+            let mut compression = json!({
                 "enabled": enabled,
                 "types": types,
                 "minLength": min_length,
                 "vary": vary,
                 "staticFiles": static_files,
             });
+            set_gzip_refinement_fields(&mut compression, &effective_gzip_refinements)?;
+            virtual_host["compression"] = compression;
         }
         // nginx `types` / `default_type`: each level's table replaces the
         // inherited one, while `default_type` inherits independently.
@@ -2197,6 +2317,16 @@ impl<'a> Mapper<'a> {
         if !effective_ignore_invalid_headers {
             virtual_host["ignoreInvalidHeaders"] = Value::Bool(false);
         }
+        if let Some(charset) = &effective_charset {
+            virtual_host["charset"] = serde_json::to_value(charset).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(autoindex) = &effective_autoindex {
+            virtual_host["autoindex"] = serde_json::to_value(autoindex).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         // Named locations are materialized after the path locations so their
         // resource ids never collide; they are appended to `routes` with an
         // exact `@name` matcher (unreachable by request path).
@@ -2250,7 +2380,7 @@ impl<'a> Mapper<'a> {
                     effective_cache,
                     None,
                     effective_redirect_policy,
-                );
+                )?;
                 named_route_entries.push(route);
             }
         }
@@ -2270,7 +2400,7 @@ impl<'a> Mapper<'a> {
                 effective_cache,
                 Some(&server_rewrite_rules),
                 effective_redirect_policy,
-            );
+            )?;
             route_entries.push(route);
         }
         if let Some((_route, resource)) = &catch_all_return {
@@ -2300,7 +2430,7 @@ impl<'a> Mapper<'a> {
         effective_cache: CacheDirectives,
         inherited_rewrites: Option<&[Value]>,
         inherited_redirect_policy: Option<RedirectPolicyConfig>,
-    ) {
+    ) -> Result<(), NginxConfigError> {
         let mut route_rewrites: Vec<Value> = inherited_rewrites
             .map(<[Value]>::to_vec)
             .unwrap_or_default();
@@ -2332,6 +2462,7 @@ impl<'a> Mapper<'a> {
             || extras.gzip_min_length.is_some()
             || extras.gzip_vary.is_some()
             || extras.gzip_static.is_some()
+            || !extras.gzip_refinements.is_empty()
         {
             // Location gzip overlays the host policy (on/off inherits;
             // types/min length replace when declared).
@@ -2390,13 +2521,22 @@ impl<'a> Mapper<'a> {
                 .gzip_static
                 .map(|mode| json!(mode))
                 .unwrap_or(host_static);
-            route["compression"] = json!({
+            let mut compression = json!({
                 "enabled": enabled,
                 "types": types,
                 "minLength": min_length,
                 "vary": vary,
                 "staticFiles": static_files,
             });
+            set_gzip_refinement_fields(
+                &mut compression,
+                &self
+                    .server_gzip_refinements
+                    .clone()
+                    .overlay(extras.gzip_refinements.clone())
+                    .resolve(),
+            )?;
+            route["compression"] = compression;
         }
         if !extras.access.is_empty() {
             route["access"] = Value::Array(extras.access.clone());
@@ -2451,6 +2591,40 @@ impl<'a> Mapper<'a> {
         if extras.internal {
             route["internal"] = Value::Bool(true);
         }
+        // nginx charset family: a location that declares any of the directives
+        // gets the fully resolved policy (its declarations over the inherited
+        // http/server ones).
+        if !extras.charset.is_empty() {
+            if let Some(charset) = self
+                .server_charset
+                .clone()
+                .overlay(extras.charset.clone())
+                .resolve()
+            {
+                route["charset"] = serde_json::to_value(&charset).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+        }
+        // nginx autoindex family: a location that declares any directive gets
+        // the fully resolved policy (its declarations over the inherited ones).
+        if !extras.autoindex.is_empty() {
+            if let Some(autoindex) = self
+                .server_autoindex
+                .clone()
+                .overlay(extras.autoindex.clone())
+                .resolve()
+            {
+                route["autoindex"] = serde_json::to_value(&autoindex).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2637,6 +2811,50 @@ impl<'a> Mapper<'a> {
                     }
                     extras.internal = true;
                 }
+                "charset" => {
+                    extras.charset.charset = Some(parse_charset_value(child, true)?);
+                }
+                "charset_types" => {
+                    extras.charset.types = Some(parse_charset_types(child)?);
+                }
+                "source_charset" => {
+                    extras.charset.source_charset = Some(parse_charset_value(child, true)?);
+                }
+                "override_charset" => {
+                    extras.charset.override_charset =
+                        Some(parse_on_off(child, "override_charset")?);
+                }
+                "autoindex" => {
+                    extras.autoindex.enabled = Some(parse_on_off(child, "autoindex")?);
+                }
+                "autoindex_exact_size" => {
+                    extras.autoindex.exact_size =
+                        Some(parse_on_off(child, "autoindex_exact_size")?);
+                }
+                "autoindex_localtime" => {
+                    extras.autoindex.localtime = Some(parse_on_off(child, "autoindex_localtime")?);
+                }
+                "autoindex_format" => {
+                    extras.autoindex.format = Some(parse_autoindex_format(child)?);
+                }
+                "empty_gif" => {
+                    if !child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "empty_gif takes no arguments",
+                        ));
+                    }
+                    extras.empty_gif = true;
+                }
+                "stub_status" => {
+                    if !child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stub_status takes no arguments",
+                        ));
+                    }
+                    extras.stub_status = true;
+                }
                 "sub_filter" => {
                     let Some(from) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
@@ -2677,6 +2895,14 @@ impl<'a> Mapper<'a> {
                 }
                 "gzip_static" => {
                     extras.gzip_static = Some(parse_gzip_static(child)?);
+                }
+                "gzip_disable" => {
+                    let (patterns, msie6) = parse_gzip_disable(child)?;
+                    extras.gzip_refinements.disable = patterns;
+                    extras.gzip_refinements.disable_msie6 = msie6;
+                }
+                "gzip_proxied" => {
+                    extras.gzip_refinements.proxied = Some(parse_gzip_proxied(child)?);
                 }
                 "gzip" => {
                     extras.gzip = Some(match child.args.first().map(String::as_str) {
@@ -2981,6 +3207,8 @@ impl<'a> Mapper<'a> {
             return_directive.is_some(),
             root.is_some(),
             alias.is_some(),
+            extras.empty_gif,
+            extras.stub_status,
         ]
         .iter()
         .filter(|present| **present)
@@ -3305,6 +3533,19 @@ impl<'a> Mapper<'a> {
                     ));
                 }
             }
+        } else if extras.stub_status {
+            // nginx `stub_status`: a bounded, loopback-gated status page.
+            self.resources.push(json!({
+                "id": resource_id,
+                "type": "stub-status",
+            }));
+        } else if extras.empty_gif {
+            // nginx `empty_gif`: a location handler with no body input that
+            // serves the canonical 1x1 GIF (GET/HEAD only).
+            self.resources.push(json!({
+                "id": resource_id,
+                "type": "empty-gif",
+            }));
         } else if let Some(root) = effective_root {
             // nginx `root` uses POSIX path semantics: a leading `/` is
             // absolute regardless of the host platform, and the full request
@@ -5670,6 +5911,350 @@ fn apply_cookie_rewrite_directive(
             format!("{} requires `off` or `<from> <to>`", directive.name),
         )),
     }
+}
+
+/// nginx autoindex family declarations (`autoindex`,
+/// `autoindex_exact_size`, `autoindex_localtime`, `autoindex_format`) at one
+/// configuration level. Every field inherits the previous level's value when
+/// undeclared (nginx merges all four with `ngx_conf_merge_value`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct AutoindexDeclarations {
+    enabled: Option<bool>,
+    exact_size: Option<bool>,
+    localtime: Option<bool>,
+    format: Option<AutoindexFormat>,
+}
+
+impl AutoindexDeclarations {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.exact_size.is_none()
+            && self.localtime.is_none()
+            && self.format.is_none()
+    }
+
+    fn overlay(self, inner: Self) -> Self {
+        Self {
+            enabled: inner.enabled.or(self.enabled),
+            exact_size: inner.exact_size.or(self.exact_size),
+            localtime: inner.localtime.or(self.localtime),
+            format: inner.format.or(self.format),
+        }
+    }
+
+    /// Materialize the effective policy; `None` means no level declared the
+    /// family (nginx default: listings off).
+    fn resolve(&self) -> Option<AutoindexConfig> {
+        if self.is_empty() {
+            return None;
+        }
+        Some(AutoindexConfig {
+            enabled: self.enabled.unwrap_or(false),
+            exact_size: self.exact_size.unwrap_or(true),
+            localtime: self.localtime.unwrap_or(false),
+            format: self.format.unwrap_or_default(),
+        })
+    }
+}
+
+/// Parse `autoindex_format html|json|jsonp|xml`.
+fn parse_autoindex_format(directive: &NginxDirective) -> Result<AutoindexFormat, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "autoindex_format takes exactly one format",
+        ));
+    }
+    match directive.args[0].as_str() {
+        "html" => Ok(AutoindexFormat::Html),
+        "json" => Ok(AutoindexFormat::Json),
+        "jsonp" => Ok(AutoindexFormat::Jsonp),
+        "xml" => Ok(AutoindexFormat::Xml),
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!("autoindex_format accepts html|json|jsonp|xml, found `{other}`"),
+        )),
+    }
+}
+
+/// nginx charset-family directives (`charset`, `charset_types`,
+/// `source_charset`, `override_charset`) declared at one configuration level.
+///
+/// `charset`/`source_charset`/`override_charset` inherit from the previous
+/// level when undeclared; `charset_types` replaces the inherited list when
+/// declared. An undeclared field stays `None` through the http → server →
+/// location merge chain.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct CharsetDeclarations {
+    charset: Option<CharsetValue>,
+    types: Option<Vec<String>>,
+    source_charset: Option<CharsetValue>,
+    override_charset: Option<bool>,
+}
+
+/// `charset` / `source_charset` argument. `off` is a real declaration (it
+/// disables the inherited value), distinct from "not declared".
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CharsetValue {
+    Off,
+    Name(String),
+}
+
+impl CharsetDeclarations {
+    fn is_empty(&self) -> bool {
+        self.charset.is_none()
+            && self.types.is_none()
+            && self.source_charset.is_none()
+            && self.override_charset.is_none()
+    }
+
+    /// Overlay `inner` (the more specific level) on `self`.
+    fn overlay(self, inner: Self) -> Self {
+        Self {
+            charset: inner.charset.or(self.charset),
+            types: inner.types.or(self.types),
+            source_charset: inner.source_charset.or(self.source_charset),
+            override_charset: inner.override_charset.or(self.override_charset),
+        }
+    }
+
+    /// Materialize the effective policy. `None` means no level declared the
+    /// family, so the runtime performs no charset header rewrite.
+    fn resolve(&self) -> Option<CharsetConfig> {
+        if self.is_empty() {
+            return None;
+        }
+        Some(CharsetConfig {
+            charset: match &self.charset {
+                Some(CharsetValue::Name(name)) => Some(name.clone()),
+                Some(CharsetValue::Off) | None => None,
+            },
+            types: self.types.clone(),
+            source_charset: match &self.source_charset {
+                Some(CharsetValue::Name(name)) => Some(name.clone()),
+                Some(CharsetValue::Off) | None => None,
+            },
+            override_charset: self.override_charset.unwrap_or(false),
+        })
+    }
+}
+
+/// Parse a `charset <name>|off` / `source_charset <name>` argument.
+fn parse_charset_value(
+    directive: &NginxDirective,
+    allow_off: bool,
+) -> Result<CharsetValue, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} takes exactly one charset name", directive.name),
+        ));
+    }
+    let value = &directive.args[0];
+    if allow_off && value.eq_ignore_ascii_case("off") {
+        return Ok(CharsetValue::Off);
+    }
+    if value.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} variable `{value}` is not supported; declare a literal charset name",
+                directive.name
+            ),
+        ));
+    }
+    if value.is_empty()
+        || value.bytes().any(|byte| {
+            !(byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':' | b'+'))
+        })
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} charset name `{value}` is not a valid charset token",
+                directive.name
+            ),
+        ));
+    }
+    Ok(CharsetValue::Name(value.clone()))
+}
+
+/// Parse `charset_types <mime…>`.
+///
+/// nginx seeds a declared list with the first built-in default type
+/// (`text/html`) and then appends the arguments, so `charset_types text/css`
+/// matches both `text/css` and `text/html` (differential-confirmed against
+/// nginx 1.29.6). `*` makes the filter match every media type.
+fn parse_charset_types(directive: &NginxDirective) -> Result<Vec<String>, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "charset_types requires at least one MIME type",
+        ));
+    }
+    if directive.args.iter().any(|arg| arg == "*") {
+        return Ok(vec!["*".to_owned()]);
+    }
+    let mut types = vec!["text/html".to_owned()];
+    for arg in &directive.args {
+        validate_media_type(directive, arg)?;
+        if !types
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(arg))
+        {
+            types.push(arg.clone());
+        }
+    }
+    Ok(types)
+}
+
+/// nginx gzip refinement directives (`gzip_comp_level`, `gzip_disable`,
+/// `gzip_proxied`) declared at one configuration level.
+///
+/// Each directive inherits independently: `gzip_comp_level` and the
+/// `gzip_proxied` bitmask inherit the previous level's value when undeclared,
+/// the `gzip_disable` regex array is replaced when declared, and the predefined
+/// `msie6` selector is a separate flag that keeps inheriting unless a level
+/// names it (nginx merges the flag and the array through two chains).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct GzipRefinementDeclarations {
+    disable: Option<Vec<String>>,
+    disable_msie6: Option<bool>,
+    proxied: Option<GzipProxiedConfig>,
+}
+
+impl GzipRefinementDeclarations {
+    fn is_empty(&self) -> bool {
+        self.disable.is_none() && self.disable_msie6.is_none() && self.proxied.is_none()
+    }
+
+    fn overlay(self, inner: Self) -> Self {
+        Self {
+            disable: inner.disable.or(self.disable),
+            disable_msie6: inner.disable_msie6.or(self.disable_msie6),
+            proxied: inner.proxied.or(self.proxied),
+        }
+    }
+
+    fn resolve(&self) -> GzipRefinements {
+        GzipRefinements {
+            // nginx `gzip_comp_level` stays accepted-unenforced: the runtime's
+            // tower-http compression layer owns its deflate level, so the
+            // declared level has no observable effect on negotiation or bytes.
+            comp_level: 1,
+            disable: self.disable.clone().unwrap_or_default(),
+            disable_msie6: self.disable_msie6.unwrap_or(false),
+            proxied: self.proxied.clone(),
+        }
+    }
+}
+
+/// Effective values of the gzip refinement family for one level.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GzipRefinements {
+    comp_level: u8,
+    disable: Vec<String>,
+    disable_msie6: bool,
+    proxied: Option<GzipProxiedConfig>,
+}
+
+/// Attach the refinement fields to a `compression` JSON object.
+fn set_gzip_refinement_fields(
+    object: &mut Value,
+    refinements: &GzipRefinements,
+) -> Result<(), NginxConfigError> {
+    object["compLevel"] = json!(refinements.comp_level);
+    if !refinements.disable.is_empty() {
+        object["disable"] = json!(refinements.disable);
+    }
+    if refinements.disable_msie6 {
+        object["disableMsie6"] = json!(true);
+    }
+    if let Some(proxied) = &refinements.proxied {
+        object["proxied"] = serde_json::to_value(proxied).map_err(|error| {
+            NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+        })?;
+    }
+    Ok(())
+}
+
+/// Parse `gzip_disable <regex…>` / `gzip_disable "msie6"`.
+///
+/// nginx compiles every non-`msie6` argument as a case-insensitive PCRE and
+/// disables gzip when any pattern matches the request `User-Agent`. The
+/// runtime compiles the same patterns with the bounded Rust regex engine; a
+/// pattern that engine rejects fails closed here instead of silently changing
+/// the negotiation.
+fn parse_gzip_disable(
+    directive: &NginxDirective,
+) -> Result<(Option<Vec<String>>, Option<bool>), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "gzip_disable requires at least one pattern",
+        ));
+    }
+    let mut patterns = Vec::new();
+    let mut msie6 = None;
+    for argument in &directive.args {
+        if argument == "msie6" {
+            msie6 = Some(true);
+            continue;
+        }
+        if argument.is_empty() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "gzip_disable pattern must not be empty",
+            ));
+        }
+        if regex::RegexBuilder::new(argument)
+            .case_insensitive(true)
+            .build()
+            .is_err()
+        {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "gzip_disable pattern `{argument}` is not supported by the runtime regex engine; use a portable pattern or remove it"
+                ),
+            ));
+        }
+        patterns.push(argument.clone());
+    }
+    Ok((Some(patterns), msie6))
+}
+
+/// Parse `gzip_proxied <off|expired|no-cache|no-store|private|no_last_modified|no_etag|auth|any…>`.
+fn parse_gzip_proxied(directive: &NginxDirective) -> Result<GzipProxiedConfig, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "gzip_proxied requires at least one condition",
+        ));
+    }
+    let mut config = GzipProxiedConfig::default();
+    for argument in &directive.args {
+        match argument.as_str() {
+            "off" => config.off = true,
+            "any" => config.any = true,
+            "expired" => config.expired = true,
+            "no-cache" => config.no_cache = true,
+            "no-store" => config.no_store = true,
+            "private" => config.private = true,
+            "no_last_modified" => config.no_last_modified = true,
+            "no_etag" => config.no_etag = true,
+            "auth" => config.auth = true,
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "gzip_proxied accepts off|expired|no-cache|no-store|private|no_last_modified|no_etag|auth|any, found `{other}`"
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(config)
 }
 
 fn parse_gzip_static(directive: &NginxDirective) -> Result<GzipStaticMode, NginxConfigError> {
@@ -8733,6 +9318,314 @@ server {
         assert!(second.merge_slashes, "server-level declaration wins");
         assert!(!second.underscores_in_headers);
         assert!(!second.ignore_invalid_headers);
+    }
+
+    #[test]
+    fn materializes_charset_family_with_nginx_inheritance() {
+        let config = materialize(
+            r#"
+charset utf-8;
+charset_types text/css;
+
+server {
+    listen 80;
+    server_name charset.example.test;
+    root /srv/www;
+
+    location /inherit/ { }
+
+    location /off/ {
+        charset off;
+    }
+
+    location /types/ {
+        charset_types application/json;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_charset = host.charset.as_ref().expect("host charset config");
+        assert_eq!(host_charset.charset.as_deref(), Some("utf-8"));
+        // A declared `charset_types` list is seeded with `text/html`, then the
+        // declared types follow in order.
+        assert_eq!(
+            host_charset.types.as_deref(),
+            Some(["text/html".to_owned(), "text/css".to_owned()].as_slice())
+        );
+        assert!(!host_charset.override_charset);
+        // A location inherits the resolved policy when it declares nothing.
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit/")
+            .expect("inherit route");
+        assert!(inherit.charset.is_none(), "inherits the host value");
+        // `charset off` is a declaration that disables the inherited charset.
+        let off = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/off/")
+            .expect("off route");
+        let off_charset = off.charset.as_ref().expect("route charset config");
+        assert_eq!(off_charset.charset, None);
+        assert_eq!(off_charset.types, host_charset.types);
+        // The location restates only `charset_types`; the host `charset` is
+        // resolved in, and the declared list replaces the host one.
+        let types = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/types/")
+            .expect("types route");
+        let types_charset = types.charset.as_ref().expect("route charset config");
+        assert_eq!(types_charset.charset.as_deref(), Some("utf-8"));
+        assert_eq!(
+            types_charset.types.as_deref(),
+            Some(["text/html".to_owned(), "application/json".to_owned()].as_slice())
+        );
+    }
+
+    #[test]
+    fn charset_family_fails_closed_on_unexecutable_forms() {
+        for (label, location, needle) in [
+            (
+                "variable charset",
+                "charset $upstream_charset; return 200 \"ok\";",
+                "variable",
+            ),
+            (
+                "invalid charset token",
+                "charset \"utf 8\"; return 200 \"ok\";",
+                "charset",
+            ),
+            (
+                "empty charset_types",
+                "charset_types; return 200 \"ok\";",
+                "charset_types",
+            ),
+            (
+                "invalid charset type",
+                "charset_types not-a-media-type; return 200 \"ok\";",
+                "MIME",
+            ),
+            (
+                "override_charset bad value",
+                "override_charset maybe; return 200 \"ok\";",
+                "on or off",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name x.example.test; location / {{ {location} }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(
+                error.to_string().contains(needle),
+                "`{label}` diagnostic must mention `{needle}`: {error}"
+            );
+        }
+        // `charset_map` is an http-context table; it stays accepted-unenforced.
+        materialize(
+            "charset_map utf-8 windows-1251 { 90 80; }\nserver { listen 80; server_name x.example.test; location / { return 200 \"ok\"; } }",
+        )
+        .expect("charset_map table is accepted-unenforced");
+        // The accepted-unenforced list is context-insensitive today, so a
+        // location-level `charset_map` is accepted too (nginx would reject the
+        // context); the table still has no effect either way.
+        materialize(
+            "server { listen 80; server_name x.example.test; location / { charset_map utf-8 windows-1251 { } return 200 \"ok\"; } }",
+        )
+        .expect("charset_map stays accepted-unenforced");
+    }
+
+    #[test]
+    fn materializes_gzip_refinements_with_nginx_inheritance() {
+        let config = materialize(
+            r#"
+gzip_proxied any;
+
+server {
+    listen 80;
+    server_name gzip.example.test;
+    root /srv/www;
+    gzip_disable "msie6" "googlebot";
+
+    location /inherit/ { }
+
+    location /loc/ {
+        gzip_comp_level 9;
+        gzip_proxied no-cache no-store auth;
+        gzip_disable "curl";
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_compression = host.compression.as_ref().expect("host compression");
+        // http-level `gzip_proxied any` is inherited by the server; the
+        // `gzip_disable` regex list and the msie6 flag come from the server.
+        assert_eq!(host_compression.proxied.as_ref().map(|p| p.any), Some(true));
+        assert_eq!(host_compression.comp_level, 1, "nginx default");
+        // `msie6` is the predefined flag, not a regex entry.
+        assert_eq!(host_compression.disable, vec!["googlebot".to_owned()]);
+        assert!(host_compression.disable_msie6, "msie6 is a separate flag");
+        // A location that declares nothing inherits the host policy.
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit/")
+            .expect("inherit route");
+        assert!(inherit.compression.is_none(), "inherits the host value");
+        // A location that declares the family gets fully resolved values: the
+        // declared regex list replaces the inherited one, the msie6 flag keeps
+        // inheriting (nginx merges the two chains independently), and the
+        // declared proxied bitmask replaces the inherited one.
+        let location = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/loc/")
+            .expect("loc route");
+        let location_compression = location.compression.as_ref().expect("route compression");
+        // `gzip_comp_level` is accepted-unenforced (runtime-owned level).
+        assert_eq!(location_compression.comp_level, 1);
+        assert_eq!(location_compression.disable, vec!["curl".to_owned()]);
+        assert!(location_compression.disable_msie6);
+        let proxied = location_compression
+            .proxied
+            .as_ref()
+            .expect("route proxied policy");
+        assert!(proxied.no_cache && proxied.no_store && proxied.auth);
+        assert!(!proxied.any, "declared bitmask replaces the inherited one");
+        assert!(!proxied.off);
+    }
+
+    #[test]
+    fn gzip_refinements_fail_closed_on_unexecutable_forms() {
+        for (label, location, needle) in [
+            (
+                "proxied unknown token",
+                "gzip_proxied sometimes; return 200 \"ok\";",
+                "gzip_proxied",
+            ),
+            (
+                "proxied empty",
+                "gzip_proxied; return 200 \"ok\";",
+                "gzip_proxied",
+            ),
+            (
+                "disable empty",
+                "gzip_disable; return 200 \"ok\";",
+                "gzip_disable",
+            ),
+            (
+                "disable unsupported regex",
+                "gzip_disable \"a(?=b)\"; return 200 \"ok\";",
+                "regex engine",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name x.example.test; location / {{ {location} }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(
+                error.to_string().contains(needle),
+                "`{label}` diagnostic must mention `{needle}`: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn materializes_autoindex_empty_gif_and_stub_status() {
+        let config = materialize(
+            r#"
+autoindex_exact_size off;
+
+server {
+    listen 80;
+    server_name listing.example.test;
+    root /srv/www;
+    autoindex on;
+
+    location /list/ { root /srv/www; }
+    location /json/ { autoindex_format json; root /srv/www; }
+    location = /pixel.gif { empty_gif; }
+    location = /status { stub_status; }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_autoindex = host.autoindex.as_ref().expect("host autoindex policy");
+        assert!(host_autoindex.enabled);
+        assert!(
+            !host_autoindex.exact_size,
+            "http-level declaration inherits"
+        );
+        assert_eq!(
+            host_autoindex.format,
+            crate::config::AutoindexFormat::Html,
+            "nginx default format"
+        );
+        // A location that declares nothing inherits the host policy.
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/list/")
+            .expect("list route");
+        assert!(inherit.autoindex.is_none());
+        // A location that declares only the format gets the fully resolved
+        // policy (inherited enabled/exact_size included).
+        let json = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/json/")
+            .expect("json route");
+        let json_autoindex = json.autoindex.as_ref().expect("route autoindex");
+        assert!(json_autoindex.enabled);
+        assert!(!json_autoindex.exact_size);
+        assert_eq!(json_autoindex.format, crate::config::AutoindexFormat::Json);
+        // The two location handlers materialize as their dedicated resources.
+        let resources: Vec<&ResourceConfig> = config.resources.iter().collect();
+        assert!(resources
+            .iter()
+            .any(|resource| matches!(resource, ResourceConfig::EmptyGif { .. })));
+        assert!(resources
+            .iter()
+            .any(|resource| matches!(resource, ResourceConfig::StubStatus { .. })));
+    }
+
+    #[test]
+    fn autoindex_and_handler_forms_fail_closed() {
+        for (label, location, needle) in [
+            (
+                "bad autoindex format",
+                "autoindex_format yaml; return 200 \"ok\";",
+                "autoindex_format",
+            ),
+            (
+                "empty_gif with arguments",
+                "empty_gif on; return 200 \"ok\";",
+                "empty_gif",
+            ),
+            (
+                "stub_status with arguments",
+                "stub_status on; return 200 \"ok\";",
+                "stub_status",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name x.example.test; location / {{ {location} }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(
+                error.to_string().contains(needle),
+                "`{label}` diagnostic must mention `{needle}`: {error}"
+            );
+        }
     }
 
     #[test]

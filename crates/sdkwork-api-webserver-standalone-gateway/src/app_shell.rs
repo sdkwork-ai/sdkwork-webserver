@@ -611,7 +611,8 @@ async fn serve_adaptive_request(
     let relative = path.trim_start_matches('/');
     let html_navigation = is_html_navigation(request.headers(), &path);
     let fallback = (spa_fallback && html_navigation).then_some(INDEX_FILE);
-    let target = match open_static_path(root, relative, path.ends_with('/'), fallback).await {
+    let target = match open_static_path(root, relative, path.ends_with('/'), fallback, false).await
+    {
         Ok(target) => target,
         Err(error) => return path_error_response(error),
     };
@@ -644,6 +645,8 @@ async fn serve_adaptive_request(
             response
         }
         StaticPathTarget::RedirectToDirectory => redirect_to_directory(request.uri()),
+        // The app-shell resolver never enables autoindex listings.
+        StaticPathTarget::Autoindex { .. } => path_error_response(StaticPathError::NotFound),
     }
 }
 

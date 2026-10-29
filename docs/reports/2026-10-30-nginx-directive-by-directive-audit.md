@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `dc62befe` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2 and 2b (code plus the re-synced directive catalog), on top of HEAD dc62befe |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `8f96a59e` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a and 3a-2 (code plus the re-synced directive catalog), on top of HEAD 8f96a59e |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `c4082d5f259fb4a9885fcf0e4217bc5f1df61bb90e2e63d8cb0d27ff76105a1b` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `4f47ce6a0541f8aa529a1820c886d83535dc4e67250bba9bad583e078290f8c3` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -24,16 +24,17 @@
   implemented unless the catalog says `executable` and the evidence reference was
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
-- **This snapshot is the uncommitted worktree refresh after Waves 1, 2 and 2b.** The
-  code, tests, generated operator matrix and the re-synced directive catalog were
-  produced by those waves and are not committed at HEAD `dc62befe`; the audit is
-  regenerated against that post-wave catalog (evidence revision
-  2026-10-29). Wave 1 (map, MIME types/default_type, gzip_static,
-  gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges, chain-file
-  consumption, typed TOML maps) and Wave 2b (proxy response-header/cookie policy,
-  internal locations, merge_slashes, request-header acceptance) are recorded as
-  completed in section 3, and every one of them is asserted executable by
-  `--verify-evidence`.
+- **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a and
+  3a-2.** The code, tests, generated operator matrix and the re-synced directive
+  catalog were produced by those waves and are not committed at HEAD
+  `8f96a59e`; the audit is regenerated against that post-wave catalog (evidence
+  revision 2026-10-29). Wave 1 (map, MIME types/default_type,
+  gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
+  chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
+  policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
+  (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
+  (autoindex family, empty_gif, stub_status) are recorded as completed in section 3,
+  and every one of them is asserted executable by `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` are generated/checked by
@@ -62,15 +63,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 99 | 13.3% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
-| `runtime-owned` | 130 | 17.5% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
+| `enforced` | 111 | 14.9% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `runtime-owned` | 131 | 17.6% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 62 | 8.3% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `behavior-gap` | 55 | 7.4% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 229 | 30.8% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
-| `fail-closed` | 207 | 27.8% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
+| `fail-closed` | 201 | 27.0% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 99 + 130 + 17 + 62 + 229 + 207 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 111 + 131 + 17 + 55 + 229 + 201 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -82,11 +83,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 99 | 99 | 0 | 0 | 0 | 0 | 0 |
-| `accepted-unenforced` | 166 | 0 | 130 | 17 | 19 | 0 | 0 |
-| `unsupported-fail-closed` | 250 | 0 | 0 | 0 | 43 | 0 | 207 |
+| `executable` | 111 | 111 | 0 | 0 | 0 | 0 | 0 |
+| `accepted-unenforced` | 160 | 0 | 131 | 17 | 12 | 0 | 0 |
+| `unsupported-fail-closed` | 244 | 0 | 0 | 0 | 43 | 0 | 201 |
 | `excluded` | 229 | 0 | 0 | 0 | 0 | 229 | 0 |
-| **total** | **744** | 99 | 130 | 17 | 62 | 229 | 207 |
+| **total** | **744** | 111 | 131 | 17 | 55 | 229 | 201 |
 
 ### 1.3 Wave Completion Status
 
@@ -95,8 +96,10 @@ wave-3 backlog entries that are currently rejected.
 | `wave 1` | 5 | done - map, MIME types/default_type, gzip_static, gzip_vary (catalog: executable) |
 | `wave 2` | 6 | done - redirect construction policies, limit status codes, max_ranges, chain-file consumption, typed TOML maps (catalog: executable) |
 | `wave 2b` | 9 | done - proxy response-header/cookie policy, internal locations, merge_slashes, request-header acceptance (catalog: executable) |
-| wave 3 backlog | 62 | open - 9 categories, see section 3.2 |
-| **total planned work** | **82** | 20 completed, 62 remaining |
+| `wave 3a` | 6 | done - charset family (header-level behaviour) and gzip refinements (gzip_disable, gzip_proxied) (catalog: executable) |
+| `wave 3a-2` | 6 | done - autoindex family (on/exact_size/localtime/format), empty_gif and stub_status location handlers (catalog: executable) |
+| wave 3 backlog | 55 | open - 8 categories, see section 3.2 |
+| **total planned work** | **87** | 32 completed, 55 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -108,17 +111,17 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 83 | 73 | 9 | 33 | 174 | 175 |
+| `http` | 547 | 95 | 74 | 9 | 26 | 174 | 169 |
 | `mail` | 51 | 0 | 0 | 0 | 0 | 51 | 0 |
 | `stream` | 105 | 15 | 23 | 8 | 29 | 3 | 27 |
-| **total** | **744** | 99 | 130 | 17 | 62 | 229 | 207 |
+| **total** | **744** | 111 | 131 | 17 | 55 | 229 | 201 |
 
 ### 1.5 Headline Findings
 
-1. **99 of 744 directives (13.3%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2 and 2b landed 20 directives. 130 more are deliberately runtime-owned (17.5%) and 17 are intentional, spec-justified security differences.
-2. **62 behavior-gap directives remain in the wave-3 backlog** (8.3% of the surface): HTTP/1 framing policy (1), charset family (5), autoindex family (4), gzip refinements (2), HTTP/2 tuning (14), static open-file cache (3), proxied method override (1), OCSP stapling / trust chain (HTTP) (3), stream module gaps (29).
-3. **436 of 744 directives (58.6%) are excluded or rejected, not silently emulated.** 229 are explicit PRD section 4 profile exclusions and 207 are fail-closed rejections outside the planned backlog.
+1. **111 of 744 directives (14.9%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a and 3a-2 landed 32 directives. 131 more are deliberately runtime-owned (17.6%) and 17 are intentional, spec-justified security differences.
+2. **55 behavior-gap directives remain in the wave-3 backlog** (7.4% of the surface): HTTP/1 framing policy (1), body addition filter (3), referer module (1), HTTP/2 tuning (14), static open-file cache (3), proxied method override (1), OCSP stapling / trust chain (HTTP) (3), stream module gaps (29).
+3. **430 of 744 directives (57.8%) are excluded or rejected, not silently emulated.** 229 are explicit PRD section 4 profile exclusions and 201 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
    all 11 "enforced typed key" migration actions now
@@ -276,9 +279,9 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `add_after_body` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the body addition filter is outside the profile. |
-| `add_before_body` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the body addition filter is outside the profile. |
-| `addition_types` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the body addition filter is outside the profile. |
+| `add_after_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, body addition filter): currently rejected at load; a stock nginx.conf that injects additional bodies around a response fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `add_before_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, body addition filter): currently rejected at load; a stock nginx.conf that injects additional bodies around a response fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `addition_types` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, body addition filter): currently rejected at load; a stock nginx.conf that injects additional bodies around a response fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_auth_basic_module` (2 directives)
 
@@ -298,10 +301,10 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `autoindex` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, autoindex family): the autoindex value is accepted but the runtime decides directory listing policy. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `autoindex_exact_size` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, autoindex family): currently rejected at load; a stock nginx.conf that formats directory listings fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `autoindex_format` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, autoindex family): currently rejected at load; a stock nginx.conf that formats directory listings fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `autoindex_localtime` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, autoindex family): currently rejected at load; a stock nginx.conf that formats directory listings fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `autoindex` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].autoindex / routes[].autoindex (AutoindexConfig.enabled/exactSize/localtime/format)`; evidence tests/nginx/differential-http/battery.py::autoindex.html. Known difference: entries are bounded to 4096 (403 beyond); listings are streamed chunked without Content-Length like nginx; stub_status/autoindex policies are nginx-plane resources. |
+| `autoindex_exact_size` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `...autoindex.exactSize (default on)`; evidence tests/nginx/differential-http/battery.py::autoindex.html-human-size. |
+| `autoindex_format` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `...autoindex.format (html\|json\|jsonp\|xml)`; evidence tests/nginx/differential-http/battery.py::autoindex.json. Known difference: jsonp callback is validated to [A-Za-z0-9_.]{1,128} and a missing callback downgrades to JSON like nginx. |
+| `autoindex_localtime` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `...autoindex.localtime (default off, process zone)`; evidence tests/nginx/differential-http/battery.py::autoindex.html-localtime. |
 
 #### `ngx_http_browser_module` (4 directives)
 
@@ -316,11 +319,11 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `charset` | http, http-if, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, charset family): the configured response charset translation is not performed. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `charset_map` | http | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, charset family): the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `charset_types` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, charset family): the MIME types eligible for charset translation are not used. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `override_charset` | http, http-if, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, charset family): currently rejected at load; a stock nginx.conf that declares a charset translation fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `source_charset` | http, http-if, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, charset family): the source charset declaration is not used for translation. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `charset` | http, http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].charset / routes[].charset (CharsetConfig.charset/types/sourceCharset/override)`; evidence tests/nginx/differential-http/battery.py::charset.default-html. Known difference: charset_map byte transcoding is out of scope and stays accepted-unenforced; a source_charset different from charset would need a codec and is accepted-unenforced. |
+| `charset_map` | http | accepted-unenforced | **runtime-owned** | runtime-owned: charset/Content-Type translation is owned by the runtime at header level; byte-level transcoding through charset_map is deliberately out of scope, so the directive stays accepted-unenforced with a truthful diagnostic. |
+| `charset_types` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].charset.types / routes[].charset.types (declared list is seeded with text/html like nginx)`; evidence tests/nginx/differential-http/battery.py::charset.declared-types-css. |
+| `override_charset` | http, http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].charset.override / routes[].charset.override`; evidence tests/nginx/differential-http/battery.py::charset.proxy-upstream-charset-kept. Known difference: an upstream charset that differs from charset needs a charset_map codec and is left untouched (documented, oracle-confirmed). |
+| `source_charset` | http, http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].charset.sourceCharset / routes[].charset.sourceCharset`; evidence tests/nginx/differential-http/battery.py::charset.proxy-override-params-normalized. Known difference: only header-level behaviour executes; a source charset that differs from charset requires transcoding and stays accepted-unenforced. |
 
 #### `ngx_http_copy_filter_module` (1 directive)
 
@@ -355,9 +358,9 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `error_log` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx log target/format is ignored; use SDKWork observability. |
 | `error_page` | http, http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].errorPages / routes[].errorPages`; evidence tests/nginx/differential-host/battery.py::named.error-page-default-status. Known difference: targets are a static path or a bounded @named location (one internal redirect); recursive_proxy_intercept chains are bounded to three hops. |
 | `etag` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `routes[].cachePolicy.etag`; evidence tests/nginx/full-surface/probe.py::case_etag_off_suppresses_generation. |
-| `gzip_disable` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, gzip refinements): the user-agent gzip exclusion list is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `gzip_disable` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `http/host/route gzip.disable (UA regex list) + gzip.disableMsie6`; evidence tests/nginx/differential-http/battery.py::gzip.disable-ua-match. Known difference: PCRE-only constructs outside the bounded Rust regex subset fail closed at materialization. |
 | `gzip_http_version` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx gzip tuning value is ignored; the runtime compression policy applies. |
-| `gzip_proxied` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, gzip refinements): the proxied-response gzip eligibility policy is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `gzip_proxied` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `http/host/route gzip.proxied (Via-gated bitmask, nginx default off)`; evidence tests/nginx/differential-http/battery.py::gzip.proxied-default-off. |
 | `gzip_vary` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `http/host/route gzip.vary`; evidence tests/nginx/differential-http/battery.py::gz.dynamic-vary-gzip. Known difference: pre-routing generated rejections keep the compression layer Vary policy (documented compression-policy difference). |
 | `if_modified_since` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `routes[].cachePolicy.ifModifiedSince`; evidence tests/nginx/full-surface/probe.py::case_if_modified_since_off_ignores_the_condition. |
 | `ignore_invalid_headers` | http, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].ignoreInvalidHeaders`; evidence crates/sdkwork-webserver-core/src/nginx/mapping.rs::materializes_request_boundary_policies_with_inheritance. Known difference: the runtime HTTP boundary always rejects a non-token header name with 400 (stricter than nginx, which drops or forwards depending on the value). |
@@ -438,7 +441,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `empty_gif` | http-location | unsupported-fail-closed | **fail-closed** | fail-closed: generated empty-GIF content is outside the profile. |
+| `empty_gif` | http-location | executable | **enforced** | enforced: the value reaches `resource kind EmptyGif (location handler: canonical 43-byte GIF, image/gif, nginx fixed Last-Modified)`; evidence tests/nginx/differential-http/battery.py::empty-gif.get. |
 
 #### `ngx_http_fastcgi_module` (49 directives)
 
@@ -781,9 +784,9 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `referer_hash_bucket_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is a map-style variable feature; the remaining backlog covers stream maps, not this cluster. |
-| `referer_hash_max_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is a map-style variable feature; the remaining backlog covers stream maps, not this cluster. |
-| `valid_referers` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is a map-style variable feature; the remaining backlog covers stream maps, not this cluster. |
+| `referer_hash_bucket_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is tracked as wave-3 backlog; the referer hash-table sizing directives are not planned. |
+| `referer_hash_max_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is tracked as wave-3 backlog; the referer hash-table sizing directives are not planned. |
+| `valid_referers` | http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, referer module): currently rejected at load; a stock nginx.conf that allow-lists Referer values fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_rewrite_module` (7 directives)
 
@@ -918,7 +921,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `stub_status` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the nginx stub_status page is not implemented; the runtime exposes its own metrics surface. |
+| `stub_status` | http-location, http-server | executable | **enforced** | enforced: the value reaches `resource kind StubStatus (location handler backed by data-plane metrics, loopback-gated)`; evidence tests/nginx/differential-http/battery.py::stub-status.get. Known difference: location context only (server context fails closed with a diagnostic); non-loopback clients are refused in addition to the allow/deny gate; counters are process-local so the battery canonicalizes digits. |
 
 #### `ngx_http_sub_filter_module` (4 directives)
 
@@ -1425,7 +1428,9 @@ The catalog now classifies every directive below as `executable` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
 construction, limit status codes, range ceilings and typed-TOML map/chain materialization;
 Wave 2b closed the proxy response-header policy, internal locations, slash merging and
-request-header acceptance.
+request-header acceptance; Wave 3a added the header-level charset family and the gzip
+user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plus the
+empty_gif and stub_status location handlers.
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1449,17 +1454,30 @@ request-header acceptance.
 | `wave 2b` | `merge_slashes` (`http:merge_slashes`) | `virtualHosts[].mergeSlashes` | `tests/nginx/differential-http/battery.py::merge.exact` |
 | `wave 2b` | `ignore_invalid_headers` (`http:ignore_invalid_headers`) | `virtualHosts[].ignoreInvalidHeaders` | `crates/sdkwork-webserver-core/src/nginx/mapping.rs::materializes_request_boundary_policies_with_inheritance` |
 | `wave 2b` | `underscores_in_headers` (`http:underscores_in_headers`) | `virtualHosts[].underscoresInHeaders` | `tests/nginx/differential-http/battery.py::headers.underscore-default-dropped` |
+| `wave 3a` | `charset` (`http:charset`) | `virtualHosts[].charset / routes[].charset (CharsetConfig.charset/types/sourceCharset/override)` | `tests/nginx/differential-http/battery.py::charset.default-html` |
+| `wave 3a` | `charset_types` (`http:charset_types`) | `virtualHosts[].charset.types / routes[].charset.types (declared list is seeded with text/html like nginx)` | `tests/nginx/differential-http/battery.py::charset.declared-types-css` |
+| `wave 3a` | `source_charset` (`http:source_charset`) | `virtualHosts[].charset.sourceCharset / routes[].charset.sourceCharset` | `tests/nginx/differential-http/battery.py::charset.proxy-override-params-normalized` |
+| `wave 3a` | `override_charset` (`http:override_charset`) | `virtualHosts[].charset.override / routes[].charset.override` | `tests/nginx/differential-http/battery.py::charset.proxy-upstream-charset-kept` |
+| `wave 3a` | `gzip_disable` (`http:gzip_disable`) | `http/host/route gzip.disable (UA regex list) + gzip.disableMsie6` | `tests/nginx/differential-http/battery.py::gzip.disable-ua-match` |
+| `wave 3a` | `gzip_proxied` (`http:gzip_proxied`) | `http/host/route gzip.proxied (Via-gated bitmask, nginx default off)` | `tests/nginx/differential-http/battery.py::gzip.proxied-default-off` |
+| `wave 3a-2` | `autoindex` (`http:autoindex`) | `virtualHosts[].autoindex / routes[].autoindex (AutoindexConfig.enabled/exactSize/localtime/format)` | `tests/nginx/differential-http/battery.py::autoindex.html` |
+| `wave 3a-2` | `autoindex_exact_size` (`http:autoindex_exact_size`) | `...autoindex.exactSize (default on)` | `tests/nginx/differential-http/battery.py::autoindex.html-human-size` |
+| `wave 3a-2` | `autoindex_localtime` (`http:autoindex_localtime`) | `...autoindex.localtime (default off, process zone)` | `tests/nginx/differential-http/battery.py::autoindex.html-localtime` |
+| `wave 3a-2` | `autoindex_format` (`http:autoindex_format`) | `...autoindex.format (html\|json\|jsonp\|xml)` | `tests/nginx/differential-http/battery.py::autoindex.json` |
+| `wave 3a-2` | `empty_gif` (`http:empty_gif`) | `resource kind EmptyGif (location handler: canonical 43-byte GIF, image/gif, nginx fixed Last-Modified)` | `tests/nginx/differential-http/battery.py::empty-gif.get` |
+| `wave 3a-2` | `stub_status` (`http:stub_status`) | `resource kind StubStatus (location handler backed by data-plane metrics, loopback-gated)` | `tests/nginx/differential-http/battery.py::stub-status.get` |
 
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (wave 3 backlog, 62 directives)
+### 3.2 Remaining Behavior-Gap Backlog (wave 3 backlog, 55 directives)
 
-These are the categories `specs/nginx-gap.catalog.json` lists as "still open after
-wave 2b". An accepted-unenforced row is silently ignored today; a rejected row fails
-the configuration load. Both are real migration gaps, so every row carries the
+These are the categories `specs/nginx-gap.catalog.json` lists as still open after
+Wave 3a-2 (plus the addition filter and referer module the same wave note names as
+remaining in this area). An accepted-unenforced row is silently ignored today; a
+rejected row fails the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
 
@@ -1469,33 +1487,21 @@ have to change, and the tests to add.
 | --- | --- | --- | --- | --- | --- | --- |
 | `chunked_transfer_encoding` | medium | accepted-unenforced | chunked response encoding policy is not applied | response framing (chunked vs content-length) is directly client-visible and can change caching and proxy behavior. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/http1_wire.rs (response framing), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | response-framing unit tests plus a framed differential case (chunked/identity and HEAD) |
 
-### 3.2.2 charset family - 5 directive(s)
+### 3.2.2 body addition filter - 3 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `charset` | high | accepted-unenforced | the configured response charset translation is not performed | the response body bytes and the Content-Type charset are client-visible; no runtime policy performs charset translation. | new data_plane charset filter, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response pipeline), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs, tools/import-nginx-conf.mjs | charset translation matrix (source/target pairs, eligible MIME types, override) plus a text/html differential case |
-| `charset_types` | high | accepted-unenforced | the MIME types eligible for charset translation are not used | the response body bytes and the Content-Type charset are client-visible; no runtime policy performs charset translation. | new data_plane charset filter, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response pipeline), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs, tools/import-nginx-conf.mjs | charset translation matrix (source/target pairs, eligible MIME types, override) plus a text/html differential case |
-| `charset_map` | high | accepted-unenforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly | the response body bytes and the Content-Type charset are client-visible; no runtime policy performs charset translation. | new data_plane charset filter, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response pipeline), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs, tools/import-nginx-conf.mjs | charset translation matrix (source/target pairs, eligible MIME types, override) plus a text/html differential case |
-| `source_charset` | high | accepted-unenforced | the source charset declaration is not used for translation | the response body bytes and the Content-Type charset are client-visible; no runtime policy performs charset translation. | new data_plane charset filter, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response pipeline), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs, tools/import-nginx-conf.mjs | charset translation matrix (source/target pairs, eligible MIME types, override) plus a text/html differential case |
-| `override_charset` | high | unsupported-fail-closed | a stock nginx.conf that declares a charset translation fails to activate. | the response body bytes and the Content-Type charset are client-visible; no runtime policy performs charset translation. | new data_plane charset filter, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response pipeline), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs, tools/import-nginx-conf.mjs | charset translation matrix (source/target pairs, eligible MIME types, override) plus a text/html differential case |
+| `add_before_body` | medium | unsupported-fail-closed | a stock nginx.conf that injects additional bodies around a response fails to activate. | the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases |
+| `add_after_body` | medium | unsupported-fail-closed | a stock nginx.conf that injects additional bodies around a response fails to activate. | the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases |
+| `addition_types` | medium | unsupported-fail-closed | a stock nginx.conf that injects additional bodies around a response fails to activate. | the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases |
 
-### 3.2.3 autoindex family - 4 directive(s)
+### 3.2.3 referer module - 1 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `autoindex` | medium | accepted-unenforced | the autoindex value is accepted but the runtime decides directory listing policy | the response for a directory URL is client-visible; no runtime policy generates listings. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_file_response.rs + static_files.rs (listing renderer), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | listing render unit tests (size/format/localtime) plus a differential directory case |
-| `autoindex_exact_size` | medium | unsupported-fail-closed | a stock nginx.conf that formats directory listings fails to activate. | the response for a directory URL is client-visible; no runtime policy generates listings. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_file_response.rs + static_files.rs (listing renderer), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | listing render unit tests (size/format/localtime) plus a differential directory case |
-| `autoindex_format` | medium | unsupported-fail-closed | a stock nginx.conf that formats directory listings fails to activate. | the response for a directory URL is client-visible; no runtime policy generates listings. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_file_response.rs + static_files.rs (listing renderer), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | listing render unit tests (size/format/localtime) plus a differential directory case |
-| `autoindex_localtime` | medium | unsupported-fail-closed | a stock nginx.conf that formats directory listings fails to activate. | the response for a directory URL is client-visible; no runtime policy generates listings. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_file_response.rs + static_files.rs (listing renderer), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | listing render unit tests (size/format/localtime) plus a differential directory case |
+| `valid_referers` | medium | unsupported-fail-closed | a stock nginx.conf that allow-lists Referer values fails to activate. | the request allow-list decision and the `$invalid_referer` variable are request-visible; nginx normally consumes them through `if`, so this also depends on threading the variable through the supported variable surface. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/request_gate.rs + data_plane/handler.rs ($invalid_referer variable), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | referer allow-list matrix plus differential valid_referers cases |
 
-### 3.2.4 gzip refinements - 2 directive(s)
-
-| Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
-| --- | --- | --- | --- | --- | --- | --- |
-| `gzip_disable` | medium | accepted-unenforced | the user-agent gzip exclusion list is not applied | representation negotiation is client-visible and per-client. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/gzip_predicate.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | user-agent exclusion and proxied-eligibility matrices plus differential gzip cases |
-| `gzip_proxied` | medium | accepted-unenforced | the proxied-response gzip eligibility policy is not applied | representation negotiation is client-visible and per-client. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/gzip_predicate.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | user-agent exclusion and proxied-eligibility matrices plus differential gzip cases |
-
-### 3.2.5 HTTP/2 tuning - 14 directive(s)
+### 3.2.4 HTTP/2 tuning - 14 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1514,7 +1520,7 @@ have to change, and the tests to add.
 | `http2_recv_timeout` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
 | `http2_streams_index_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
 
-### 3.2.6 static open-file cache - 3 directive(s)
+### 3.2.5 static open-file cache - 3 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1522,13 +1528,13 @@ have to change, and the tests to add.
 | `open_file_cache_min_uses` | medium | accepted-unenforced | the static-file descriptor cache usage threshold is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
 | `open_file_cache_valid` | medium | accepted-unenforced | the static-file descriptor cache TTL is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
 
-### 3.2.7 proxied method override - 1 directive(s)
+### 3.2.6 proxied method override - 1 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
 | `proxy_method` | high | accepted-unenforced | the proxied HTTP method override is not applied | the upstream request method is protocol-visible and changes upstream semantics. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_client.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | method-override unit test plus a differential upstream-method case |
 
-### 3.2.8 OCSP stapling / trust chain (HTTP) - 3 directive(s)
+### 3.2.7 OCSP stapling / trust chain (HTTP) - 3 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1536,7 +1542,7 @@ have to change, and the tests to add.
 | `ssl_stapling_verify` | medium (commercial impact bounded) | accepted-unenforced | OCSP stapling verification does not run | stapling is a client-visible TLS handshake property and the gap catalog records `tls.ocsp-stapling` as missing. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | stapling unit test plus a TLS handshake differential with a stapled response |
 | `ssl_trusted_certificate` | medium (commercial impact bounded) | accepted-unenforced | the OCSP/verification trust chain is not used | stapling is a client-visible TLS handshake property and the gap catalog records `tls.ocsp-stapling` as missing. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | stapling unit test plus a TLS handshake differential with a stapled response |
 
-### 3.2.9 stream module gaps - 29 directive(s)
+### 3.2.8 stream module gaps - 29 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1572,21 +1578,27 @@ have to change, and the tests to add.
 
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest operator payoff is the stream module gaps and the
-charset family (both are whole response/transport behaviours), followed by the HTTP/2
-tuning set (configurations that declare HTTP/2 limits are rejected today even though
-HTTP/2 itself executes) and the autoindex family. `proxy_method`,
-`chunked_transfer_encoding`, the gzip refinements and the static open-file cache are
-smaller, bounded changes. The OCSP/trust-chain rows are limited by the rustls capability
-gap recorded as `tls.ocsp-stapling: missing` in the gap catalog.
+Within the backlog, the largest operator payoff is the stream module gaps (a whole
+transport plane), followed by the HTTP/2 tuning set (configurations that declare HTTP/2
+limits are rejected today even though HTTP/2 itself executes). The body addition filter
+and the referer module are medium-sized features that pull in a bounded subrequest engine
+and `$invalid_referer` variable threading respectively. `proxy_method`,
+`chunked_transfer_encoding` and the static open-file cache are smaller, bounded
+changes. The OCSP/trust-chain rows are limited by the rustls capability gap recorded as
+`tls.ocsp-stapling: missing` in the gap catalog.
+
+Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
+truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
+scope; the runtime owns charset translation at header level) and `gzip_comp_level` (the
+compression layer owns the level).
 
 ## 4. Enforced Spot-Check
 
 ### 4.1 Method
 
-- A sample of 52 `executable` directive rows was drawn,
+- A sample of 64 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1595,7 +1607,7 @@ gap recorded as `tls.ocsp-stapling: missing` in the gap catalog.
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (52 directive rows)
+### 4.2 Verified Sample (64 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -1651,6 +1663,18 @@ gap recorded as `tls.ocsp-stapling: missing` in the gap catalog.
 | `http:merge_slashes` | `merge_slashes off keeps repeated slashes in exact-location identity` | `tests/nginx/differential-http/battery.py::merge.double-slash-does-not-match-exact` | differential: `/merge//exact` does not match the exact location while `/merge/exact` does | verified |
 | `http:ignore_invalid_headers` | `ignore_invalid_headers materializes with nginx inheritance and defaults` | `crates/sdkwork-webserver-core/src/nginx/mapping.rs::materializes_request_boundary_policies_with_inheritance` | asserts http-level inheritance, server-level override, and nginx default on for a host that declares none | verified |
 | `http:underscores_in_headers` | `underscores_in_headers on forwards underscore header names` | `tests/nginx/differential-http/battery.py::headers.underscore-on-forwarded` | differential: the underscore header reaches the upstream under on, and is dropped under the nginx default off | verified |
+| `http:charset` | `charset appends the configured charset to eligible response types` | `tests/nginx/differential-http/battery.py::charset.default-html` | differential: the built-in text types receive the configured charset while application/json, text/css and images are untouched; `charset off` at a location disables it | verified |
+| `http:charset_types` | `charset_types replaces the built-in eligibility list and is seeded with text/html` | `tests/nginx/differential-http/battery.py::charset.declared-types-css` | differential: a declared list applies the charset to CSS and still to text/html, while JSON stays untouched; a location list replaces the server list | verified |
+| `http:source_charset` | `source_charset participates in header-level charset normalisation` | `tests/nginx/differential-http/battery.py::charset.proxy-override-params-normalized` | differential: an upstream Content-Type whose charset matches the configured source is normalised in place; a differing source needs transcoding and stays accepted-unenforced | verified |
+| `http:override_charset` | `override_charset normalises an equal upstream charset and leaves a differing one` | `tests/nginx/differential-http/battery.py::charset.proxy-override-normalizes` | differential: override on rewrites the upstream charset spelling when it equals the configured charset; a differing upstream charset (which needs charset_map transcoding) is kept | verified |
+| `http:gzip_disable` | `gzip_disable disables compression for matching user agents` | `tests/nginx/differential-http/battery.py::gzip.disable-ua-match` | differential: a case-insensitive UA regex match suppresses gzip while a non-matching UA is compressed; the predefined msie6 selector and its Opera carve-out also match nginx | verified |
+| `http:gzip_proxied` | `gzip_proxied gates compression for Via-marked proxied requests` | `tests/nginx/differential-http/battery.py::gzip.proxied-any` | differential: the nginx default off suppresses compression for proxied traffic, `any` accepts it, and the no-cache/no_last_modified/auth/expired flags match nginx | verified |
+| `http:autoindex` | `autoindex generates the nginx HTML directory listing` | `tests/nginx/differential-http/battery.py::autoindex.html` | differential: byte-exact listing (directories first, hidden skipped, escaping, pinned sizes/mtimes), 301 for a missing trailing slash, HEAD without a body, and 403 when off | verified |
+| `http:autoindex_exact_size` | `autoindex_exact_size off renders nginx rounded K/M/G sizes` | `tests/nginx/differential-http/battery.py::autoindex.html-human-size` | differential: the listing column matches nginx human-size rounding | verified |
+| `http:autoindex_localtime` | `autoindex_localtime on renders the listing dates in local time` | `tests/nginx/differential-http/battery.py::autoindex.html-localtime` | differential: the listing date column matches nginx with both sides pinned to TZ=UTC | verified |
+| `http:autoindex_format` | `autoindex_format renders html, json, jsonp and xml listings` | `tests/nginx/differential-http/battery.py::autoindex.json` | differential: the JSON shape matches; jsonp validates the callback and downgrades to JSON without one; an invalid callback is 400; XML matches | verified |
+| `http:empty_gif` | `empty_gif serves the canonical 1x1 transparent GIF` | `tests/nginx/differential-http/battery.py::empty-gif.get` | differential: the exact 43-byte image/gif body and fixed Last-Modified; HEAD keeps headers without a body and POST is 405 | verified |
+| `http:stub_status` | `stub_status serves the nginx status page from runtime metrics` | `tests/nginx/differential-http/battery.py::stub-status.get` | differential: field shape and plain-text headers match nginx (counters canonicalised as process-local); HEAD and 405 behaviour match; location-only and loopback-gated | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -1696,7 +1720,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-99 executable rows cite only the generic
+111 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -1707,7 +1731,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (99 <=> 99). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (111 <=> 111). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -1715,17 +1739,17 @@ Consistent: `executable` <=> `enforced` in both directions (99 <=> 99). Every co
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 99 | 13.3% |
+| `enforced` (actually nginx-compatible behavior) | 111 | 14.9% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 62 | 8.3% |
-| `runtime-owned` (deliberately not nginx value) | 130 | 17.5% |
+| `behavior-gap` (planned toward compatibility) | 55 | 7.4% |
+| `runtime-owned` (deliberately not nginx value) | 131 | 17.6% |
 | `out-of-profile` (PRD section 4 exclusion) | 229 | 30.8% |
-| `fail-closed` (rejected, not planned) | 207 | 27.8% |
+| `fail-closed` (rejected, not planned) | 201 | 27.0% |
 
-566 of 744 directives (76.1%) are
+561 of 744 directives (75.4%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 99 executed directives plus the 62 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 111 executed directives plus the 55 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (229 directives)
@@ -1761,7 +1785,7 @@ What implementing each group would actually require:
 | GeoIP | 8 | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | 1 | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
-### 5.3 Fail-Closed Groups (207 directives, top modules)
+### 5.3 Fail-Closed Groups (201 directives, top modules)
 
 - `ngx_http_proxy_module` - 31 directive(s)
 - `ngx_http_grpc_module` - 29 directive(s)
@@ -1779,8 +1803,8 @@ What implementing each group would actually require:
 - `ngx_http_dav_module` - 4 directive(s)
 - `ngx_http_mp4_module` - 4 directive(s)
 - `ngx_stream_core_module` - 4 directive(s)
-- `ngx_http_addition_filter_module` - 3 directive(s)
 - `ngx_http_headers_filter_module` - 3 directive(s)
+- `ngx_http_gzip_filter_module` - 3 directive(s)
 
 Representative implementation cost:
 
@@ -1792,7 +1816,7 @@ Representative implementation cost:
 | HTTP/2 tuning (`ngx_http_v2_module`) | 0 | the http2_* set is tracked as wave-3 backlog, so this module is expected to move rather than stay fail-closed. |
 | TLS extras (CRL/OCSP-response/ECH/ticket files) | 27 | rustls feature gaps (OCSP response handling, raw public keys, certificate compression, session ticket key files) plus a certificate-material pipeline. |
 | HTTP/3 + QUIC (`ngx_http_v3_module`, `ngx_quic_bpf_module`) | 9 | a QUIC transport (UDP, TLS 1.3 QUIC keys, connection migration, congestion control) - a separate transport product, explicitly excluded by PRD section 4. |
-| Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | 26 | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
+| Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | 25 | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
 | `if`/`set` rewrite control (`ngx_http_rewrite_module`) | 5 | a general conditional rewrite interpreter - contradicts the bounded rewrite state machine PRD section 6 requires. |
 
 ### 5.4 Lua, njs, And Third-Party Modules
@@ -1837,9 +1861,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-The first audit snapshot recorded Waves 1/2 as in progress and Wave 2b as not started.
-This refresh was regenerated after the Lead re-synced the catalog; the completed-wave
-rows moved as follows:
+This refresh was regenerated after Waves 3a/3a-2 landed and the Lead re-synced the
+catalog. The table lists the cumulative completed-wave rows and their current state:
 
 | Directive | Wave | Current state |
 | --- | --- | --- |
@@ -1863,13 +1886,25 @@ rows moved as follows:
 | `merge_slashes` (`http:merge_slashes`) | `wave 2b` | completed - `enforced` |
 | `ignore_invalid_headers` (`http:ignore_invalid_headers`) | `wave 2b` | completed - `enforced` |
 | `underscores_in_headers` (`http:underscores_in_headers`) | `wave 2b` | completed - `enforced` |
+| `charset` (`http:charset`) | `wave 3a` | completed - `enforced` |
+| `charset_types` (`http:charset_types`) | `wave 3a` | completed - `enforced` |
+| `source_charset` (`http:source_charset`) | `wave 3a` | completed - `enforced` |
+| `override_charset` (`http:override_charset`) | `wave 3a` | completed - `enforced` |
+| `gzip_disable` (`http:gzip_disable`) | `wave 3a` | completed - `enforced` |
+| `gzip_proxied` (`http:gzip_proxied`) | `wave 3a` | completed - `enforced` |
+| `autoindex` (`http:autoindex`) | `wave 3a-2` | completed - `enforced` |
+| `autoindex_exact_size` (`http:autoindex_exact_size`) | `wave 3a-2` | completed - `enforced` |
+| `autoindex_localtime` (`http:autoindex_localtime`) | `wave 3a-2` | completed - `enforced` |
+| `autoindex_format` (`http:autoindex_format`) | `wave 3a-2` | completed - `enforced` |
+| `empty_gif` (`http:empty_gif`) | `wave 3a-2` | completed - `enforced` |
+| `stub_status` (`http:stub_status`) | `wave 3a-2` | completed - `enforced` |
 
-All 20 rows above were re-spot-checked (section 4.2) and are
+All 32 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 62 wave-3 backlog rows are the only behavior-gap
+The 55 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 

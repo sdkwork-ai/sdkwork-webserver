@@ -434,6 +434,8 @@ mod tests {
             limit_conn_status: None,
             max_ranges: None,
             internal: false,
+            charset: None,
+            autoindex: None,
         }
     }
 

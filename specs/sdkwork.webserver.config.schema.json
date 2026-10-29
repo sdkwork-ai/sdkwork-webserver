@@ -117,6 +117,12 @@
           },
           {
             "$ref": "#/$defs/knowledgebaseResource"
+          },
+          {
+            "$ref": "#/$defs/emptyGifResource"
+          },
+          {
+            "$ref": "#/$defs/stubStatusResource"
           }
         ]
       }
@@ -250,6 +256,71 @@
             "always"
           ],
           "default": "off"
+        },
+        "compLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "default": 1,
+          "description": "nginx gzip_comp_level, accepted-unenforced: the runtime compression layer owns its deflate level, so the value has no observable negotiation effect."
+        },
+        "disable": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "description": "nginx gzip_disable case-insensitive patterns matched against User-Agent."
+        },
+        "disableMsie6": {
+          "type": "boolean",
+          "default": false,
+          "description": "The predefined gzip_disable \"msie6\" selector."
+        },
+        "proxied": {
+          "description": "nginx gzip_proxied conditions for requests carrying a Via header; absent is nginx's default `off`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "off": {
+              "type": "boolean",
+              "default": false
+            },
+            "any": {
+              "type": "boolean",
+              "default": false
+            },
+            "expired": {
+              "type": "boolean",
+              "default": false
+            },
+            "noCache": {
+              "type": "boolean",
+              "default": false
+            },
+            "noStore": {
+              "type": "boolean",
+              "default": false
+            },
+            "private": {
+              "type": "boolean",
+              "default": false
+            },
+            "noLastModified": {
+              "type": "boolean",
+              "default": false
+            },
+            "noEtag": {
+              "type": "boolean",
+              "default": false
+            },
+            "auth": {
+              "type": "boolean",
+              "default": false
+            }
+          }
         }
       }
     },
@@ -1916,6 +1987,12 @@
           "description": "nginx ignore_invalid_headers (default on). The runtime always rejects non-token header names at its HTTP boundary with 400 (stricter, documented divergence).",
           "type": "boolean",
           "default": true
+        },
+        "charset": {
+          "$ref": "#/$defs/charset"
+        },
+        "autoindex": {
+          "$ref": "#/$defs/autoindex"
         }
       }
     },
@@ -2115,6 +2192,14 @@
           "description": "nginx internal: the location is reachable only through an internal redirect (rewrite last, error_page, try_files named target); an external request is answered with nginx's generated 404.",
           "type": "boolean",
           "default": false
+        },
+        "charset": {
+          "description": "Location-level nginx charset policy resolved over the host value.",
+          "$ref": "#/$defs/charset"
+        },
+        "autoindex": {
+          "description": "Location-level nginx autoindex policy resolved over the host value.",
+          "$ref": "#/$defs/autoindex"
         }
       }
     },
@@ -3118,6 +3203,98 @@
         },
         "cookieDomain": {
           "$ref": "#/$defs/cookieRewritePolicy"
+        }
+      }
+    },
+    "charset": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx charset family resolved for a host or route: `charset` appends `; charset=<name>` to matching Content-Types; `charsetTypes` replaces the type list (a declared list is seeded with text/html, `*` matches everything); `sourceCharset` that differs from `charset` needs byte transcoding and is accepted-unenforced.",
+      "properties": {
+        "charset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Effective charset name; absent means `charset off`."
+        },
+        "types": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": "Effective charset_types list (text/html first when declared); absent keeps nginx's default list."
+        },
+        "sourceCharset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "overrideCharset": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "autoindex": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx autoindex family resolved for a host or route: directory requests without an index file render a bounded nginx-compatible listing (html/json/jsonp/xml) instead of 403.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "exactSize": {
+          "type": "boolean",
+          "default": true
+        },
+        "localtime": {
+          "type": "boolean",
+          "default": false
+        },
+        "format": {
+          "enum": [
+            "html",
+            "json",
+            "jsonp",
+            "xml"
+          ],
+          "default": "html"
+        }
+      }
+    },
+    "emptyGifResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "empty-gif"
+        }
+      }
+    },
+    "stubStatusResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "stub-status"
         }
       }
     }

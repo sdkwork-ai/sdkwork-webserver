@@ -84,9 +84,9 @@
       "probe": "battery.py",
       "oracle": "nginx-oracle.json",
       "listenPort": 20992,
-      "cases": 182,
+      "cases": 236,
       "orchestrator": "tools/run-nginx-differential-http.mjs",
-      "notes": "Broad HTTP surface compared field by field against a real nginx 1.29.6 binary (static delivery/MIME/HEAD/ranges incl multipart/conditionals, routing and rewrite, response headers, error_page mapping, gzip negotiation, allow/deny + auth_basic, limit_req/limit_conn, proxy_pass URI splice/Host-forwarded/hop-by-hop/upstream status mapping). The slice owns its oracle: tests/nginx/differential-http/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences are justified per-field in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-http.mjs, and the oracle is pinned to nginx/1.29.6 by the same gate."
+      "notes": "Broad HTTP surface compared field by field against a real nginx 1.29.6 binary (static delivery/MIME/HEAD/ranges incl multipart/conditionals, routing and rewrite, response headers, error_page mapping, gzip negotiation, allow/deny + auth_basic, limit_req/limit_conn, proxy_pass URI splice/Host-forwarded/hop-by-hop/upstream status mapping). Wave 3a/3a-2 added the nginx autoindex family (html/json/jsonp/xml listings), empty_gif and the loopback-gated stub_status page, plus Wave 3a's charset family and gzip refinements. Wave 3a added the nginx charset family (charset/charset_types/source_charset/override_charset header filter) and the gzip refinements (gzip_disable msie6/regex user-agent gating, gzip_proxied Via policy). The slice owns its oracle: tests/nginx/differential-http/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences are justified per-field in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-http.mjs, and the oracle is pinned to nginx/1.29.6 by the same gate."
     },
     {
       "id": "host-selection",
@@ -98,7 +98,7 @@
       "listenPort": 21010,
       "cases": 39,
       "orchestrator": "tools/run-nginx-differential-host.mjs",
-      "notes": "PRD-nginx-compatibility \u00a75/\u00a76 virtual-host selection and bounded named-location internal redirects compared against a real nginx 1.29.6 binary: exact / leading wildcard (any depth, longest) / trailing wildcard (longest) / dot-prefix / regex (authored order, nginx case folding) precedence, default-server fallback, and try_files/error_page \u2192 @named targets (return, root, proxy_pass). The slice owns its oracle: tests/nginx/differential-host/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences (nginx's built-in 404 page body) are justified in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-host.mjs."
+      "notes": "PRD-nginx-compatibility §5/§6 virtual-host selection and bounded named-location internal redirects compared against a real nginx 1.29.6 binary: exact / leading wildcard (any depth, longest) / trailing wildcard (longest) / dot-prefix / regex (authored order, nginx case folding) precedence, default-server fallback, and try_files/error_page → @named targets (return, root, proxy_pass). The slice owns its oracle: tests/nginx/differential-host/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences (nginx's built-in 404 page body) are justified in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-host.mjs."
     }
   ]
 }

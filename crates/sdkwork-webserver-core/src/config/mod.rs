@@ -5,6 +5,7 @@ pub mod cache_policy;
 mod compiled;
 mod discovery;
 mod error;
+pub mod gzip_disable;
 mod limit_conn;
 mod limit_req;
 mod loader;
@@ -34,6 +35,9 @@ pub use discovery::{
     NGINX_CONFIG_FILE_ENV, WEBSERVER_CONFIG_FILE_ENV, WEBSERVER_CONFIG_FILE_NAME,
 };
 pub use error::{ConfigDiagnostic, WebServerConfigError};
+pub use gzip_disable::{
+    gzip_disabled_for_user_agent, user_agent_is_msie6, user_agent_matches_disable_patterns,
+};
 pub use limit_conn::{parse_limit_conn, parse_limit_conn_zone, LimitConnParseError};
 pub use limit_req::{parse_limit_req, parse_limit_req_zone, LimitReqParseError};
 pub use loader::{
@@ -48,10 +52,11 @@ pub use map_variables::{
 };
 pub use model::{
     AccessAction, AccessRuleConfig, AcmeHttp01Config, AppDomainFallbackConfig,
-    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, CachePolicyConfig,
-    CertificateConfig, CertificateSource, ClientAuthConfig, ClientAuthMode, ConfigProviderType,
-    CookieRewritePolicyConfig, CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode,
-    GzipConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig, LimitConnZoneConfig,
+    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, AutoindexConfig,
+    AutoindexFormat, CachePolicyConfig, CertificateConfig, CertificateSource, CharsetConfig,
+    ClientAuthConfig, ClientAuthMode, ConfigProviderType, CookieRewritePolicyConfig,
+    CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode, GzipConfig,
+    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig, LimitConnZoneConfig,
     LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
     MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig, ObservabilityConfig,
     ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,

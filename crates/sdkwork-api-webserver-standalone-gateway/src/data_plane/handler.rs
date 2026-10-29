@@ -198,6 +198,18 @@ async fn route_admitted_request(
     // negotiates after the handler returns, so the handler needs the same input
     // to publish a validator that matches the negotiated representation.
     let accept_encoding = request.headers().get(ACCEPT_ENCODING).cloned();
+    // nginx `gzip_disable` / `gzip_proxied` inspect request headers
+    // (`User-Agent`, `Via`, `Authorization`); the compression predicate only
+    // sees the response, so the facts ride along as a response extension.
+    let gzip_facts = super::gzip_predicate::GzipRequestFacts {
+        user_agent: request
+            .headers()
+            .get(USER_AGENT)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned),
+        via: request.headers().contains_key(axum::http::header::VIA),
+        authorization: request.headers().contains_key(AUTHORIZATION),
+    };
     // Captured before dispatch consumes the request: nginx `add_header` values
     // may reference `$request_uri`/`$args`/`$request_method`, and the response
     // header choke point runs after every content handler has taken the
@@ -1096,6 +1108,60 @@ async fn route_admitted_request(
             )
             .await
         }
+        ResourceConfig::StubStatus { .. } => {
+            if !client_ip.is_loopback() {
+                return text_response(
+                    StatusCode::FORBIDDEN,
+                    "stub_status is available from loopback only\n",
+                );
+            }
+            match drain_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok(_) if matches!(method.as_str(), "GET" | "HEAD") => {
+                    let snapshot = state.runtime.metrics.stub_status_snapshot();
+                    let body = format!(
+                        "Active connections: {} \nserver accepts handled requests\n {} {} {} \nReading: {} Writing: {} Waiting: {} \n",
+                        snapshot.active,
+                        snapshot.accepts,
+                        snapshot.handled,
+                        snapshot.requests,
+                        snapshot.reading,
+                        snapshot.writing,
+                        snapshot.waiting,
+                    );
+                    fixed_response_with_type(
+                        200,
+                        Some(&HeaderValue::from_static("text/plain")),
+                        &body,
+                        method == "HEAD",
+                    )
+                }
+                Ok(_) => text_response(StatusCode::METHOD_NOT_ALLOWED, "method is not allowed\n"),
+                Err(response) => response,
+            }
+        }
+        ResourceConfig::EmptyGif { .. } => {
+            // nginx `empty_gif` handler: GET/HEAD serve the canonical 43-byte
+            // 1x1 transparent GIF; any other method is 405.
+            match drain_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok(_) if matches!(method.as_str(), "GET" | "HEAD") => {
+                    empty_gif_response(method == "HEAD")
+                }
+                Ok(_) => text_response(StatusCode::METHOD_NOT_ALLOWED, "method is not allowed\n"),
+                Err(response) => response,
+            }
+        }
         ResourceConfig::Static {
             id,
             strip_prefix,
@@ -1400,6 +1466,7 @@ async fn route_admitted_request(
         &path,
         request_query.as_deref(),
     );
+    response.extensions_mut().insert(gzip_facts.clone());
     // Route-level `sub_filter` rides on the response so the substitution
     // layer can apply it without re-selecting the route.
     if let Some(sub_filter) = selected.route.sub_filter.clone() {
@@ -1420,6 +1487,7 @@ async fn route_admitted_request(
         &generation.app.config().gzip,
         negotiated_compression,
         accept_encoding.as_ref(),
+        Some(&gzip_facts),
     );
     // Route the per-vhost compression policy (server-level nginx `gzip`) to
     // the compression layer; `None` inherits the app-level policy.
@@ -1478,6 +1546,11 @@ fn static_delivery_policy<'a>(
             .max_ranges
             .or(selected.virtual_host.max_ranges)
             .unwrap_or(DEFAULT_MAX_RANGES),
+        autoindex: selected
+            .route
+            .autoindex
+            .as_ref()
+            .or(selected.virtual_host.autoindex.as_ref()),
     }
 }
 
@@ -1694,7 +1767,8 @@ async fn named_fallback_selection<'a>(
     let root = generation.app.static_root(id)?;
     let relative = super::static_files::relative_request_path(selected.route, *strip_prefix, path);
     let miss = matches!(
-        super::static_path::open_static_path(root, relative, path.ends_with('/'), None).await,
+        super::static_path::open_static_path(root, relative, path.ends_with('/'), None, false)
+            .await,
         Err(super::static_path::StaticPathError::NotFound)
     );
     if !miss {
@@ -2184,7 +2258,27 @@ fn finalize_response_headers(
         None => effective_response_headers(selected),
     };
     let response = apply_redirect_policy(response, effective_redirect_policy(selected), variables);
+    // nginx `charset_filter`: the charset header filter runs for every content
+    // handler's response (static, proxy, `return`, mapped error page); a
+    // location-level declaration replaces the host value, which itself is the
+    // resolved http/server policy.
+    let response = match effective_charset(selected) {
+        Some(charset) => super::charset_policy::apply_charset_policy(response, charset),
+        None => response,
+    };
     apply_nginx_response_headers(response, policy, variables, uri, query)
+}
+
+/// Effective nginx charset policy for one selected route: a location-level
+/// declaration wins over the host's resolved policy.
+fn effective_charset<'a>(
+    selected: &SelectedRoute<'a>,
+) -> Option<&'a sdkwork_webserver_core::CharsetConfig> {
+    selected
+        .route
+        .charset
+        .as_ref()
+        .or(selected.virtual_host.charset.as_ref())
 }
 
 /// Effective redirect construction policy for one selected route: a
@@ -2864,6 +2958,38 @@ fn fixed_response_with_type(
 /// Renders a redirect response. nginx-compatible `return` URLs may contain
 /// `$host`, `$request_uri`, and `$scheme` variables, expanded from the
 /// current request (nginx `return` semantics).
+/// nginx `ngx_http_empty_gif_module`: the minimal single-pixel transparent
+/// GIF (43 bytes).
+const EMPTY_GIF_BYTES: &[u8] = &[
+    b'G', b'I', b'F', b'8', b'9', b'a', 0x01, 0x00, 0x01, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x01, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x4c, 0x01, 0x00, 0x3b,
+];
+
+fn empty_gif_response(head: bool) -> Response<Body> {
+    let mut response = Response::new(if head {
+        Body::empty()
+    } else {
+        Body::from(EMPTY_GIF_BYTES)
+    });
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("image/gif"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_LENGTH,
+        HeaderValue::from_static("43"),
+    );
+    // nginx sets `last_modified_time = 23349600` for the canned GIF, and its
+    // header filter then publishes that as the `Last-Modified` field.
+    response.headers_mut().insert(
+        axum::http::header::LAST_MODIFIED,
+        HeaderValue::from_static("Mon, 28 Sep 1970 06:00:00 GMT"),
+    );
+    response
+}
+
 fn redirect_response(
     status: u16,
     location: &str,
@@ -3123,6 +3249,8 @@ mod tests {
             merge_slashes: true,
             underscores_in_headers: false,
             ignore_invalid_headers: true,
+            charset: None,
+            autoindex: None,
         };
         let mut route = sdkwork_webserver_core::RouteConfig {
             id: "r".to_owned(),
@@ -3150,6 +3278,8 @@ mod tests {
             limit_conn_status: Some(503),
             max_ranges: None,
             internal: false,
+            charset: None,
+            autoindex: None,
         };
         assert_eq!(
             route

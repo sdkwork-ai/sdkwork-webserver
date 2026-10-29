@@ -4,7 +4,10 @@ use axum::{
     body::Body,
     http::{header, HeaderValue, Method, Request, Response, StatusCode},
 };
-use sdkwork_webserver_core::{GzipConfig, GzipStaticMode, RouteConfig, RoutePathType};
+use futures_util::stream;
+use sdkwork_webserver_core::{
+    AutoindexConfig, GzipConfig, GzipStaticMode, RouteConfig, RoutePathType,
+};
 
 use super::{
     credential_entry_injection::{inject_bootstrap_token, injection_token},
@@ -24,6 +27,9 @@ pub(crate) struct StaticDeliveryPolicy<'a> {
     /// Effective nginx `max_ranges` for this route (`0` disables range
     /// processing; the app default is an effectively unbounded ceiling).
     pub(crate) max_ranges: u64,
+    /// Effective nginx `autoindex` family for this route; `None` keeps nginx's
+    /// default (directory listings off).
+    pub(crate) autoindex: Option<&'a AutoindexConfig>,
 }
 
 pub async fn serve_static(
@@ -45,6 +51,9 @@ pub async fn serve_static(
         relative,
         normalized_request_path.ends_with('/'),
         spa_fallback,
+        delivery
+            .autoindex
+            .is_some_and(|autoindex| autoindex.enabled),
     )
     .await
     {
@@ -86,7 +95,86 @@ pub async fn serve_static(
                     text_response(StatusCode::BAD_REQUEST, "invalid request path\n")
                 })
         }
+        StaticPathTarget::Autoindex { mut entries } => {
+            let Some(autoindex) = delivery.autoindex.filter(|autoindex| autoindex.enabled) else {
+                // The listing was only produced because the caller asked for
+                // one; without a policy it must stay nginx's 403.
+                return text_response(StatusCode::FORBIDDEN, "forbidden\n");
+            };
+            let mut callback = None;
+            let mut effective_autoindex = autoindex.clone();
+            if autoindex.format == sdkwork_webserver_core::AutoindexFormat::Jsonp {
+                let query = request.uri().query().unwrap_or("");
+                let Some(raw) = query_parameter(query, "callback") else {
+                    // nginx downgrades a missing callback to the JSON format
+                    // (content type and wrapper both switch).
+                    effective_autoindex.format = sdkwork_webserver_core::AutoindexFormat::Json;
+                    return autoindex_response(
+                        &mut entries,
+                        &effective_autoindex,
+                        normalized_request_path,
+                        None,
+                        request.method(),
+                    );
+                };
+                let Some(validated) = super::autoindex::validate_jsonp_callback(raw) else {
+                    return text_response(StatusCode::BAD_REQUEST, "invalid callback name\n");
+                };
+                callback = Some(validated.to_owned());
+            }
+            autoindex_response(
+                &mut entries,
+                autoindex,
+                normalized_request_path,
+                callback.as_deref(),
+                request.method(),
+            )
+        }
     }
+}
+
+/// Raw `name=value` query lookup (nginx `ngx_http_arg` does not percent-decode
+/// the value either).
+fn query_parameter<'a>(query: &'a str, name: &str) -> Option<&'a str> {
+    query.split('&').find_map(|parameter| {
+        let (key, value) = parameter.split_once('=')?;
+        (key == name).then_some(value)
+    })
+}
+
+/// Build the nginx `autoindex` response: 200 with the rendered body and its
+/// media type, bounded by `Content-Length`; HEAD keeps the headers and drops
+/// the body like nginx's generated listing.
+fn autoindex_response(
+    entries: &mut [super::static_path::AutoindexEntry],
+    autoindex: &AutoindexConfig,
+    request_uri: &str,
+    callback: Option<&str>,
+    method: &axum::http::Method,
+) -> Response<Body> {
+    let rendered = super::autoindex::render(autoindex, request_uri, entries, callback);
+    let content_type = match axum::http::HeaderValue::from_str(rendered.content_type) {
+        Ok(value) => value,
+        Err(_) => return text_response(StatusCode::INTERNAL_SERVER_ERROR, "invalid listing\n"),
+    };
+    // nginx's autoindex handler sends the response header before it builds the
+    // listing, so the body is streamed (chunked on HTTP/1.1) with no
+    // `Content-Length`; HEAD keeps the headers and drops the body. The body has
+    // no exact size hint here for the same reason.
+    let body = if method == axum::http::Method::HEAD {
+        // A size-less empty stream keeps hyper from inferring `Content-Length:
+        // 0`: nginx's HEAD listing carries only the generated headers.
+        Body::from_stream(stream::empty::<Result<bytes::Bytes, std::io::Error>>())
+    } else {
+        let bytes = bytes::Bytes::from(rendered.body);
+        Body::from_stream(stream::once(async move { Ok::<_, std::io::Error>(bytes) }))
+    };
+    let mut response = Response::new(body);
+    *response.status_mut() = StatusCode::OK;
+    response
+        .headers_mut()
+        .insert(axum::http::header::CONTENT_TYPE, content_type);
+    response
 }
 
 /// Serve one opened static file, preferring a precompressed `<path>.gz` sidecar
@@ -182,7 +270,7 @@ async fn open_gzip_sidecar(
     let mut sidecar = path_hint.as_os_str().to_os_string();
     sidecar.push(".gz");
     let sidecar = sidecar.to_str()?;
-    match open_static_path(root, sidecar, false, None).await {
+    match open_static_path(root, sidecar, false, None, false).await {
         Ok(StaticPathTarget::File(file)) => Some(file),
         _ => None,
     }

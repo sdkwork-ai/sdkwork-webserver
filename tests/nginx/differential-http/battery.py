@@ -57,6 +57,7 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -114,6 +115,17 @@ MERGE_HOST = "merge.example.com"
 HEADERS_UNDERSCORE_OFF_HOST = "headers-underscore-off.example.com"
 HEADERS_UNDERSCORE_ON_HOST = "headers-underscore-on.example.com"
 HEADERS_INVALID_STRICT_HOST = "headers-invalid-strict.example.com"
+# Fifteenth host family: nginx `charset` family header filter.
+CHARSET_HOST = "charset.example.com"
+CHARSET_TYPES_HOST = "charset-types.example.com"
+# Sixteenth host: gzip refinement directives (`gzip_disable`, `gzip_proxied`).
+GZIPREF_HOST = "gzipref.example.com"
+# Seventeenth host: nginx `autoindex` directory listings.
+AUTOINDEX_HOST = "autoindex.example.com"
+# Eighteenth host: the `empty_gif` location handler.
+EMPTY_GIF_HOST = "emptygif.example.com"
+# Nineteenth host: the `stub_status` page (loopback/allow-gated).
+STATUS_HOST = "status.example.com"
 # 2020-01-01T00:00:00Z. Both endpoints serve these exact files, so pinning the
 # mtime makes `ETag` and `Last-Modified` stable across checkouts (git does not
 # preserve mtimes). The battery pins it on both runs before any request.
@@ -135,10 +147,14 @@ def sha256_hex(payload: bytes) -> str:
 
 
 def pin_fixture_mtimes() -> None:
-    """Pin every fixture file to the same mtime on both sides."""
+    """Pin every fixture file *and directory* to the same mtime on both sides.
+
+    Directories matter for `autoindex` listings: nginx renders a directory
+    entry's own mtime, so an unpinned directory would make the committed oracle
+    capture depend on checkout time rather than on the fixture bytes.
+    """
     for path in sorted(PUBLIC_DIR.rglob("*")):
-        if path.is_file():
-            os.utime(path, (PINNED_MTIME_SECONDS, PINNED_MTIME_SECONDS))
+        os.utime(path, (PINNED_MTIME_SECONDS, PINNED_MTIME_SECONDS))
 
 
 # The mock upstream's own port, used to build absolute `Location` / `Refresh`
@@ -203,6 +219,77 @@ class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
             # duration, only on the overlap.
             time.sleep(2.0)
             self._write(200, "text/plain", b"slow-done\n", extra=[("X-Upstream", "yes")])
+            return
+        if path.endswith("/up-text"):
+            self._write(200, "text/plain", b"the quick brown fox jumps over the lazy dog\n", extra=[("X-Upstream", "yes")])
+            return
+        if path.endswith("/up-text-lm"):
+            self._write(
+                200,
+                "text/plain",
+                b"the quick brown fox jumps over the lazy dog\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    ("Last-Modified", "Wed, 01 Jan 2020 00:00:00 GMT"),
+                ],
+            )
+            return
+        if path.endswith("/up-text-nocache"):
+            self._write(
+                200,
+                "text/plain",
+                b"the quick brown fox jumps over the lazy dog\n",
+                extra=[("X-Upstream", "yes"), ("Cache-Control", "no-cache")],
+            )
+            return
+        if path.endswith("/up-text-expired"):
+            self._write(
+                200,
+                "text/plain",
+                b"the quick brown fox jumps over the lazy dog\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    ("Expires", "Thu, 01 Jan 1970 00:00:00 GMT"),
+                ],
+            )
+            return
+        if path.endswith("/up-text-future"):
+            self._write(
+                200,
+                "text/plain",
+                b"the quick brown fox jumps over the lazy dog\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    ("Expires", "Fri, 01 Jan 2100 00:00:00 GMT"),
+                ],
+            )
+            return
+        if path.endswith("/up-plain"):
+            self._write(200, "text/html", b"<html>up</html>\n", extra=[("X-Upstream", "yes")])
+            return
+        if path.endswith("/up-charset"):
+            self._write(
+                200,
+                "text/html; charset=iso-8859-1",
+                b"<html>up</html>\n",
+                extra=[("X-Upstream", "yes")],
+            )
+            return
+        if path.endswith("/up-utf8"):
+            self._write(
+                200,
+                "text/html; charset=UTF-8",
+                b"<html>up</html>\n",
+                extra=[("X-Upstream", "yes")],
+            )
+            return
+        if path.endswith("/up-params"):
+            self._write(
+                200,
+                "text/html; boundary=xyz; charset=UTF-8",
+                b"<html>up</html>\n",
+                extra=[("X-Upstream", "yes")],
+            )
             return
         if path.endswith("/hidden-headers"):
             # The default-hidden upstream set (`ngx_http_proxy_hide_headers`)
@@ -538,7 +625,30 @@ def canonicalize(port: int, upstream_port: int, dead_port: int, status, headers,
             character.isprintable() or character in "\r\n\t" for character in text
         ):
             record["body_text"] = text
+    canonicalize_stub_status(record)
     return record
+
+
+STUB_STATUS_MARKER = "Active connections: "
+
+
+def canonicalize_stub_status(record) -> None:
+    """Mask the process-local `stub_status` counters.
+
+    nginx's status page reports live per-process numbers (accepted requests,
+    active connections, ...) that depend on the measurement order and can never
+    match between two sequential runs. The field *shape* is the compared
+    contract: digit runs are replaced by `N` and the length header by a token,
+    so status/content-type/body-template differences still fail.
+    """
+    text = record.get("body_text")
+    if not isinstance(text, str) or not text.startswith(STUB_STATUS_MARKER):
+        return
+    masked = re.sub(r"[0-9]+", "N", text)
+    record["body_text"] = masked
+    record["body_len"] = len(masked)
+    record["body_sha256"] = sha256_hex(masked.encode("utf-8"))
+    record["headers"]["content-length"] = "<dynamic>" 
 
 
 def capture(
@@ -1154,6 +1264,211 @@ def main() -> int:
             "/cookie-path/cookies-case",
             host=PROXYHDR_HOST,
         )
+
+        # ---- gzip refinements -----------------------------------------
+        accept_gzip_header = [("Accept-Encoding", "gzip")]
+        # Control: a normal user agent is compressed.
+        case(
+            "gzip.refine-control",
+            "/plain/hello.txt",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header,
+        )
+        # `gzip_disable` regexes are case-insensitive against `User-Agent`.
+        case(
+            "gzip.disable-ua-match",
+            "/disable-ua/hello.txt",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("User-Agent", "Mozilla/5.0 (compatible; Googlebot/2.1)")],
+        )
+        case(
+            "gzip.disable-ua-no-match",
+            "/disable-ua/hello.txt",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("User-Agent", "Mozilla/5.0 (X11; Linux x86_64)")],
+        )
+        # The predefined `msie6` selector: IE 4/5/6 without SV1, and the Opera
+        # carve-out that clears MSIE detection.
+        case(
+            "gzip.disable-msie6",
+            "/disable-msie6/hello.txt",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("User-Agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)")],
+        )
+        case(
+            "gzip.disable-msie6-sv1",
+            "/disable-msie6/hello.txt",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("User-Agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1)")],
+        )
+        case(
+            "gzip.disable-msie6-opera",
+            "/disable-msie6/hello.txt",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("User-Agent", "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; Opera 9.0)")],
+        )
+        # `gzip_proxied`: with a `Via` header the request is proxied traffic.
+        # nginx's default is `off`, so no compression.
+        case(
+            "gzip.proxied-default-off",
+            "/px-only/up-text",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+        case(
+            "gzip.proxied-explicit-off",
+            "/px-off/up-text",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+        case(
+            "gzip.proxied-any",
+            "/px-any/up-text",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+        # Without `Via` the proxied policy does not apply at all.
+        case(
+            "gzip.proxied-any-no-via",
+            "/px-any/up-text",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header,
+        )
+        # `no-cache` accepts a response whose Cache-Control declares it.
+        case(
+            "gzip.proxied-no-cache",
+            "/px-nocache/up-text-nocache",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+        # `no_last_modified` declines a response carrying Last-Modified.
+        case(
+            "gzip.proxied-no-last-modified",
+            "/px-lm/up-text-lm",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+        # `auth` accepts a proxied request that carries Authorization.
+        case(
+            "gzip.proxied-auth",
+            "/px-auth/up-text",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header
+            + [("Via", "1.0 proxy.example.com"), ("Authorization", "Bearer token")],
+        )
+        # `expired` accepts an already-expired Expires and declines a future one.
+        case(
+            "gzip.proxied-expired",
+            "/px-expired/up-text-expired",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+        case(
+            "gzip.proxied-not-expired",
+            "/px-expired/up-text-future",
+            host=GZIPREF_HOST,
+            headers=accept_gzip_header + [("Via", "1.0 proxy.example.com")],
+        )
+
+        # ---- stub_status -----------------------------------------------
+        # Loopback/allow-gated status page: the counter values are masked by
+        # `canonicalize_stub_status` (they are process-local runtime state), so
+        # the compared contract is the field shape and the plain-text headers.
+        case("stub-status.get", "/status", host=STATUS_HOST)
+        case("stub-status.head", "/status", host=STATUS_HOST, method="HEAD")
+        case("stub-status.post-405", "/status", host=STATUS_HOST, method="POST")
+
+        # ---- empty_gif -------------------------------------------------
+        # The canonical 43-byte GIF with its image/gif content type. HEAD keeps
+        # the generated headers; a non-GET/HEAD method is 405.
+        case("empty-gif.get", "/pixel.gif", host=EMPTY_GIF_HOST)
+        case("empty-gif.head", "/pixel.gif", host=EMPTY_GIF_HOST, method="HEAD")
+        case("empty-gif.post-405", "/pixel.gif", host=EMPTY_GIF_HOST, method="POST")
+
+        # ---- autoindex listings ---------------------------------------
+        # Exact HTML listing (entries sorted directories-first then by name,
+        # hidden names skipped, pinned mtimes/sizes, escaping applied).
+        case("autoindex.html", "/list/", host=AUTOINDEX_HOST)
+        # `autoindex_exact_size off`: nginx's rounded K/M/G column.
+        case("autoindex.html-human-size", "/list-human/", host=AUTOINDEX_HOST)
+        # `autoindex_localtime on`; both sides run with TZ=UTC.
+        case("autoindex.html-localtime", "/list-localtime/", host=AUTOINDEX_HOST)
+        # JSON / JSONP / XML shapes.
+        case("autoindex.json", "/list-json/", host=AUTOINDEX_HOST)
+        case(
+            "autoindex.jsonp",
+            "/list-jsonp/?callback=cb",
+            host=AUTOINDEX_HOST,
+        )
+        # Without a `callback` nginx downgrades jsonp to plain JSON.
+        case("autoindex.jsonp-no-callback", "/list-jsonp/", host=AUTOINDEX_HOST)
+        # An invalid callback name is rejected with 400.
+        case(
+            "autoindex.jsonp-invalid-callback",
+            "/list-jsonp/?callback=bad()",
+            host=AUTOINDEX_HOST,
+        )
+        case("autoindex.xml", "/list-xml/", host=AUTOINDEX_HOST)
+        # `autoindex off` keeps the directory-without-index 403.
+        case("autoindex.off-403", "/list-off/", host=AUTOINDEX_HOST)
+        # A directory whose `index.html` exists serves the index, not a listing.
+        case("autoindex.index-wins", "/with-index/", host=AUTOINDEX_HOST)
+        # Directory requests without the trailing slash still 301-redirect.
+        case("autoindex.dir-redirect", "/list", host=AUTOINDEX_HOST)
+        # HEAD keeps the generated headers and drops the body.
+        case("autoindex.head", "/list/", host=AUTOINDEX_HOST, method="HEAD")
+
+        # ---- charset family -------------------------------------------
+        # The server-level `charset utf-8` is appended for the built-in
+        # default type list...
+        case("charset.default-html", "/plain/index.html", host=CHARSET_HOST)
+        case("charset.default-txt", "/plain/hello.txt", host=CHARSET_HOST)
+        case("charset.default-js", "/plain/app.js", host=CHARSET_HOST)
+        # ...and not for media types outside it (`application/json`,
+        # `text/css`, images).
+        case("charset.default-json-untouched", "/plain/data.json", host=CHARSET_HOST)
+        case("charset.default-css-untouched", "/plain/style.css", host=CHARSET_HOST)
+        case("charset.default-png-untouched", "/plain/image.png", host=CHARSET_HOST)
+        # `charset off` at a location disables the inherited value.
+        case("charset.off-location", "/off/index.html", host=CHARSET_HOST)
+        # A declared list is seeded with `text/html` first.
+        case("charset.declared-types-css", "/types-css/style.css", host=CHARSET_HOST)
+        case("charset.declared-types-seeded-html", "/types-css/index.html", host=CHARSET_HOST)
+        case("charset.declared-types-json-untouched", "/types-css/data.json", host=CHARSET_HOST)
+        # `charset_types *` matches every media type.
+        case("charset.wildcard-png", "/wild/image.png", host=CHARSET_HOST)
+        # A `return` body derives its type from the URI extension (`text/plain`
+        # here) and still receives the charset.
+        case("charset.return-body", "/ret/", host=CHARSET_HOST)
+        # nginx never publishes a charset on a 301/302.
+        case("charset.redirect-301", "/ret-301/", host=CHARSET_HOST)
+        # Proxied responses: configured charset applies when the upstream has
+        # none; an upstream charset is kept unless `override_charset on`.
+        case("charset.proxy-no-upstream-charset", "/p-off/up-plain", host=CHARSET_HOST)
+        case("charset.proxy-upstream-charset-kept", "/p-off/up-charset", host=CHARSET_HOST)
+        # With override on, an equal charset is normalized to the configured
+        # spelling; a differing one would need `charset_map` (accepted-
+        # unenforced, header left untouched).
+        case("charset.proxy-override-normalizes", "/p-on/up-utf8", host=CHARSET_HOST)
+        case(
+            "charset.proxy-override-differing-kept",
+            "/p-on/up-charset",
+            host=CHARSET_HOST,
+        )
+        case(
+            "charset.proxy-override-params-normalized",
+            "/p-on/up-params",
+            host=CHARSET_HOST,
+        )
+        # Server-level `charset_types` is inherited by a location that declares
+        # none, and replaced by one that declares its own list.
+        case("charset.server-types-json", "/plain/data.json", host=CHARSET_TYPES_HOST)
+        case(
+            "charset.location-types-replace",
+            "/loc-css/data.json",
+            host=CHARSET_TYPES_HOST,
+        )
+        case("charset.location-types-css", "/loc-css/style.css", host=CHARSET_TYPES_HOST)
 
         # ---- internal locations ---------------------------------------
         # An external request for an `internal` location is answered with the

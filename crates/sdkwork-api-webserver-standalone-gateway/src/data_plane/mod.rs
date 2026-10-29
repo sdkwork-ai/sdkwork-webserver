@@ -1,9 +1,11 @@
 mod accept;
 mod acme_challenge;
 mod active_health;
+mod autoindex;
 pub(crate) mod cache;
 mod cache_policy;
 pub(crate) mod certificates_metrics;
+mod charset_policy;
 mod connection_limit;
 pub(crate) mod credential_entry_injection;
 mod delivery_policy;

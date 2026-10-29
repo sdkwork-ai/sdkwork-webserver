@@ -257,6 +257,21 @@ impl DataPlaneMetrics {
         })
     }
 
+    /// nginx `stub_status` counter snapshot (see [`StubStatusSnapshot`]).
+    pub(super) fn stub_status_snapshot(&self) -> StubStatusSnapshot {
+        let active = load(&self.connections_active);
+        let writing = load(&self.requests_active);
+        StubStatusSnapshot {
+            active,
+            accepts: load(&self.connections_accepted_total),
+            handled: load(&self.connections_accepted_total),
+            requests: load(&self.requests_started_total),
+            reading: 0,
+            writing,
+            waiting: active.saturating_sub(writing),
+        }
+    }
+
     pub(super) fn record_connection_accepted(&self) {
         saturating_increment(&self.connections_accepted_total);
     }
@@ -1150,6 +1165,26 @@ fn saturating_decrement(counter: &AtomicU64) {
     let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
         Some(current.saturating_sub(1))
     });
+}
+
+/// Counter snapshot for nginx `stub_status`.
+///
+/// nginx's fields map onto the runtime's existing metrics: `active` is the
+/// current connection count, `accepts`/`handled` are the accepted-connection
+/// total, `requests` is the started-request total, `reading` is always 0 (the
+/// HTTP parser completes the header before any handler runs), `writing` is the
+/// in-flight request count, and `waiting` is `active - writing` (keep-alive
+/// idle connections). The values are process-local runtime state; the
+/// differential battery compares the field shape, not the numbers.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct StubStatusSnapshot {
+    pub(super) active: u64,
+    pub(super) accepts: u64,
+    pub(super) handled: u64,
+    pub(super) requests: u64,
+    pub(super) reading: u64,
+    pub(super) writing: u64,
+    pub(super) waiting: u64,
 }
 
 fn load(counter: &AtomicU64) -> u64 {

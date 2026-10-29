@@ -599,6 +599,7 @@ impl SemanticValidator {
                         );
                     }
                 }
+                ResourceConfig::EmptyGif { .. } | ResourceConfig::StubStatus { .. } => {}
                 ResourceConfig::Redirect {
                     status, location, ..
                 } => {

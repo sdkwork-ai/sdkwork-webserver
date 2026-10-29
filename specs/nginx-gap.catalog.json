@@ -8,6 +8,8 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Wave 3a-2 execution (2026-10-30, REQ-2026-0073): autoindex family, empty_gif and stub_status moved to executable; differential-http grew 218 -> 236 cases against nginx 1.29.6. Remaining in this area: addition filter (needs a bounded subrequest engine), referer module ($invalid_referer threading; `if` still unsupported), typed-TOML parity for charset/gzip/autoindex. Later waves: HTTP/2 tuning, stream module gaps, OCSP/trust chain, open_file_cache, proxy_method, chunked_transfer_encoding.",
+    "Wave 3a directive execution (2026-10-30, REQ-2026-0073): charset family (charset/charset_types/source_charset/override_charset) and gzip refinements (gzip_disable/gzip_proxied) moved to executable with real-nginx differential evidence; differential-http grew 182 -> 218 cases. `charset_map` (byte transcoding) and `gzip_comp_level` remain accepted-unenforced with truthful diagnostics. Autoindex family, stub_status/empty_gif/addition/referer and typed-TOML parity continue in wave 3a-2.",
     "Wave 2b directive execution (2026-10-30, REQ-2026-0073): proxy response-header policies (hide/pass/redirect/cookie path+domain), internal locations, merge_slashes and request-header acceptance moved from accepted-unenforced/fail-closed to executable. tests/nginx/differential-http grew 150 -> 182 cases against nginx 1.29.6. Still open after wave 2b: chunked_transfer_encoding, charset family, autoindex family, gzip refinements, HTTP/2 tuning, stream module gaps (wave 3).",
     "Wave 2 directive execution (2026-10-30, REQ-2026-0073): redirect construction policies (absolute_redirect/port_in_redirect/server_name_in_redirect), limit_req_status/limit_conn_status, max_ranges, certificate chainFile consumption and typed TOML [[http.maps]] moved from accepted-unenforced/silent to executable. tests/nginx/differential-http grew 130 -> 150 cases against nginx 1.29.6. The three upstream proxy timeout keys became explicit accepted-unenforced diagnostics instead of silent drops. Still open in this wave: proxy response header policies, internal locations, merge_slashes, header acceptance policy (wave 2b).",
     "Wave 1 directive execution (2026-10-30, REQ-2026-0073): nginx `map` (http), `types`/`default_type`, `gzip_static` and `gzip_vary` moved from accepted-unenforced to executable with real-nginx differential evidence. tests/nginx/differential-http grew 87 -> 130 cases (oracle recaptured from nginx 1.29.6, floor 130); the migration CLI no longer treats them as unenforced. Bounded gaps: map source is a single supported variable and evaluates once before the rewrite loop; typed TOML exposes MIME types only at http level; gzip_static does not serve orphan .gz sidecars and `gunzip` remains out of scope.",
@@ -411,6 +413,36 @@
       "group": "routing",
       "status": "implemented",
       "summary": "underscores_in_headers / ignore_invalid_headers: per-host request-header acceptance policy; nginx-plane default drops underscore headers before all modules, typed TOML keeps its historical permissive default, and the runtime HTTP boundary always rejects non-token header names with 400 (documented stricter divergence) (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "http.charset",
+      "group": "response",
+      "status": "implemented",
+      "summary": "nginx charset header filter: charset on|off, charset_types (declared list seeded with text/html like nginx, `*` wildcard), source_charset and override_charset (kept/normalized/left when a charset_map codec would be needed) at http/server/location with nginx inheritance; no charset on 301/302, `off` disables, variables/invalid names fail closed. `charset_map` byte transcoding remains accepted-unenforced. 21 real-nginx differential cases (REQ-2026-0073 wave 3a)"
+    },
+    {
+      "id": "http.gzip-refinements",
+      "group": "response",
+      "status": "implemented",
+      "summary": "gzip_disable (case-insensitive UA regex + nginx msie6 selector with exact MSIE 4/5/6 detection and SV1/Opera carve-outs) and gzip_proxied (Via-gated condition order, nginx default off) execute with nginx inheritance; gzip_comp_level remains accepted-unenforced because the compression layer owns the level and no observable contract differs. 15 real-nginx differential cases (REQ-2026-0073 wave 3a)"
+    },
+    {
+      "id": "http.autoindex",
+      "group": "static",
+      "status": "implemented",
+      "summary": "nginx autoindex module: autoindex on|off, autoindex_exact_size, autoindex_localtime, autoindex_format html|json|jsonp|xml at http/server/location. Byte-exact HTML/JSON/JSONP/XML templates vs nginx 1.29.6 (escaping, 50-char column, truncation, date/size columns, JSONP callback validation and no-callback downgrade, directories-first ordering, hidden skipped, bounded 4096 entries), streamed chunked framing without Content-Length like nginx, `index` wins over the listing, `autoindex off` keeps 403. 12 differential cases (REQ-2026-0073 wave 3a-2)"
+    },
+    {
+      "id": "http.empty-gif",
+      "group": "response",
+      "status": "implemented",
+      "summary": "nginx empty_gif location handler: canonical 43-byte 1x1 transparent GIF, image/gif, nginx's fixed Last-Modified, GET/HEAD only (405 otherwise); 3 differential cases (REQ-2026-0073 wave 3a-2)"
+    },
+    {
+      "id": "http.stub-status",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "nginx stub_status location page backed by the data-plane metrics (Active/accepts/handled/requests/Reading/Writing/Waiting, text/plain), location context only, loopback-gated on top of allow/deny, GET/HEAD only; counters are process-local so the differential battery canonicalizes digits (field shape/headers compared); 3 differential cases (REQ-2026-0073 wave 3a-2)"
     }
   ]
 }

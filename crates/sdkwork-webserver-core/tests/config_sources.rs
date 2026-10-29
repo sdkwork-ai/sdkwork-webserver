@@ -396,6 +396,8 @@ fn resource_kind(resource: &ResourceConfig) -> &'static str {
         ResourceConfig::Static { .. } => "static",
         ResourceConfig::Proxy { .. } => "proxy",
         ResourceConfig::Redirect { .. } => "redirect",
+        ResourceConfig::EmptyGif { .. } => "empty-gif",
+        ResourceConfig::StubStatus { .. } => "stub-status",
         ResourceConfig::Respond { .. } => "respond",
         ResourceConfig::Drive { .. } => "drive",
         ResourceConfig::Knowledgebase { .. } => "knowledgebase",

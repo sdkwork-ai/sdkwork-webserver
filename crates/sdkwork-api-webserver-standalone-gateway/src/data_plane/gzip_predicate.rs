@@ -23,6 +23,20 @@ use super::runtime::DataPlaneRuntime;
 #[derive(Clone, Default)]
 pub(crate) struct CompressionOverride(pub Option<GzipConfig>);
 
+/// Request facts the nginx `gzip_disable` / `gzip_proxied` policies need.
+///
+/// The tower-http compression predicate only sees the response, so the request
+/// handler attaches these facts as a response extension before the response
+/// crosses the compression layer (`ngx_http_gzip_ok` inspects the request's
+/// `User-Agent`, `Via` and `Authorization` headers together with the response
+/// cache headers).
+#[derive(Clone, Default)]
+pub(crate) struct GzipRequestFacts {
+    pub(crate) user_agent: Option<String>,
+    pub(crate) via: bool,
+    pub(crate) authorization: bool,
+}
+
 /// Compress when `[http] gzip = true` and the response MIME matches
 /// `gzipTypes` (plus always `text/html`), with `gzipMinLength`.
 #[derive(Clone)]
@@ -52,14 +66,19 @@ impl Predicate for NginxGzipPredicate {
             Some(resolved) => resolved,
             None => &generation.app.config().gzip,
         };
-        response_is_compressible(response, gzip)
+        let facts = response.extensions().get::<GzipRequestFacts>();
+        response_is_compressible(response, gzip, facts)
     }
 }
 
 /// The eligibility matrix shared by the compression predicate and by the
 /// validator-weakening step: gzip enabled, a compressible status, no existing
 /// `Content-Encoding`, a MIME the policy selects, and a body above the minimum.
-fn response_is_compressible<B>(response: &http::Response<B>, gzip: &GzipConfig) -> bool
+fn response_is_compressible<B>(
+    response: &http::Response<B>,
+    gzip: &GzipConfig,
+    facts: Option<&GzipRequestFacts>,
+) -> bool
 where
     B: HttpBody,
 {
@@ -85,7 +104,108 @@ where
     if !content_type_matches(content_type, &gzip.types) {
         return false;
     }
+    if let Some(facts) = facts {
+        // nginx `gzip_disable`: a matching `User-Agent` (including the
+        // predefined `msie6` selector) disables gzip for this response.
+        if gzip_disabled_for_user_agent(gzip, facts) {
+            return false;
+        }
+        // nginx `gzip_proxied`: a request carrying `Via` is proxied traffic;
+        // the declared condition list decides whether it may be compressed.
+        // nginx's default is `off`.
+        if facts.via && !proxied_request_may_compress(response, gzip, facts) {
+            return false;
+        }
+    }
     SizeAbove::new(gzip.min_length).should_compress(response)
+}
+
+/// nginx `gzip_disable` user-agent matching (shared with the materializer's
+/// pattern validation through `sdkwork_webserver_core::config::gzip_disable`).
+fn gzip_disabled_for_user_agent(gzip: &GzipConfig, facts: &GzipRequestFacts) -> bool {
+    sdkwork_webserver_core::gzip_disabled_for_user_agent(
+        gzip.disable_msie6,
+        &gzip.disable,
+        facts.user_agent.as_deref(),
+    )
+}
+
+/// nginx `gzip_proxied` decision for a `Via`-carrying request
+/// (`ngx_http_gzip_ok`).
+fn proxied_request_may_compress<B>(
+    response: &http::Response<B>,
+    gzip: &GzipConfig,
+    facts: &GzipRequestFacts,
+) -> bool
+where
+    B: HttpBody,
+{
+    // `None` is nginx's default: `gzip_proxied off`.
+    let Some(policy) = gzip.proxied.as_ref() else {
+        return false;
+    };
+    if policy.off {
+        return false;
+    }
+    if policy.any {
+        return true;
+    }
+    if facts.authorization && policy.auth {
+        return true;
+    }
+    if let Some(expires) = response.headers().get(header::EXPIRES) {
+        if !policy.expired {
+            return false;
+        }
+        let (Some(expires), date) = (
+            expires.to_str().ok().and_then(parse_http_date),
+            response
+                .headers()
+                .get(header::DATE)
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_http_date),
+        ) else {
+            return false;
+        };
+        let date = date.unwrap_or_else(std::time::SystemTime::now);
+        return expires < date;
+    }
+    let cache_control_values: Vec<&str> = response
+        .headers()
+        .get_all(header::CACHE_CONTROL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    if !cache_control_values.is_empty() {
+        let has = |token: &str| {
+            cache_control_values.iter().any(|value| {
+                value
+                    .split(',')
+                    .any(|candidate| candidate.trim().eq_ignore_ascii_case(token))
+            })
+        };
+        if policy.no_cache && has("no-cache") {
+            return true;
+        }
+        if policy.no_store && has("no-store") {
+            return true;
+        }
+        if policy.private && has("private") {
+            return true;
+        }
+        return false;
+    }
+    if policy.no_last_modified && response.headers().contains_key(header::LAST_MODIFIED) {
+        return false;
+    }
+    if policy.no_etag && response.headers().contains_key(header::ETAG) {
+        return false;
+    }
+    true
+}
+
+fn parse_http_date(value: &str) -> Option<std::time::SystemTime> {
+    httpdate::parse_http_date(value).ok()
 }
 
 /// nginx marks a dynamically gzip-compressed representation with a *weak*
@@ -100,9 +220,10 @@ pub(crate) fn weaken_etag_for_negotiated_gzip(
     app_gzip: &GzipConfig,
     override_gzip: Option<&GzipConfig>,
     accept_encoding: Option<&HeaderValue>,
+    facts: Option<&GzipRequestFacts>,
 ) -> Response<Body> {
     let gzip = override_gzip.unwrap_or(app_gzip);
-    if !response_is_compressible(&response, gzip) || !accepts_gzip(accept_encoding) {
+    if !response_is_compressible(&response, gzip, facts) || !accepts_gzip(accept_encoding) {
         return response;
     }
     let Some(etag) = response.headers().get(header::ETAG).cloned() else {
@@ -308,6 +429,7 @@ mod tests {
             min_length: 0,
             vary: true,
             static_files: sdkwork_webserver_core::GzipStaticMode::Off,
+            ..GzipConfig::default()
         }
     }
 
@@ -328,6 +450,7 @@ mod tests {
             &gzip_config(),
             None,
             Some(&HeaderValue::from_static("gzip")),
+            None,
         );
         assert_eq!(compressed.headers()[header::ETAG], "W/\"5e0be100-12\"");
     }
@@ -344,6 +467,7 @@ mod tests {
                 &gzip_config(),
                 None,
                 accept_encoding.as_ref(),
+                None,
             );
             assert_eq!(response.headers()[header::ETAG], "\"5e0be100-12\"");
         }
@@ -357,12 +481,14 @@ mod tests {
             min_length: 0,
             vary: true,
             static_files: sdkwork_webserver_core::GzipStaticMode::Off,
+            ..GzipConfig::default()
         };
         let response = weaken_etag_for_negotiated_gzip(
             response_with_etag(),
             &gzip_config(),
             Some(&disabled),
             Some(&HeaderValue::from_static("gzip")),
+            None,
         );
         assert_eq!(response.headers()[header::ETAG], "\"5e0be100-12\"");
     }

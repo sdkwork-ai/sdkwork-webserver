@@ -687,6 +687,75 @@ pub struct GzipConfig {
     /// static content.
     #[serde(default)]
     pub static_files: GzipStaticMode,
+    /// nginx `gzip_comp_level` (1-9; nginx default `1`). The runtime's
+    /// compression layer owns its deflate level, so the declared value is
+    /// recorded for import completeness but does not change negotiation or the
+    /// decoded representation (a boundary documented on the nginx mapping).
+    #[serde(default = "default_gzip_comp_level")]
+    pub comp_level: u8,
+    /// nginx `gzip_disable` PCRE patterns; nginx compiles them case-insensitively
+    /// and disables gzip when any matches the request `User-Agent`. The runtime
+    /// compiles them with the bounded Rust regex engine (an unsupported pattern
+    /// fails closed at materialization).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disable: Vec<String>,
+    /// The predefined `gzip_disable "msie6"` selector, tracked independently
+    /// of the regex list (nginx merges the flag and the array through separate
+    /// inheritance chains). A matching `MSIE 4/5/6` user agent disables gzip.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disable_msie6: bool,
+    /// nginx `gzip_proxied` conditions for a request that carries `Via`.
+    /// `None` is nginx's default `off` policy (no gzip for proxied requests).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxied: Option<GzipProxiedConfig>,
+}
+
+/// nginx `gzip_proxied` bitmask as one boolean per accepted token.
+///
+/// A request is "proxied" when it carries a `Via` header. With `off` (nginx's
+/// default) or no matching condition, a proxied request is served
+/// uncompressed; `any` accepts every proxied request.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GzipProxiedConfig {
+    #[serde(default)]
+    pub off: bool,
+    #[serde(default)]
+    pub any: bool,
+    #[serde(default)]
+    pub expired: bool,
+    #[serde(default)]
+    pub no_cache: bool,
+    #[serde(default)]
+    pub no_store: bool,
+    #[serde(default)]
+    pub private: bool,
+    #[serde(default)]
+    pub no_last_modified: bool,
+    #[serde(default)]
+    pub no_etag: bool,
+    #[serde(default)]
+    pub auth: bool,
+}
+
+impl GzipProxiedConfig {
+    /// Whether the configuration declares any token at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        !(self.off
+            || self.any
+            || self.expired
+            || self.no_cache
+            || self.no_store
+            || self.private
+            || self.no_last_modified
+            || self.no_etag
+            || self.auth)
+    }
+}
+
+fn default_gzip_comp_level() -> u8 {
+    1
 }
 
 /// nginx `gzip_static` mode.
@@ -710,6 +779,10 @@ impl Default for GzipConfig {
             min_length: default_gzip_min_length(),
             vary: true,
             static_files: GzipStaticMode::Off,
+            comp_level: default_gzip_comp_level(),
+            disable: Vec::new(),
+            disable_msie6: false,
+            proxied: None,
         }
     }
 }
@@ -1242,6 +1315,13 @@ pub enum ResourceConfig {
         status: u16,
         location: String,
     },
+    /// nginx `empty_gif`: the location handler serves the canonical minimal
+    /// 1x1 transparent GIF (`ngx_http_empty_gif_module`, 43 bytes,
+    /// `Content-Type: image/gif`). GET/HEAD only; any other method is 405.
+    EmptyGif { id: String },
+    /// nginx `stub_status`: a bounded status page with nginx's field shape
+    /// (`ngx_http_stub_status_module`). Served to loopback clients only.
+    StubStatus { id: String },
     Respond {
         id: String,
         status: u16,
@@ -1281,6 +1361,8 @@ impl ResourceConfig {
             Self::Static { id, .. }
             | Self::Proxy { id, .. }
             | Self::Redirect { id, .. }
+            | Self::EmptyGif { id }
+            | Self::StubStatus { id }
             | Self::Respond { id, .. }
             | Self::Drive { id, .. }
             | Self::Knowledgebase { id, .. } => id,
@@ -1292,6 +1374,8 @@ impl ResourceConfig {
             Self::Static { id: current, .. }
             | Self::Proxy { id: current, .. }
             | Self::Redirect { id: current, .. }
+            | Self::EmptyGif { id: current }
+            | Self::StubStatus { id: current }
             | Self::Respond { id: current, .. }
             | Self::Drive { id: current, .. }
             | Self::Knowledgebase { id: current, .. } => *current = id,
@@ -1319,6 +1403,8 @@ impl ResourceConfig {
             Self::Static { .. }
             | Self::Proxy { .. }
             | Self::Redirect { .. }
+            | Self::EmptyGif { .. }
+            | Self::StubStatus { .. }
             | Self::Respond { .. } => None,
         }
     }
@@ -1338,6 +1424,8 @@ impl ResourceConfig {
             Self::Static { .. }
             | Self::Proxy { .. }
             | Self::Redirect { .. }
+            | Self::EmptyGif { .. }
+            | Self::StubStatus { .. }
             | Self::Respond { .. } => None,
         }
     }
@@ -1349,6 +1437,8 @@ impl ResourceConfig {
             Self::Static { .. }
             | Self::Proxy { .. }
             | Self::Redirect { .. }
+            | Self::EmptyGif { .. }
+            | Self::StubStatus { .. }
             | Self::Respond { .. } => None,
         }
     }
@@ -1770,6 +1860,15 @@ pub struct VirtualHostConfig {
     /// surface is complete and typed configs can state it explicitly.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub ignore_invalid_headers: bool,
+    /// Server-level nginx `charset` / `charset_types` / `source_charset` /
+    /// `override_charset` resolved for this host; `None` means no level
+    /// declared the family (no charset header rewrite).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub charset: Option<CharsetConfig>,
+    /// Server-level nginx `autoindex` family resolved for this host; `None`
+    /// means no level declared it (directory listings off).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autoindex: Option<AutoindexConfig>,
 }
 
 /// `true` is the serde default for the nginx `merge_slashes` /
@@ -1855,6 +1954,80 @@ pub enum CookieRewritePolicyConfig {
     /// the value case-insensitively after ignoring one leading dot and
     /// re-applies the matched value's leading dot.
     Rules(Vec<ProxyRewriteRuleConfig>),
+}
+
+/// nginx `autoindex` file-listing policy (`autoindex`,
+/// `autoindex_exact_size`, `autoindex_localtime`, `autoindex_format`).
+///
+/// A directory request without a matching `index` file is answered 403 when
+/// this policy is off (nginx's default); when on, the data plane renders
+/// nginx-compatible listings (`html`, `json`, `jsonp`, `xml`) bounded in entry
+/// count and safely escaped.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AutoindexConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    /// nginx `autoindex_exact_size` (default `on`): exact byte counts; off
+    /// renders nginx's human-readable K/M/G sizes.
+    #[serde(default = "default_true")]
+    pub exact_size: bool,
+    /// nginx `autoindex_localtime` (default `off`): render mtimes in the
+    /// process's local time zone instead of GMT.
+    #[serde(default)]
+    pub localtime: bool,
+    /// nginx `autoindex_format` (default `html`).
+    #[serde(default)]
+    pub format: AutoindexFormat,
+}
+
+/// nginx `autoindex_format` values.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoindexFormat {
+    #[default]
+    Html,
+    Json,
+    Jsonp,
+    Xml,
+}
+
+/// HTTP response charset policy (`charset`, `charset_types`,
+/// `source_charset`, `override_charset`).
+///
+/// nginx's charset header filter appends `; charset=<name>` to the
+/// `Content-Type` of a response whose media type matches `charset_types`
+/// (default list: `text/html`, `text/xml`, `text/plain`,
+/// `text/vnd.wap.wml`, `application/javascript`, `application/rss+xml`). It
+/// never sets the field on a 301/302 (nginx skips redirects so NN 4.x does not
+/// apply the target page's charset to the redirect). Body transcoding
+/// (`charset_map` + a `source_charset` that differs from `charset`) is not
+/// implemented: such a location is accepted-unenforced and its `Content-Type`
+/// is left untouched rather than claiming an encoding the bytes do not have.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CharsetConfig {
+    /// Effective `charset` value; `None` means `charset off` (or that no level
+    /// declared the directive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub charset: Option<String>,
+    /// Effective `charset_types` media types. `None` keeps nginx's default
+    /// list. A declared list always starts with `text/html` (nginx seeds the
+    /// directive array with the first default type, so a declared list is
+    /// "text/html plus the declared types"), and `["*"]` matches every media
+    /// type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<Vec<String>>,
+    /// Effective `source_charset`; `None` means off. A non-`None` value that
+    /// differs from `charset` requires byte transcoding (out of scope; the
+    /// filter is accepted-unenforced for that pair).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_charset: Option<String>,
+    /// nginx `override_charset` (default off): when on, a charset already
+    /// carried by the response (an upstream `Content-Type; charset=...`) is
+    /// normalized against the configured one instead of being kept verbatim.
+    #[serde(default)]
+    pub override_charset: bool,
 }
 
 /// nginx redirect construction policy (`absolute_redirect`,
@@ -2281,6 +2454,14 @@ pub struct RouteConfig {
     /// against nginx 1.29.6).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub internal: bool,
+    /// Location-level nginx charset policy resolved over the host value;
+    /// `None` inherits the host (a location that declares any directive in the
+    /// family gets the fully resolved config here).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub charset: Option<CharsetConfig>,
+    /// Location-level nginx `autoindex` family resolved over the host value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autoindex: Option<AutoindexConfig>,
 }
 
 /// nginx `secure_link` module modes (ngx_http_secure_link_module).

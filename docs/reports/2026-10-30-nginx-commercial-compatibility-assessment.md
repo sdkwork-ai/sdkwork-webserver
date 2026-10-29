@@ -16,9 +16,9 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **99** | 可承诺 |
-| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **166** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **250** | 安全失败，不静默近似 |
+| executable（真实执行且有测试证据） | 79 | **111** | 可承诺 |
+| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **160** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **244** | 安全失败，不静默近似 |
 | excluded from profile（PRD §4 明确排除） | 229 | **229** | 不承诺；实现需独立协议/安全立项 |
 | **合计** | 744 | **744** | |
 
@@ -55,6 +55,16 @@
 | typed `[[http.maps]]` | 类型化 TOML 可声明有序 map 定义并与 nginx 平面同一套校验和运行时求值 | 往返 + 失败关闭单测 |
 | 三个 upstream 超时键 | 从静默丢弃改为带位置诊断的 accepted-unenforced | 诊断单测 |
 
+### Wave 3a / 3a-2：charset、gzip 细化、autoindex、empty_gif、stub_status（14 条）
+
+| 指令 | 轮后行为 | 证据 |
+| --- | --- | --- |
+| `charset` / `charset_types` / `source_charset` / `override_charset` | nginx charset 头过滤器：按生效类型列表追加 `; charset=`（声明列表按 nginx 行为预置 text/html，`*` 通配），`off` 关闭，301/302 不加 charset，http/server/location 继承，override_charset 保持/规范化/不同编码不动；`charset_map` 字节转码仍接受不执行 | 21 个 differential `charset.*` |
+| `gzip_disable` / `gzip_proxied` | UA 正则（含 nginx `msie6` 判定与 SV1/Opera 例外）与 Via 条件策略按 nginx 顺序执行、继承正确；`gzip_comp_level` 由压缩层持有，保持接受不执行且有真实诊断 | 15 个 differential `gzip.*` |
+| `autoindex` / `autoindex_exact_size` / `autoindex_localtime` / `autoindex_format` | nginx 目录列表：HTML/JSON/JSONP/XML 模板与 nginx 逐字节一致、转义/截断/排序列/隐藏项/4096 上限、chunked 无 Content-Length；`index` 优先，`off` 保持 403 | 12 个 differential `autoindex.*` |
+| `empty_gif` | 规范 43 字节 1x1 GIF、image/gif、nginx 固定 Last-Modified、仅 GET/HEAD | 3 个 differential `empty-gif.*` |
+| `stub_status` | nginx 字段形状状态页（Active/accepts/handled/requests/Reading/Writing/Waiting），仅 location 上下文、loopback 门禁；计数为进程本地，差分对字段形状规范化比较 | 3 个 differential `stub-status.*` |
+
 ### Wave 2b：代理响应头策略、internal、merge_slashes、请求头策略（8 条）
 
 | 指令 | 轮后行为 | 证据 |
@@ -78,7 +88,7 @@
 | --- | --- | --- |
 | 进程内全表面行为回归 | `python3 tests/nginx/full-surface/probe.py` | **76/76** |
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
-| 宽面 HTTP 差分（本轮从 87 增至 182 例） | `node tools/run-nginx-differential-http.mjs` | **182/182**，0 非预期（已知差异均有规范依据） |
+| 宽面 HTTP 差分（本轮从 87 增至 236 例） | `node tools/run-nginx-differential-http.mjs` | **236/236**，0 非预期（已知差异均有规范依据） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |
@@ -116,8 +126,8 @@
 | 能力 | 现状 | 商业影响 | 优先级 |
 | --- | --- | --- | --- |
 | `chunked_transfer_encoding on/off` | 接受但不执行 | 低（仅影响无长度响应分帧） | P3 |
-| charset 族 | Wave 3 | 中（中文/遗留站点编码声明） | P2 |
-| autoindex 族 | Wave 3 | 中（文件目录发布场景） | P2 |
+| charset 族 | 已实现（charset/charset_types/source_charset/override_charset）；`charset_map` 字节转码仍接受不执行 | 低（仅声明头） | P3 |
+| autoindex 族 | 已实现（含 4 种格式）；`addition` 子请求过滤器待实现 | 低 | P3 |
 | gzip 细化（comp_level/disable/proxied） | Wave 3 | 低-中 | P3 |
 | HTTP/2 调优（streams/field size/idle/requests） | Wave 3 | 中（大流量/防滥用） | P2 |
 | stream 模块 allow/deny、limit_conn、return/set、preread | Wave 3 | 中（TCP 边缘） | P2 |

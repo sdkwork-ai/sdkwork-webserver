@@ -22,6 +22,22 @@ pub(crate) struct OpenedStaticFile {
 pub(crate) enum StaticPathTarget {
     File(OpenedStaticFile),
     RedirectToDirectory,
+    /// Directory listing: `autoindex on` for a directory request whose `index`
+    /// file does not exist. Entries are already filtered (hidden names
+    /// skipped), stat-ed and bounded; the renderer sorts and formats them.
+    Autoindex {
+        entries: Vec<AutoindexEntry>,
+    },
+}
+
+/// One directory entry read for an nginx `autoindex` listing.
+pub(crate) struct AutoindexEntry {
+    pub(crate) name: String,
+    pub(crate) is_dir: bool,
+    pub(crate) is_file: bool,
+    pub(crate) size: u64,
+    /// Modification time as Unix seconds (0 when unavailable).
+    pub(crate) mtime: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -45,6 +61,7 @@ pub(crate) async fn open_static_path(
     relative: &str,
     request_path_has_trailing_slash: bool,
     spa_fallback: Option<&str>,
+    autoindex: bool,
 ) -> Result<StaticPathTarget, StaticPathError> {
     let root = root.to_owned();
     let relative = relative.to_owned();
@@ -55,6 +72,7 @@ pub(crate) async fn open_static_path(
             &relative,
             request_path_has_trailing_slash,
             spa_fallback.as_deref(),
+            autoindex,
         )
     })
     .await
@@ -66,6 +84,7 @@ fn open_static_path_sync(
     relative: &str,
     request_path_has_trailing_slash: bool,
     spa_fallback: Option<&str>,
+    autoindex: bool,
 ) -> Result<StaticPathTarget, StaticPathError> {
     let components = validated_components(relative)?;
     let root_dir = Dir::open_ambient_dir(root, ambient_authority()).map_err(map_root_error)?;
@@ -75,7 +94,7 @@ fn open_static_path_sync(
         Ok(OpenedEntry::Directory(_directory)) if !request_path_has_trailing_slash => {
             Ok(StaticPathTarget::RedirectToDirectory)
         }
-        Ok(OpenedEntry::Directory(directory)) => match open_index(directory, relative) {
+        Ok(OpenedEntry::Directory(directory)) => match open_index(&directory, relative) {
             Ok(file) => Ok(StaticPathTarget::File(file)),
             // nginx `autoindex off` + an `index` that names no existing file
             // answers 403 Forbidden for a directory request, not 404: the
@@ -86,6 +105,13 @@ fn open_static_path_sync(
             // This also pre-empts an SPA fallback: nginx's `try_files $uri/`
             // matches the existing directory, the index module then refuses
             // it, and the fallback target is never reached.
+            //
+            // nginx `autoindex on` replaces that 403 with a generated listing:
+            // the index module hands the request to the autoindex module when
+            // no index file exists.
+            Err(StaticPathError::NotFound) if autoindex => Ok(StaticPathTarget::Autoindex {
+                entries: read_autoindex_entries(directory)?,
+            }),
             Err(StaticPathError::NotFound) => Err(StaticPathError::Forbidden),
             Err(error) => Err(error),
         },
@@ -204,12 +230,67 @@ fn open_entry(
     }))
 }
 
-fn open_index(directory: Dir, parent_hint: &str) -> Result<OpenedStaticFile, StaticPathError> {
+fn open_index(directory: &Dir, parent_hint: &str) -> Result<OpenedStaticFile, StaticPathError> {
     let path_hint = Path::new(parent_hint).join("index.html");
-    match open_entry(&directory, Path::new("index.html"), &path_hint)? {
+    match open_entry(directory, Path::new("index.html"), &path_hint)? {
         OpenedEntry::File(file) => Ok(file),
         OpenedEntry::Directory(_) => Err(StaticPathError::NotFound),
     }
+}
+
+/// Read nginx `autoindex` entries from an opened directory.
+///
+/// Hidden names (a leading `.`) are skipped like nginx; metadata follows
+/// symlinks (`ngx_de_info`, with a no-follow fallback for broken links) so a
+/// symlinked directory lists as a directory. The collection is bounded by
+/// [`MAXIMUM_AUTOINDEX_ENTRIES`]; a larger directory is refused instead of
+/// building an unbounded listing.
+fn read_autoindex_entries(directory: Dir) -> Result<Vec<AutoindexEntry>, StaticPathError> {
+    const MAXIMUM: usize = super::autoindex::MAXIMUM_AUTOINDEX_ENTRIES;
+    let mut entries = Vec::new();
+    let iterator = directory.entries().map_err(map_entry_error)?;
+    for item in iterator {
+        let item = item.map_err(map_entry_error)?;
+        let name = item.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        if entries.len() >= MAXIMUM {
+            return Err(StaticPathError::Forbidden);
+        }
+        let (is_dir, is_file, size, mtime) = match item.metadata() {
+            Ok(metadata) => (
+                metadata.is_dir(),
+                metadata.is_file(),
+                metadata.len(),
+                metadata
+                    .modified()
+                    .ok()
+                    .and_then(|time| time.into_std().duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|elapsed| elapsed.as_secs() as i64)
+                    .unwrap_or(0),
+            ),
+            Err(_) => {
+                // Broken symlink or a transient stat failure: nginx falls back
+                // to lstat, which classifies it as neither file nor directory.
+                let file_type = item.file_type().ok();
+                (
+                    file_type.as_ref().is_some_and(|kind| kind.is_dir()),
+                    file_type.as_ref().is_some_and(|kind| kind.is_file()),
+                    0,
+                    0,
+                )
+            }
+        };
+        entries.push(AutoindexEntry {
+            name,
+            is_dir,
+            is_file,
+            size,
+            mtime,
+        });
+    }
+    Ok(entries)
 }
 
 fn validated_components(path: &str) -> Result<Vec<PathBuf>, StaticPathError> {
@@ -265,7 +346,7 @@ mod tests {
         let public = temp.path().join("public");
         std::fs::create_dir(&public).unwrap();
         std::fs::write(public.join("asset.txt"), "original").unwrap();
-        let target = open_static_path_sync(&public, "asset.txt", false, None).unwrap();
+        let target = open_static_path_sync(&public, "asset.txt", false, None, false).unwrap();
         let StaticPathTarget::File(mut opened) = target else {
             panic!("expected opened file");
         };
@@ -294,7 +375,7 @@ mod tests {
         // module refuses it.
         for spa_fallback in [None, Some("index.html")] {
             assert!(matches!(
-                open_static_path_sync(&public, "nodx/", true, spa_fallback),
+                open_static_path_sync(&public, "nodx/", true, spa_fallback, false),
                 Err(StaticPathError::Forbidden)
             ));
         }
@@ -302,13 +383,13 @@ mod tests {
         // Without the trailing slash nginx first redirects to the canonical
         // directory URI; that branch is unchanged by the 403 rule.
         assert!(matches!(
-            open_static_path_sync(&public, "nodx", false, None),
+            open_static_path_sync(&public, "nodx", false, None, false),
             Ok(StaticPathTarget::RedirectToDirectory)
         ));
 
         // A real file inside the directory is still served.
         assert!(matches!(
-            open_static_path_sync(&public, "nodx/keep.txt", false, None),
+            open_static_path_sync(&public, "nodx/keep.txt", false, None, false),
             Ok(StaticPathTarget::File(_))
         ));
     }
@@ -328,11 +409,11 @@ mod tests {
         symlink(&outside, public.join("nested")).unwrap();
 
         assert!(matches!(
-            open_static_path_sync(&public, "final.txt", false, None),
+            open_static_path_sync(&public, "final.txt", false, None, false),
             Err(StaticPathError::Forbidden)
         ));
         assert!(matches!(
-            open_static_path_sync(&public, "nested/secret.txt", false, None),
+            open_static_path_sync(&public, "nested/secret.txt", false, None, false),
             Err(StaticPathError::Forbidden)
         ));
     }

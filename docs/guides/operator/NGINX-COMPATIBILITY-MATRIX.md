@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 99 |
-| accepted, NOT enforced | 166 |
-| rejected (fail closed) | 250 |
+| executable | 111 |
+| accepted, NOT enforced | 160 |
+| rejected (fail closed) | 244 |
 | excluded from profile | 229 |
 | **total** | **744** |
 
@@ -51,15 +51,11 @@ states what is lost and what to configure instead.
 
 | Directive | Contexts | What an operator loses | Migration action |
 | --- | --- | --- | --- |
-| `autoindex` | http, http-location, http-server | the autoindex value is accepted but the runtime decides directory listing policy | No enforced equivalent is catalogued for this directive; remove it or track capability `http:autoindex` (specs/nginx-gap.catalog.json). |
-| `charset` | http, http-if, http-location, http-server | the configured response charset translation is not performed | No enforced equivalent is catalogued for this directive; remove it or track capability `http:charset` (specs/nginx-gap.catalog.json). |
-| `charset_types` | http, http-location, http-server | the MIME types eligible for charset translation are not used | No enforced equivalent is catalogued for this directive; remove it or track capability `http:charset_types` (specs/nginx-gap.catalog.json). |
 | `open_file_cache` | http, http-location, http-server | the static-file descriptor cache policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:open_file_cache` (specs/nginx-gap.catalog.json). |
 | `proxy_method` | http, http-location, http-server | the proxied HTTP method override is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_method` (specs/nginx-gap.catalog.json). |
 | `proxy_next_upstream` | http, http-location, http-server | the upstream retry condition list is not applied; the runtime uses its own retry policy | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_next_upstream` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_ciphers` | http, http-location, http-server | the upstream TLS cipher policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_ssl_ciphers` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_protocols` | http, http-location, http-server | the upstream TLS protocol window is not applied from nginx.conf (typed TOML owns upstream TLS) | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_ssl_protocols` (specs/nginx-gap.catalog.json). |
-| `source_charset` | http, http-if, http-location, http-server | the source charset declaration is not used for translation | No enforced equivalent is catalogued for this directive; remove it or track capability `http:source_charset` (specs/nginx-gap.catalog.json). |
 | `ssl_ciphers` | http, http-server | the cipher policy is not applied; the rustls TLS policy is used instead | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ssl_ciphers` (specs/nginx-gap.catalog.json). |
 | `ssl_prefer_server_ciphers` | http, http-server | server cipher preference is not applied | No enforced typed equivalent: typed TOML key `http.server.tls.preferServerCiphers` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_prefer_server_ciphers` (specs/nginx-gap.catalog.json). |
 | `ssl_session_cache` | http, http-server | the nginx TLS session cache sizing/sharing is not applied; the runtime manages TLS sessions | No enforced typed equivalent: typed TOML key `http.server.tls.sessionCache` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_session_cache` (specs/nginx-gap.catalog.json). |
@@ -88,13 +84,10 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_google_perftools_module` (1) — `google_perftools_profiles`
 - `ngx_http_addition_filter_module` (3) — `add_after_body`, `add_before_body`, `addition_types`
 - `ngx_http_auth_request_module` (2) — `auth_request`, `auth_request_set`
-- `ngx_http_autoindex_module` (3) — `autoindex_exact_size`, `autoindex_format`, `autoindex_localtime`
 - `ngx_http_browser_module` (4) — `ancient_browser`, `ancient_browser_value`, `modern_browser`, `modern_browser_value`
-- `ngx_http_charset_filter_module` (1) — `override_charset`
 - `ngx_http_core_module` (16) — `aio`, `aio_write`, `auth_delay`, `client_body_in_file_only`, `client_body_in_single_buffer`, `client_body_temp_path`, `early_hints`, `keepalive_min_timeout`, `limit_except`, `limit_rate`, `limit_rate_after`, `open_file_cache_errors`, `open_file_cache_events`, `post_action`, `satisfy`, `subrequest_output_buffer_size`
 - `ngx_http_dav_module` (4) — `create_full_put_path`, `dav_access`, `dav_methods`, `min_delete_depth`
 - `ngx_http_degradation_module` (2) — `degradation`, `degrade`
-- `ngx_http_empty_gif_module` (1) — `empty_gif`
 - `ngx_http_flv_module` (1) — `flv`
 - `ngx_http_geo_module` (1) — `geo`
 - `ngx_http_grpc_module` (29) — `grpc_bind`, `grpc_buffer_size`, `grpc_connect_timeout`, `grpc_hide_header`, `grpc_ignore_headers`, `grpc_intercept_errors`, `grpc_next_upstream`, `grpc_next_upstream_timeout`, `grpc_next_upstream_tries`, `grpc_pass`, `grpc_pass_header`, `grpc_read_timeout`, `grpc_send_timeout`, `grpc_set_header`, `grpc_socket_keepalive`, `grpc_ssl_certificate`, `grpc_ssl_certificate_cache`, `grpc_ssl_certificate_key`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_name`, `grpc_ssl_password_file`, `grpc_ssl_protocols`, `grpc_ssl_server_name`, `grpc_ssl_session_reuse`, `grpc_ssl_trusted_certificate`, `grpc_ssl_verify`, `grpc_ssl_verify_depth`
@@ -115,7 +108,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_split_clients_module` (1) — `split_clients`
 - `ngx_http_ssi_filter_module` (7) — `ssi`, `ssi_ignore_recycled_buffers`, `ssi_last_modified`, `ssi_min_file_chunk`, `ssi_silent_errors`, `ssi_types`, `ssi_value_length`
 - `ngx_http_ssl_module` (13) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
-- `ngx_http_stub_status_module` (1) — `stub_status`
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
 - `ngx_http_upstream_zone_module` (1) — `zone`
 - `ngx_http_userid_filter_module` (9) — `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`
@@ -388,10 +380,10 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `autoindex` | flag | http, http-location, http-server | accepted, NOT enforced | the autoindex value is accepted but the runtime decides directory listing policy |
-| `autoindex_exact_size` | flag | http, http-location, http-server | rejected (fail closed) |  |
-| `autoindex_format` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `autoindex_localtime` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `autoindex` | flag | http, http-location, http-server | executable | runtime: `virtualHosts[].autoindex / routes[].autoindex (AutoindexConfig.enabled/exactSize/localtime/format)`. entries are bounded to 4096 (403 beyond); listings are streamed chunked without Content-Length like nginx; stub_status/autoindex policies are nginx-plane resources |
+| `autoindex_exact_size` | flag | http, http-location, http-server | executable | runtime: `...autoindex.exactSize (default on)` |
+| `autoindex_format` | 1 | http, http-location, http-server | executable | runtime: `...autoindex.format (html\|json\|jsonp\|xml)`. jsonp callback is validated to [A-Za-z0-9_.]{1,128} and a missing callback downgrades to JSON like nginx |
+| `autoindex_localtime` | flag | http, http-location, http-server | executable | runtime: `...autoindex.localtime (default off, process zone)` |
 
 #### `ngx_http_browser_module` (4 directives)
 
@@ -406,11 +398,11 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `charset` | 1 | http, http-if, http-location, http-server | accepted, NOT enforced | the configured response charset translation is not performed |
+| `charset` | 1 | http, http-if, http-location, http-server | executable | runtime: `virtualHosts[].charset / routes[].charset (CharsetConfig.charset/types/sourceCharset/override)`. charset_map byte transcoding is out of scope and stays accepted-unenforced; a source_charset different from charset would need a codec and is accepted-unenforced |
 | `charset_map` | 2 | http | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
-| `charset_types` | 1+ | http, http-location, http-server | accepted, NOT enforced | the MIME types eligible for charset translation are not used |
-| `override_charset` | flag | http, http-if, http-location, http-server | rejected (fail closed) |  |
-| `source_charset` | 1 | http, http-if, http-location, http-server | accepted, NOT enforced | the source charset declaration is not used for translation |
+| `charset_types` | 1+ | http, http-location, http-server | executable | runtime: `virtualHosts[].charset.types / routes[].charset.types (declared list is seeded with text/html like nginx)` |
+| `override_charset` | flag | http, http-if, http-location, http-server | executable | runtime: `virtualHosts[].charset.override / routes[].charset.override`. an upstream charset that differs from charset needs a charset_map codec and is left untouched (documented, oracle-confirmed) |
+| `source_charset` | 1 | http, http-if, http-location, http-server | executable | runtime: `virtualHosts[].charset.sourceCharset / routes[].charset.sourceCharset`. only header-level behaviour executes; a source charset that differs from charset requires transcoding and stays accepted-unenforced |
 
 #### `ngx_http_copy_filter_module` (1 directives)
 
@@ -445,9 +437,9 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `error_log` | 1+ | http, http-location, http-server | accepted, NOT enforced | the nginx log target/format is ignored; use SDKWork observability |
 | `error_page` | 2+ | http, http-if, http-location, http-server | executable | runtime: `virtualHosts[].errorPages / routes[].errorPages`. targets are a static path or a bounded @named location (one internal redirect); recursive_proxy_intercept chains are bounded to three hops |
 | `etag` | flag | http, http-location, http-server | executable | runtime: `routes[].cachePolicy.etag` |
-| `gzip_disable` | 1+ | http, http-location, http-server | accepted, NOT enforced | the user-agent gzip exclusion list is not applied |
+| `gzip_disable` | 1+ | http, http-location, http-server | executable | runtime: `http/host/route gzip.disable (UA regex list) + gzip.disableMsie6`. PCRE-only constructs outside the bounded Rust regex subset fail closed at materialization |
 | `gzip_http_version` | 1 | http, http-location, http-server | accepted, NOT enforced | the nginx gzip tuning value is ignored; the runtime compression policy applies |
-| `gzip_proxied` | 1+ | http, http-location, http-server | accepted, NOT enforced | the proxied-response gzip eligibility policy is not applied |
+| `gzip_proxied` | 1+ | http, http-location, http-server | executable | runtime: `http/host/route gzip.proxied (Via-gated bitmask, nginx default off)` |
 | `gzip_vary` | flag | http, http-location, http-server | executable | runtime: `http/host/route gzip.vary`. pre-routing generated rejections keep the compression layer Vary policy (documented compression-policy difference) |
 | `if_modified_since` | 1 | http, http-location, http-server | executable | runtime: `routes[].cachePolicy.ifModifiedSince` |
 | `ignore_invalid_headers` | flag | http, http-server | executable | runtime: `virtualHosts[].ignoreInvalidHeaders`. the runtime HTTP boundary always rejects a non-token header name with 400 (stricter than nginx, which drops or forwards depending on the value) |
@@ -528,7 +520,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `empty_gif` | no-args | http-location | rejected (fail closed) |  |
+| `empty_gif` | no-args | http-location | executable | runtime: `resource kind EmptyGif (location handler: canonical 43-byte GIF, image/gif, nginx fixed Last-Modified)` |
 
 #### `ngx_http_fastcgi_module` (49 directives)
 
@@ -1008,7 +1000,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `stub_status` | 1\|no-args | http-location, http-server | rejected (fail closed) |  |
+| `stub_status` | 1\|no-args | http-location, http-server | executable | runtime: `resource kind StubStatus (location handler backed by data-plane metrics, loopback-gated)`. location context only (server context fails closed with a diagnostic); non-loopback clients are refused in addition to the allow/deny gate; counters are process-local so the battery canonicalizes digits |
 
 #### `ngx_http_sub_filter_module` (4 directives)
 

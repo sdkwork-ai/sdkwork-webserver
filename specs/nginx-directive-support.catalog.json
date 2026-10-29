@@ -1615,11 +1615,30 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the autoindex value is accepted but the runtime decides directory listing policy",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:autoindex` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "virtualHosts[].autoindex / routes[].autoindex (AutoindexConfig.enabled/exactSize/localtime/format)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.html"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.dir-redirect"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.index-wins"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.head"
+        }
+      ],
+      "knownDifferences": [
+        "entries are bounded to 4096 (403 beyond); listings are streamed chunked without Content-Length like nginx; stub_status/autoindex policies are nginx-plane resources"
+      ]
     },
     {
       "id": "http:autoindex_exact_size",
@@ -1632,10 +1651,20 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "...autoindex.exactSize (default on)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.html-human-size"
+        }
+      ]
     },
     {
       "id": "http:autoindex_format",
@@ -1648,10 +1677,31 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "...autoindex.format (html|json|jsonp|xml)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.json"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.jsonp"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.jsonp-invalid-callback"
+        }
+      ],
+      "knownDifferences": [
+        "jsonp callback is validated to [A-Za-z0-9_.]{1,128} and a missing callback downgrades to JSON like nginx"
+      ]
     },
     {
       "id": "http:autoindex_localtime",
@@ -1664,10 +1714,20 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "...autoindex.localtime (default off, process zone)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "autoindex.html-localtime"
+        }
+      ]
     },
     {
       "id": "http:break",
@@ -1702,11 +1762,30 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the configured response charset translation is not performed",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:charset` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "virtualHosts[].charset / routes[].charset (CharsetConfig.charset/types/sourceCharset/override)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.default-html"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.default-txt"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.declared-types-seeded-html"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.off-location"
+        }
+      ],
+      "knownDifferences": [
+        "charset_map byte transcoding is out of scope and stays accepted-unenforced; a source_charset different from charset would need a codec and is accepted-unenforced"
+      ]
     },
     {
       "id": "http:charset_map",
@@ -1742,11 +1821,23 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the MIME types eligible for charset translation are not used",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:charset_types` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "virtualHosts[].charset.types / routes[].charset.types (declared list is seeded with text/html like nginx)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.declared-types-css"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.declared-types-json-untouched"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.location-types-css"
+        }
+      ]
     },
     {
       "id": "http:chunked_transfer_encoding",
@@ -2194,10 +2285,26 @@
         "http-location"
       ],
       "grammar": "no-args",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http-location"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "resource kind EmptyGif (location handler: canonical 43-byte GIF, image/gif, nginx fixed Last-Modified)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "empty-gif.get"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "empty-gif.head"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "empty-gif.post-405"
+        }
+      ]
     },
     {
       "id": "http:error_log",
@@ -3795,11 +3902,30 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "medium",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the user-agent gzip exclusion list is not applied",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:gzip_disable` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "http/host/route gzip.disable (UA regex list) + gzip.disableMsie6",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.disable-ua-match"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.disable-ua-no-match"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.disable-msie6"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/gzip_disable.rs",
+          "case": "patterns_match_case_insensitively"
+        }
+      ],
+      "knownDifferences": [
+        "PCRE-only constructs outside the bounded Rust regex subset fail closed at materialization"
+      ]
     },
     {
       "id": "http:gzip_hash",
@@ -3897,11 +4023,27 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "medium",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the proxied-response gzip eligibility policy is not applied",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:gzip_proxied` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "http/host/route gzip.proxied (Via-gated bitmask, nginx default off)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.proxied-default-off"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.proxied-any"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.proxied-expired"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "gzip.proxied-auth"
+        }
+      ]
     },
     {
       "id": "http:gzip_static",
@@ -5994,10 +6136,31 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "virtualHosts[].charset.override / routes[].charset.override",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.proxy-upstream-charset-kept"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.proxy-override-normalizes"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.proxy-override-differing-kept"
+        }
+      ],
+      "knownDifferences": [
+        "an upstream charset that differs from charset needs a charset_map codec and is left untouched (documented, oracle-confirmed)"
+      ]
     },
     {
       "id": "http:perl",
@@ -9220,11 +9383,22 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the source charset declaration is not used for translation",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:source_charset` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "virtualHosts[].charset.sourceCharset / routes[].charset.sourceCharset",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.proxy-override-params-normalized"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "charset.proxy-no-upstream-charset"
+        }
+      ],
+      "knownDifferences": [
+        "only header-level behaviour executes; a source charset that differs from charset requires transcoding and stays accepted-unenforced"
+      ]
     },
     {
       "id": "http:split_clients",
@@ -9995,10 +10169,29 @@
         "http-server"
       ],
       "grammar": "1|no-args",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http-location"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resource kind StubStatus (location handler backed by data-plane metrics, loopback-gated)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "stub-status.get"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "stub-status.head"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "stub-status.post-405"
+        }
+      ],
+      "knownDifferences": [
+        "location context only (server context fails closed with a diagnostic); non-loopback clients are refused in addition to the allow/deny gate; counters are process-local so the battery canonicalizes digits"
+      ]
     },
     {
       "id": "http:sub_filter",

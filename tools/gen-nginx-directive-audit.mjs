@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = 'dc62befe';
+const AUDIT_HEAD = '8f96a59e';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2 and 2b (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a and 3a-2 (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'wave 3 backlog';
 
@@ -89,8 +89,8 @@ const DECISION_MEANING = {
 
 /**
  * Executed waves. Members are now `executable` in the catalog; the generator
- * fails closed if any of them regresses. Wave 2b is the proxy-response-header /
- * routing-policy wave from the same run.
+ * fails closed if any of them regresses. Wave 3a is the charset/gzip-refinement
+ * wave and wave 3a-2 is the autoindex/empty_gif/stub_status wave.
  */
 const COMPLETED_WAVES = [
   {
@@ -133,13 +133,39 @@ const COMPLETED_WAVES = [
       'http:underscores_in_headers',
     ],
   },
+  {
+    key: 'wave 3a',
+    summary:
+      'charset family (header-level behaviour) and gzip refinements (gzip_disable, gzip_proxied)',
+    ids: [
+      'http:charset',
+      'http:charset_types',
+      'http:source_charset',
+      'http:override_charset',
+      'http:gzip_disable',
+      'http:gzip_proxied',
+    ],
+  },
+  {
+    key: 'wave 3a-2',
+    summary:
+      'autoindex family (on/exact_size/localtime/format), empty_gif and stub_status location handlers',
+    ids: [
+      'http:autoindex',
+      'http:autoindex_exact_size',
+      'http:autoindex_localtime',
+      'http:autoindex_format',
+      'http:empty_gif',
+      'http:stub_status',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
 
 /**
- * Remaining behavior-gap backlog after waves 1/2/2b (the categories named by
- * specs/nginx-gap.catalog.json as "still open after wave 2b").
+ * Remaining behavior-gap backlog after waves 1/2/2b/3a/3a-2 (the categories
+ * named by specs/nginx-gap.catalog.json as still open after wave 3a-2).
  *
  * Each id is either accepted-unenforced today (silently ignored) or
  * unsupported-fail-closed (rejected). Rejected entries are planned work here:
@@ -160,51 +186,28 @@ const REMAINING_GAP_CATEGORIES = [
     tests: 'response-framing unit tests plus a framed differential case (chunked/identity and HEAD)',
   },
   {
-    key: 'charset',
-    label: 'charset family',
-    priority: 'high',
-    ids: [
-      'http:charset',
-      'http:charset_types',
-      'http:charset_map',
-      'http:source_charset',
-      'http:override_charset',
-    ],
+    key: 'addition-filter',
+    label: 'body addition filter',
+    priority: 'medium',
+    ids: ['http:add_before_body', 'http:add_after_body', 'http:addition_types'],
     rejectedLoss:
-      'a stock nginx.conf that declares a charset translation fails to activate.',
-    why: 'the response body bytes and the Content-Type charset are client-visible; no runtime policy performs charset translation.',
+      'a stock nginx.conf that injects additional bodies around a response fails to activate.',
+    why: 'the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece.',
     surface:
-      'new data_plane charset filter, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response pipeline), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs, tools/import-nginx-conf.mjs',
-    tests: 'charset translation matrix (source/target pairs, eligible MIME types, override) plus a text/html differential case',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases',
   },
   {
-    key: 'autoindex',
-    label: 'autoindex family',
+    key: 'referer-module',
+    label: 'referer module',
     priority: 'medium',
-    ids: [
-      'http:autoindex',
-      'http:autoindex_exact_size',
-      'http:autoindex_format',
-      'http:autoindex_localtime',
-    ],
+    ids: ['http:valid_referers'],
     rejectedLoss:
-      'a stock nginx.conf that formats directory listings fails to activate.',
-    why: 'the response for a directory URL is client-visible; no runtime policy generates listings.',
+      'a stock nginx.conf that allow-lists Referer values fails to activate.',
+    why: 'the request allow-list decision and the `$invalid_referer` variable are request-visible; nginx normally consumes them through `if`, so this also depends on threading the variable through the supported variable surface.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_file_response.rs + static_files.rs (listing renderer), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'listing render unit tests (size/format/localtime) plus a differential directory case',
-  },
-  {
-    key: 'gzip',
-    label: 'gzip refinements',
-    priority: 'medium',
-    ids: ['http:gzip_disable', 'http:gzip_proxied'],
-    rejectedLoss:
-      'a stock nginx.conf that narrows gzip negotiation fails to activate.',
-    why: 'representation negotiation is client-visible and per-client.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/gzip_predicate.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'user-agent exclusion and proxied-eligibility matrices plus differential gzip cases',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/request_gate.rs + data_plane/handler.rs ($invalid_referer variable), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'referer allow-list matrix plus differential valid_referers cases',
   },
   {
     key: 'http2-tuning',
@@ -408,6 +411,17 @@ const SECURITY_DIFFERENCES = new Map([
   ],
 ]);
 
+/**
+ * Accepted-unenforced rows where the runtime owns the subsystem but the nginx
+ * value is not a pure tuning knob; the rationale needs the explicit boundary.
+ */
+const RUNTIME_OWNED_NOTES = new Map([
+  [
+    'http:charset_map',
+    'runtime-owned: charset/Content-Type translation is owned by the runtime at header level; byte-level transcoding through charset_map is deliberately out of scope, so the directive stays accepted-unenforced with a truthful diagnostic.',
+  ],
+]);
+
 /** Out-of-profile groups: excluded by PRD-nginx-compatibility section 4. */
 const OUT_OF_PROFILE_REASONS = [
   [
@@ -516,7 +530,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_addition_filter_module$/,
-    'the body addition filter is outside the profile.',
+    'the body addition filter is tracked as wave-3 backlog (it needs a bounded subrequest engine); any remaining form is not planned.',
   ],
   [
     /^ngx_http_headers_filter_module$/,
@@ -528,7 +542,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_referer_module$/,
-    'valid_referers is a map-style variable feature; the remaining backlog covers stream maps, not this cluster.',
+    'valid_referers is tracked as wave-3 backlog; the referer hash-table sizing directives are not planned.',
   ],
   [
     /^ngx_stream_limit_conn_module$/,
@@ -1041,6 +1055,91 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'differential: the underscore header reaches the upstream under on, and is dropped under the nginx default off',
   },
+  {
+    id: 'http:charset',
+    evidence: 'tests/nginx/differential-http/battery.py::charset.default-html',
+    claim: 'charset appends the configured charset to eligible response types',
+    proves:
+      'differential: the built-in text types receive the configured charset while application/json, text/css and images are untouched; `charset off` at a location disables it',
+  },
+  {
+    id: 'http:charset_types',
+    evidence: 'tests/nginx/differential-http/battery.py::charset.declared-types-css',
+    claim: 'charset_types replaces the built-in eligibility list and is seeded with text/html',
+    proves:
+      'differential: a declared list applies the charset to CSS and still to text/html, while JSON stays untouched; a location list replaces the server list',
+  },
+  {
+    id: 'http:source_charset',
+    evidence:
+      'tests/nginx/differential-http/battery.py::charset.proxy-override-params-normalized',
+    claim: 'source_charset participates in header-level charset normalisation',
+    proves:
+      'differential: an upstream Content-Type whose charset matches the configured source is normalised in place; a differing source needs transcoding and stays accepted-unenforced',
+  },
+  {
+    id: 'http:override_charset',
+    evidence:
+      'tests/nginx/differential-http/battery.py::charset.proxy-override-normalizes',
+    claim: 'override_charset normalises an equal upstream charset and leaves a differing one',
+    proves:
+      'differential: override on rewrites the upstream charset spelling when it equals the configured charset; a differing upstream charset (which needs charset_map transcoding) is kept',
+  },
+  {
+    id: 'http:gzip_disable',
+    evidence: 'tests/nginx/differential-http/battery.py::gzip.disable-ua-match',
+    claim: 'gzip_disable disables compression for matching user agents',
+    proves:
+      'differential: a case-insensitive UA regex match suppresses gzip while a non-matching UA is compressed; the predefined msie6 selector and its Opera carve-out also match nginx',
+  },
+  {
+    id: 'http:gzip_proxied',
+    evidence: 'tests/nginx/differential-http/battery.py::gzip.proxied-any',
+    claim: 'gzip_proxied gates compression for Via-marked proxied requests',
+    proves:
+      'differential: the nginx default off suppresses compression for proxied traffic, `any` accepts it, and the no-cache/no_last_modified/auth/expired flags match nginx',
+  },
+  {
+    id: 'http:autoindex',
+    evidence: 'tests/nginx/differential-http/battery.py::autoindex.html',
+    claim: 'autoindex generates the nginx HTML directory listing',
+    proves:
+      'differential: byte-exact listing (directories first, hidden skipped, escaping, pinned sizes/mtimes), 301 for a missing trailing slash, HEAD without a body, and 403 when off',
+  },
+  {
+    id: 'http:autoindex_exact_size',
+    evidence: 'tests/nginx/differential-http/battery.py::autoindex.html-human-size',
+    claim: 'autoindex_exact_size off renders nginx rounded K/M/G sizes',
+    proves: 'differential: the listing column matches nginx human-size rounding',
+  },
+  {
+    id: 'http:autoindex_localtime',
+    evidence: 'tests/nginx/differential-http/battery.py::autoindex.html-localtime',
+    claim: 'autoindex_localtime on renders the listing dates in local time',
+    proves:
+      'differential: the listing date column matches nginx with both sides pinned to TZ=UTC',
+  },
+  {
+    id: 'http:autoindex_format',
+    evidence: 'tests/nginx/differential-http/battery.py::autoindex.json',
+    claim: 'autoindex_format renders html, json, jsonp and xml listings',
+    proves:
+      'differential: the JSON shape matches; jsonp validates the callback and downgrades to JSON without one; an invalid callback is 400; XML matches',
+  },
+  {
+    id: 'http:empty_gif',
+    evidence: 'tests/nginx/differential-http/battery.py::empty-gif.get',
+    claim: 'empty_gif serves the canonical 1x1 transparent GIF',
+    proves:
+      'differential: the exact 43-byte image/gif body and fixed Last-Modified; HEAD keeps headers without a body and POST is 405',
+  },
+  {
+    id: 'http:stub_status',
+    evidence: 'tests/nginx/differential-http/battery.py::stub-status.get',
+    claim: 'stub_status serves the nginx status page from runtime metrics',
+    proves:
+      'differential: field shape and plain-text headers match nginx (counters canonicalised as process-local); HEAD and 405 behaviour match; location-only and loopback-gated',
+  },
 ];
 
 /**
@@ -1206,8 +1305,11 @@ function rationaleFor(entry, decision) {
       }
       return text;
     }
-    case 'runtime-owned':
+    case 'runtime-owned': {
+      const note = RUNTIME_OWNED_NOTES.get(entry.id);
+      if (note) return note;
       return `runtime-owned: ${impact || 'the Rust runtime owns this subsystem by design'}.`;
+    }
     case 'security-difference':
       return SECURITY_DIFFERENCES.get(entry.id) ?? fail(`missing security-difference rationale for ${entry.id}`);
     case 'behavior-gap': {
@@ -1325,16 +1427,17 @@ function renderHeader(inventory, catalog) {
   implemented unless the catalog says \`executable\` and the evidence reference was
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
-- **This snapshot is the uncommitted worktree refresh after Waves 1, 2 and 2b.** The
-  code, tests, generated operator matrix and the re-synced directive catalog were
-  produced by those waves and are not committed at HEAD \`${AUDIT_HEAD}\`; the audit is
-  regenerated against that post-wave catalog (evidence revision
-  ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type, gzip_static,
-  gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges, chain-file
-  consumption, typed TOML maps) and Wave 2b (proxy response-header/cookie policy,
-  internal locations, merge_slashes, request-header acceptance) are recorded as
-  completed in section 3, and every one of them is asserted executable by
-  \`--verify-evidence\`.
+- **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a and
+  3a-2.** The code, tests, generated operator matrix and the re-synced directive
+  catalog were produced by those waves and are not committed at HEAD
+  \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
+  revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
+  gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
+  chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
+  policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
+  (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
+  (autoindex family, empty_gif, stub_status) are recorded as completed in section 3,
+  and every one of them is asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -1439,7 +1542,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2 and 2b landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a and 3a-2 landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -1554,7 +1657,9 @@ The catalog now classifies every directive below as \`executable\` with committe
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
 construction, limit status codes, range ceilings and typed-TOML map/chain materialization;
 Wave 2b closed the proxy response-header policy, internal locations, slash merging and
-request-header acceptance.
+request-header acceptance; Wave 3a added the header-level charset family and the gzip
+user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plus the
+empty_gif and stub_status location handlers.
 
 ${completedTable}
 ${completedRows}
@@ -1569,22 +1674,29 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
     'behavior-gap',
   )} directives)
 
-These are the categories \`specs/nginx-gap.catalog.json\` lists as "still open after
-wave 2b". An accepted-unenforced row is silently ignored today; a rejected row fails
-the configuration load. Both are real migration gaps, so every row carries the
+These are the categories \`specs/nginx-gap.catalog.json\` lists as still open after
+Wave 3a-2 (plus the addition filter and referer module the same wave note names as
+remaining in this area). An accepted-unenforced row is silently ignored today; a
+rejected row fails the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
 
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest operator payoff is the stream module gaps and the
-charset family (both are whole response/transport behaviours), followed by the HTTP/2
-tuning set (configurations that declare HTTP/2 limits are rejected today even though
-HTTP/2 itself executes) and the autoindex family. \`proxy_method\`,
-\`chunked_transfer_encoding\`, the gzip refinements and the static open-file cache are
-smaller, bounded changes. The OCSP/trust-chain rows are limited by the rustls capability
-gap recorded as \`tls.ocsp-stapling: missing\` in the gap catalog.
+Within the backlog, the largest operator payoff is the stream module gaps (a whole
+transport plane), followed by the HTTP/2 tuning set (configurations that declare HTTP/2
+limits are rejected today even though HTTP/2 itself executes). The body addition filter
+and the referer module are medium-sized features that pull in a bounded subrequest engine
+and \`$invalid_referer\` variable threading respectively. \`proxy_method\`,
+\`chunked_transfer_encoding\` and the static open-file cache are smaller, bounded
+changes. The OCSP/trust-chain rows are limited by the rustls capability gap recorded as
+\`tls.ocsp-stapling: missing\` in the gap catalog.
+
+Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
+truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
+scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
+compression layer owns the level).
 `;
 }
 
@@ -1627,7 +1739,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1815,9 +1927,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-The first audit snapshot recorded Waves 1/2 as in progress and Wave 2b as not started.
-This refresh was regenerated after the Lead re-synced the catalog; the completed-wave
-rows moved as follows:
+This refresh was regenerated after Waves 3a/3a-2 landed and the Lead re-synced the
+catalog. The table lists the cumulative completed-wave rows and their current state:
 
 | Directive | Wave | Current state |
 | --- | --- | --- |

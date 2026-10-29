@@ -695,6 +695,8 @@ mod tests {
             merge_slashes: true,
             underscores_in_headers: false,
             ignore_invalid_headers: true,
+            charset: None,
+            autoindex: None,
         }
     }
 
