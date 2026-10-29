@@ -5946,6 +5946,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-webserver-upstream-protocol"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "sdkwork-webserver-website-delivery-edge-runtime"
 version = "0.1.0"
 dependencies = [

@@ -29,6 +29,7 @@ members = [
   "crates/sdkwork-webserver-tunnel-transport",
   "crates/sdkwork-webserver-tunnel",
   "crates/sdkwork-webserver-cluster",
+  "crates/sdkwork-webserver-upstream-protocol",
 ]
 exclude = [
   "sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-rust/generated/server-openapi",
