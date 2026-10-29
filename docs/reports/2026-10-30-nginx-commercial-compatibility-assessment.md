@@ -16,10 +16,10 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **116** | 可承诺 |
+| executable（真实执行且有测试证据） | 79 | **175** | 可承诺 |
 | accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **228** | 安全失败，不静默近似 |
-| excluded from profile（PRD §4 明确排除） | 229 | **229** | 不承诺；实现需独立协议/安全立项 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **334** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
+| excluded from profile（明确排除） | 229 | **64** | 仅 mail proxy 51 / GeoIP 8 / Perl 4 / 动态模块 1 |
 | **合计** | 744 | **744** | |
 
 判定：
@@ -100,7 +100,8 @@
 | --- | --- | --- |
 | 进程内全表面行为回归 | `python3 tests/nginx/full-surface/probe.py` | **76/76** |
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
-| 宽面 HTTP 差分（本轮从 87 增至 237 例） | `node tools/run-nginx-differential-http.mjs` | **237/237**，0 非预期（已知差异均有规范依据） |
+| 宽面 HTTP 差分（87→259 例） | `node tools/run-nginx-differential-http.mjs` | **259/259**，0 非预期 |
+| 上游协议差分（FastCGI/uWSGI/SCGI/memcached vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **26/26** 逐字节一致 |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |
@@ -133,7 +134,18 @@
 | nginx 在 range 生成的 416 上跑两次 header filter | nginx 实现细节；运行时按最终状态应用一次，RFC 9110 §5.3 允许合并 |
 | 运行时 HTTP 边界始终 400 拒绝非 token 头名 | 比 nginx 的丢弃/转发更严格，安全强化 |
 
-## 4.1 剩余 29 条行为缺口（审计台账 §3.2，全部有明确架构阻塞，不是静默忽略）
+### Wave 3c / 5 / 4a：上游协议、变量模块（56+3 条）
+
+| 模块 | 轮后行为 | 证据 |
+| --- | --- | --- |
+| FastCGI | `fastcgi_pass/param/index/split_path_info/keep_conn/buffering/timeouts/hide/pass/intercept_errors/next_upstream*` 全链路，参数管道与 nginx 一致 | differential-protocols 12 例逐字节一致 |
+| uWSGI / SCGI | `uwsgi_pass/scgi_pass` + param/timeout/hide/pass/intercept/retries；SCGI netstring | 8 例逐字节一致 |
+| memcached | 有界 `set $memcached_key` + `memcached_pass` 文本 GET/HEAD、命中/未命中/502/504、Accept-Ranges/CL 对齐 | 6 例逐字节一致 |
+| referer / geo / split_clients | `valid_referers`+`$invalid_referer`；geo 最长前缀/范围；split_clients nginx MurmurHash2 分桶 | differential-http 22 例 |
+
+> 说明：协议模块中原先被排除的 cache/buffer/store/ssl 子族、unix socket、变量目标等未实现形式现为**带定位诊断的失败关闭**（行为缺口清单），不再是"档位外"。
+
+## 4.1 剩余行为缺口（审计台账 §3.2，全部有明确架构阻塞，不是静默忽略）
 
 | 分类 | 数量 | 指令 | 阻塞与结论 |
 | --- | ---: | --- | --- |
