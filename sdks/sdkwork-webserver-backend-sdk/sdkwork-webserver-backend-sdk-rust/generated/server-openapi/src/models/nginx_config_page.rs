@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{NginxConfigResponse};
+use crate::models::NginxConfigResponse;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct NginxConfigPage {

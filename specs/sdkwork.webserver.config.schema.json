@@ -25,6 +25,30 @@
     "nginx": {
       "$ref": "#/$defs/nginx"
     },
+    "maps": {
+      "description": "nginx map variables declared at http context.",
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/map"
+      },
+      "default": []
+    },
+    "mimeTypes": {
+      "description": "nginx http-level types table; replaces the built-in table when present.",
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/mimeType"
+      }
+    },
+    "defaultType": {
+      "description": "nginx default_type: content type for a static representation whose extension is unknown.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[^\\s/]+/[^\\s/]+$"
+    },
     "gzip": {
       "$ref": "#/$defs/gzip"
     },
@@ -193,7 +217,7 @@
     "gzip": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Response gzip policy from http.gzip / gzipTypes / gzipMinLength.",
+      "description": "Response gzip policy from http.gzip / gzipTypes / gzipMinLength / gzipVary / gzipStatic.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -212,6 +236,103 @@
           "minimum": 0,
           "maximum": 104857600,
           "default": 20
+        },
+        "vary": {
+          "description": "nginx gzip_vary: declare Vary: Accept-Encoding whenever the policy selects a representation.",
+          "type": "boolean",
+          "default": true
+        },
+        "staticFiles": {
+          "description": "nginx gzip_static: serve a precompressed <path>.gz sidecar.",
+          "enum": [
+            "off",
+            "on",
+            "always"
+          ],
+          "default": "off"
+        }
+      }
+    },
+    "mapEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "result",
+        "entries"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^\\$[A-Za-z0-9_]+$"
+        },
+        "result": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^\\$[A-Za-z0-9_]+$"
+        },
+        "hostnames": {
+          "type": "boolean",
+          "default": false
+        },
+        "default": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/mapEntry"
+          }
+        }
+      }
+    },
+    "mimeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mime",
+        "extensions"
+      ],
+      "properties": {
+        "mime": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^\\s/]+/[^\\s/]+$"
+        },
+        "extensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_+-]+(\\.[A-Za-z0-9_+-]+)*$"
+          }
         }
       }
     },
@@ -855,6 +976,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 4096
+        },
+        "chainFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
         }
       }
     },
@@ -1077,6 +1203,9 @@
           "description": "nginx proxy_intercept_errors on: proxied responses whose status has an error_page mapping are replaced by the mapped page.",
           "type": "boolean",
           "default": false
+        },
+        "proxyResponsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
         }
       },
       "oneOf": [
@@ -1091,6 +1220,25 @@
           ]
         }
       ]
+    },
+    "redirectPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx redirect construction policy (absolute_redirect / port_in_redirect / server_name_in_redirect); nginx defaults are absolute Location, port included off the scheme default, request Host as the authority.",
+      "properties": {
+        "absoluteRedirect": {
+          "type": "boolean",
+          "default": true
+        },
+        "portInRedirect": {
+          "type": "boolean",
+          "default": true
+        },
+        "serverNameInRedirect": {
+          "type": "boolean",
+          "default": false
+        }
+      }
     },
     "redirectResource": {
       "type": "object",
@@ -1148,6 +1296,11 @@
           "minLength": 1,
           "maxLength": 255,
           "default": "text/plain; charset=utf-8"
+        },
+        "contentTypeFromUri": {
+          "description": "Derive the response content type from the request URI extension through the resolved types table (nginx return-body semantics).",
+          "type": "boolean",
+          "default": false
         },
         "body": {
           "type": "string",
@@ -1643,6 +1796,23 @@
         "routes"
       ],
       "properties": {
+        "redirectPolicy": {
+          "$ref": "#/$defs/redirectPolicy"
+        },
+        "limitReqStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "limitConnStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "maxRanges": {
+          "type": "integer",
+          "minimum": 0
+        },
         "id": {
           "$ref": "#/$defs/id"
         },
@@ -1686,6 +1856,28 @@
             }
           ]
         },
+        "mimeTypes": {
+          "description": "Server-level nginx types block; replaces the inherited table.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/mimeType"
+              }
+            }
+          ]
+        },
+        "defaultType": {
+          "description": "Server-level nginx default_type; absent inherits the http-level value.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^\\s/]+/[^\\s/]+$"
+        },
         "errorPages": {
           "description": "nginx error_page mappings declared at http/server level for this host, in declaration order (later entries override earlier codes).",
           "type": "array",
@@ -1709,6 +1901,21 @@
               "$ref": "#/$defs/cachePolicy"
             }
           ]
+        },
+        "mergeSlashes": {
+          "description": "nginx merge_slashes (default on): when off, repeated adjacent slashes stay in the canonical request path (exact-location matching, $uri, static/proxy path identity).",
+          "type": "boolean",
+          "default": true
+        },
+        "underscoresInHeaders": {
+          "description": "nginx underscores_in_headers resolved for this host (nginx default off: request header names containing `_` are dropped at the request boundary). The nginx materializer always emits the resolved value; the schema default is true so typed configs keep the historical permissive behavior.",
+          "type": "boolean",
+          "default": true
+        },
+        "ignoreInvalidHeaders": {
+          "description": "nginx ignore_invalid_headers (default on). The runtime always rejects non-token header names at its HTTP boundary with 400 (stricter, documented divergence).",
+          "type": "boolean",
+          "default": true
         }
       }
     },
@@ -1780,6 +1987,23 @@
         "resourceRef"
       ],
       "properties": {
+        "redirectPolicy": {
+          "$ref": "#/$defs/redirectPolicy"
+        },
+        "limitReqStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "limitConnStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "maxRanges": {
+          "type": "integer",
+          "minimum": 0
+        },
         "id": {
           "$ref": "#/$defs/id"
         },
@@ -1837,6 +2061,28 @@
             }
           ]
         },
+        "mimeTypes": {
+          "description": "Location-level nginx types block; replaces the inherited table.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/mimeType"
+              }
+            }
+          ]
+        },
+        "defaultType": {
+          "description": "Location-level nginx default_type; absent inherits the host value.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^\\s/]+/[^\\s/]+$"
+        },
         "errorPages": {
           "description": "Location-level nginx error_page mappings; non-empty replaces the host-level set for this route.",
           "type": "array",
@@ -1864,6 +2110,11 @@
               "$ref": "#/$defs/cachePolicy"
             }
           ]
+        },
+        "internal": {
+          "description": "nginx internal: the location is reachable only through an internal redirect (rewrite last, error_page, try_files named target); an external request is answered with nginx's generated 404.",
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -2761,6 +3012,112 @@
           ],
           "minimum": 200,
           "maximum": 599
+        }
+      }
+    },
+    "proxyRewriteRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "to": {
+          "type": "string",
+          "maxLength": 2048
+        }
+      }
+    },
+    "proxyRedirectPolicy": {
+      "description": "nginx proxy_redirect policy: off, default, or ordered literal <from> <to> rules (regular-expression and variable forms fail closed at materialization).",
+      "oneOf": [
+        {
+          "const": "off"
+        },
+        {
+          "const": "default"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules"
+          ],
+          "properties": {
+            "rules": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/proxyRewriteRule"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "cookieRewritePolicy": {
+      "description": "nginx proxy_cookie_path / proxy_cookie_domain policy: off or ordered <from> <to> rules.",
+      "oneOf": [
+        {
+          "const": "off"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules"
+          ],
+          "properties": {
+            "rules": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/proxyRewriteRule"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "proxyResponsePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx proxy response-header policy resolved for one proxy resource: proxy_hide_header / proxy_pass_header (added to / removed from nginx's default-hidden upstream header set), proxy_redirect, proxy_cookie_path and proxy_cookie_domain.",
+      "properties": {
+        "hideHeaders": {
+          "description": "proxy_hide_header entries, added to the default-hidden set (Date, Server, X-Pad, X-Accel-*).",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "passHeaders": {
+          "description": "proxy_pass_header entries, removed from the hidden set (pass wins over hide).",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "redirect": {
+          "$ref": "#/$defs/proxyRedirectPolicy"
+        },
+        "cookiePath": {
+          "$ref": "#/$defs/cookieRewritePolicy"
+        },
+        "cookieDomain": {
+          "$ref": "#/$defs/cookieRewritePolicy"
         }
       }
     }

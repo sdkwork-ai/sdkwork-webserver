@@ -143,6 +143,12 @@ export const MAIN_STRUCTURAL = new Set(['http', 'stream']);
  */
 export const PARSER_EXECUTED = new Map([
   ['include', 'crates/sdkwork-webserver-core/src/nginx/parser.rs::expand_includes'],
+  // `map` is materialized by the context pre-scan in `materialize_nginx_app`
+  // (parse_map + Mapper::materialize_map) before the directive loop runs, so
+  // the loop's `"map" => {}` arm is not evidence that the value is dropped.
+  // Keyed by catalog id, not name: the stream `map` directive is still
+  // accepted-unenforced because the stream plane evaluates no variables.
+  ['http:map', 'crates/sdkwork-webserver-core/src/nginx/mapping.rs::materialize_nginx_app map pre-scan'],
 ]);
 
 /**
@@ -352,6 +358,89 @@ export function deriveUnenforcedTomlKeys() {
 }
 
 /**
+ * Derive the authoritative typed-TOML enforcement facts from `server_toml.rs`:
+ *
+ *  - `acceptedIgnored`: the full `ACCEPTED_IGNORED` allow-list (never read by a
+ *    materializer consumer; the const exists so stock configs load);
+ *  - `behaviorKeys`: the curated `UNENFORCED_BEHAVIOR_TOML_KEYS` behaviour
+ *    subset with the operator consequence;
+ *  - `supportedKeys`: keys listed in a `check_supported_keys` context list or a
+ *    `*_KEYS` const (validation surface, not proof of consumption);
+ *  - `consumedKeys`: keys actually read by the typed-TOML materializer in
+ *    non-test code (`get`/`get_mut`/`remove`, `as_*` helper reads, bracket
+ *    indexing, and dynamic key-pair loops such as allow/deny).
+ *
+ * A typed key is enforced only when it is not in the accepted-ignored or
+ * behaviour sets and the materializer actually consumes it. A key that only
+ * appears in a supported-context list is NOT enforced (that was the root cause
+ * of the migration-action over-claims).
+ */
+export function deriveTypedTomlFacts() {
+  const source = fs.readFileSync(SERVER_TOML_SOURCE_PATH, 'utf8');
+  const testStart = source.indexOf('#[cfg(test)]');
+  const production = testStart >= 0 ? source.slice(0, testStart) : source;
+  const acceptedMatch = /const ACCEPTED_IGNORED: &\[&str\] = &\[([\s\S]*?)\];/u.exec(production);
+  if (!acceptedMatch) throw new Error('unable to locate ACCEPTED_IGNORED in server_toml.rs');
+  const acceptedIgnored = new Set(
+    [...acceptedMatch[1].matchAll(/"([^"]+)"/gu)].map((item) => item[1]),
+  );
+  const behaviorKeys = deriveUnenforcedTomlKeys();
+  const supportedKeys = new Set();
+  for (const match of source.matchAll(/const ([A-Z_]+_KEYS): &\[&str\] = &\[([\s\S]*?)\];/gu)) {
+    for (const item of match[2].matchAll(/"([^"]+)"/gu)) supportedKeys.add(item[1]);
+  }
+  for (const match of source.matchAll(/check_supported_keys\([^;]*?&\[([\s\S]*?)\]\)/gu)) {
+    for (const item of match[1].matchAll(/"([^"]+)"/gu)) supportedKeys.add(item[1]);
+  }
+  const consumedKeys = new Set();
+  for (const match of production.matchAll(/\.(?:get|get_mut|remove)\("([^"]+)"/gu)) consumedKeys.add(match[1]);
+  for (const match of production.matchAll(/as_(?:array|object|str|u64|bool)\([^;\n]*?"([^"]+)"\s*\)/gu)) {
+    consumedKeys.add(match[1]);
+  }
+  for (const match of production.matchAll(/\["([^"]+)"\]/gu)) consumedKeys.add(match[1]);
+  // Dynamic key loops, e.g. `for (action, key) in [("allow", "allow"), ("deny", "deny")]`.
+  for (const match of production.matchAll(/for\s*\([^)]*\)\s*in\s*\[([^\]]*)\]/gu)) {
+    for (const item of match[1].matchAll(/"([^"]+)"/gu)) consumedKeys.add(item[1]);
+  }
+  return { acceptedIgnored, behaviorKeys, supportedKeys, consumedKeys };
+}
+
+/** Authoritative enforcement verdict for one typed TOML key. */
+export function typedKeyVerdict(key, facts) {
+  if (facts.behaviorKeys.some((entry) => entry.key === key)) {
+    return { enforced: false, reason: 'documented unenforced behavior key' };
+  }
+  if (facts.acceptedIgnored.has(key)) {
+    return { enforced: false, reason: 'accepted-but-ignored by the typed TOML materializer' };
+  }
+  if (!facts.consumedKeys.has(key)) {
+    return { enforced: false, reason: 'not consumed by the typed TOML materializer' };
+  }
+  return { enforced: true, reason: 'consumed by the typed TOML materializer' };
+}
+
+/**
+ * The complete unenforced typed-key set the catalog must publish: the curated
+ * behaviour subset plus every importer-mapped key the authoritative verdict
+ * rejects. Sorted, de-duplicated by key.
+ */
+export function deriveUnenforcedTypedKeys(catalog, facts) {
+  const byKey = new Map();
+  for (const entry of facts.behaviorKeys) {
+    byKey.set(entry.key, { key: entry.key, reason: 'documented unenforced behavior key', consequence: entry.consequence });
+  }
+  for (const entry of catalog.directives) {
+    if (!entry.importer?.mapped) continue;
+    const key = entry.importer.tomlPath?.split('.').pop();
+    if (!key) continue;
+    const verdict = typedKeyVerdict(key, facts);
+    if (verdict.enforced || byKey.has(key)) continue;
+    byKey.set(key, { key, reason: verdict.reason });
+  }
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/**
  * Derive the directive recognition facts from the implementation sources.
  *
  * `contexts[context]` contains four sets:
@@ -433,7 +522,7 @@ export function recommendClassification(entry, implementation) {
   // events-context directive is accepted without being enforced.
   if (nginxContexts.has('events')) acceptedContexts.add('events');
   let classification;
-  if (PARSER_EXECUTED.has(entry.name)) {
+  if (PARSER_EXECUTED.has(entry.name) || PARSER_EXECUTED.has(entry.id)) {
     return {
       classification: 'executable',
       supportedContexts: [...nginxContexts].sort(),
@@ -494,7 +583,7 @@ export function evidenceProblems(catalog, readSource = loadEvidenceSources()) {
         continue;
       }
       if (reference.test) {
-        if (!new RegExp(`fn\\s+${reference.test}\\b`, 'u').test(source)
+        if (!new RegExp(`(?:fn|def)\\s+${reference.test}\\b`, 'u').test(source)
           && !source.includes(reference.test)) {
           problems.push(`${entry.id}: evidence test not found in ${reference.file}: ${reference.test}`);
           continue;
@@ -639,11 +728,19 @@ export function migrationActionFor(entry) {
   if (entry.classification !== 'accepted-unenforced') return undefined;
   const importer = entry.importer;
   if (importer?.mapped && importer.tomlEnforced) {
+    if (importer.tomlSemantics) {
+      return `Import renders typed key \`${importer.tomlPath}\`, but the runtime consumes it as `
+        + `${importer.tomlSemantics}; treat it as an intentional semantic difference, not an equivalent.`;
+    }
     return `Import renders the enforced typed key \`${importer.tomlPath}\`; verify it with \`--write-toml\`.`;
   }
   if (importer?.mapped) {
-    return `No enforced equivalent: typed TOML key \`${importer.tomlPath}\` is also accepted-but-unenforced; `
-      + `remove the directive or track capability \`${entry.id ?? `${entry.group}:${entry.name}`}\` (specs/nginx-gap.catalog.json).`;
+    const detail = importer.tomlSemantics
+      ? `is consumed as ${importer.tomlSemantics}, not as this directive`
+      : 'is accepted-but-ignored by the runtime';
+    return `No enforced typed equivalent: typed TOML key \`${importer.tomlPath}\` ${detail}; `
+      + `see the migration risk list, remove the directive, or track capability `
+      + `\`${entry.id ?? `${entry.group}:${entry.name}`}\` (specs/nginx-gap.catalog.json).`;
   }
   return `No enforced equivalent is catalogued for this directive; remove it or track capability `
     + `\`${entry.id ?? `${entry.group}:${entry.name}`}\` (specs/nginx-gap.catalog.json).`;
@@ -758,23 +855,23 @@ export function syncCatalog(catalog, inventory, implementation, cliHandled) {
     digest: inventory.digest,
     directiveCount: inventory.directiveCount,
   };
-  const derivedUnenforced = deriveUnenforcedTomlKeys();
-  const unenforcedKeys = new Set(derivedUnenforced.map((entry) => entry.key));
+  const facts = deriveTypedTomlFacts();
+  const derivedBehavior = deriveUnenforcedTomlKeys();
+  const derivedUnenforced = deriveUnenforcedTypedKeys(catalog, facts);
   catalog.typedToml = {
     ...catalog.typedToml,
-    source: 'crates/sdkwork-webserver-core/src/config/server_toml.rs::UNENFORCED_BEHAVIOR_TOML_KEYS',
-    unenforcedBehaviorKeys: derivedUnenforced,
+    source: 'crates/sdkwork-webserver-core/src/config/server_toml.rs::UNENFORCED_BEHAVIOR_TOML_KEYS '
+      + '+ ACCEPTED_IGNORED + materializer consumption',
+    unenforcedBehaviorKeys: derivedBehavior,
+    unenforcedKeys: derivedUnenforced,
   };
   for (const entry of [...catalog.directives, ...catalog.extensions]) {
-    if (entry.importer?.mapped) {
-      const key = entry.importer.tomlPath ? entry.importer.tomlPath.split('.').pop() : null;
-      const enforced = key ? !unenforcedKeys.has(key) : false;
-      if (entry.importer.tomlKey !== key || entry.importer.tomlEnforced !== enforced) {
-        entry.importer.tomlKey = key;
-        entry.importer.tomlEnforced = enforced;
-        entry.reviewRequired = true;
-        problems.push(`${entry.id}: typed TOML key enforcement changed; review required`);
-      }
+    if (!entry.importer?.mapped) continue;
+    const key = entry.importer.tomlPath ? entry.importer.tomlPath.split('.').pop() : null;
+    const verdict = key ? typedKeyVerdict(key, facts) : { enforced: false, reason: 'missing tomlPath key' };
+    if (entry.importer.tomlKey !== key || entry.importer.tomlEnforced !== verdict.enforced) {
+      entry.importer.tomlKey = key;
+      entry.importer.tomlEnforced = verdict.enforced;
     }
   }
   for (const entry of catalog.directives) {
@@ -897,6 +994,30 @@ export function renderMatrix(catalog, inventory) {
     }
   }
   lines.push('');
+  lines.push('### Typed TOML keys that are accepted but NOT enforced');
+  lines.push('');
+  lines.push('These typed TOML keys are accepted so a stock configuration can be loaded, but the TOML');
+  lines.push('materializer does not apply them. A migration that renders one of these keys would turn one');
+  lines.push('silent no-op into another, so `tools/import-nginx-conf.mjs` does not emit them and reports the');
+  lines.push('directive under `accepted` instead. Derived from `server_toml.rs` (ACCEPTED_IGNORED +');
+  lines.push('UNENFORCED_BEHAVIOR_TOML_KEYS + actual materializer reads).');
+  lines.push('');
+  lines.push('| Typed TOML key | Why it has no effect |');
+  lines.push('| --- | --- |');
+  for (const entry of catalog.typedToml?.unenforcedKeys ?? []) {
+    const consequence = entry.consequence ? `${entry.reason} — ${entry.consequence}` : entry.reason;
+    lines.push(`| \`${entry.key}\` | ${escapeCell(consequence)} |`);
+  }
+  lines.push('');
+  const semantic = catalog.directives.filter((entry) => entry.importer?.tomlSemantics);
+  if (semantic.length > 0) {
+    lines.push('### Typed TOML mappings with a different semantic');
+    lines.push('');
+    for (const entry of semantic) {
+      lines.push(`- \`${entry.name}\` → \`${entry.importer.tomlPath}\`: ${escapeCell(entry.importer.tomlSemantics)}.`);
+    }
+    lines.push('');
+  }
   lines.push('### Extraction, rewrite, buffer, and retry limits');
   lines.push('');
   lines.push('Nginx tuning directives listed as accepted-but-unenforced do not change runtime limits: the');
@@ -1247,19 +1368,64 @@ http {
   assert.deepEqual(problems, []);
 });
 
-test('catalog typed-TOML unenforced set matches server_toml.rs (check i)', () => {
+test('catalog typed-TOML enforcement is authoritative (check i)', () => {
   const catalog = loadCatalog();
   assert.ok(catalog.typedToml, 'catalog must document typed TOML enforcement');
-  const derived = deriveUnenforcedTomlKeys();
-  assert.deepEqual(catalog.typedToml.unenforcedBehaviorKeys, derived,
+  const facts = deriveTypedTomlFacts();
+  const derivedBehavior = deriveUnenforcedTomlKeys();
+  assert.deepEqual(catalog.typedToml.unenforcedBehaviorKeys, derivedBehavior,
     'catalog.typedToml.unenforcedBehaviorKeys drift from server_toml.rs::UNENFORCED_BEHAVIOR_TOML_KEYS');
-  const unenforced = new Set(derived.map((entry) => entry.key));
+  const derivedUnenforced = deriveUnenforcedTypedKeys(catalog, facts);
+  assert.deepEqual(catalog.typedToml.unenforcedKeys, derivedUnenforced,
+    'catalog.typedToml.unenforcedKeys drift from server_toml.rs enforcement facts '
+      + '(ACCEPTED_IGNORED + supported lists + actual materializer reads)');
+  const unenforced = new Map(derivedUnenforced.map((entry) => [entry.key, entry]));
   for (const entry of catalog.directives) {
     if (!entry.importer?.mapped) continue;
     const key = entry.importer.tomlPath?.split('.').pop();
     assert.ok(key, `${entry.id}: importer.mapped needs a tomlPath`);
-    assert.equal(entry.importer.tomlEnforced, !unenforced.has(key),
-      `${entry.id}: importer.tomlEnforced must reflect whether the typed key is enforced`);
+    const verdict = typedKeyVerdict(key, facts);
+    assert.equal(entry.importer.tomlEnforced, verdict.enforced,
+      `${entry.id}: importer.tomlEnforced must equal the authoritative verdict for \`${key}\` (${verdict.reason})`);
+    if (!verdict.enforced) {
+      assert.ok(!/enforced typed key/u.test(entry.migrationAction ?? ''),
+        `${entry.id}: migrationAction still claims an enforced typed key for unenforced \`${key}\``);
+    }
+    if (entry.classification === 'executable') {
+      assert.equal(entry.importer.tomlEnforced, true,
+        `${entry.id}: an executable nginx directive may not map to an unenforced typed key`);
+    }
+    if (entry.importer.tomlEnforced && unenforced.has(key)) {
+      assert.fail(`${entry.id}: \`${key}\` is published as unenforced but importer.tomlEnforced is true`);
+    }
+  }
+});
+
+test('executable evidence citations resolve against the audit contract (check j)', () => {
+  const catalog = loadCatalog();
+  const problems = evidenceProblems(catalog);
+  assert.deepEqual(problems, [], 'every executable evidence citation must resolve');
+  const facts = deriveTypedTomlFacts();
+  for (const entry of catalog.directives) {
+    if (entry.classification === 'executable') {
+      assert.ok(Array.isArray(entry.evidence) && entry.evidence.length > 0,
+        `${entry.id}: executable entry needs evidence`);
+      assert.ok(entry.evidence.some((reference) => reference.test || reference.case),
+        `${entry.id}: evidence must cite a test function or fixture case id`);
+      for (const reference of entry.evidence) {
+        assert.ok(reference.file.startsWith('crates/') || reference.file.startsWith('tests/'),
+          `${entry.id}: evidence must be a committed test/fixture path, got ${reference.file}`);
+        assert.ok(!reference.file.startsWith('specs/') && !reference.file.startsWith('docs/'),
+          `${entry.id}: evidence must not cite generated contract/documentation files`);
+      }
+    }
+    if (entry.classification === 'accepted-unenforced'
+      && /enforced typed key/u.test(entry.migrationAction ?? '')) {
+      const key = entry.importer?.tomlPath?.split('.').pop();
+      assert.ok(key, `${entry.id}: an "enforced typed key" action needs an importer.tomlPath`);
+      assert.equal(typedKeyVerdict(key, facts).enforced, true,
+        `${entry.id}: migrationAction names typed key \`${key}\`, which the materializer does not consume`);
+    }
   }
 });
 

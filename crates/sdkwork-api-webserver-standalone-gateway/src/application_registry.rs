@@ -683,9 +683,18 @@ mod tests {
             routes: Vec::new(),
             security_headers: None,
             compression: None,
+            mime_types: None,
+            default_type: None,
             error_pages: Vec::new(),
             recursive_error_pages: false,
             cache_policy: None,
+            redirect_policy: None,
+            limit_req_status: None,
+            limit_conn_status: None,
+            max_ranges: None,
+            merge_slashes: true,
+            underscores_in_headers: false,
+            ignore_invalid_headers: true,
         }
     }
 
@@ -699,6 +708,9 @@ mod tests {
             kind: "test".to_owned(),
             app_key: "test".to_owned(),
             nginx: Default::default(),
+            maps: Vec::new(),
+            mime_types: None,
+            default_type: None,
             gzip: Default::default(),
             limit_req_zones: Vec::new(),
             limit_conn_zones: Vec::new(),

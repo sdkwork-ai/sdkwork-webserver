@@ -117,6 +117,23 @@ pub fn apply_rewrites(
     query: Option<&str>,
     rules: &[RewriteRuleConfig],
 ) -> Result<RewriteOutcome, RewriteApplyError> {
+    apply_rewrites_with(path, query, rules, &|template| template.to_owned())
+}
+
+/// [`apply_rewrites`] with request-variable expansion of the replacement.
+///
+/// nginx compiles a `rewrite` replacement as a script: `$1..$9` are capture
+/// references and every other `$variable` is resolved against the request.
+/// The runtime already executes the capture part; `expand` resolves the
+/// remaining vocabulary (nginx `map` result variables) after the captures have
+/// been substituted, exactly like a compiled nginx script evaluates the two
+/// kinds of reference in source order.
+pub fn apply_rewrites_with(
+    path: &str,
+    query: Option<&str>,
+    rules: &[RewriteRuleConfig],
+    expand: &dyn Fn(&str) -> String,
+) -> Result<RewriteOutcome, RewriteApplyError> {
     let uri = match query {
         Some(q) if !q.is_empty() => format!("{path}?{q}"),
         _ => path.to_owned(),
@@ -133,6 +150,7 @@ pub fn apply_rewrites(
             replacement = replacement.replace(&format!("${index}"), value);
             replacement = replacement.replace(&format!("\\{index}"), value);
         }
+        replacement = expand(&replacement);
         match rule.flag {
             RewriteFlag::Redirect => {
                 return Ok(RewriteOutcome::Redirect {

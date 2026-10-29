@@ -84,7 +84,7 @@
       "probe": "battery.py",
       "oracle": "nginx-oracle.json",
       "listenPort": 20992,
-      "cases": 87,
+      "cases": 182,
       "orchestrator": "tools/run-nginx-differential-http.mjs",
       "notes": "Broad HTTP surface compared field by field against a real nginx 1.29.6 binary (static delivery/MIME/HEAD/ranges incl multipart/conditionals, routing and rewrite, response headers, error_page mapping, gzip negotiation, allow/deny + auth_basic, limit_req/limit_conn, proxy_pass URI splice/Host-forwarded/hop-by-hop/upstream status mapping). The slice owns its oracle: tests/nginx/differential-http/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences are justified per-field in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-http.mjs, and the oracle is pinned to nginx/1.29.6 by the same gate."
     },

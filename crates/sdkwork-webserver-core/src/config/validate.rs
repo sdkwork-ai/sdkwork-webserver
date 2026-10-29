@@ -54,6 +54,9 @@ pub(crate) fn validate_webserver_config(
 struct SemanticValidator {
     diagnostics: Vec<ConfigDiagnostic>,
     ids: HashMap<String, String>,
+    /// nginx `map` result variables (without `$`) declared by this config, so
+    /// a response-header value may reference one exactly like nginx does.
+    map_variables: Vec<String>,
 }
 
 impl SemanticValidator {
@@ -91,6 +94,13 @@ impl SemanticValidator {
             );
         }
 
+        self.validate_maps(config);
+        validate_mime_policy(
+            self,
+            "/mimeTypes",
+            config.mime_types.as_deref(),
+            config.default_type.as_deref(),
+        );
         self.validate_limits(config);
         self.validate_resource_pressure(config);
         self.validate_limit_req_zones(config);
@@ -431,6 +441,7 @@ impl SemanticValidator {
             let CertificateSource::ProtectedFile {
                 certificate_file,
                 private_key_file,
+                ..
             } = &certificate.source;
             if certificate_file == private_key_file {
                 self.push(
@@ -980,6 +991,12 @@ impl SemanticValidator {
                 );
             }
             validate_security_headers(self, &path, virtual_host.security_headers.as_ref());
+            validate_mime_policy(
+                self,
+                &format!("{path}/mimeTypes"),
+                virtual_host.mime_types.as_deref(),
+                virtual_host.default_type.as_deref(),
+            );
             validate_cache_policy(
                 self,
                 &format!("{path}/cachePolicy"),
@@ -1248,6 +1265,23 @@ impl SemanticValidator {
                     "http channel requires an absolute http(s) endpoint URL",
                 );
             }
+        }
+    }
+
+    /// Validate the executable `map` subset and record each result variable so
+    /// response-header declarations that reference one are accepted.
+    fn validate_maps(&mut self, config: &WebServerAppConfig) {
+        self.map_variables = config
+            .maps
+            .iter()
+            .filter_map(super::map_variables::map_result_name)
+            .map(str::to_owned)
+            .collect();
+        if config.maps.is_empty() {
+            return;
+        }
+        if let Err(message) = super::map_variables::validate_map_definitions(&config.maps) {
+            self.push("/maps", message);
         }
     }
 
@@ -2210,6 +2244,12 @@ fn validate_routes(
                 }
             }
         }
+        validate_mime_policy(
+            validator,
+            &format!("{path}/mimeTypes"),
+            route.mime_types.as_deref(),
+            route.default_type.as_deref(),
+        );
         for (header_index, header) in route.response_headers.iter().enumerate() {
             let header_path = format!("{path}/responseHeaders/{header_index}");
             if HOP_BY_HOP_HEADERS.contains(&header.name.to_ascii_lowercase().as_str()) {
@@ -2415,6 +2455,85 @@ fn validate_security_headers(
     }
 }
 
+/// Validate one resolved nginx `types` / `default_type` pair: a bounded,
+/// well-formed MIME table and a `type/subtype` default.
+fn validate_mime_policy(
+    validator: &mut SemanticValidator,
+    path: &str,
+    mime_types: Option<&[super::MimeTypeConfig]>,
+    default_type: Option<&str>,
+) {
+    if let Some(mime_types) = mime_types {
+        for (index, entry) in mime_types.iter().enumerate() {
+            if !is_valid_media_type(&entry.mime) {
+                validator.push(
+                    format!("{path}/{index}/mime"),
+                    format!("MIME type `{}` is not a `type/subtype` token", entry.mime),
+                );
+            }
+            if entry.extensions.is_empty() {
+                validator.push(
+                    format!("{path}/{index}/extensions"),
+                    "a types row requires at least one extension",
+                );
+            }
+            for (extension_index, extension) in entry.extensions.iter().enumerate() {
+                if extension.is_empty()
+                    || extension.starts_with('.')
+                    || extension.len() > 64
+                    || !extension.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'+' | b'.')
+                    })
+                {
+                    validator.push(
+                        format!("{path}/{index}/extensions/{extension_index}"),
+                        format!(
+                            "invalid file extension `{extension}`; use the bare extension without a leading dot"
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    if let Some(default_type) = default_type {
+        if !is_valid_media_type(default_type) {
+            validator.push(
+                path,
+                format!("default_type `{default_type}` is not a `type/subtype` token"),
+            );
+        }
+    }
+}
+
+fn is_valid_media_type(value: &str) -> bool {
+    let Some((media_type, subtype)) = value.split_once('/') else {
+        return false;
+    };
+    let token_is_valid = |token: &str| {
+        !token.is_empty()
+            && token.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric()
+                    || matches!(
+                        byte,
+                        b'!' | b'#'
+                            | b'$'
+                            | b'&'
+                            | b'\''
+                            | b'*'
+                            | b'+'
+                            | b'-'
+                            | b'.'
+                            | b'^'
+                            | b'_'
+                            | b'`'
+                            | b'|'
+                            | b'~'
+                    )
+            })
+    };
+    token_is_valid(media_type) && token_is_valid(subtype)
+}
+
 /// Validate one `customHeaders` / `responseHeaders` declaration: HTTP field
 /// name shape, bounded value, and only the `$variables` the response-header
 /// layer expands. The nginx materializer validates the same rules at parse
@@ -2424,9 +2543,12 @@ fn validate_custom_header_declaration(
     path: &str,
     header: &super::CustomHeaderConfig,
 ) {
-    if let Err(message) =
-        super::CustomHeaderConfig::validate_declaration(&header.name, &header.value)
-    {
+    let map_variables: Vec<&str> = validator.map_variables.iter().map(String::as_str).collect();
+    if let Err(message) = super::CustomHeaderConfig::validate_declaration_with_variables(
+        &header.name,
+        &header.value,
+        &map_variables,
+    ) {
         validator.push(path, message);
     }
 }

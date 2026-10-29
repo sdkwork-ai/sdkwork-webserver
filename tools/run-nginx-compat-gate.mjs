@@ -76,6 +76,11 @@ const staticGates = [
     'tools/check-nginx-directive-matrix.mjs',
     ['tools/check-nginx-directive-matrix.mjs'],
   ],
+  [
+    'directive audit',
+    'tools/gen-nginx-directive-audit.mjs',
+    ['tools/gen-nginx-directive-audit.mjs', '--check', '--verify-evidence'],
+  ],
 ];
 for (const [label, script, args] of staticGates) {
   if (!requireFile(script, label)) {

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{PageInfo};
+use crate::models::PageInfo;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct SdkWorkPageData {

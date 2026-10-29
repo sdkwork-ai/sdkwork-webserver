@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ApplicationStoreListing};
+use crate::models::ApplicationStoreListing;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ApplicationResponse {

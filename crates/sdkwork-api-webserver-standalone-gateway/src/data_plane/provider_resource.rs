@@ -424,9 +424,16 @@ mod tests {
             sub_filter: None,
             secure_link: None,
             compression: None,
+            mime_types: None,
+            default_type: None,
             error_pages: Vec::new(),
             response_headers: Vec::new(),
             cache_policy: None,
+            redirect_policy: None,
+            limit_req_status: None,
+            limit_conn_status: None,
+            max_ranges: None,
+            internal: false,
         }
     }
 

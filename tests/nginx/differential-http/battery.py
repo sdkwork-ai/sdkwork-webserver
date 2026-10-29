@@ -25,6 +25,12 @@ alongside the battery; each is a candidate case once the gap closes):
 
 - malformed `Upgrade` requests: the runtime rejects them with 400 as hardening,
   nginx silently strips the hop-by-hop field and serves the request.
+- an invalid header line (`X Bad: v`, a space inside the field name): nginx
+  answers 400 on a bad parse; the runtime's HTTP boundary guards so strictly
+  that it never produces a response for the connection, so there is no
+  comparable status/body record. `ignore_invalid_headers` is still parsed and
+  materialized (see the `headers-invalid-strict` host) and the runtime's
+  strictness is documented on the config field.
 
 The `add_header` matrix, the directory-without-index 403, and `error_page`
 mapping of a `return` status (including a `return 3xx`) are covered below; they
@@ -71,6 +77,43 @@ GZIP_HOST = "gzip.example.com"
 # no catch-all, so a request can select the host but no route (nginx still
 # applies the server's inherited `add_header` policy to its generated 404).
 NO_ROUTE_HOST = "noroute.example.com"
+# Fifth virtual host: owns the nginx `map` matrix. It declares its own
+# `add_header` array so map results are observable on static responses without
+# touching the header-policy host's expectations.
+MAPS_HOST = "maps.example.com"
+# Sixth virtual host: owns the nginx `types` / `default_type` matrix.
+MIME_HOST = "mime.example.com"
+# Seventh virtual host: owns the `gzip_static` / `gzip_vary` matrix.
+GZSTATIC_HOST = "gzstatic.example.com"
+# Eighth host family: owns the redirect-construction policy matrix
+# (`absolute_redirect` / `port_in_redirect` / `server_name_in_redirect`).
+REDIRECT_HOST = "redirect.example.com"
+REDIRECT_REL_HOST = "redirect-rel.example.com"
+REDIRECT_NOPORT_HOST = "redirect-noport.example.com"
+REDIRECT_SRVNAME_HOST = "redirect-srvname.example.com"
+# A second server_name of the `server_name_in_redirect on` host: the request
+# presents this name, so an absolute Location must show the *first* name.
+REDIRECT_ALIAS_HOST = "redirect-alias.example.com"
+# Ninth host: `max_ranges` matrix.
+RANGES_HOST = "ranges.example.com"
+# Tenth host: configurable `limit_req_status` / `limit_conn_status`.
+LIMITS_HOST = "limits.example.com"
+# Eleventh host family: nginx proxy response-header policy
+# (`proxy_hide_header` / `proxy_pass_header` / `proxy_redirect` /
+# `proxy_cookie_path` / `proxy_cookie_domain`). The `-abs` host runs the same
+# rewrites under `absolute_redirect on`.
+PROXYHDR_HOST = "proxyhdr.example.com"
+PROXYHDR_ABS_HOST = "proxyhdr-abs.example.com"
+# Twelfth host family: `internal` locations (external 404, internal redirects).
+INTERNAL_HOST = "internal.example.com"
+INTERNAL_PLAIN_HOST = "internal-plain.example.com"
+# Thirteenth host: the `merge_slashes off` matrix.
+MERGE_HOST = "merge.example.com"
+# Fourteenth host family: request header acceptance policy
+# (`underscores_in_headers` default off / explicit on, invalid header name).
+HEADERS_UNDERSCORE_OFF_HOST = "headers-underscore-off.example.com"
+HEADERS_UNDERSCORE_ON_HOST = "headers-underscore-on.example.com"
+HEADERS_INVALID_STRICT_HOST = "headers-invalid-strict.example.com"
 # 2020-01-01T00:00:00Z. Both endpoints serve these exact files, so pinning the
 # mtime makes `ETag` and `Last-Modified` stable across checkouts (git does not
 # preserve mtimes). The battery pins it on both runs before any request.
@@ -96,6 +139,11 @@ def pin_fixture_mtimes() -> None:
     for path in sorted(PUBLIC_DIR.rglob("*")):
         if path.is_file():
             os.utime(path, (PINNED_MTIME_SECONDS, PINNED_MTIME_SECONDS))
+
+
+# The mock upstream's own port, used to build absolute `Location` / `Refresh`
+# values that only a proxy response-header policy can rewrite.
+UPSTREAM_PLACEHOLDER = 0
 
 
 class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
@@ -155,6 +203,103 @@ class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
             # duration, only on the overlap.
             time.sleep(2.0)
             self._write(200, "text/plain", b"slow-done\n", extra=[("X-Upstream", "yes")])
+            return
+        if path.endswith("/hidden-headers"):
+            # The default-hidden upstream set (`ngx_http_proxy_hide_headers`)
+            # plus one ordinary field: nginx hides every X-Accel-*/X-Pad field
+            # and the upstream `Server` banner, and forwards X-Upstream/X-Secret.
+            self._write(
+                200,
+                "text/plain",
+                b"hidden-headers\n",
+                extra=[
+                    ("Server", "upstream-banner/1.0"),
+                    ("X-Pad", "pad"),
+                    ("X-Accel-Expires", "60"),
+                    ("X-Accel-Buffering", "yes"),
+                    ("X-Accel-Limit-Rate", "100"),
+                    ("X-Accel-Charset", "utf-8"),
+                    ("X-Secret", "s"),
+                    ("X-Upstream", "yes"),
+                ],
+            )
+            return
+        if path.endswith("/redir-basic"):
+            self._write(
+                302,
+                "text/plain",
+                b"redir-basic\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    (
+                        "Location",
+                        "http://127.0.0.1:%d/echo/target?x=1" % UPSTREAM_PLACEHOLDER,
+                    ),
+                ],
+            )
+            return
+        if path.endswith("/redir-other"):
+            self._write(
+                302,
+                "text/plain",
+                b"redir-other\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    ("Location", "http://other.example.com/path"),
+                ],
+            )
+            return
+        if path.endswith("/redir-relative"):
+            self._write(
+                302,
+                "text/plain",
+                b"redir-relative\n",
+                extra=[("X-Upstream", "yes"), ("Location", "/local/path")],
+            )
+            return
+        if path.endswith("/refresh-basic"):
+            self._write(
+                200,
+                "text/plain",
+                b"refresh-basic\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    (
+                        "Refresh",
+                        "5; url=http://127.0.0.1:%d/echo/target" % UPSTREAM_PLACEHOLDER,
+                    ),
+                ],
+            )
+            return
+        if path.endswith("/cookies"):
+            self._write(
+                200,
+                "text/plain",
+                b"cookies\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    (
+                        "Set-Cookie",
+                        "sid=abc; Path=/upstream; Domain=upstream.example.com; HttpOnly",
+                    ),
+                    ("Set-Cookie", "other=1; Path=/"),
+                    ("Set-Cookie", "bare=2"),
+                ],
+            )
+            return
+        if path.endswith("/cookies-case"):
+            self._write(
+                200,
+                "text/plain",
+                b"cookies-case\n",
+                extra=[
+                    ("X-Upstream", "yes"),
+                    (
+                        "Set-Cookie",
+                        "c=1; path=/upstream; domain=upstream.example.com",
+                    ),
+                ],
+            )
             return
         if path.endswith("/hop-response"):
             self._write(
@@ -417,7 +562,13 @@ def capture(
 
 
 def capture_concurrent_connection_limit(
-    port: int, upstream_port: int, dead_port: int, results: dict
+    port: int,
+    upstream_port: int,
+    dead_port: int,
+    results: dict,
+    host: str = HOST,
+    prefix: str = "limit-conn",
+    base_path: str = "/conn/",
 ) -> None:
     """Hold the first /conn/ request while the second one hits the limit.
 
@@ -430,7 +581,7 @@ def capture_concurrent_connection_limit(
 
     def first():
         try:
-            held["first"] = request(port, "/conn/slow")
+            held["first"] = request(port, base_path + "slow", host=host)
         except OSError as error:  # pragma: no cover - diagnostic path
             held["error"] = error
 
@@ -439,15 +590,15 @@ def capture_concurrent_connection_limit(
     # Let the first request reach the data plane and acquire its slot before
     # the second one is sent; the mock upstream then keeps it there.
     time.sleep(0.5)
-    second = request(port, "/conn/other")
+    second = request(port, base_path + "other", host=host)
     worker.join(timeout=15.0)
     first_status = held.get("first")
     if first_status is None:
         raise RuntimeError("the held limit_conn request did not complete")
-    results["limit-conn.first"] = canonicalize(
+    results[prefix + ".first"] = canonicalize(
         port, upstream_port, dead_port, *first_status
     )
-    results["limit-conn.second"] = canonicalize(
+    results[prefix + ".second"] = canonicalize(
         port, upstream_port, dead_port, *second
     )
 
@@ -459,6 +610,9 @@ def main() -> int:
     parser.add_argument("--dead-port", type=int, required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
+
+    global UPSTREAM_PLACEHOLDER
+    UPSTREAM_PLACEHOLDER = args.upstream_port
 
     pin_fixture_mtimes()
     try:
@@ -543,6 +697,69 @@ def main() -> int:
             headers=[("Range", "bytes=99-")],
         )
         case("static.range.invalid", "/alias/hello.txt", headers=[("Range", "bytes=abc")])
+        # nginx `max_ranges 0` disables byte-range processing entirely: even a
+        # valid Range answers the full 200 and `Accept-Ranges` is not sent.
+        case("static.max-ranges.zero-plain", "/zero/plain.txt", host=RANGES_HOST)
+        case(
+            "static.max-ranges.zero-range",
+            "/zero/plain.txt",
+            headers=[("Range", "bytes=0-2")],
+            host=RANGES_HOST,
+        )
+        # A ceiling of 1 accepts a single range and declines a two-range
+        # request (full 200, `Accept-Ranges: bytes` still advertised).
+        case(
+            "static.max-ranges.one-single",
+            "/one/plain.txt",
+            headers=[("Range", "bytes=0-2")],
+            host=RANGES_HOST,
+        )
+        case(
+            "static.max-ranges.one-multi-declined",
+            "/one/plain.txt",
+            headers=[("Range", "bytes=0-2,4-5")],
+            host=RANGES_HOST,
+        )
+        case(
+            "static.max-ranges.two-multi",
+            "/two/plain.txt",
+            headers=[("Range", "bytes=0-2,4-5")],
+            host=RANGES_HOST,
+        )
+
+        # ---- redirect construction policy ------------------------------
+        # Differential-confirmed against nginx 1.29.6: the header filter makes
+        # a relative target absolute from the resolved host/port unless
+        # `absolute_redirect off`; the port is the listener port unless it is
+        # the scheme default or `port_in_redirect off`; the host is the first
+        # `server_name` under `server_name_in_redirect on` and the request
+        # `Host` otherwise; an absolute target passes through untouched.
+        case("redirect.default.dir", "/sub", host=REDIRECT_HOST)
+        case("redirect.default.return-relative", "/ret-rel", host=REDIRECT_HOST)
+        case("redirect.default.return-absolute", "/ret-abs", host=REDIRECT_HOST)
+        case(
+            "redirect.default.rewrite-redirect",
+            "/rw-redirect/hello.txt",
+            host=REDIRECT_HOST,
+        )
+        case(
+            "redirect.default.mapped-error-page",
+            "/mapped-301",
+            host=REDIRECT_HOST,
+        )
+        case("redirect.relative.dir", "/sub", host=REDIRECT_REL_HOST)
+        case(
+            "redirect.relative.return-relative",
+            "/ret-rel",
+            host=REDIRECT_REL_HOST,
+        )
+        case("redirect.noport.dir", "/sub", host=REDIRECT_NOPORT_HOST)
+        case("redirect.srvname.dir", "/sub", host=REDIRECT_ALIAS_HOST)
+        case(
+            "redirect.srvname.return-relative",
+            "/ret-rel",
+            host=REDIRECT_ALIAS_HOST,
+        )
         case(
             "static.conditional.inm-match",
             "/alias/hello.txt",
@@ -623,6 +840,181 @@ def main() -> int:
             host=NO_ROUTE_HOST,
         )
 
+        # ---- nginx types / default_type --------------------------------
+        # A host-level `types` block replaces the inherited http table:
+        # `.txt` resolves through the host row, not the http row.
+        case("mime.host-table", "/m/hello.txt", host=MIME_HOST)
+        # An extension absent from the declared table falls to `default_type`.
+        case("mime.host-default", "/m/blob.zzz", host=MIME_HOST)
+        # A location-level table replaces the host table...
+        case("mime.location-table", "/m-loc/hello.txt", host=MIME_HOST)
+        # ...and its `default_type` applies to unknown extensions.
+        case("mime.location-default", "/m-loc/blob.zzz", host=MIME_HOST)
+        # A location table without its own `default_type` inherits the host
+        # default (the two directives have independent inheritance chains).
+        case("mime.location-inherits-default", "/m-loc-inherit/blob.zzz", host=MIME_HOST)
+        # An explicitly empty table replaces the inherited one: every
+        # extension uses `default_type`.
+        case("mime.empty-table", "/m-raw/blob.zzz", host=MIME_HOST)
+        # A `return` body's type comes from the request URI extension through
+        # the resolved table (`default_type` when it has none).
+        case("mime.return-no-extension", "/m-ret", host=MIME_HOST)
+        case("mime.return-extension", "/m-ret.txt", host=MIME_HOST)
+
+        # ---- gzip_static / gzip_vary ----------------------------------
+        accept_gzip = [("Accept-Encoding", "gzip")]
+        accept_identity = [("Accept-Encoding", "identity")]
+        accept_rejects_gzip = [("Accept-Encoding", "gzip;q=0")]
+        # `gzip_static on`: the sidecar replies only when gzip is accepted; its
+        # `Content-Length`, `ETag` and bytes are the sidecar's.
+        case("gz.static-on-gzip", "/on/page.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+        case("gz.static-on-identity", "/on/page.txt", host=GZSTATIC_HOST, headers=accept_identity)
+        case("gz.static-on-q0", "/on/page.txt", host=GZSTATIC_HOST, headers=accept_rejects_gzip)
+        case("gz.static-on-no-header", "/on/page.txt", host=GZSTATIC_HOST)
+        # A sidecar that does not exist falls back to the identity file; a
+        # `gzip_vary on` in `on` mode does not declare the negotiation when no
+        # sidecar was found.
+        case("gz.static-missing-sidecar", "/on/plain.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+        # `gzip_static on` + `gzip_vary on`: Vary on both representations.
+        case("gz.static-vary-gzip", "/onvary/page.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+        case("gz.static-vary-identity", "/onvary/page.txt", host=GZSTATIC_HOST, headers=accept_identity)
+        case("gz.static-vary-no-header", "/onvary/page.txt", host=GZSTATIC_HOST)
+        # `gzip_static always`: sidecar regardless of `Accept-Encoding`, and no
+        # `Vary` negotiation field.
+        case("gz.static-always-identity", "/always/page.txt", host=GZSTATIC_HOST, headers=accept_identity)
+        case("gz.static-always-q0", "/always/page.txt", host=GZSTATIC_HOST, headers=accept_rejects_gzip)
+        # No `gzip_static`: identity representation even when gzip is accepted.
+        case("gz.static-off", "/off/page.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+        # A range request ranges over the stored gzip bytes, exactly like nginx.
+        case(
+            "gz.static-range",
+            "/on/page.txt",
+            host=GZSTATIC_HOST,
+            headers=accept_gzip + [("Range", "bytes=0-3")],
+        )
+        # HEAD mirrors the headers of the negotiated representation.
+        case("gz.static-head", "/on/page.txt", host=GZSTATIC_HOST, method="HEAD", headers=accept_gzip)
+        # Dynamic gzip: `gzip_vary on` declares the negotiation field on both
+        # the compressed and the identity representation.
+        case("gz.dynamic-vary-gzip", "/dynvary/page.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+        case("gz.dynamic-vary-identity", "/dynvary/page.txt", host=GZSTATIC_HOST, headers=accept_identity)
+        # `gzip_vary off` (and nginx's default-off) suppress the negotiation
+        # field even though the representation is compressed.
+        case("gz.dynamic-vary-off", "/dynnovary/page.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+        case("gz.dynamic-vary-default", "/dyndefault/page.txt", host=GZSTATIC_HOST, headers=accept_gzip)
+
+        # A conditional request validated by the sidecar's own entity tag is
+        # answered 304, proving the sidecar's validators are the published ones.
+        _, gz_headers, _ = request(
+            port,
+            "/on/page.txt",
+            headers=accept_gzip,
+            host=GZSTATIC_HOST,
+        )
+        sidecar_etag = gz_headers.get("etag", [None])[0]
+        if sidecar_etag is not None:
+            case(
+                "gz.static-conditional",
+                "/on/page.txt",
+                host=GZSTATIC_HOST,
+                headers=accept_gzip + [("If-None-Match", sidecar_etag)],
+            )
+
+        # ---- nginx map variables ---------------------------------------
+        # Default fallback: an unmatched source value selects `default`.
+        case(
+            "map.header-default",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "unknown-tenant")],
+        )
+        # An absent source value is the empty string, so the authored empty key
+        # wins over `default` (nginx semantics for a missing header/argument).
+        case("map.header-empty-key", "/alias/hello.txt", host=MAPS_HOST)
+        # Keys are matched case-insensitively (nginx lowercases the map hash).
+        case(
+            "map.header-exact-key",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "ACME")],
+        )
+        # Regex keys run in authored order after hash keys (`~*` here).
+        case(
+            "map.header-regex-key",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "BETA-42")],
+        )
+        # A regex match's `$1` capture expands inside the map value.
+        case(
+            "map.header-regex-capture",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "gamma-7")],
+        )
+        # `hostnames` wildcard keys match a subdomain...
+        case(
+            "map.hostnames-wildcard",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Hostkey", "a.wild.example.com")],
+        )
+        # ...but `*.suffix` does NOT match the apex (differential-probed).
+        case(
+            "map.hostnames-apex-is-not-wildcard",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Hostkey", "wild.example.com")],
+        )
+        # An exact hostname key wins over the wildcard.
+        case(
+            "map.hostnames-exact",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Hostkey", "exact.example.com")],
+        )
+        # A map whose result is empty removes the header like nginx.
+        case(
+            "map.header-empty-result",
+            "/alias/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "acme")],
+        )
+        # `return` body/URL and `rewrite` replacements are variable scripts:
+        # they expand map results too.
+        case(
+            "map.return-body",
+            "/m-ret",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "beta-9")],
+        )
+        case(
+            "map.return-url",
+            "/m-url",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "acme")],
+        )
+        case(
+            "map.rewrite",
+            "/m-rw/hello.txt",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "acme")],
+        )
+        # `proxy_set_header` value expansion from a map result.
+        case(
+            "map.proxy-set-header",
+            "/m-proxy",
+            host=MAPS_HOST,
+            headers=[("X-Tenant", "acme")],
+        )
+        # `$request_method` source.
+        case("map.method-source", "/m-ret", host=MAPS_HOST)
+        # `$arg_` values are raw: `?tag=` is present-but-empty and matches `""`.
+        case("map.arg-empty", "/m-ret?tag=", host=MAPS_HOST)
+        # ...while an encoded value keeps its raw spelling for key matching.
+        case("map.arg-raw", "/m-ret?tag=a%20b", host=MAPS_HOST)
+        case("map.arg-default", "/m-ret?tag=zzz", host=MAPS_HOST)
+
         # ---- error_page -------------------------------------------------
         case("error-page.location-override", "/lost/missing")
         case("error-page.code-override", "/lost-code/missing")
@@ -671,7 +1063,139 @@ def main() -> int:
         case("limit-req.second", "/rate/b")
         case("limit-req.third", "/rate/c")
         capture_concurrent_connection_limit(port, upstream_port, dead_port, results)
+        # `limit_req_status 429` (location) and `limit_conn_status 429` (server
+        # inheritance) replace the nginx default 503.
+        case("limit-req-status.first", "/rate429/a", host=LIMITS_HOST)
+        case("limit-req-status.second", "/rate429/b", host=LIMITS_HOST)
+        case("limit-req-status.third", "/rate429/c", host=LIMITS_HOST)
+        capture_concurrent_connection_limit(
+            port,
+            upstream_port,
+            dead_port,
+            results,
+            host=LIMITS_HOST,
+            prefix="limit-conn-status",
+            base_path="/conn429/",
+        )
 
+        # ---- proxy response-header policy ------------------------------
+        # The default-hidden upstream set: Server/X-Pad/X-Accel-* are never
+        # forwarded; X-Upstream/X-Secret pass through.
+        case("proxy.hidden-default", "/plain/hidden-headers", host=PROXYHDR_HOST)
+        case("proxy.hide-header", "/hide/hidden-headers", host=PROXYHDR_HOST)
+        # `proxy_pass_header` removes a name from the hidden set (pass wins).
+        case("proxy.pass-header", "/pass/hidden-headers", host=PROXYHDR_HOST)
+        # `proxy_redirect default` replaces the `proxy_pass` URL base with the
+        # location name; a non-matching target passes through untouched.
+        case(
+            "proxy.redirect-default",
+            "/redirect-default/redir-basic",
+            host=PROXYHDR_HOST,
+        )
+        case(
+            "proxy.redirect-default-other",
+            "/redirect-default/redir-other",
+            host=PROXYHDR_HOST,
+        )
+        case(
+            "proxy.redirect-default-relative",
+            "/redirect-default/redir-relative",
+            host=PROXYHDR_HOST,
+        )
+        # `proxy_redirect off` forwards the upstream target verbatim.
+        case(
+            "proxy.redirect-off",
+            "/redirect-off/redir-basic",
+            host=PROXYHDR_HOST,
+        )
+        # Explicit rules: a relative replacement, and a rule on another host.
+        case(
+            "proxy.redirect-explicit",
+            "/redirect-explicit/redir-basic",
+            host=PROXYHDR_HOST,
+        )
+        case(
+            "proxy.redirect-explicit-absolute",
+            "/redirect-explicit-absolute/redir-other",
+            host=PROXYHDR_HOST,
+        )
+        # The `Refresh` header's `url=` part is rewritten exactly like a
+        # dangling Location (the delay prefix is preserved).
+        case(
+            "proxy.redirect-refresh",
+            "/redirect-default/refresh-basic",
+            host=PROXYHDR_HOST,
+        )
+        # `proxy_redirect` rewrites a relative target, which the header filter
+        # then makes absolute under `absolute_redirect on`.
+        case(
+            "proxy.redirect-absolute-default",
+            "/redirect-default/redir-basic",
+            host=PROXYHDR_ABS_HOST,
+        )
+        case(
+            "proxy.redirect-absolute-explicit",
+            "/redirect-explicit/redir-basic",
+            host=PROXYHDR_ABS_HOST,
+        )
+        # Cookie attribute rewriting: Path prefix, Domain exact (case-insensitive,
+        # leading dot preserved), both on one cookie, and `off`.
+        case("proxy.cookie-path", "/cookie-path/cookies", host=PROXYHDR_HOST)
+        case("proxy.cookie-domain", "/cookie-domain/cookies", host=PROXYHDR_HOST)
+        case(
+            "proxy.cookie-domain-dot",
+            "/cookie-domain-dot/cookies",
+            host=PROXYHDR_HOST,
+        )
+        case("proxy.cookie-both", "/cookie-both/cookies", host=PROXYHDR_HOST)
+        case("proxy.cookie-off", "/cookie-off/cookies", host=PROXYHDR_HOST)
+        case(
+            "proxy.cookie-case",
+            "/cookie-path/cookies-case",
+            host=PROXYHDR_HOST,
+        )
+
+        # ---- internal locations ---------------------------------------
+        # An external request for an `internal` location is answered with the
+        # generated 404 (mapped through the host `error_page 404` here).
+        case("internal.external", "/internal/x", host=INTERNAL_HOST)
+        case("internal.public", "/pub/x", host=INTERNAL_HOST)
+        # Reachable through `rewrite … last` and through `error_page`.
+        case("internal.rewrite", "/int-rewrite/x", host=INTERNAL_HOST)
+        case("internal.errpage", "/int-errpage/x", host=INTERNAL_HOST)
+        # Without an `error_page` mapping, the generated 404 still carries the
+        # server `always` header.
+        case("internal.external-plain", "/internal-plain/x", host=INTERNAL_PLAIN_HOST)
+
+        # ---- merge_slashes off ----------------------------------------
+        # An exact location only matches the unmerged spelling.
+        case("merge.exact", "/merge/exact", host=MERGE_HOST)
+        case("merge.double-slash-does-not-match-exact", "/merge//exact", host=MERGE_HOST)
+        case("merge.triple-slash-does-not-match-exact", "/merge///exact", host=MERGE_HOST)
+        # `$uri` keeps the repeated slashes; `$request_uri` is always raw.
+        case("merge.uri-keeps-slashes", "/merge/show//x", host=MERGE_HOST)
+        # A dot-segment still resolves, popping the empty segment.
+        case("merge.dotdot-pops-empty-segment", "/merge/show//../show/x", host=MERGE_HOST)
+        # Percent-decoded slashes participate in the unmerged identity.
+        case("merge.encoded-slashes", "/merge%2F%2Fexact", host=MERGE_HOST)
+        # Static resolution collapses the repeated slash at the filesystem.
+        case("merge.static", "/merge/files//hello.txt", host=MERGE_HOST)
+
+        # ---- request header acceptance policy -------------------------
+        # nginx default `underscores_in_headers off`: the field is dropped
+        # before the proxy module forwards the request headers.
+        case(
+            "headers.underscore-default-dropped",
+            "/echo/echo/headers",
+            host=HEADERS_UNDERSCORE_OFF_HOST,
+            headers=[("X_Underscore", "v")],
+        )
+        case(
+            "headers.underscore-on-forwarded",
+            "/echo/echo/headers",
+            host=HEADERS_UNDERSCORE_ON_HOST,
+            headers=[("X_Underscore", "v")],
+        )
         # ---- upstream proxying -----------------------------------------
         case("proxy.pass-path", "/proxy/echo/path?x=1")
         case("proxy.pass-uri-replace", "/proxy-uri/echo/path?a=1")

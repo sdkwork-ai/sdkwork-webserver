@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{TrafficUsageAppTotal, TrafficUsageDailyPoint, TrafficUsageTenantTotal, TrafficUsageTotal};
+use crate::models::{
+    TrafficUsageAppTotal, TrafficUsageDailyPoint, TrafficUsageTenantTotal, TrafficUsageTotal,
+};
 
 /// Aggregated traffic usage over a **half-open** date window (`dateFrom <= day < dateTo`). Every view is derived from the same append-only traffic facts, so the totals, the daily series, and the per-app breakdown are consistent with each other by construction rather than by a reconciliation job having run most recently.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

@@ -204,14 +204,21 @@ http {
   assert.equal(classified.unsupported.length, 0, JSON.stringify(classified.unsupported, null, 2));
   assert.ok(classified.accepted.some((item) => item.name === 'types'));
   assert.ok(classified.accepted.some((item) => item.name === 'charset_map'));
-  // `map` is catalogued accepted-but-unenforced and its typed TOML key
-  // (`http.map`) is itself unenforced, so it must not become an
-  // enforced-looking draft key.
-  const map = classified.accepted.find((item) => item.name === 'map');
-  assert.ok(map);
-  assert.match(map.reason, /accepted-but-unenforced|not rendered/);
+  // `map` executes on the runtime through typed `[[http.maps]]`, so it is
+  // rendered as a typed declaration (never as the legacy string-array `map`
+  // key, which stays accepted-but-unenforced).
+  const mapItem = classified.mapped.find((item) => item.name === 'map');
+  assert.ok(mapItem, 'map must be classified as a mapped executable directive');
   const draft = buildDraft(classified.mapped);
-  assert.equal(draft.http.map, undefined, 'unenforced typed keys must not be rendered');
+  assert.equal(draft.http.map, undefined, 'the legacy string-array map key must not be rendered');
+  assert.equal(draft.http.maps.length, 1);
+  assert.equal(draft.http.maps[0].source, '$http_user_agent');
+  assert.equal(draft.http.maps[0].result, '$mobile');
+  assert.equal(draft.http.maps[0].default, '0');
+  assert.deepEqual(draft.http.maps[0].entries, [{ key: '~*iphone', value: '1' }]);
+  const toml = emitToml(draft, { id: 'typed-map' });
+  assert.match(toml, /\[\[http\.maps\]\]/u);
+  assert.match(toml, /\[\[http\.maps\.entries\]\]/u);
 });
 
 test('executable and accepted catalogued directives are not reported unsupported', () => {
@@ -296,12 +303,15 @@ http {
 }
 `;
   const classified = classify(scanDirectives(source));
-  for (const name of ['ssl_prefer_server_ciphers', 'ssl_session_cache', 'ssl_stapling', 'server_tokens', 'proxy_buffering', 'map']) {
+  for (const name of ['ssl_prefer_server_ciphers', 'ssl_session_cache', 'ssl_stapling', 'server_tokens', 'proxy_buffering']) {
     assert.ok(classified.accepted.some((item) => item.name === name),
       `${name} must be reported accepted, not rendered`);
     assert.ok(!classified.mapped.some((item) => item.name === name),
       `${name} must not be rendered into the draft`);
   }
+  // `map` is executable through typed `[[http.maps]]`; it is covered by the
+  // data-block test above and must render as a typed declaration.
+  assert.ok(classified.mapped.some((item) => item.name === 'map'));
   const toml = emitToml(buildDraft(classified.mapped), { id: 'unenforced' });
   for (const key of ['preferServerCiphers', 'sessionCache', 'ocspStapling', 'stapling =', 'serverTokens', 'proxyBuffering', 'map =']) {
     assert.ok(!toml.includes(key), `draft must not emit unenforced typed key ${key}`);

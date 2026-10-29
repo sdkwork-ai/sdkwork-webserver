@@ -99,6 +99,7 @@ pub(crate) fn compile_policy_tls_material(
         let loaded = match load_certified_key(
             certificate_file,
             private_key_file,
+            generation.app.certificate_chain_file(&certificate.id),
             &certificate.server_names,
             provider,
         ) {

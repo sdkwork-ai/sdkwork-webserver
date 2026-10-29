@@ -262,7 +262,7 @@ server {
     server_name web.example.com;
     proxy_read_timeout 300s;
     proxy_buffering off;
-    gzip_static on;
+    gzip_comp_level 6;
     location / { proxy_pass http://127.0.0.1:18080; }
 }
 "#,
@@ -275,7 +275,7 @@ server {
             "every accepted-but-unenforced directive needs one diagnostic: {:?}",
             report.ignored
         );
-        for expected in ["proxy_read_timeout", "proxy_buffering", "gzip_static"] {
+        for expected in ["proxy_read_timeout", "proxy_buffering", "gzip_comp_level"] {
             assert!(
                 report.ignored.iter().any(|diagnostic| {
                     diagnostic.message.contains(expected) && diagnostic.path.contains("web.conf:")

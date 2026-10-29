@@ -2,10 +2,17 @@
 
 use std::sync::Arc;
 
-use axum::body::Body;
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use axum::{body::Body, extract::Request};
 use http::{header, HeaderValue, Response, StatusCode};
 use http_body::Body as HttpBody;
 use sdkwork_webserver_core::config::GzipConfig;
+use tower::{Layer, Service};
 use tower_http::compression::predicate::{Predicate, SizeAbove};
 
 use super::runtime::DataPlaneRuntime;
@@ -117,7 +124,7 @@ pub(crate) fn weaken_etag_for_negotiated_gzip(
 /// tower-http negotiation this layer runs: an absent header means identity, an
 /// explicit `q=0` rejects the coding, and `*` covers gzip when no explicit
 /// token does.
-fn accepts_gzip(header: Option<&HeaderValue>) -> bool {
+pub(crate) fn accepts_gzip(header: Option<&HeaderValue>) -> bool {
     let Some(header) = header else {
         return false;
     };
@@ -169,6 +176,89 @@ fn content_type_matches(content_type: &str, configured: &[String]) -> bool {
     })
 }
 
+/// Marks a response whose effective nginx gzip policy has `gzip_vary off`, so
+/// the tower-http compression layer's automatic `Vary: Accept-Encoding` must be
+/// removed. nginx only declares the negotiation field when `gzip_vary on`; the
+/// compression layer has no per-route configuration and always declares it when
+/// it selects a representation, so the handler states the exception.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SuppressGzipVary;
+
+/// Outermost response layer: honour [`SuppressGzipVary`] by removing the
+/// `Accept-Encoding` token from every `Vary` field (other selectors such as the
+/// adaptive-surface `User-Agent` are preserved).
+///
+/// A tower layer (rather than `axum::middleware::from_fn`) is required because
+/// it sits *outside* `CompressionLayer`, whose response body type is
+/// `CompressionBody<Body>`; the layer is therefore generic over the body type.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SuppressGzipVaryLayer;
+
+impl<S> Layer<S> for SuppressGzipVaryLayer {
+    type Service = SuppressGzipVaryService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        SuppressGzipVaryService { inner }
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SuppressGzipVaryService<S> {
+    inner: S,
+}
+
+impl<S, ResponseBody> Service<Request> for SuppressGzipVaryService<S>
+where
+    S: Service<Request, Response = Response<ResponseBody>> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Send + 'static,
+    ResponseBody: HttpBody<Data = bytes::Bytes> + Send + 'static,
+    ResponseBody::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    type Response = Response<Body>;
+    type Error = S::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, context: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(context)
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        let mut inner = self.inner.clone();
+        Box::pin(async move {
+            let response = inner.call(request).await?;
+            // Wrap the response body back into `axum::body::Body` so the body
+            // type stays compatible with the router and every inner layer.
+            let (parts, body) = response.into_parts();
+            let mut response = Response::from_parts(parts, Body::new(body));
+            if response.extensions().get::<SuppressGzipVary>().is_some() {
+                strip_accept_encoding_vary(&mut response);
+            }
+            Ok(response)
+        })
+    }
+}
+
+fn strip_accept_encoding_vary<ResponseBody>(response: &mut Response<ResponseBody>) {
+    let headers = response.headers_mut();
+    let values = headers
+        .get_all(header::VARY)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .filter(|token| !token.eq_ignore_ascii_case("accept-encoding"))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    headers.remove(header::VARY);
+    if !values.is_empty() {
+        if let Ok(value) = HeaderValue::from_str(&values.join(", ")) {
+            headers.insert(header::VARY, value);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use axum::body::Body;
@@ -216,6 +306,8 @@ mod tests {
             enabled: true,
             types: vec!["text/plain".to_owned()],
             min_length: 0,
+            vary: true,
+            static_files: sdkwork_webserver_core::GzipStaticMode::Off,
         }
     }
 
@@ -263,6 +355,8 @@ mod tests {
             enabled: false,
             types: Vec::new(),
             min_length: 0,
+            vary: true,
+            static_files: sdkwork_webserver_core::GzipStaticMode::Off,
         };
         let response = weaken_etag_for_negotiated_gzip(
             response_with_etag(),

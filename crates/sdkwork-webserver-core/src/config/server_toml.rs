@@ -14,9 +14,17 @@ use std::{
 use serde_json::{json, Map, Value};
 
 use super::{
-    error::ConfigDiagnostic, error::WebServerConfigError, model::CachePolicyConfig,
-    model::TlsVersion, model::WebServerAppConfig, network::hostname_upstream_allowed_cidrs,
-    proxy_headers::merge_proxy_set_headers, validate_webserver_config,
+    error::ConfigDiagnostic,
+    error::WebServerConfigError,
+    map_variables::{validate_map_definitions, validate_map_source},
+    model::CachePolicyConfig,
+    model::MapConfig,
+    model::MapEntryConfig,
+    model::TlsVersion,
+    model::WebServerAppConfig,
+    network::hostname_upstream_allowed_cidrs,
+    proxy_headers::merge_proxy_set_headers,
+    validate_webserver_config,
 };
 use crate::nginx::{parse_nginx_config, NginxDirective};
 
@@ -274,7 +282,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "sendTimeout",
     "serverNamesHashMaxSize",
     "serverTokens",
-    "defaultType",
     "logFormat",
     "accessLog",
     "map",
@@ -344,7 +351,7 @@ const UNSUPPORTED_SECURITY: &[&str] = &[];
 const UNENFORCED_BEHAVIOR_TOML_KEYS: &[(&str, &str)] = &[
     (
         "map",
-        "map variables are not evaluated; express the routing/header effect with typed keys",
+        "the legacy string-array `map` key is not executed; declare `[[http.maps]]` entries (source/result/entries) for an executable map",
     ),
     (
         "errorPage",
@@ -375,12 +382,20 @@ const UNENFORCED_BEHAVIOR_TOML_KEYS: &[(&str, &str)] = &[
         "response charset is not rewritten from this key",
     ),
     (
-        "defaultType",
-        "default MIME type comes from the runtime's own table, not this key",
-    ),
-    (
         "proxyBuffering",
         "proxy responses are always streamed; buffering cannot be enabled by this key",
+    ),
+    (
+        "proxyConnectTimeout",
+        "upstream connect timeouts follow the resolved upstream policy, not this location key",
+    ),
+    (
+        "proxyReadTimeout",
+        "upstream response timeouts follow the resolved upstream policy, not this location key",
+    ),
+    (
+        "proxySendTimeout",
+        "upstream request timeouts follow the resolved upstream policy, not this location key",
     ),
     (
         "proxyRequestBuffering",
@@ -1317,6 +1332,10 @@ struct Materializer<'a> {
     limit_req_zone_names: Vec<String>,
     limit_conn_zones: Vec<Value>,
     limit_conn_zone_names: Vec<String>,
+    /// http-level `[[http.maps]]` declarations materialized into the executable
+    /// `map` model (`WebServerAppConfig.maps`). The legacy string-array `map`
+    /// key stays accepted-but-unenforced with its diagnostic.
+    maps: Vec<Value>,
 }
 
 impl<'a> Materializer<'a> {
@@ -1338,6 +1357,7 @@ impl<'a> Materializer<'a> {
             limit_req_zone_names: Vec::new(),
             limit_conn_zones: Vec::new(),
             limit_conn_zone_names: Vec::new(),
+            maps: Vec::new(),
         }
     }
 
@@ -1588,6 +1608,23 @@ impl<'a> Materializer<'a> {
         let acme = cert.get("acme").and_then(Value::as_str);
         let cert_file = cert.get("certFile").and_then(Value::as_str);
         let cert_key_file = cert.get("certKeyFile").and_then(Value::as_str);
+        // nginx `ssl_trusted_certificate` equivalent: a declared chain file is
+        // part of the certificate material (the downstream client-auth trust
+        // store), never a silently dropped key. A malformed declaration is a
+        // located configuration error.
+        let chain_file = match cert.get("chainFile") {
+            None => None,
+            Some(value) => {
+                let chain_file = value.as_str().map(str::trim).unwrap_or_default();
+                if chain_file.is_empty() {
+                    return Err(materialize_error(
+                        &format!("{path}.chainFile"),
+                        "chainFile must be a non-empty PEM path",
+                    ));
+                }
+                Some(chain_file.to_owned())
+            }
+        };
         let (certificate_file, private_key_file) = match (acme, cert_file, cert_key_file) {
             (Some(acme_name), _, _) => {
                 // `acme <name>` resolves against the ACME live root, which is
@@ -1616,14 +1653,18 @@ impl<'a> Materializer<'a> {
                 ))
             }
         };
+        let mut source = json!({
+            "type": "protected-file",
+            "certificateFile": certificate_file,
+            "privateKeyFile": private_key_file,
+        });
+        if let Some(chain_file) = chain_file {
+            source["chainFile"] = Value::String(chain_file);
+        }
         self.certificates.push(json!({
             "id": name,
             "serverNames": server_names,
-            "source": {
-                "type": "protected-file",
-                "certificateFile": certificate_file,
-                "privateKeyFile": private_key_file,
-            },
+            "source": source,
         }));
         let mut policy = json!({
             "id": format!("tls-{name}"),
@@ -2437,6 +2478,124 @@ impl<'a> Materializer<'a> {
                 self.ensure_upstream(upstream, &format!("http.upstream[{index}]"))?;
             }
         }
+        Ok(())
+    }
+
+    /// Materialize typed-TOML `[[http.maps]]` into the executable
+    /// `WebServerAppConfig.maps` model.
+    ///
+    /// This is the typed plane's equivalent of the nginx `map` block Wave 1
+    /// made executable: the same model, the same bounded validation
+    /// ([`crate::config::map_variables::validate_map_definitions`]), and the
+    /// same runtime expansion (`$result` in `addHeader`, `proxySetHeader`,
+    /// `return`/redirect targets, `rewrite` replacements). The legacy
+    /// string-array `map` key remains ACCEPTED_IGNORED with its diagnostic.
+    fn materialize_maps(&mut self, http: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+        let Some(entries) = http.get("maps") else {
+            return Ok(());
+        };
+        let Some(entries) = entries.as_array() else {
+            return Err(materialize_error(
+                "server.toml.http.maps",
+                "`maps` must be an array of tables (`[[http.maps]]`)",
+            ));
+        };
+        let mut maps: Vec<MapConfig> = Vec::with_capacity(entries.len());
+        for (index, entry) in entries.iter().enumerate() {
+            let path = format!("server.toml.http.maps[{index}]");
+            let entry = entry
+                .as_object()
+                .ok_or_else(|| materialize_error(&path, "expected a TOML table"))?;
+            check_supported_keys(
+                entry,
+                &path,
+                &["source", "result", "hostnames", "default", "entries"],
+            )?;
+            let source = entry
+                .get("source")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    materialize_error(&format!("{path}.source"), "`source` is required")
+                })?
+                .to_owned();
+            validate_map_source(&source)
+                .map_err(|message| materialize_error(&format!("{path}.source"), message))?;
+            let result = entry
+                .get("result")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    materialize_error(&format!("{path}.result"), "`result` is required")
+                })?
+                .to_owned();
+            if let Err(message) = crate::config::map_variables::parse_variable_reference(&result) {
+                return Err(materialize_error(
+                    &format!("{path}.result"),
+                    format!("map result `{result}` is invalid: {message}"),
+                ));
+            }
+            let hostnames = entry
+                .get("hostnames")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let default = match entry.get("default") {
+                None => None,
+                Some(value) => Some(
+                    value
+                        .as_str()
+                        .ok_or_else(|| {
+                            materialize_error(
+                                &format!("{path}.default"),
+                                "`default` must be a string",
+                            )
+                        })?
+                        .to_owned(),
+                ),
+            };
+            let mut map_entries: Vec<MapEntryConfig> = Vec::new();
+            if let Some(rows) = entry.get("entries") {
+                let Some(rows) = rows.as_array() else {
+                    return Err(materialize_error(
+                        &format!("{path}.entries"),
+                        "`entries` must be an array of `{ key = …, value = … }` tables",
+                    ));
+                };
+                for (row_index, row) in rows.iter().enumerate() {
+                    let row_path = format!("{path}.entries[{row_index}]");
+                    let row = row
+                        .as_object()
+                        .ok_or_else(|| materialize_error(&row_path, "expected a TOML table"))?;
+                    check_supported_keys(row, &row_path, &["key", "value"])?;
+                    let key = row.get("key").and_then(Value::as_str).ok_or_else(|| {
+                        materialize_error(&format!("{row_path}.key"), "`key` is required")
+                    })?;
+                    let value = row.get("value").and_then(Value::as_str).ok_or_else(|| {
+                        materialize_error(&format!("{row_path}.value"), "`value` is required")
+                    })?;
+                    map_entries.push(MapEntryConfig {
+                        key: key.to_owned(),
+                        value: value.to_owned(),
+                    });
+                }
+            }
+            maps.push(MapConfig {
+                source,
+                result,
+                hostnames,
+                default,
+                entries: map_entries,
+            });
+        }
+        // Same bounded validation as the nginx-conf plane: source/result
+        // vocabulary, value templates, duplicate result variables, hostnames
+        // key form. A diagnostic is located at the authored array level (the
+        // per-map detail is in the message).
+        validate_map_definitions(&maps).map_err(|message| {
+            materialize_error("server.toml.http.maps", format!("invalid `map`: {message}"))
+        })?;
+        self.maps = maps
+            .into_iter()
+            .map(|map| serde_json::to_value(map).unwrap_or(Value::Null))
+            .collect();
         Ok(())
     }
 
@@ -3535,6 +3694,7 @@ impl<'a> Materializer<'a> {
         Ok(Some(value))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn finish(
         self,
         limits: Value,
@@ -3542,15 +3702,20 @@ impl<'a> Materializer<'a> {
         gzip: Value,
         proxy_cache: Value,
         tunnel: Option<Value>,
+        mime_types: Option<Value>,
+        default_type: Option<Value>,
     ) -> Result<WebServerAppConfig, WebServerConfigError> {
         let instance = json!({
             "schemaVersion": 1,
             "kind": "sdkwork.webserver.app",
             "appKey": self.app_key,
             "nginx": nginx,
+            "mimeTypes": mime_types,
+            "defaultType": default_type,
             "gzip": gzip,
             "limitReqZones": self.limit_req_zones,
             "limitConnZones": self.limit_conn_zones,
+            "maps": self.maps,
             "limits": limits,
             "listeners": self.listeners,
             "certificates": self.certificates,
@@ -4210,6 +4375,8 @@ pub fn materialize_app(
     };
     let mut limits = json!({});
     let mut gzip = json!({ "enabled": false, "types": [], "minLength": 20 });
+    let mut mime_types_json: Option<Value> = None;
+    let mut default_type_json: Option<Value> = None;
     if let Some(http) = root.get("http").and_then(Value::as_object) {
         if let Some(body_size) = http.get("clientMaxBodySize").and_then(Value::as_str) {
             let bytes = materialize_size_bytes(body_size);
@@ -4236,6 +4403,47 @@ pub fn materialize_app(
             .and_then(|value| value.as_u64().or_else(|| value.as_i64().map(|n| n as u64)))
         {
             gzip["minLength"] = Value::from(min_length);
+        }
+        if let Some(default_type) = http.get("defaultType").and_then(Value::as_str) {
+            if default_type.trim().is_empty() {
+                return Err(materialize_error(
+                    "server.toml.http.defaultType",
+                    "`defaultType` must not be empty",
+                ));
+            }
+            default_type_json = Some(Value::String(default_type.to_owned()));
+        }
+        if let Some(rows) = http.get("mimeTypes").and_then(Value::as_array) {
+            let mut entries = Vec::with_capacity(rows.len());
+            for (index, row) in rows.iter().enumerate() {
+                let path = format!("server.toml.http.mimeTypes[{index}]");
+                let row = row
+                    .as_object()
+                    .ok_or_else(|| materialize_error(&path, "expected a TOML table"))?;
+                for key in row.keys() {
+                    if !matches!(key.as_str(), "mime" | "extensions") {
+                        return Err(materialize_error(
+                            &path,
+                            format!("unknown key `{key}`; expected `mime` and `extensions`"),
+                        ));
+                    }
+                }
+                let mime = as_str(row, &path, "mime")?;
+                let extensions = row
+                    .get("extensions")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| materialize_error(&path, "`extensions` must be an array"))?;
+                let extensions = extensions
+                    .iter()
+                    .map(|extension| {
+                        extension.as_str().map(str::to_owned).ok_or_else(|| {
+                            materialize_error(&path, "`extensions` entries must be strings")
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                entries.push(json!({ "mime": mime, "extensions": extensions }));
+            }
+            mime_types_json = Some(Value::Array(entries));
         }
     }
 
@@ -4303,12 +4511,15 @@ pub fn materialize_app(
             "certificates",
             "clientMaxBodySize",
             "defaults",
+            "defaultType",
+            "mimeTypes",
             "gzip",
             "gzipTypes",
             "gzipMinLength",
             "keepaliveTimeout",
             "limitConnZone",
             "limitReqZone",
+            "maps",
             "server",
             "upstream",
         ],
@@ -4316,6 +4527,7 @@ pub fn materialize_app(
     let defaults_tls = materialize_http_defaults(http)?;
     materializer.materialize_limit_req_zones(http)?;
     materializer.materialize_limit_conn_zones(http)?;
+    materializer.materialize_maps(http)?;
     materializer.materialize_certificates(http)?;
     materializer.materialize_upstreams(http)?;
     if let Some(servers) = http.get("server").and_then(Value::as_array) {
@@ -4337,7 +4549,15 @@ pub fn materialize_app(
         ));
     }
     let tunnel = Materializer::materialize_tunnel(effective)?;
-    materializer.finish(limits, nginx, gzip, proxy_cache, tunnel)
+    materializer.finish(
+        limits,
+        nginx,
+        gzip,
+        proxy_cache,
+        tunnel,
+        mime_types_json,
+        default_type_json,
+    )
 }
 
 #[cfg(test)]
@@ -5461,6 +5681,152 @@ tcpmux_port = 8444
             sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default().tcpmux_port,
             None
         );
+    }
+
+    #[test]
+    fn materializes_typed_maps_into_the_executable_model() {
+        // Item 12: `[[http.maps]]` is the typed plane's executable map form;
+        // the migration importer can render it without creating a silent
+        // no-op. The same bounded validation as the nginx-conf plane applies.
+        let toml_text = r#"
+[http]
+
+[[http.maps]]
+source = "$host"
+result = "$tenant_zone"
+default = "anonymous"
+
+[[http.maps.entries]]
+key = "a.example.test"
+value = "zone-a"
+
+[[http.maps.entries]]
+key = "b.example.test"
+value = "zone-b"
+
+[[http.maps]]
+source = "$http_x_role"
+result = "$role_tag"
+hostnames = false
+default = "none"
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["maps.example.test"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        assert_eq!(config.maps.len(), 2);
+        let zones = &config.maps[0];
+        assert_eq!(zones.source, "$host");
+        assert_eq!(zones.result, "$tenant_zone");
+        assert_eq!(zones.default.as_deref(), Some("anonymous"));
+        assert_eq!(zones.entries.len(), 2);
+        assert_eq!(zones.entries[0].key, "a.example.test");
+        assert_eq!(zones.entries[0].value, "zone-a");
+        // The declared result variable evaluates through the shared map
+        // evaluator, exactly like the nginx-conf plane.
+        struct Facts(&'static str);
+        impl crate::config::map_variables::MapVariables for Facts {
+            fn map_variable(&self, name: &str) -> Option<String> {
+                (name == "host").then(|| self.0.to_owned())
+            }
+        }
+        let resolved = crate::config::evaluate_map(&zones, &Facts("a.example.test"));
+        assert_eq!(resolved, "zone-a");
+        let fallback = crate::config::evaluate_map(&zones, &Facts("c.example.test"));
+        assert_eq!(fallback, "anonymous");
+    }
+
+    #[test]
+    fn typed_maps_invalid_forms_fail_closed_with_a_located_diagnostic() {
+        let build = |maps: &str| {
+            let toml_text = format!(
+                r#"
+[http]
+{maps}
+[[http.server]]
+listen = ["8080"]
+serverName = ["maps.example.test"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+"#
+            );
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            serde_json::to_value(&value).expect("converts")
+        };
+        let unsupported_source = build(
+            r#"
+[[http.maps]]
+source = "$server_protocol"
+result = "$tag"
+"#,
+        );
+        let error = materialize_app(&unsupported_source, "test").expect_err("unsupported source");
+        assert!(
+            error.to_string().contains("server.toml.http.maps"),
+            "diagnostic must be located: {error}"
+        );
+        let unknown_key = build(
+            r#"
+[[http.maps]]
+source = "$host"
+result = "$tag"
+unknown = "x"
+"#,
+        );
+        let error = materialize_app(&unknown_key, "test").expect_err("unknown key");
+        assert!(
+            error.to_string().contains("server.toml.http.maps[0]"),
+            "diagnostic must be located: {error}"
+        );
+    }
+
+    #[test]
+    fn materializes_chain_file_into_the_certificate_source() {
+        // Item 10: `chainFile` is in SERVER_TLS_KEYS, so it must reach the
+        // runtime material instead of being silently dropped. It is carried on
+        // the certificate source and consumed by the TLS materializer
+        // (downstream client-auth trust chain / served chain completion).
+        let toml_text = r#"
+[http]
+[http.certificates."tls-site"]
+certFile = "/etc/sdkwork/certs/tls.example.com/fullchain.pem"
+certKeyFile = "/etc/sdkwork/certs/tls.example.com/privkey.pem"
+chainFile = "/etc/sdkwork/certs/tls.example.com/chain.pem"
+
+[[http.server]]
+listen = ["443 ssl"]
+serverName = ["tls.example.com"]
+
+[http.server.tls]
+cert = "tls-site"
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        let certificate = config
+            .certificates
+            .iter()
+            .find(|certificate| certificate.id == "tls-site")
+            .expect("certificate");
+        match &certificate.source {
+            crate::config::CertificateSource::ProtectedFile { chain_file, .. } => assert_eq!(
+                chain_file.as_deref(),
+                Some("/etc/sdkwork/certs/tls.example.com/chain.pem")
+            ),
+        }
     }
 
     /// Minimal single-server typed-TOML document with an inline certificate,

@@ -4,14 +4,27 @@ use axum::{
     body::Body,
     http::{header, HeaderValue, Method, Request, Response, StatusCode},
 };
-use sdkwork_webserver_core::{RouteConfig, RoutePathType};
+use sdkwork_webserver_core::{GzipConfig, GzipStaticMode, RouteConfig, RoutePathType};
 
 use super::{
     credential_entry_injection::{inject_bootstrap_token, injection_token},
+    delivery_policy::MimePolicy,
     proxy::text_response,
-    static_file_response::serve_opened_file_with_cache_policy,
+    static_file_response::serve_opened_file_representation,
     static_path::{open_static_path, StaticPathError, StaticPathTarget},
 };
+
+/// Resolved delivery policy for one static route: the nginx `types` table and
+/// the nginx `gzip*` policy (whose `gzip_static` mode selects a precompressed
+/// sidecar).
+#[derive(Clone, Copy)]
+pub(crate) struct StaticDeliveryPolicy<'a> {
+    pub(crate) mime: MimePolicy<'a>,
+    pub(crate) gzip: &'a GzipConfig,
+    /// Effective nginx `max_ranges` for this route (`0` disables range
+    /// processing; the app default is an effectively unbounded ceiling).
+    pub(crate) max_ranges: u64,
+}
 
 pub async fn serve_static(
     root: &Path,
@@ -20,6 +33,7 @@ pub async fn serve_static(
     spa_fallback: Option<&str>,
     normalized_request_path: &str,
     request: Request<Body>,
+    delivery: StaticDeliveryPolicy<'_>,
 ) -> Response<Body> {
     if !matches!(request.method().as_str(), "GET" | "HEAD") {
         return text_response(StatusCode::METHOD_NOT_ALLOWED, "method is not allowed\n");
@@ -50,13 +64,7 @@ pub async fn serve_static(
             {
                 return with_adaptive_vary_if_spa(response, spa_fallback);
             }
-            let response = serve_opened_file_with_cache_policy(
-                file,
-                request.method(),
-                request.headers(),
-                route.cache_policy.as_ref(),
-            )
-            .await;
+            let response = serve_static_representation(root, file, request, route, delivery).await;
             with_adaptive_vary_if_spa(response, spa_fallback)
         }
         StaticPathTarget::RedirectToDirectory => {
@@ -78,6 +86,105 @@ pub async fn serve_static(
                     text_response(StatusCode::BAD_REQUEST, "invalid request path\n")
                 })
         }
+    }
+}
+
+/// Serve one opened static file, preferring a precompressed `<path>.gz` sidecar
+/// when nginx `gzip_static` selects it (differential-probed against nginx
+/// 1.29.6):
+///
+/// - `on`: the sidecar is served when the client accepts gzip; when the client
+///   does not, the identity file is served instead and `gzip_vary on` still
+///   declares `Vary: Accept-Encoding`;
+/// - `always`: the sidecar is served regardless of `Accept-Encoding`;
+/// - `off`: the identity file is served.
+///
+/// A sidecar representation carries `Content-Encoding: gzip` and its
+/// `Content-Length`/`ETag`/`Last-Modified` are the **sidecar file's** (nginx
+/// opens the `.gz` file and publishes its metadata), while `Content-Type` and
+/// the freshness policy belong to the original path. Range requests range over
+/// the stored (gzip) bytes, exactly like nginx. The sidecar is opened through
+/// the same no-symlink, no-`..` path walk as the identity file, so it can never
+/// escape the static root.
+async fn serve_static_representation(
+    root: &Path,
+    file: super::static_path::OpenedStaticFile,
+    request: Request<Body>,
+    route: &RouteConfig,
+    delivery: StaticDeliveryPolicy<'_>,
+) -> Response<Body> {
+    let content_type = delivery.mime.content_type(&file.path_hint);
+    let cache_control_path = file.path_hint.clone();
+    let identity_hints =
+        |vary_accept_encoding: bool| super::static_file_response::RepresentationHints {
+            content_type: content_type.clone(),
+            content_encoding: None,
+            vary_accept_encoding,
+            cache_control_path: &cache_control_path,
+        };
+    let mode = delivery.gzip.static_files;
+    if !matches!(mode, GzipStaticMode::Off) {
+        if let Some(sidecar) = open_gzip_sidecar(root, &file.path_hint).await {
+            let accepted = super::gzip_predicate::accepts_gzip(
+                request.headers().get(axum::http::header::ACCEPT_ENCODING),
+            );
+            if matches!(mode, GzipStaticMode::Always) || accepted {
+                let hints = super::static_file_response::RepresentationHints {
+                    content_type: content_type.clone(),
+                    content_encoding: Some("gzip"),
+                    // nginx 1.29.6 only sets the vary flag in `on` mode: the
+                    // `always` path never consults `Accept-Encoding` and does
+                    // not advertise the negotiation (differential-confirmed).
+                    vary_accept_encoding: matches!(mode, GzipStaticMode::On) && delivery.gzip.vary,
+                    cache_control_path: &cache_control_path,
+                };
+                return serve_opened_file_representation(
+                    sidecar,
+                    request.method(),
+                    request.headers(),
+                    route.cache_policy.as_ref(),
+                    &hints,
+                    delivery.max_ranges,
+                )
+                .await;
+            }
+            // The sidecar exists but this client will not decode it; serve the
+            // identity representation and still vary when the policy says so.
+            return serve_opened_file_representation(
+                file,
+                request.method(),
+                request.headers(),
+                route.cache_policy.as_ref(),
+                &identity_hints(matches!(mode, GzipStaticMode::On) && delivery.gzip.vary),
+                delivery.max_ranges,
+            )
+            .await;
+        }
+    }
+    serve_opened_file_representation(
+        file,
+        request.method(),
+        request.headers(),
+        route.cache_policy.as_ref(),
+        &identity_hints(false),
+        delivery.max_ranges,
+    )
+    .await
+}
+
+/// Open `<path_hint>.gz` through the static-root path walk. `path_hint` is
+/// already root-relative and symlink-free, so appending the suffix cannot
+/// escape the root; the component walk then refuses a symlinked sidecar.
+async fn open_gzip_sidecar(
+    root: &Path,
+    path_hint: &Path,
+) -> Option<super::static_path::OpenedStaticFile> {
+    let mut sidecar = path_hint.as_os_str().to_os_string();
+    sidecar.push(".gz");
+    let sidecar = sidecar.to_str()?;
+    match open_static_path(root, sidecar, false, None).await {
+        Ok(StaticPathTarget::File(file)) => Some(file),
+        _ => None,
     }
 }
 
@@ -232,4 +339,46 @@ fn is_spa_fallback_index(spa_fallback: &str) -> bool {
         .rsplit('/')
         .next()
         .is_some_and(|name| name.eq_ignore_ascii_case("index.html"))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    /// The sidecar lookup walks the static root exactly like the identity file:
+    /// a sidecar symlink that points outside the root must never be served.
+    #[tokio::test]
+    async fn gzip_sidecar_never_escapes_the_static_root_through_a_symlink() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let root = directory.path().join("public");
+        std::fs::create_dir_all(&root).expect("root");
+        std::fs::write(root.join("page.txt"), b"identity body\n").expect("identity");
+        let outside = directory.path().join("outside.txt.gz");
+        std::fs::write(&outside, b"outside secret\n").expect("outside");
+        symlink(&outside, root.join("page.txt.gz")).expect("symlink sidecar");
+
+        let sidecar = open_gzip_sidecar(&root, Path::new("page.txt")).await;
+        assert!(
+            sidecar.is_none(),
+            "a symlinked .gz sidecar must not be opened"
+        );
+    }
+
+    /// The sidecar path is derived by appending `.gz` to the already
+    /// root-relative, symlink-free resolved path, so a directory index
+    /// (`sub/index.html`) looks for `sub/index.html.gz`.
+    #[tokio::test]
+    async fn gzip_sidecar_is_derived_from_the_resolved_root_relative_path() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let root = directory.path().join("public");
+        std::fs::create_dir_all(root.join("sub")).expect("root");
+        std::fs::write(root.join("sub/index.html"), b"<html></html>").expect("index");
+        std::fs::write(root.join("sub/index.html.gz"), b"gzip bytes").expect("sidecar");
+
+        let sidecar = open_gzip_sidecar(&root, Path::new("sub/index.html"))
+            .await
+            .expect("sidecar opened");
+        assert!(sidecar.path_hint.ends_with("sub/index.html.gz"));
+    }
 }

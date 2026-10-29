@@ -627,7 +627,10 @@ async fn serve_listener(
                 .no_deflate()
                 .no_zstd()
                 .compress_when(NginxGzipPredicate::new(runtime.clone())),
-        );
+        )
+        // Outermost: nginx `gzip_vary off` removes the compression layer's
+        // automatic `Vary: Accept-Encoding`.
+        .layer(super::gzip_predicate::SuppressGzipVaryLayer);
     let service = app.into_make_service_with_connect_info::<DownstreamConnectionInfo>();
     let global_permits = runtime.connection_permits.clone();
     let resource_pressure = runtime.resource_pressure.clone();

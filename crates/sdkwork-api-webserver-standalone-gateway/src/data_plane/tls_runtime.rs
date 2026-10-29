@@ -762,6 +762,7 @@ fn compile_candidate(
         let loaded = load_certified_key(
             &certificate_file,
             &private_key_file,
+            None,
             &assignment.server_names,
             provider,
         )

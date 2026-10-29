@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{MediaResource};
+use crate::models::MediaResource;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ApplicationStoreListing {

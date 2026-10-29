@@ -95,6 +95,7 @@
     "check:nginx-gap": "node --test tools/check-nginx-gap.mjs",
     "check:nginx-corpus": "node --test tools/check-nginx-behavioral-corpus.mjs",
     "check:nginx-matrix": "node tools/check-nginx-directive-matrix.mjs",
+    "check:nginx-directive-audit": "node tools/gen-nginx-directive-audit.mjs --check --verify-evidence",
     "check:nginx-differential": "node tools/run-nginx-differential.mjs",
     "check:nginx-behavior": "node tools/run-nginx-behavioral-corpus.mjs",
     "check:nginx-compat": "node tools/run-nginx-compat-gate.mjs",

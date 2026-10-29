@@ -658,6 +658,51 @@ function certFingerprint(cert) {
   return `${cert.certFile || ''}|${cert.certKeyFile || ''}|${cert.chainFile || ''}`;
 }
 
+/** Strip one layer of nginx quoting from a map key or value token. */
+function unquoteMapToken(token) {
+  const trimmed = String(token ?? '').trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    if ((first === '"' || first === "'") && trimmed.endsWith(first)) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Parse one nginx `map $source $result { … }` declaration into the typed
+ * `[[http.maps]]` draft entry (the runtime executes this, unlike the legacy
+ * string-array `map` key which stays accepted-but-unenforced).
+ */
+function parseMapDeclaration(item) {
+  const args = item.statement.replace(/;$/u, '').split(/\s+/u).slice(1);
+  const source = args[0];
+  const result = args[1];
+  if (!source?.startsWith('$') || !result?.startsWith('$')) {
+    throw new Error('map requires `map $source $result { … }`');
+  }
+  const entry = { source, result, entries: [] };
+  for (const raw of item.blockData ?? []) {
+    const line = String(raw).trim().replace(/;$/u, '').trim();
+    if (!line) continue;
+    if (line === 'hostnames') {
+      entry.hostnames = true;
+      continue;
+    }
+    if (line === 'volatile') {
+      throw new Error('map `volatile` is not supported by the execution subset');
+    }
+    const match = /^(\S+)\s+(.+)$/u.exec(line);
+    if (!match) continue;
+    const key = unquoteMapToken(match[1]);
+    const value = unquoteMapToken(match[2]);
+    if (key === 'default') entry.default = value;
+    else entry.entries.push({ key, value });
+  }
+  return entry;
+}
+
 function buildDraft(mapped) {
   const draft = {
     schemaVersion: 1,
@@ -668,7 +713,7 @@ function buildDraft(mapped) {
       certificates: {},
       upstream: [],
       server: [],
-      map: [],
+      maps: [],
     },
     notes: [
       'Review mapped directives before promoting into deployments/webserver/server.*.toml.',
@@ -773,12 +818,10 @@ function buildDraft(mapped) {
       draft.http.limitReqZone = draft.http.limitReqZone || [];
       draft.http.limitReqZone.push(args.join(' '));
     } else if (item.name === 'map') {
-      // A map block is one declaration whose body lines are data. Keep the
-      // complete declaration in the review draft; never classify body lines
-      // as directives.
-      const body = (item.blockData ?? []).map((line) => line.trim()).filter(Boolean).join(' ');
-      const declaration = `${args.join(' ')}${body ? ` { ${body} }` : ''}`.trim();
-      if (declaration && !draft.http.map.includes(declaration)) draft.http.map.push(declaration);
+      // A map block is one typed declaration whose body lines are data; never
+      // classify body lines as directives. `[[http.maps]]` executes on the
+      // runtime, so the CLI renders it instead of the legacy string-array key.
+      draft.http.maps.push(parseMapDeclaration(item));
     } else if (item.name === 'least_conn' || item.name === 'ip_hash' || item.name === 'hash') {
       const upstream = ensureUpstream(item);
       if (upstream) {
@@ -922,7 +965,6 @@ function buildDraft(mapped) {
   // Drop internal bookkeeping fields from published draft.
   for (const server of draft.http.server) delete server._blockId;
   for (const upstream of draft.http.upstream) delete upstream._blockId;
-  if (draft.http.map.length === 0) delete draft.http.map;
 
   return draft;
 }
@@ -975,8 +1017,22 @@ function emitToml(draft, options = {}) {
   if (http.serverTokens) lines.push(`serverTokens = ${tomlQuote(http.serverTokens)}`);
   if (http.gzip != null) lines.push(`gzip = ${http.gzip}`);
   if (http.gzipTypes?.length) lines.push(`gzipTypes = ${tomlInlineArray(http.gzipTypes)}`);
-  if (http.map?.length) lines.push(`map = ${tomlInlineArray(http.map)}`);
   if (http.limitReqZone?.length) lines.push(`limitReqZone = ${tomlInlineArray(http.limitReqZone)}`);
+
+  for (const map of http.maps || []) {
+    lines.push('');
+    lines.push('[[http.maps]]');
+    lines.push(`source = ${tomlQuote(map.source)}`);
+    lines.push(`result = ${tomlQuote(map.result)}`);
+    if (map.hostnames) lines.push('hostnames = true');
+    if (map.default != null) lines.push(`default = ${tomlQuote(map.default)}`);
+    for (const entry of map.entries || []) {
+      lines.push('');
+      lines.push('[[http.maps.entries]]');
+      lines.push(`key = ${tomlQuote(entry.key)}`);
+      lines.push(`value = ${tomlQuote(entry.value)}`);
+    }
+  }
 
   for (const [certId, cert] of Object.entries(http.certificates || {})) {
     lines.push('');

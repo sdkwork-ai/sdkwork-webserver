@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{MediaChecksum};
+use crate::models::MediaChecksum;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct MediaResource {

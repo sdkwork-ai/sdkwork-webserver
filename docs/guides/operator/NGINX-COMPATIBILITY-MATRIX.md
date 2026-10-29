@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 79 |
-| accepted, NOT enforced | 183 |
-| rejected (fail closed) | 253 |
+| executable | 99 |
+| accepted, NOT enforced | 166 |
+| rejected (fail closed) | 250 |
 | excluded from profile | 229 |
 | **total** | **744** |
 
@@ -51,36 +51,22 @@ states what is lost and what to configure instead.
 
 | Directive | Contexts | What an operator loses | Migration action |
 | --- | --- | --- | --- |
-| `absolute_redirect` | http, http-location, http-server | redirect URL construction policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:absolute_redirect` (specs/nginx-gap.catalog.json). |
 | `autoindex` | http, http-location, http-server | the autoindex value is accepted but the runtime decides directory listing policy | No enforced equivalent is catalogued for this directive; remove it or track capability `http:autoindex` (specs/nginx-gap.catalog.json). |
 | `charset` | http, http-if, http-location, http-server | the configured response charset translation is not performed | No enforced equivalent is catalogued for this directive; remove it or track capability `http:charset` (specs/nginx-gap.catalog.json). |
 | `charset_types` | http, http-location, http-server | the MIME types eligible for charset translation are not used | No enforced equivalent is catalogued for this directive; remove it or track capability `http:charset_types` (specs/nginx-gap.catalog.json). |
-| `default_type` | http, http-location, http-server | the configured default MIME type is not used | No enforced equivalent is catalogued for this directive; remove it or track capability `http:default_type` (specs/nginx-gap.catalog.json). |
-| `gzip_static` | http, http-location, http-server | precompressed `.gz` sidecar files are not served; the runtime compresses on the fly per its own policy | No enforced equivalent is catalogued for this directive; remove it or track capability `http:gzip_static` (specs/nginx-gap.catalog.json). |
-| `ignore_invalid_headers` | http, http-server | invalid header handling uses the runtime policy instead | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ignore_invalid_headers` (specs/nginx-gap.catalog.json). |
-| `limit_conn_status` | http, http-location, http-server | the connection-limit status code is not configurable from nginx.conf | No enforced equivalent is catalogued for this directive; remove it or track capability `http:limit_conn_status` (specs/nginx-gap.catalog.json). |
-| `limit_req_status` | http, http-location, http-server | the rate-limit status code is not configurable from nginx.conf | No enforced equivalent is catalogued for this directive; remove it or track capability `http:limit_req_status` (specs/nginx-gap.catalog.json). |
-| `map` | http | variable maps are not evaluated; every mapped variable resolves as missing | No enforced equivalent: typed TOML key `http.map` is also accepted-but-unenforced; remove the directive or track capability `http:map` (specs/nginx-gap.catalog.json). |
-| `merge_slashes` | http, http-server | repeated-slash handling uses URI canonicalization, not this nginx flag | No enforced equivalent is catalogued for this directive; remove it or track capability `http:merge_slashes` (specs/nginx-gap.catalog.json). |
 | `open_file_cache` | http, http-location, http-server | the static-file descriptor cache policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:open_file_cache` (specs/nginx-gap.catalog.json). |
-| `port_in_redirect` | http, http-location, http-server | redirect port policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:port_in_redirect` (specs/nginx-gap.catalog.json). |
-| `proxy_hide_header` | http, http-location, http-server | the upstream header hide list is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_hide_header` (specs/nginx-gap.catalog.json). |
 | `proxy_method` | http, http-location, http-server | the proxied HTTP method override is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_method` (specs/nginx-gap.catalog.json). |
 | `proxy_next_upstream` | http, http-location, http-server | the upstream retry condition list is not applied; the runtime uses its own retry policy | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_next_upstream` (specs/nginx-gap.catalog.json). |
-| `proxy_pass_header` | http, http-location, http-server | the upstream header pass-through list is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_pass_header` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_ciphers` | http, http-location, http-server | the upstream TLS cipher policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_ssl_ciphers` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_protocols` | http, http-location, http-server | the upstream TLS protocol window is not applied from nginx.conf (typed TOML owns upstream TLS) | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_ssl_protocols` (specs/nginx-gap.catalog.json). |
-| `server_name_in_redirect` | http, http-location, http-server | redirect host policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:server_name_in_redirect` (specs/nginx-gap.catalog.json). |
 | `source_charset` | http, http-if, http-location, http-server | the source charset declaration is not used for translation | No enforced equivalent is catalogued for this directive; remove it or track capability `http:source_charset` (specs/nginx-gap.catalog.json). |
 | `ssl_ciphers` | http, http-server | the cipher policy is not applied; the rustls TLS policy is used instead | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ssl_ciphers` (specs/nginx-gap.catalog.json). |
-| `ssl_prefer_server_ciphers` | http, http-server | server cipher preference is not applied | No enforced equivalent: typed TOML key `http.server.tls.preferServerCiphers` is also accepted-but-unenforced; remove the directive or track capability `http:ssl_prefer_server_ciphers` (specs/nginx-gap.catalog.json). |
-| `ssl_session_cache` | http, http-server | the nginx TLS session cache sizing/sharing is not applied; the runtime manages TLS sessions | No enforced equivalent: typed TOML key `http.server.tls.sessionCache` is also accepted-but-unenforced; remove the directive or track capability `http:ssl_session_cache` (specs/nginx-gap.catalog.json). |
+| `ssl_prefer_server_ciphers` | http, http-server | server cipher preference is not applied | No enforced typed equivalent: typed TOML key `http.server.tls.preferServerCiphers` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_prefer_server_ciphers` (specs/nginx-gap.catalog.json). |
+| `ssl_session_cache` | http, http-server | the nginx TLS session cache sizing/sharing is not applied; the runtime manages TLS sessions | No enforced typed equivalent: typed TOML key `http.server.tls.sessionCache` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_session_cache` (specs/nginx-gap.catalog.json). |
 | `ssl_session_tickets` | http, http-server | TLS session ticket policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ssl_session_tickets` (specs/nginx-gap.catalog.json). |
-| `ssl_stapling` | http, http-server | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | No enforced equivalent: typed TOML key `http.server.tls.stapling` is also accepted-but-unenforced; remove the directive or track capability `http:ssl_stapling` (specs/nginx-gap.catalog.json). |
+| `ssl_stapling` | http, http-server | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | No enforced typed equivalent: typed TOML key `http.server.tls.stapling` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_stapling` (specs/nginx-gap.catalog.json). |
 | `ssl_stapling_verify` | http, http-server | OCSP stapling verification does not run | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ssl_stapling_verify` (specs/nginx-gap.catalog.json). |
 | `ssl_trusted_certificate` | http, http-server | the OCSP/verification trust chain is not used | Import renders the enforced typed key `http.certificates.chainFile`; verify it with `--write-toml`. |
-| `types` | http, http-location, http-server | the MIME type table is not used; the runtime serves its own content-type table | No enforced equivalent is catalogued for this directive; remove it or track capability `http:types` (specs/nginx-gap.catalog.json). |
-| `underscores_in_headers` | http, http-server | headers with underscores are not accepted the way nginx accepts them | No enforced equivalent is catalogued for this directive; remove it or track capability `http:underscores_in_headers` (specs/nginx-gap.catalog.json). |
 | `map` | stream | variable maps are not evaluated; every mapped variable resolves as missing | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:map` (specs/nginx-gap.catalog.json). |
 | `proxy_next_upstream` | stream, stream-server | the upstream retry condition list is not applied; the runtime uses its own retry policy | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_next_upstream` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_ciphers` | stream, stream-server | the upstream TLS cipher policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_ssl_ciphers` (specs/nginx-gap.catalog.json). |
@@ -105,7 +91,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_autoindex_module` (3) — `autoindex_exact_size`, `autoindex_format`, `autoindex_localtime`
 - `ngx_http_browser_module` (4) — `ancient_browser`, `ancient_browser_value`, `modern_browser`, `modern_browser_value`
 - `ngx_http_charset_filter_module` (1) — `override_charset`
-- `ngx_http_core_module` (17) — `aio`, `aio_write`, `auth_delay`, `client_body_in_file_only`, `client_body_in_single_buffer`, `client_body_temp_path`, `early_hints`, `internal`, `keepalive_min_timeout`, `limit_except`, `limit_rate`, `limit_rate_after`, `open_file_cache_errors`, `open_file_cache_events`, `post_action`, `satisfy`, `subrequest_output_buffer_size`
+- `ngx_http_core_module` (16) — `aio`, `aio_write`, `auth_delay`, `client_body_in_file_only`, `client_body_in_single_buffer`, `client_body_temp_path`, `early_hints`, `keepalive_min_timeout`, `limit_except`, `limit_rate`, `limit_rate_after`, `open_file_cache_errors`, `open_file_cache_events`, `post_action`, `satisfy`, `subrequest_output_buffer_size`
 - `ngx_http_dav_module` (4) — `create_full_put_path`, `dav_access`, `dav_methods`, `min_delete_depth`
 - `ngx_http_degradation_module` (2) — `degradation`, `degrade`
 - `ngx_http_empty_gif_module` (1) — `empty_gif`
@@ -121,7 +107,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_log_module` (1) — `open_log_file_cache`
 - `ngx_http_mirror_module` (2) — `mirror`, `mirror_request_body`
 - `ngx_http_mp4_module` (4) — `mp4`, `mp4_buffer_size`, `mp4_max_buffer_size`, `mp4_start_key_frame`
-- `ngx_http_proxy_module` (33) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_domain`, `proxy_cookie_flags`, `proxy_cookie_path`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
+- `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
 - `ngx_http_random_index_module` (1) — `random_index`
 - `ngx_http_referer_module` (3) — `referer_hash_bucket_size`, `referer_hash_max_size`, `valid_referers`
 - `ngx_http_rewrite_module` (5) — `break`, `if`, `rewrite_log`, `set`, `uninitialized_variable_warn`
@@ -176,6 +162,64 @@ memcached, and do not import mail or third-party module blocks.
 - `ngx_mail_smtp_module` (4) — `smtp_auth`, `smtp_capabilities`, `smtp_client_buffer`, `smtp_greeting_delay`
 - `ngx_mail_ssl_module` (20) — `ssl_certificate`, `ssl_certificate_compression`, `ssl_certificate_key`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_protocols`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`, `starttls`
 - `ngx_stream_geoip_module` (3) — `geoip_city`, `geoip_country`, `geoip_org`
+
+### Typed TOML keys that are accepted but NOT enforced
+
+These typed TOML keys are accepted so a stock configuration can be loaded, but the TOML
+materializer does not apply them. A migration that renders one of these keys would turn one
+silent no-op into another, so `tools/import-nginx-conf.mjs` does not emit them and reports the
+directive under `accepted` instead. Derived from `server_toml.rs` (ACCEPTED_IGNORED +
+UNENFORCED_BEHAVIOR_TOML_KEYS + actual materializer reads).
+
+| Typed TOML key | Why it has no effect |
+| --- | --- |
+| `autoindex` | documented unenforced behavior key — directory listings are not generated by the data plane (404 for a directory without an index file) |
+| `charset` | documented unenforced behavior key — response charset is not rewritten from this key |
+| `ciphers` | documented unenforced behavior key — cipher suites follow the runtime policy-safe TLS defaults, not this key |
+| `dhparam` | documented unenforced behavior key — the runtime TLS stack uses its own key-exchange groups, not this key |
+| `disableSymlinks` | documented unenforced behavior key — symlink policy is enforced by the configured static root, not by this key |
+| `ecdhCurve` | documented unenforced behavior key — the runtime TLS stack uses its own key-exchange groups, not this key |
+| `errorLog` | accepted-but-ignored by the typed TOML materializer |
+| `errorPage` | documented unenforced behavior key — error-page mapping is not materialized from this key; declare typed errorPages entries |
+| `failTimeout` | documented unenforced behavior key — upstream ejection follows the runtime passive/active health policy, not this key |
+| `keepalive` | accepted-but-ignored by the typed TOML materializer |
+| `keepaliveTimeout` | accepted-but-ignored by the typed TOML materializer |
+| `logNotFound` | documented unenforced behavior key — missing-file logging follows the runtime log policy |
+| `map` | documented unenforced behavior key — the legacy string-array `map` key is not executed; declare `[[http.maps]]` entries (source/result/entries) for an executable map |
+| `maxFails` | documented unenforced behavior key — upstream ejection follows the runtime passive/active health policy, not this key |
+| `ocspStapling` | documented unenforced behavior key — OCSP stapling is not implemented: no OCSP response is stapled to the certificate |
+| `pid` | accepted-but-ignored by the typed TOML materializer |
+| `preferServerCiphers` | documented unenforced behavior key — server cipher preference is owned by the runtime TLS policy, not this key |
+| `proxyBuffering` | documented unenforced behavior key — proxy responses are always streamed; buffering cannot be enabled by this key |
+| `proxyConnectTimeout` | documented unenforced behavior key — upstream connect timeouts follow the resolved upstream policy, not this location key |
+| `proxyHideHeader` | documented unenforced behavior key — upstream response headers are filtered by the runtime hop-by-hop policy, not this key |
+| `proxyHttpVersion` | documented unenforced behavior key — the upstream protocol is negotiated by the runtime, not this key |
+| `proxyInterceptErrors` | documented unenforced behavior key — upstream error interception is not materialized from this key; the upstream status is relayed |
+| `proxyMethod` | documented unenforced behavior key — the upstream method follows the client method, not this key |
+| `proxyNextUpstream` | documented unenforced behavior key — retry eligibility follows the runtime bounded retry policy, not this key |
+| `proxyReadTimeout` | documented unenforced behavior key — upstream response timeouts follow the resolved upstream policy, not this location key |
+| `proxyRequestBuffering` | documented unenforced behavior key — request bodies are streamed to the upstream, never buffered by this key |
+| `proxySendTimeout` | documented unenforced behavior key — upstream request timeouts follow the resolved upstream policy, not this location key |
+| `proxyWebsocketUpgrade` | documented unenforced behavior key — WebSocket upgrades follow the runtime upgrade policy, not this key |
+| `resolve` | documented unenforced behavior key — upstream hostnames are resolved at connection time; this key adds no effect |
+| `sendfile` | accepted-but-ignored by the typed TOML materializer |
+| `sendfileMaxChunk` | documented unenforced behavior key — static files are streamed by the runtime in bounded chunks |
+| `serverTokens` | documented unenforced behavior key — the runtime never emits an nginx version banner, so the declared value has no effect |
+| `sessionCache` | documented unenforced behavior key — TLS session resumption is owned by the runtime TLS policy, not this key |
+| `sessionTickets` | documented unenforced behavior key — TLS session tickets are owned by the runtime TLS policy, not this key |
+| `sessionTimeout` | documented unenforced behavior key — TLS session resumption is owned by the runtime TLS policy, not this key |
+| `stapling` | documented unenforced behavior key — OCSP stapling is not implemented: no OCSP response is stapled to the certificate |
+| `staplingVerify` | documented unenforced behavior key — OCSP stapling is not implemented, so response verification has no effect |
+| `tcpNodelay` | accepted-but-ignored by the typed TOML materializer |
+| `tcpNopush` | accepted-but-ignored by the typed TOML materializer |
+| `user` | accepted-but-ignored by the typed TOML materializer |
+| `verifyDepth` | documented unenforced behavior key — client-certificate chain depth follows the runtime verifier policy, not this key |
+| `workerConnections` | accepted-but-ignored by the typed TOML materializer |
+| `workerProcesses` | accepted-but-ignored by the typed TOML materializer |
+
+### Typed TOML mappings with a different semantic
+
+- `keepalive_timeout` → `http.keepaliveTimeout`: limits.requestTimeoutMs (a request timeout, not the keep-alive idle timeout).
 
 ### Extraction, rewrite, buffer, and retry limits
 
@@ -378,7 +422,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `absolute_redirect` | flag | http, http-location, http-server | accepted, NOT enforced | redirect URL construction policy is not applied |
+| `absolute_redirect` | flag | http, http-location, http-server | executable | runtime: `virtualHosts[].redirectPolicy.absolute (http/server) / routes[].redirectPolicy.absolute (location)`. a proxied upstream Location that no proxy_redirect rule matches is absolutized under absolute_redirect on (nginx keeps it relative when unmatched); the differential fixture pins absolute_redirect off for proxy-policy hosts |
 | `aio` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `aio_write` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `alias` | 1 | http-location | executable | runtime: `virtualHosts[].routes[].resource.root (prefix replacement)`. path substitution executes; forbidden when staging a tenant fragment on a shared edge |
@@ -393,7 +437,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `client_header_timeout` | 1 | http, http-server | accepted, NOT enforced | the request-header timeout is not configurable from nginx.conf |
 | `client_max_body_size` | 1 | http, http-location, http-server | executable | runtime: `limits.maxRequestBodyBytes` |
 | `connection_pool_size` | 1 | http, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
-| `default_type` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured default MIME type is not used |
+| `default_type` | 1 | http, http-location, http-server | executable | runtime: `http.defaultType / host.defaultType / route.defaultType (independent inheritance)`. when no default_type is declared the runtime keeps its safe application/octet-stream fallback, while nginx ships text/plain (pre-existing documented difference) |
 | `directio` | 1 | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `directio_alignment` | 1 | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `disable_symlinks` | 1\|2 | http, http-location, http-server | accepted, NOT enforced | symlink policy is not applied |
@@ -404,10 +448,10 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `gzip_disable` | 1+ | http, http-location, http-server | accepted, NOT enforced | the user-agent gzip exclusion list is not applied |
 | `gzip_http_version` | 1 | http, http-location, http-server | accepted, NOT enforced | the nginx gzip tuning value is ignored; the runtime compression policy applies |
 | `gzip_proxied` | 1+ | http, http-location, http-server | accepted, NOT enforced | the proxied-response gzip eligibility policy is not applied |
-| `gzip_vary` | flag | http, http-location, http-server | accepted, NOT enforced | the Vary header behavior for gzip negotiation is not applied |
+| `gzip_vary` | flag | http, http-location, http-server | executable | runtime: `http/host/route gzip.vary`. pre-routing generated rejections keep the compression layer Vary policy (documented compression-policy difference) |
 | `if_modified_since` | 1 | http, http-location, http-server | executable | runtime: `routes[].cachePolicy.ifModifiedSince` |
-| `ignore_invalid_headers` | flag | http, http-server | accepted, NOT enforced | invalid header handling uses the runtime policy instead |
-| `internal` | no-args | http-location | rejected (fail closed) |  |
+| `ignore_invalid_headers` | flag | http, http-server | executable | runtime: `virtualHosts[].ignoreInvalidHeaders`. the runtime HTTP boundary always rejects a non-token header name with 400 (stricter than nginx, which drops or forwards depending on the value) |
+| `internal` | no-args | http-location | executable | runtime: `routes[].internal`. reachable through the supported internal-redirect mechanisms (rewrite last, error_page, named target); try_files <absolute-uri> route re-selection is the pre-existing bounded gap; http/server contexts fail closed |
 | `keepalive_disable` | 1\|2 | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `keepalive_min_timeout` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `keepalive_requests` | 1 | http, http-location, http-server, http-upstream | accepted, NOT enforced | the nginx keepalive request ceiling is not applied from nginx.conf |
@@ -424,8 +468,8 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `location` | 1\|2 | http-location, http-server | executable | runtime: `virtualHosts[].routes[]` |
 | `log_not_found` | flag | http, http-location, http-server | accepted, NOT enforced | the nginx log target/format is ignored; use SDKWork observability |
 | `log_subrequest` | flag | http, http-location, http-server | accepted, NOT enforced | the nginx log target/format is ignored; use SDKWork observability |
-| `max_ranges` | 1 | http, http-location, http-server | accepted, NOT enforced | the partial-range count ceiling is not applied |
-| `merge_slashes` | flag | http, http-server | accepted, NOT enforced | repeated-slash handling uses URI canonicalization, not this nginx flag |
+| `max_ranges` | 1 | http, http-location, http-server | executable | runtime: `virtualHosts[].maxRanges / routes[].maxRanges` |
+| `merge_slashes` | flag | http, http-server | executable | runtime: `virtualHosts[].mergeSlashes`. nginx parses the URI before virtual-host selection, so its effective value is the listener default server; the runtime resolves the directive per host (the differential fixture declares it at http level so both sides agree) |
 | `msie_padding` | flag | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `msie_refresh` | flag | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `open_file_cache` | 1\|2 | http, http-location, http-server | accepted, NOT enforced | the static-file descriptor cache policy is not applied |
@@ -433,7 +477,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `open_file_cache_events` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `open_file_cache_min_uses` | 1 | http, http-location, http-server | accepted, NOT enforced | the static-file descriptor cache usage threshold is not applied |
 | `open_file_cache_valid` | 1 | http, http-location, http-server | accepted, NOT enforced | the static-file descriptor cache TTL is not applied |
-| `port_in_redirect` | flag | http, http-location, http-server | accepted, NOT enforced | redirect port policy is not applied |
+| `port_in_redirect` | flag | http, http-location, http-server | executable | runtime: `virtualHosts[].redirectPolicy.port / routes[].redirectPolicy.port` |
 | `post_action` | 1 | http, http-if, http-location, http-server | rejected (fail closed) |  |
 | `postpone_output` | 1 | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `read_ahead` | 1 | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
@@ -450,17 +494,17 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `sendfile_max_chunk` | 1 | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `server` | 1+\|no-args | http, http-upstream | executable | runtime: `virtualHosts[]` |
 | `server_name` | 1+ | http-server | executable | runtime: `virtualHosts[].serverNames (exact, *.leading-wildcard, trailing-wildcard, .suffix, ~regex)`. TLS SNI certificate selection stays exact plus one-level wildcard, so a regex or trailing-wildcard server_name on an ssl listener is rejected at import instead of answered with a mismatched certificate; the empty `server_name ""` and `$hostname` forms fail closed; duplicate ownership of a name across virtual hosts fails closed instead of nginx's conflicting-name warning |
-| `server_name_in_redirect` | flag | http, http-location, http-server | accepted, NOT enforced | redirect host policy is not applied |
+| `server_name_in_redirect` | flag | http, http-location, http-server | executable | runtime: `virtualHosts[].redirectPolicy.serverName / routes[].redirectPolicy.serverName` |
 | `server_names_hash_bucket_size` | 1 | http | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `server_names_hash_max_size` | 1 | http | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `server_tokens` | 1 | http, http-location, http-server | accepted, NOT enforced | the Server response header token policy is not applied |
 | `subrequest_output_buffer_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `tcp_nodelay` | flag | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
 | `tcp_nopush` | flag | http, http-location, http-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
-| `types` | no-args | http, http-location, http-server | accepted, NOT enforced | the MIME type table is not used; the runtime serves its own content-type table |
+| `types` | no-args | http, http-location, http-server | executable | runtime: `http.mimeTypes / host.mimeTypes / route.mimeTypes (replace-on-declare table)`. typed TOML/JSON exposes the MIME table only at http level; the nginx plane supports http/server/location |
 | `types_hash_bucket_size` | 1 | http, http-location, http-server | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `types_hash_max_size` | 1 | http, http-location, http-server | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
-| `underscores_in_headers` | flag | http, http-server | accepted, NOT enforced | headers with underscores are not accepted the way nginx accepts them |
+| `underscores_in_headers` | flag | http, http-server | executable | runtime: `virtualHosts[].underscoresInHeaders`. typed TOML keeps its historical permissive default (true); the nginx-conf plane defaults to nginx’s off |
 | `variables_hash_bucket_size` | 1 | http | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `variables_hash_max_size` | 1 | http | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 
@@ -621,7 +665,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `gzip_static` | 1 | http, http-location, http-server | accepted, NOT enforced | precompressed `.gz` sidecar files are not served; the runtime compresses on the fly per its own policy |
+| `gzip_static` | 1 | http, http-location, http-server | executable | runtime: `http.gzip.staticFiles / host.gzip.staticFiles / route.gzip.staticFiles (off\|on\|always)`. an orphan .gz sidecar without the identity file is not served (nginx 1.29.6 serves it); `gunzip` is out of scope; gzip_static applies to the static-file content path only; pre-routing generated rejections keep the compression layer policy |
 
 #### `ngx_http_headers_filter_module` (5 directives)
 
@@ -658,7 +702,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `limit_conn` | 2 | http, http-location, http-server | executable | runtime: `routes[].limitConn` |
 | `limit_conn_dry_run` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `limit_conn_log_level` | 1 | http, http-location, http-server | accepted, NOT enforced | the connection-limit log level is not configurable from nginx.conf |
-| `limit_conn_status` | 1 | http, http-location, http-server | accepted, NOT enforced | the connection-limit status code is not configurable from nginx.conf |
+| `limit_conn_status` | 1 | http, http-location, http-server | executable | runtime: `virtualHosts[].limitConnStatus / routes[].limitConnStatus` |
 | `limit_conn_zone` | 2 | http | executable | runtime: `limitConnZones[]` |
 
 #### `ngx_http_limit_req_module` (5 directives)
@@ -668,7 +712,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `limit_req` | 1\|2\|3 | http, http-location, http-server | executable | runtime: `routes[].limitReq`. burst/nodelay supported; the nginx delay queue is not scheduled |
 | `limit_req_dry_run` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `limit_req_log_level` | 1 | http, http-location, http-server | accepted, NOT enforced | the rate-limit log level is not configurable from nginx.conf |
-| `limit_req_status` | 1 | http, http-location, http-server | accepted, NOT enforced | the rate-limit status code is not configurable from nginx.conf |
+| `limit_req_status` | 1 | http, http-location, http-server | executable | runtime: `virtualHosts[].limitReqStatus / routes[].limitReqStatus` |
 | `limit_req_zone` | 3 | http | executable | runtime: `limitReqZones[]` |
 
 #### `ngx_http_log_module` (3 directives)
@@ -683,7 +727,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `map` | 2 | http | accepted, NOT enforced | variable maps are not evaluated; every mapped variable resolves as missing |
+| `map` | 2 | http | executable | runtime: `http.maps[] (MapConfig: source/result/hostnames/default/entries)`. a map source must be exactly one supported variable (no composite "$host:$port" source); a result variable cannot be the source of another map; `volatile` fails closed; maps are evaluated once before the rewrite loop, so a map sourced from $uri/$document_uri observes the pre-rewrite URI (nginx evaluates lazily at first use); duplicate result variable names fail closed (nginx silently keeps the last declaration) |
 | `map_hash_bucket_size` | 1 | http | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `map_hash_max_size` | 1 | http | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 
@@ -759,13 +803,13 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `proxy_cache_use_stale` | 1+ | http, http-location, http-server | executable | runtime: `proxyCache.staleTtlSeconds` |
 | `proxy_cache_valid` | 1+ | http, http-location, http-server | executable | runtime: `proxyCache.defaultTtlSeconds` |
 | `proxy_connect_timeout` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
-| `proxy_cookie_domain` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `proxy_cookie_domain` | 1\|2 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.cookieDomain`. regex forms fail closed |
 | `proxy_cookie_flags` | 1\|2\|3\|4 | http, http-location, http-server | rejected (fail closed) |  |
-| `proxy_cookie_path` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `proxy_cookie_path` | 1\|2 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.cookiePath`. regex forms fail closed |
 | `proxy_force_ranges` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_headers_hash_bucket_size` | 1 | http, http-location, http-server | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `proxy_headers_hash_max_size` | 1 | http, http-location, http-server | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
-| `proxy_hide_header` | 1 | http, http-location, http-server | accepted, NOT enforced | the upstream header hide list is not applied |
+| `proxy_hide_header` | 1 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.hideHeaders (http/server/location, replace-on-declare)`. the default-hidden upstream set is nginx’s (Date, Server, X-Pad, X-Accel-*) |
 | `proxy_http_version` | 1 | http, http-location, http-server | accepted, NOT enforced | the upstream protocol version is not forced from nginx.conf |
 | `proxy_ignore_client_abort` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_ignore_headers` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
@@ -778,12 +822,12 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `proxy_next_upstream_tries` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_no_cache` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_pass` | 1 | http-if, http-limit-except, http-location | executable | runtime: `virtualHosts[].routes[].resource.targets[].url`. http(s) upstream targets only; unix sockets, query strings, and FTP-style schemes are rejected |
-| `proxy_pass_header` | 1 | http, http-location, http-server | accepted, NOT enforced | the upstream header pass-through list is not applied |
+| `proxy_pass_header` | 1 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.passHeaders` |
 | `proxy_pass_request_body` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_pass_request_headers` | flag | http, http-location, http-server | executable | runtime: `routes[].resource.proxyPassRequestHeaders` |
 | `proxy_pass_trailers` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_read_timeout` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
-| `proxy_redirect` | 1\|2 | http, http-location, http-server | accepted, NOT enforced | the upstream Location rewrite policy is not applied |
+| `proxy_redirect` | 1\|2 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.redirects (off\|default\|<from> <to>)`. regex from/to forms and `$variable` from/to forms fail closed; `default` with a variable proxy_pass fails closed |
 | `proxy_request_buffering` | flag | http, http-location, http-server | accepted, NOT enforced | the request buffering mode is not changed from nginx.conf |
 | `proxy_send_lowat` | 1 | http, http-location, http-server | accepted, NOT enforced | the nginx proxy tuning value is ignored; the runtime proxy policy applies |
 | `proxy_send_timeout` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |

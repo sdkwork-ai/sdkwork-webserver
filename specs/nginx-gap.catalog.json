@@ -8,6 +8,9 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Wave 2b directive execution (2026-10-30, REQ-2026-0073): proxy response-header policies (hide/pass/redirect/cookie path+domain), internal locations, merge_slashes and request-header acceptance moved from accepted-unenforced/fail-closed to executable. tests/nginx/differential-http grew 150 -> 182 cases against nginx 1.29.6. Still open after wave 2b: chunked_transfer_encoding, charset family, autoindex family, gzip refinements, HTTP/2 tuning, stream module gaps (wave 3).",
+    "Wave 2 directive execution (2026-10-30, REQ-2026-0073): redirect construction policies (absolute_redirect/port_in_redirect/server_name_in_redirect), limit_req_status/limit_conn_status, max_ranges, certificate chainFile consumption and typed TOML [[http.maps]] moved from accepted-unenforced/silent to executable. tests/nginx/differential-http grew 130 -> 150 cases against nginx 1.29.6. The three upstream proxy timeout keys became explicit accepted-unenforced diagnostics instead of silent drops. Still open in this wave: proxy response header policies, internal locations, merge_slashes, header acceptance policy (wave 2b).",
+    "Wave 1 directive execution (2026-10-30, REQ-2026-0073): nginx `map` (http), `types`/`default_type`, `gzip_static` and `gzip_vary` moved from accepted-unenforced to executable with real-nginx differential evidence. tests/nginx/differential-http grew 87 -> 130 cases (oracle recaptured from nginx 1.29.6, floor 130); the migration CLI no longer treats them as unenforced. Bounded gaps: map source is a single supported variable and evaluates once before the rewrite loop; typed TOML exposes MIME types only at http level; gzip_static does not serve orphan .gz sidecars and `gunzip` remains out of scope.",
     "Response-semantics closure (2026-10-29, REQ-2026-0073): add_header now executes nginx semantics at http/server/location (replace-on-declare inheritance, authored order and duplicates, default status list plus `always`, bounded variable expansion, one response choke point covering static/proxy/cache/return/redirect/error/named-hop/generated responses); nginx-materialized hosts stop promoting add_header into the unconditional dedicated security fields. A directory without an index answers 403 instead of 404, and error_page also maps statuses produced by return/redirect routes. The broad differential slice grew to 87 cases (0 unexpected); two nginx generated-416 header-filter quirks are documented intentional differences (nginx runs its headers filter twice on a range-generated 416), and gzip policy on generated error pages remains a documented bounded gap because the compression layer sits outside the handler.",
     "Release-gate repair (2026-10-29): the committed conditional-cache oracle had been captured from a CRLF working tree while the committed fixture is LF, so on a clean Linux checkout every tag/length/range asserted by tests/nginx/differential differed (103 unexpected differences, 4/50 matched). The oracle was recaptured from nginx 1.29.6 against the LF fixture, .gitattributes pins every differential fixture directory as `-text`, tests/nginx/differential/run-nginx.sh runs an unprivileged package binary by injecting its http temp paths, and tools/run-nginx-differential.mjs now pins REFERENCE_NGINX, rejects a baseline captured from another build, and rejects a fixture whose byte size no longer matches the recorded representation. The gate reports 50/50 with only allowlisted known differences. tools/run-nginx-compat-gate.mjs is the new release entrypoint (wired into _sdkwork:verify as check:nginx-compat): it discovers differential orchestrators from specs/nginx-behavioral-corpus.manifest.json and executes them with SDKWORK_REQUIRE_NGINX_EVIDENCE=1, so a gate that declines to run fails the release instead of passing silently.",
     "Directive-level contract (2026-10-29): specs/nginx-directive-inventory.json snapshots the 744 nginx 1.29.6 OSS directives from the real ngx_command_t tables; specs/nginx-directive-support.catalog.json classifies each directive for http-core-v1 (executable / accepted-unenforced / unsupported-fail-closed / excluded) with runtime field, importer mapping, risk, migration impact/action and executable evidence; tools/check-nginx-directive-matrix.mjs (11 checks, offline, mutation-tested) binds inventory, catalog, mapping.rs, fixtures, the migration CLI and the generated docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md together. tools/import-nginx-conf.mjs no longer owns a classifier: it consumes the catalog, treats types/charset_map/map bodies as data, and never renders an accepted-but-unenforced typed TOML key.",
@@ -324,6 +327,90 @@
       "group": "response",
       "status": "implemented",
       "summary": "A directory request with no index file answers 403 (nginx autoindex-off) without an ETag, and does not fall through to the SPA fallback; differential case static.dir-no-index against nginx 1.29.6"
+    },
+    {
+      "id": "http.map",
+      "group": "variables",
+      "status": "implemented",
+      "summary": "Bounded nginx map execution at http context: default/exact/hostnames wildcard/ordered regex keys with $0-$9 captures, empty-result omission, result variables usable in add_header/proxy_set_header/return URL+body/rewrite replacement/variable proxy_pass; supported source vocabulary is the 11 fixed variables plus $http_/$arg_/$cookie_ families; unsupported sources/values/volatile/duplicate results fail closed with located diagnostics (REQ-2026-0073 wave 1, differential-http maps.* cases vs nginx 1.29.6)"
+    },
+    {
+      "id": "http.mime-types",
+      "group": "static",
+      "status": "implemented",
+      "summary": "nginx types + default_type: replace-on-declare MIME table and independently inherited default_type at http/server/location; static responses and return bodies resolve Content-Type from the configured table, unknown extension uses default_type, 204 omits Content-Type; typed TOML [http] defaultType + ordered [[http.mimeTypes]] materialized (REQ-2026-0073 wave 1)"
+    },
+    {
+      "id": "http.gzip-static",
+      "group": "response",
+      "status": "implemented",
+      "summary": "gzip_static off|on|always: precompressed <path>.gz sidecars served inside the approved static root (symlink/.. safe) with nginx-exact sidecar Content-Length/ETag/Last-Modified, original-path Content-Type, Content-Encoding gzip, range/HEAD/304 behavior, q=0 and identity fallback, and always-mode without Vary; orphan sidecars and gunzip remain documented gaps (REQ-2026-0073 wave 1)"
+    },
+    {
+      "id": "http.gzip-vary",
+      "group": "response",
+      "status": "implemented",
+      "summary": "gzip_vary on|off at http/server/location: nginx default off, and the runtime strips tower-http's automatic Vary: Accept-Encoding when the policy is off; sidecar/negotiated responses follow the policy (REQ-2026-0073 wave 1)"
+    },
+    {
+      "id": "http.redirect-policy",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx redirect construction policies at http/server/location: absolute_redirect (off -> relative Location), port_in_redirect (omit scheme-default port), server_name_in_redirect (first server_name instead of request Host); one handler choke point covers static directory redirects, return 3xx /path, rewrite redirect/permanent and error_page-mapped 3xx, proven byte-for-byte against nginx 1.29.6 (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "http.limit-status",
+      "group": "response",
+      "status": "implemented",
+      "summary": "limit_req_status / limit_conn_status: configurable 400-599 rejection status with http->server->location inheritance (default 503), proven against nginx 1.29.6 (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "http.max-ranges",
+      "group": "response",
+      "status": "implemented",
+      "summary": "max_ranges n at http/server/location: 0 disables range processing (full 200, no Accept-Ranges) and a ceiling declines over-limit multi-range requests to a full 200 with Accept-Ranges, matching nginx range-filter behaviour (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "tls.chain-file",
+      "group": "tls",
+      "status": "implemented",
+      "summary": "Typed TOML certificate chainFile is consumed end-to-end: validated, resolved to a readable file, decoded and appended to the served certificate chain (DER-deduped, fail-closed on empty/malformed PEM); previously the key was silently dropped (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "config.typed-maps",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Typed TOML [[http.maps]] materializes ordered map definitions (source/result/hostnames/default/entries) into WebServerAppConfig.maps with the same validation as the nginx-conf plane; the legacy string-array map key remains accepted-unenforced with a located diagnostic pointing at [[http.maps]] (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "config.accepted-unenforced-timeouts",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "proxyConnectTimeout / proxyReadTimeout / proxySendTimeout are advertised in the location supported-key list but not consumed; they now emit located accepted-unenforced diagnostics instead of being silently dropped (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "http.proxy-response-headers",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "proxy_hide_header / proxy_pass_header / proxy_redirect / proxy_cookie_path / proxy_cookie_domain execute nginx response-header policy: pinned default-hidden set (Date, Server, X-Pad, X-Accel-*), pass-list wins on conflict, Location/Refresh rewriting for off|default|explicit from/to, Set-Cookie Path/Domain rewriting with attribute preservation, replace-on-declare inheritance; regex and $variable forms fail closed. 18 real-nginx differential cases (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "routing.internal-location",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx `internal` locations: parsed at location context, unreachable by external request (nginx-style 404 with the location's add_header and host error_page mapping intact), reachable via rewrite last / error_page / named targets; http/server contexts still fail closed (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "routing.merge-slashes",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "merge_slashes on|off resolves per host; off keeps repeated slashes in the canonical path for exact-location identity, $uri, %2F decoding, alias/static resolution and dot-segment handling, matching nginx in both modes; the nginx pre-vhost-selection quirk is documented as a bounded divergence (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "http.header-acceptance",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "underscores_in_headers / ignore_invalid_headers: per-host request-header acceptance policy; nginx-plane default drops underscore headers before all modules, typed TOML keeps its historical permissive default, and the runtime HTTP boundary always rejects non-token header names with 400 (documented stricter divergence) (REQ-2026-0073 wave 2b)"
     }
   ]
 }

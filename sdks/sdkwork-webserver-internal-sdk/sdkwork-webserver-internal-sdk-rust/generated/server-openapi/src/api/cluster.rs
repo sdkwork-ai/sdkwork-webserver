@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
-use crate::api::base::{RequestHeaders};
-use crate::api::paths::custom_path;
+use crate::api::base::RequestHeaders;
 use crate::api::paths::append_query_string;
+use crate::api::paths::custom_path;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ClusterDrainCompleteResponse, ClusterHeartbeatRequest, ClusterHeartbeatResponse, ClusterPeerDirectoryResponse, ClusterRegistrationRequest, ClusterRegistrationResponse, ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState};
+use crate::models::{
+    ClusterDrainCompleteResponse, ClusterHeartbeatRequest, ClusterHeartbeatResponse,
+    ClusterPeerDirectoryResponse, ClusterRegistrationRequest, ClusterRegistrationResponse,
+    ClusterSyncAckRequest, ClusterSyncManifest, ClusterSyncState,
+};
 
 #[derive(Clone)]
 pub struct ClusterApi {
@@ -17,54 +21,100 @@ impl ClusterApi {
     }
 
     /// Register a webserver process instance and its host machine
-    pub async fn instances_register(&self, body: &ClusterRegistrationRequest, idempotency_key: &str) -> Result<ClusterRegistrationResponse, SdkworkError> {
+    pub async fn instances_register(
+        &self,
+        body: &ClusterRegistrationRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterRegistrationResponse, SdkworkError> {
         let path = custom_path(&"/web/cluster/instances/register".to_string());
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .post(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Record one webserver instance heartbeat
-    pub async fn instances_heartbeat(&self, body: &ClusterHeartbeatRequest, idempotency_key: &str) -> Result<ClusterHeartbeatResponse, SdkworkError> {
+    pub async fn instances_heartbeat(
+        &self,
+        body: &ClusterHeartbeatRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterHeartbeatResponse, SdkworkError> {
         let path = custom_path(&"/web/cluster/instances/heartbeat".to_string());
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .post(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Retrieve one desired-state sync manifest for the calling instance
     pub async fn sync_manifest(&self, kind: &str) -> Result<ClusterSyncManifest, SdkworkError> {
-        let query = build_query_string(&[
-            QueryParameterSpec::new("kind", kind, "form", true, false, None),
-        ]);
-        let path = append_query_string(custom_path(&"/web/cluster/sync/manifest".to_string()), &query);
+        let query = build_query_string(&[QueryParameterSpec::new(
+            "kind", kind, "form", true, false, None,
+        )]);
+        let path = append_query_string(
+            custom_path(&"/web/cluster/sync/manifest".to_string()),
+            &query,
+        );
         self.client.get(&path, None, None).await
     }
 
     /// Record one node sync acknowledgment
-    pub async fn sync_ack(&self, body: &ClusterSyncAckRequest, idempotency_key: &str) -> Result<ClusterSyncState, SdkworkError> {
+    pub async fn sync_ack(
+        &self,
+        body: &ClusterSyncAckRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterSyncState, SdkworkError> {
         let path = custom_path(&"/web/cluster/sync/ack".to_string());
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .post(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Acknowledge graceful-drain completion
-    pub async fn instances_drain_complete(&self) -> Result<ClusterDrainCompleteResponse, SdkworkError> {
+    pub async fn instances_drain_complete(
+        &self,
+    ) -> Result<ClusterDrainCompleteResponse, SdkworkError> {
         let path = custom_path(&"/web/cluster/instances/drain_complete".to_string());
-        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+        self.client
+            .post(&path, Option::<&serde_json::Value>::None, None, None, None)
+            .await
     }
 
     /// Retrieve the authenticated instance's cluster peer directory
@@ -72,9 +122,7 @@ impl ClusterApi {
         let path = custom_path(&"/web/cluster/peers".to_string());
         self.client.get(&path, None, None).await
     }
-
 }
-
 
 struct HeaderParameterSpec {
     value: serde_json::Value,
@@ -97,7 +145,10 @@ impl HeaderParameterSpec {
     }
 }
 
-fn build_request_headers(headers: &[(&str, HeaderParameterSpec)], cookies: &[(&str, HeaderParameterSpec)]) -> Option<RequestHeaders> {
+fn build_request_headers(
+    headers: &[(&str, HeaderParameterSpec)],
+    cookies: &[(&str, HeaderParameterSpec)],
+) -> Option<RequestHeaders> {
     let mut request_headers = RequestHeaders::new();
     for (name, parameter) in headers {
         if let Some(value) = serialize_header_parameter(parameter) {
@@ -239,12 +290,36 @@ fn append_serialized_parameter(pairs: &mut Vec<String>, parameter: &QueryParamet
         return;
     }
 
-    let style = if parameter.style.is_empty() { "form" } else { parameter.style };
+    let style = if parameter.style.is_empty() {
+        "form"
+    } else {
+        parameter.style
+    };
     match &parameter.value {
-        serde_json::Value::Array(values) => append_array_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
-        serde_json::Value::Object(values) if style == "deepObject" => append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved),
-        serde_json::Value::Object(values) => append_object_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
-        value => pairs.push(format!("{}={}", percent_encode(parameter.name), encode_query_value(&primitive_to_string(value), parameter.allow_reserved))),
+        serde_json::Value::Array(values) => append_array_parameter(
+            pairs,
+            parameter.name,
+            values,
+            style,
+            parameter.explode,
+            parameter.allow_reserved,
+        ),
+        serde_json::Value::Object(values) if style == "deepObject" => {
+            append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved)
+        }
+        serde_json::Value::Object(values) => append_object_parameter(
+            pairs,
+            parameter.name,
+            values,
+            style,
+            parameter.explode,
+            parameter.allow_reserved,
+        ),
+        value => pairs.push(format!(
+            "{}={}",
+            percent_encode(parameter.name),
+            encode_query_value(&primitive_to_string(value), parameter.allow_reserved)
+        )),
     }
 }
 
@@ -256,17 +331,29 @@ fn append_array_parameter(
     explode: bool,
     allow_reserved: bool,
 ) {
-    let serialized = values.iter().filter(|value| !value.is_null()).map(primitive_to_string).collect::<Vec<_>>();
+    let serialized = values
+        .iter()
+        .filter(|value| !value.is_null())
+        .map(primitive_to_string)
+        .collect::<Vec<_>>();
     if serialized.is_empty() {
         return;
     }
     if style == "form" && explode {
         for item in serialized {
-            pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&item, allow_reserved)));
+            pairs.push(format!(
+                "{}={}",
+                percent_encode(name),
+                encode_query_value(&item, allow_reserved)
+            ));
         }
         return;
     }
-    pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
+    pairs.push(format!(
+        "{}={}",
+        percent_encode(name),
+        encode_query_value(&serialized.join(","), allow_reserved)
+    ));
 }
 
 fn append_object_parameter(
@@ -283,14 +370,22 @@ fn append_object_parameter(
             continue;
         }
         if style == "form" && explode {
-            pairs.push(format!("{}={}", percent_encode(key), encode_query_value(&primitive_to_string(value), allow_reserved)));
+            pairs.push(format!(
+                "{}={}",
+                percent_encode(key),
+                encode_query_value(&primitive_to_string(value), allow_reserved)
+            ));
         } else {
             serialized.push(key.clone());
             serialized.push(primitive_to_string(value));
         }
     }
     if !serialized.is_empty() {
-        pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
+        pairs.push(format!(
+            "{}={}",
+            percent_encode(name),
+            encode_query_value(&serialized.join(","), allow_reserved)
+        ));
     }
 }
 
@@ -302,7 +397,11 @@ fn append_deep_object_parameter(
 ) {
     for (key, value) in values {
         if !value.is_null() {
-            pairs.push(format!("{}={}", percent_encode(&format!("{}[{}]", name, key)), encode_query_value(&primitive_to_string(value), allow_reserved)));
+            pairs.push(format!(
+                "{}={}",
+                percent_encode(&format!("{}[{}]", name, key)),
+                encode_query_value(&primitive_to_string(value), allow_reserved)
+            ));
         }
     }
 }
@@ -313,11 +412,24 @@ fn encode_query_value(value: &str, allow_reserved: bool) -> String {
         return encoded;
     }
     for (escaped, reserved) in [
-        ("%3A", ":"), ("%2F", "/"), ("%3F", "?"), ("%23", "#"),
-        ("%5B", "["), ("%5D", "]"), ("%40", "@"), ("%21", "!"),
-        ("%24", "$"), ("%26", "&"), ("%27", "'"), ("%28", "("),
-        ("%29", ")"), ("%2A", "*"), ("%2B", "+"), ("%2C", ","),
-        ("%3B", ";"), ("%3D", "="),
+        ("%3A", ":"),
+        ("%2F", "/"),
+        ("%3F", "?"),
+        ("%23", "#"),
+        ("%5B", "["),
+        ("%5D", "]"),
+        ("%40", "@"),
+        ("%21", "!"),
+        ("%24", "$"),
+        ("%26", "&"),
+        ("%27", "'"),
+        ("%28", "("),
+        ("%29", ")"),
+        ("%2A", "*"),
+        ("%2B", "+"),
+        ("%2C", ","),
+        ("%3B", ";"),
+        ("%3D", "="),
     ] {
         encoded = encoded.replace(escaped, reserved);
     }

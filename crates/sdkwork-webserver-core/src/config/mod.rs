@@ -8,6 +8,7 @@ mod error;
 mod limit_conn;
 mod limit_req;
 mod loader;
+pub mod map_variables;
 mod model;
 mod network;
 mod proxy_headers;
@@ -40,18 +41,25 @@ pub use loader::{
     load_and_compile_webserver_config_json, load_and_compile_webserver_config_revision,
     CompiledWebServerRevision, WebServerConfigFileRevision, MAX_CONFIG_BYTES,
 };
+pub use map_variables::{
+    evaluate_map, expand_map_template, is_supported_map_variable, map_result_name,
+    resolve_map_value, validate_map_definitions, validate_map_source, validate_map_value_template,
+    MapVariables, MAP_SOURCE_PREFIXES, MAP_SOURCE_VARIABLES,
+};
 pub use model::{
     AccessAction, AccessRuleConfig, AcmeHttp01Config, AppDomainFallbackConfig,
     AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, CachePolicyConfig,
     CertificateConfig, CertificateSource, ClientAuthConfig, ClientAuthMode, ConfigProviderType,
-    CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode, GzipConfig,
-    IfModifiedSinceMode, LimitConnConfig, LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig,
-    ListenerConfig, ListenerProtocol, ListenerTlsRuntime, NginxConfig, ObservabilityConfig,
+    CookieRewritePolicyConfig, CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode,
+    GzipConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig, LimitConnZoneConfig,
+    LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
+    MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig, ObservabilityConfig,
     ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
-    ProxyProtocolVersion, ReloadConfig, ReloadMode, ResolverConfig, ResourceConfig,
-    ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag, RewriteRuleConfig,
-    RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode, SecurityHeadersConfig,
-    StreamProtocol, StreamServerConfig, StreamTargetConfig, StreamTlsMode,
+    ProxyProtocolVersion, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
+    ProxyRewriteRuleConfig, RedirectPolicyConfig, ReloadConfig, ReloadMode, ResolverConfig,
+    ResourceConfig, ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag,
+    RewriteRuleConfig, RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode,
+    SecurityHeadersConfig, StreamProtocol, StreamServerConfig, StreamTargetConfig, StreamTlsMode,
     StrictTransportSecurityConfig, SubFilterConfig, SubFilterRule, TlsCertificateResolution,
     TlsPolicyConfig, TlsVersion, TrustedProxyConfig, TrustedProxyHeader,
     UpstreamActiveHealthConfig, UpstreamActiveHealthMethod, UpstreamAddressPolicyConfig,
@@ -59,19 +67,23 @@ pub use model::{
     UpstreamPassiveHealthConfig, UpstreamRetryCondition, UpstreamRetryConfig, UpstreamTargetConfig,
     UpstreamTlsConfig, UpstreamTlsTrustMode, UsageMeteringChannel, UsageMeteringConfig,
     VirtualHostConfig, WebServerAppConfig, WebServerLimits, XFrameOptions,
-    ACME_HTTP_01_CHALLENGE_PREFIX,
+    ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_MAX_RANGES,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
 };
 pub use proxy_headers::{
-    format_proxy_set_header_entry, merge_proxy_set_headers, validate_proxy_set_header_entry,
-    SUPPORTED_PROXY_HEADER_VARS,
+    format_proxy_set_header_entry, format_proxy_set_header_entry_with_maps,
+    merge_proxy_set_headers, validate_proxy_set_header_entry,
+    validate_proxy_set_header_entry_with_maps, SUPPORTED_PROXY_HEADER_VARS,
 };
-pub use proxy_pass::{expand_proxy_pass_template, validate_proxy_pass_template};
+pub use proxy_pass::{
+    expand_proxy_pass_template, validate_proxy_pass_template,
+    validate_proxy_pass_template_with_maps,
+};
 pub use rewrite::{
-    apply_rewrites, parse_rewrite, RewriteApplyError, RewriteOutcome, RewriteParseError,
-    MAX_REWRITE_INTERNAL_REDIRECTS,
+    apply_rewrites, apply_rewrites_with, parse_rewrite, RewriteApplyError, RewriteOutcome,
+    RewriteParseError, MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 pub use sdkwork_webserver_resolver_cache::{RedisCacheConfig, ResolutionCacheConfig};
 pub use secure_link::{
@@ -96,7 +108,7 @@ pub use source::{
 pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,
 };
-pub use uri::{normalize_uri_path, UriPathNormalizationError};
+pub use uri::{normalize_uri_path, normalize_uri_path_with_options, UriPathNormalizationError};
 pub use validate::{
     normalize_server_name, normalize_tls_server_name, server_name_covers,
     wildcard_server_name_covers,

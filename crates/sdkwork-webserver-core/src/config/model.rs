@@ -444,6 +444,29 @@ pub struct WebServerAppConfig {
     pub app_key: String,
     #[serde(default)]
     pub nginx: NginxConfig,
+    /// nginx `map` variables declared at http context, in declaration order.
+    ///
+    /// A `map` declares a result variable whose value is selected from an
+    /// ordered key/value table by one request variable. The result is
+    /// expandable wherever the runtime already expands nginx variables
+    /// (`add_header`, `proxy_set_header`, `return` URL/body, `rewrite`
+    /// replacement, and variable `proxy_pass` templates); an empty result is
+    /// the empty string and therefore omits a header or redirect target just
+    /// like nginx. See `config::map_variables` for the bounded source, key and
+    /// value subset.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub maps: Vec<MapConfig>,
+    /// nginx http-level `types { <mime> <ext…>; }` table, in authored order.
+    /// `None` keeps the runtime's built-in MIME table; `Some` (including an
+    /// explicitly empty `types {}` block) *replaces* it for this application,
+    /// exactly as nginx replaces the inherited table at the declaring level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_types: Option<Vec<MimeTypeConfig>>,
+    /// nginx `default_type`: the content type of a static representation whose
+    /// extension is absent from the resolved table. `None` keeps the runtime's
+    /// safe `application/octet-stream` fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_type: Option<String>,
     /// Response gzip settings materialized from `[http] gzip` / `gzipTypes` /
     /// `gzipMinLength` (SDKWORK_WEBSERVER_SPEC.md §6).
     #[serde(default)]
@@ -592,7 +615,56 @@ pub struct NginxConfig {
     pub unknown_directive_policy: String,
 }
 
-/// HTTP response gzip policy (`gzip`, `gzip_types`, `gzip_min_length`).
+/// nginx `map` variable (`map $source $result { … }`), executed in the
+/// bounded subset defined by `config::map_variables`.
+///
+/// nginx matches a map **case-insensitively** for every key (the map hash is
+/// lowercased at startup; differential-confirmed against nginx 1.29.6: keys
+/// `foo` and `FOO` are a duplicate declaration and both source values select
+/// the same entry). With `hostnames` the keys may additionally be host
+/// wildcards of the `*.suffix` / `prefix.*` / `.suffix` forms; wildcard
+/// characters are literal text otherwise.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MapConfig {
+    /// Source variable, written with its `$` (`$host`, `$http_x_tenant`, …).
+    pub source: String,
+    /// Result variable name, written with its `$` (`$tenant_zone`).
+    pub result: String,
+    /// `hostnames;` — wildcard key matching for host-like sources.
+    #[serde(default)]
+    pub hostnames: bool,
+    /// `default <value>;` — used when no key matches. An absent default is the
+    /// empty string, exactly like nginx.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// Authored key/value entries in declaration order.
+    pub entries: Vec<MapEntryConfig>,
+}
+
+/// One `<key> <value>;` entry of a `map` block.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MapEntryConfig {
+    pub key: String,
+    pub value: String,
+}
+
+/// One nginx `types { <mime> <ext…>; }` row: a media type and the file
+/// extensions that resolve to it. Rows keep authored order; a later row that
+/// declares an already-mapped extension wins (nginx logs a duplicate-extension
+/// warning and uses the last declaration, differential-confirmed).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MimeTypeConfig {
+    /// Media type, for example `text/html`.
+    pub mime: String,
+    /// Extensions without the leading dot, stored lowercased.
+    pub extensions: Vec<String>,
+}
+
+/// HTTP response gzip policy (`gzip`, `gzip_types`, `gzip_min_length`,
+/// `gzip_vary`, `gzip_static`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GzipConfig {
@@ -604,6 +676,30 @@ pub struct GzipConfig {
     pub types: Vec<String>,
     #[serde(default = "default_gzip_min_length")]
     pub min_length: u64,
+    /// nginx `gzip_vary`: declare `Vary: Accept-Encoding` whenever the gzip
+    /// policy selects the representation, even when the negotiated encoding is
+    /// identity. The nginx import plane defaults to `false` (nginx's default);
+    /// the typed plane keeps the historical runtime behaviour (`true`) so an
+    /// existing config does not silently change its cache-key advertisement.
+    #[serde(default = "default_true")]
+    pub vary: bool,
+    /// nginx `gzip_static`: serve a precompressed `<path>.gz` sidecar for
+    /// static content.
+    #[serde(default)]
+    pub static_files: GzipStaticMode,
+}
+
+/// nginx `gzip_static` mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GzipStaticMode {
+    /// Serve the sidecar only to clients that accept gzip.
+    #[default]
+    Off,
+    /// Serve the sidecar when the client accepts gzip, else the identity file.
+    On,
+    /// Serve the sidecar regardless of `Accept-Encoding`.
+    Always,
 }
 
 impl Default for GzipConfig {
@@ -612,6 +708,8 @@ impl Default for GzipConfig {
             enabled: false,
             types: Vec::new(),
             min_length: default_gzip_min_length(),
+            vary: true,
+            static_files: GzipStaticMode::Off,
         }
     }
 }
@@ -957,6 +1055,12 @@ pub enum CertificateSource {
     ProtectedFile {
         certificate_file: String,
         private_key_file: String,
+        /// Optional nginx `ssl_trusted_certificate` / typed-TOML `chainFile`
+        /// PEM chain used for downstream client-certificate verification. The
+        /// certificate worker exposes it to client-auth trust stores; it is
+        /// never silently dropped.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        chain_file: Option<String>,
     },
 }
 
@@ -1123,6 +1227,15 @@ pub enum ResourceConfig {
         /// has an `error_page` mapping are replaced by the mapped page.
         #[serde(default)]
         proxy_intercept_errors: bool,
+        /// nginx proxy response-header policy (`proxy_hide_header`,
+        /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
+        /// `proxy_cookie_domain`) resolved for this resource. The nginx
+        /// materializer always emits it (nginx defaults included), so `None`
+        /// only appears in typed TOML/JSON configs that declare no policy and
+        /// keeps the historical pass-through behavior (every upstream header
+        /// forwarded except hop-by-hop fields).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        proxy_response_policy: Option<ProxyResponsePolicyConfig>,
     },
     Redirect {
         id: String,
@@ -1134,6 +1247,12 @@ pub enum ResourceConfig {
         status: u16,
         #[serde(default = "default_content_type")]
         content_type: String,
+        /// nginx `return <status> "<body>"` derives the response content type
+        /// from the request URI extension through the resolved `types` table
+        /// (`default_type` when the extension is unknown). The typed TOML/JSON
+        /// plane keeps declaring `contentType` explicitly, so this is opt-in.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        content_type_from_uri: bool,
         #[serde(default)]
         body: String,
     },
@@ -1579,6 +1698,14 @@ pub struct VirtualHostConfig {
     /// inherits the http-level (app-wide) policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compression: Option<GzipConfig>,
+    /// Server-level nginx `types` block resolved for this host; `None`
+    /// inherits the http-level (app-wide) table. A declared block replaces the
+    /// inherited table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_types: Option<Vec<MimeTypeConfig>>,
+    /// Server-level nginx `default_type`; `None` inherits the http-level value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_type: Option<String>,
     /// nginx `error_page` mappings declared at http/server level for this
     /// host, in declaration order (later entries override earlier codes).
     /// A `uri` of `@name` targets a named location in this virtual host.
@@ -1592,6 +1719,181 @@ pub struct VirtualHostConfig {
     /// for this host; `None` inherits the http-level (app-wide) policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_policy: Option<CachePolicyConfig>,
+    /// Redirect construction policy resolved for this host from the
+    /// http/server `absolute_redirect` / `port_in_redirect` /
+    /// `server_name_in_redirect` declarations; `None` keeps the nginx
+    /// defaults (absolute Location, port included only off the scheme
+    /// default, host taken from the request `Host`). A route-level
+    /// declaration overrides it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect_policy: Option<RedirectPolicyConfig>,
+    /// Server-level nginx `limit_req_status`; `None` inherits the http-level
+    /// value (nginx default 503).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_req_status: Option<u16>,
+    /// Server-level nginx `limit_conn_status`; `None` inherits the http-level
+    /// value (nginx default 503).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_conn_status: Option<u16>,
+    /// Server-level nginx `max_ranges`; `None` inherits the http-level value
+    /// (nginx default: an effectively unbounded `NGX_MAX_INT32_VALUE`). `0`
+    /// disables byte-range processing entirely.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_ranges: Option<u64>,
+    /// nginx `merge_slashes` (default `on`) resolved for this host. When
+    /// `off`, repeated adjacent slashes stay in the canonical request path:
+    /// exact-location matching, static path identity, `$uri`, and proxied
+    /// request targets keep them instead of collapsing to one slash. Bounded
+    /// difference from nginx: nginx parses the request URI before virtual-host
+    /// selection, so its effective value is the listener's default server's;
+    /// the runtime resolves the directive per selected host (the same result
+    /// when the directive is declared at the http level, which is how the
+    /// differential fixture exercises it).
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub merge_slashes: bool,
+    /// nginx `underscores_in_headers` resolved for this host.
+    ///
+    /// nginx's default is `off`: a request header whose name contains `_` is
+    /// dropped at the request boundary. The nginx materializer always emits the
+    /// resolved value, so an imported configuration gets the nginx default. The
+    /// serde default is `true` (forward the header) so the typed TOML/JSON
+    /// plane keeps its historical permissive behavior: an existing API
+    /// integration that uses an underscore header is not silently broken by a
+    /// directive it never declared.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub underscores_in_headers: bool,
+    /// nginx `ignore_invalid_headers` (default `on`) resolved for this host.
+    /// The runtime always rejects a request whose header name is not an RFC
+    /// 9110 token at its HTTP boundary with 400 (intentional, stricter
+    /// divergence: nginx silently drops such a field when this is on and
+    /// forwards it when off). The value is materialized so the nginx import
+    /// surface is complete and typed configs can state it explicitly.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub ignore_invalid_headers: bool,
+}
+
+/// `true` is the serde default for the nginx `merge_slashes` /
+/// `ignore_invalid_headers` directives; serialize only overrides.
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+/// nginx `max_ranges` default: `ngx_http_core_module` merges
+/// `NGX_MAX_INT32_VALUE`, i.e. a range-count ceiling that is effectively
+/// unbounded for any real request.
+pub const DEFAULT_MAX_RANGES: u64 = i32::MAX as u64;
+
+/// nginx proxy response-header policy (`proxy_hide_header`,
+/// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
+/// `proxy_cookie_domain`).
+///
+/// nginx keeps a fixed default-hidden upstream response header set
+/// (`ngx_http_proxy_hide_headers`: `Date`, `Server`, `X-Pad`,
+/// `X-Accel-Expires`, `X-Accel-Redirect`, `X-Accel-Limit-Rate`,
+/// `X-Accel-Buffering`, `X-Accel-Charset`) and never forwards those fields;
+/// `proxy_hide_header` adds names to it and `proxy_pass_header` removes names
+/// from it (pass wins when a name is in both lists — differential-confirmed
+/// against nginx 1.29.6). The remaining fields select the upstream
+/// `Location`/`Refresh` rewrite rules and the `Set-Cookie` attribute rewrites.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProxyResponsePolicyConfig {
+    /// `proxy_hide_header <name>` entries, added to the default-hidden set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hide_headers: Vec<String>,
+    /// `proxy_pass_header <name>` entries, removed from the hidden set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pass_headers: Vec<String>,
+    /// `proxy_redirect` policy. `None` means the directive was not declared at
+    /// any level, which for a proxy resource is nginx's `default`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect: Option<ProxyRedirectPolicyConfig>,
+    /// `proxy_cookie_path` rules; `None` means no rewriting (nginx default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cookie_path: Option<CookieRewritePolicyConfig>,
+    /// `proxy_cookie_domain` rules; `None` means no rewriting (nginx default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cookie_domain: Option<CookieRewritePolicyConfig>,
+}
+
+/// nginx `proxy_redirect` policy for one proxy resource.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProxyRedirectPolicyConfig {
+    /// `proxy_redirect off`: pass the upstream `Location`/`Refresh` through.
+    Off,
+    /// `proxy_redirect default`: replace the `proxy_pass` URL base with the
+    /// matched location prefix (or the upstream base with `/` when
+    /// `proxy_pass` has no URI part). The replacement is relative whenever the
+    /// location prefix is, so nginx's header filter may still make it absolute
+    /// per `absolute_redirect`.
+    Default,
+    /// Ordered `proxy_redirect <from> <to>` rules; the first rule whose
+    /// literal `from` is a prefix of the upstream target wins. Matching is
+    /// case-insensitive (nginx `ngx_rstrncmp`) and the replacement is emitted
+    /// verbatim.
+    Rules(Vec<ProxyRewriteRuleConfig>),
+}
+
+/// One literal `proxy_redirect <from> <to>` / `proxy_cookie_path|domain
+/// <from> <to>` pair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProxyRewriteRuleConfig {
+    pub from: String,
+    pub to: String,
+}
+
+/// nginx `proxy_cookie_path` / `proxy_cookie_domain` policy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CookieRewritePolicyConfig {
+    /// The directive form `off`: attribute rewriting is disabled.
+    Off,
+    /// Ordered `<from> <to>` rules. A path rule replaces the attribute-value
+    /// prefix literally (case-sensitive, like nginx); a domain rule compares
+    /// the value case-insensitively after ignoring one leading dot and
+    /// re-applies the matched value's leading dot.
+    Rules(Vec<ProxyRewriteRuleConfig>),
+}
+
+/// nginx redirect construction policy (`absolute_redirect`,
+/// `port_in_redirect`, `server_name_in_redirect`).
+///
+/// nginx builds the client-visible `Location` in
+/// `ngx_http_header_filter`/`ngx_http_header_filter_module`: only a
+/// `Location` value starting with `/` is rewritten; an absolute target is
+/// passed through unchanged. With `absolute_redirect on` (the nginx default)
+/// the value becomes `<scheme>://<host>[:<port>]<path>`, where the host is the
+/// first `server_name` when `server_name_in_redirect on` and the request's
+/// `Host` header otherwise, and the port is the listener port, omitted when it
+/// is the scheme default (80/http, 443/https) and always omitted when
+/// `port_in_redirect off`. With `absolute_redirect off` the value stays
+/// relative. Differential-confirmed against nginx 1.29.6.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RedirectPolicyConfig {
+    /// nginx `absolute_redirect` (default `on`).
+    #[serde(default = "default_true")]
+    pub absolute_redirect: bool,
+    /// nginx `port_in_redirect` (default `on`): include the listener port in
+    /// an absolute `Location` unless it is the scheme default port.
+    #[serde(default = "default_true")]
+    pub port_in_redirect: bool,
+    /// nginx `server_name_in_redirect` (default `off`): build the absolute
+    /// `Location` host from the first `server_name` instead of the request
+    /// `Host` header.
+    #[serde(default)]
+    pub server_name_in_redirect: bool,
+}
+
+impl RedirectPolicyConfig {
+    /// nginx's compiled defaults (all levels absent).
+    pub const NGINX_DEFAULT: Self = Self {
+        absolute_redirect: true,
+        port_in_redirect: true,
+        server_name_in_redirect: false,
+    };
 }
 
 /// One nginx `error_page <codes…> [=response] uri;` mapping.
@@ -1698,6 +2000,18 @@ impl CustomHeaderConfig {
     /// [always]` in nginx, or a JSON/TOML custom header): a valid HTTP field
     /// name, a bounded value, and only the variables the runtime expands.
     pub fn validate_declaration(name: &str, value: &str) -> Result<(), String> {
+        Self::validate_declaration_with_variables(name, value, &[])
+    }
+
+    /// [`Self::validate_declaration`] plus the nginx `map` result variables
+    /// declared by the same application config. A map result is a legal
+    /// `$variable` in a response header value; every other unlisted variable
+    /// still fails closed.
+    pub fn validate_declaration_with_variables(
+        name: &str,
+        value: &str,
+        map_variables: &[&str],
+    ) -> Result<(), String> {
         if name.is_empty() {
             return Err("response header name must not be empty".to_owned());
         }
@@ -1761,12 +2075,14 @@ impl CustomHeaderConfig {
             if variable.is_empty() {
                 return Err(format!("response header `{name}` contains a bare `$`"));
             }
-            if !Self::SUPPORTED_VARIABLES.contains(&variable) {
+            if !Self::SUPPORTED_VARIABLES.contains(&variable) && !map_variables.contains(&variable)
+            {
                 return Err(format!(
                     "response header `{name}` uses `${variable}`, which the runtime does not expand; supported: {}",
                     Self::SUPPORTED_VARIABLES
                         .iter()
                         .map(|name| format!("${name}"))
+                        .chain(map_variables.iter().map(|name| format!("${name}")))
                         .collect::<Vec<_>>()
                         .join(" ")
                 ));
@@ -1920,6 +2236,13 @@ pub struct RouteConfig {
     /// inherits the host/app policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compression: Option<GzipConfig>,
+    /// Location-level nginx `types` block; `None` inherits the host table and
+    /// a declared block replaces it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_types: Option<Vec<MimeTypeConfig>>,
+    /// Location-level nginx `default_type`; `None` inherits the host value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_type: Option<String>,
     /// Location-level nginx `error_page` mappings; when non-empty they
     /// replace the host-level set for this route (nginx inheritance).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1935,6 +2258,29 @@ pub struct RouteConfig {
     /// resolved for this route; `None` inherits the host/app policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_policy: Option<CachePolicyConfig>,
+    /// Location-level redirect construction policy; `None` inherits the
+    /// virtual host's value. See [`RedirectPolicyConfig`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect_policy: Option<RedirectPolicyConfig>,
+    /// Location-level nginx `limit_req_status`; `None` inherits the host
+    /// value (nginx default 503).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_req_status: Option<u16>,
+    /// Location-level nginx `limit_conn_status`; `None` inherits the host
+    /// value (nginx default 503).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_conn_status: Option<u16>,
+    /// Location-level nginx `max_ranges`; `None` inherits the host value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_ranges: Option<u64>,
+    /// nginx `internal`: the location is reachable only through an internal
+    /// redirect (`rewrite … last`, `error_page`, a `try_files` named target,
+    /// or `X-Accel-Redirect`). An external request that matches it is answered
+    /// with nginx's generated 404, and the location's own `add_header` /
+    /// `error_page` policy still applies to that 404 (differential-confirmed
+    /// against nginx 1.29.6).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub internal: bool,
 }
 
 /// nginx `secure_link` module modes (ngx_http_secure_link_module).

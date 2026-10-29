@@ -12,7 +12,7 @@ use axum::{
 use bytes::Bytes;
 use futures_util::stream;
 use httpdate::HttpDate;
-use sdkwork_webserver_core::{CachePolicyConfig, IfModifiedSinceMode};
+use sdkwork_webserver_core::{CachePolicyConfig, IfModifiedSinceMode, DEFAULT_MAX_RANGES};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 
 use super::static_path::OpenedStaticFile;
@@ -30,7 +30,7 @@ pub(crate) async fn serve_opened_file(
     method: &Method,
     headers: &HeaderMap,
 ) -> Response<Body> {
-    serve_opened_file_with_cache_policy(opened, method, headers, None).await
+    serve_opened_file_with_cache_policy(opened, method, headers, None, DEFAULT_MAX_RANGES).await
 }
 
 /// `serve_opened_file` with the route's nginx `etag` / `if_modified_since`
@@ -52,6 +52,42 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
     method: &Method,
     headers: &HeaderMap,
     policy: Option<&CachePolicyConfig>,
+    max_ranges: u64,
+) -> Response<Body> {
+    let content_type = static_content_type(&opened.path_hint);
+    let cache_control_path = opened.path_hint.clone();
+    let hints = RepresentationHints {
+        content_type,
+        content_encoding: None,
+        vary_accept_encoding: false,
+        cache_control_path: &cache_control_path,
+    };
+    serve_opened_file_representation(opened, method, headers, policy, &hints, max_ranges).await
+}
+
+/// Response metadata that differs between the identity representation and a
+/// precompressed `<path>.gz` sidecar.
+pub(crate) struct RepresentationHints<'a> {
+    /// `Content-Type` of the decoded representation. For a gzip sidecar it is
+    /// the type of the *original* path (nginx derives it from the request URI).
+    pub(crate) content_type: HeaderValue,
+    /// `Content-Encoding` of the stored bytes (`gzip` for a sidecar).
+    pub(crate) content_encoding: Option<&'static str>,
+    /// Emit `Vary: Accept-Encoding` (nginx `gzip_vary on` with a sidecar in
+    /// `gzip_static on` mode).
+    pub(crate) vary_accept_encoding: bool,
+    /// Path whose extension drives the deployment freshness policy. A sidecar
+    /// inherits the original representation's policy.
+    pub(crate) cache_control_path: &'a Path,
+}
+
+pub(crate) async fn serve_opened_file_representation(
+    opened: OpenedStaticFile,
+    method: &Method,
+    headers: &HeaderMap,
+    policy: Option<&CachePolicyConfig>,
+    hints: &RepresentationHints<'_>,
+    max_ranges: u64,
 ) -> Response<Body> {
     let modified = opened.metadata.modified().ok().map(HttpDate::from);
     let etag_enabled = policy.map(|policy| policy.etag).unwrap_or(true);
@@ -82,19 +118,35 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
         let serves_on_inm =
             !serves_on_ims && inm_present && if_none_match_passes(headers, etag.as_deref());
         if !serves_on_ims && !serves_on_inm {
-            return not_modified_response(&opened.path_hint, etag.as_deref(), modified);
+            let mut response = not_modified_response(&opened.path_hint, etag.as_deref(), modified);
+            if hints.vary_accept_encoding {
+                insert_vary_accept_encoding(response.headers_mut());
+            }
+            return response;
         }
     }
 
     let size = opened.metadata.len();
-    // `If-Range` gates the range handling: a mismatching validator makes the
-    // server ignore `Range` and answer the whole representation with 200.
-    let ranges = if if_range_allows_ranges(headers, etag.as_deref(), modified) {
-        parse_range(headers, size)
-    } else {
+    // nginx `max_ranges` (`ngx_http_range_header_filter` /
+    // `ngx_http_range_parse`, differential-confirmed against nginx 1.29.6):
+    // - `0` disables byte-range processing entirely, so even a valid `Range`
+    //   answers 200 with the whole representation and no `Accept-Ranges`;
+    // - a ceiling `n` accepts at most `n` ranges; when the request asks for
+    //   more, nginx declines range processing and answers the full 200.
+    // `If-Range` gates the range handling first: a mismatching validator makes
+    // the server ignore `Range` and answer the whole representation with 200.
+    let range_processing_disabled = max_ranges == 0;
+    let ranges = if range_processing_disabled
+        || !if_range_allows_ranges(headers, etag.as_deref(), modified)
+    {
         None
+    } else {
+        match parse_range(headers, size) {
+            Some(Ok(parsed)) if parsed.len() as u64 > max_ranges => None,
+            other => other,
+        }
     };
-    let mime = static_content_type(&opened.path_hint);
+    let mime = hints.content_type.clone();
     // nginx attaches `Accept-Ranges` from the range filter's fall-through path
     // only, which every non-partial outcome reaches; a 206 or 416 never carries
     // it, so advertising it on the partial response would be a difference the
@@ -108,9 +160,17 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
         // ETag/Last-Modified conditional requests.
         .header(
             header::CACHE_CONTROL,
-            cache_control_for_path(&opened.path_hint),
+            cache_control_for_path(hints.cache_control_path),
         );
-    if !partial {
+    if let Some(encoding) = hints.content_encoding {
+        builder = builder.header(header::CONTENT_ENCODING, encoding);
+    }
+    if hints.vary_accept_encoding {
+        builder = builder.header(header::VARY, "Accept-Encoding");
+    }
+    // nginx `max_ranges 0` returns before its range filter's fall-through path,
+    // so it advertises neither a partial representation nor `Accept-Ranges`.
+    if !partial && !range_processing_disabled {
         builder = builder.header(header::ACCEPT_RANGES, "bytes");
     }
     if let Some(modified) = modified {
@@ -161,6 +221,20 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
             };
             finish_response(builder.header(header::CONTENT_LENGTH, size), body)
         }
+    }
+}
+
+/// Append `Accept-Encoding` to an existing `Vary` field list (idempotent).
+pub(crate) fn insert_vary_accept_encoding(headers: &mut HeaderMap) {
+    let already_present = headers.get_all(header::VARY).iter().any(|value| {
+        value.to_str().is_ok_and(|value| {
+            value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case("accept-encoding"))
+        })
+    });
+    if !already_present {
+        headers.append(header::VARY, HeaderValue::from_static("Accept-Encoding"));
     }
 }
 
@@ -648,6 +722,40 @@ mod tests {
                 .status(),
             StatusCode::NOT_MODIFIED
         );
+    }
+
+    #[tokio::test]
+    async fn max_ranges_caps_or_disables_range_processing() {
+        // Differential-confirmed against nginx 1.29.6
+        // (`ngx_http_range_header_filter` / `ngx_http_range_parse`):
+        // `max_ranges 0` disables range processing entirely (200 full body and
+        // no Accept-Ranges), and a request that asks for more ranges than the
+        // ceiling declines range processing (200 full body + Accept-Ranges).
+        let mut temp = NamedTempFile::new().unwrap();
+        temp.write_all(b"0123456789").unwrap();
+        let path = PathBuf::from("test.txt");
+        let hints = RepresentationHints {
+            content_type: HeaderValue::from_static("text/plain"),
+            content_encoding: None,
+            vary_accept_encoding: false,
+            cache_control_path: &path,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, HeaderValue::from_static("bytes=0-0,2-2"));
+        let response = serve_opened_file_representation(
+            opened(&temp),
+            &Method::GET,
+            &headers,
+            None,
+            &hints,
+            2,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert!(response.headers()[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("multipart/byteranges"));
     }
 
     #[tokio::test]

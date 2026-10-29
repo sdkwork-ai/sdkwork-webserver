@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ServerResponse};
+use crate::models::ServerResponse;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ServerPage {

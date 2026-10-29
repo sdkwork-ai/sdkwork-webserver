@@ -127,17 +127,21 @@ is `specs/nginx-directive-support.catalog.json` rendered as
 | Aggregate release gate (wired into `_sdkwork:verify` as `check:nginx-compat`) | `node tools/run-nginx-compat-gate.mjs` | PASS — static gates, in-process corpus and all three differential slices executed |
 | In-process full-surface behavioural corpus | `python3 tests/nginx/full-surface/probe.py` | 76/76 |
 | Conditional/range/cache differential vs nginx 1.29.6 | `node tools/run-nginx-differential.mjs` | 50/50, 0 unexpected (44 documented allowances) |
-| Broad HTTP differential vs nginx 1.29.6 | `node tools/run-nginx-differential-http.mjs` | 87/87, 0 unexpected (227 documented allowances) |
+| Broad HTTP differential vs nginx 1.29.6 | `node tools/run-nginx-differential-http.mjs` | 182/182, 0 unexpected (406 documented allowances) |
 | Virtual-host selection and named locations vs nginx 1.29.6 | `node tools/run-nginx-differential-host.mjs` | 39/39, 0 unexpected (3 documented allowances) |
-| Directive catalog drift (inventory ↔ catalog ↔ implementation ↔ CLI ↔ docs) | `node tools/check-nginx-directive-matrix.mjs` | 11/11 |
+| Directive catalog drift (inventory ↔ catalog ↔ implementation ↔ CLI ↔ docs) | `node tools/check-nginx-directive-matrix.mjs` | 12/12 |
 | Migration CLI consumes the catalog | `node --test tools/import-nginx-conf.test.mjs` | 14/14 |
+| Directive-by-directive audit ledger (744 rows) current + evidence verified | `node tools/gen-nginx-directive-audit.mjs --check --verify-evidence` | PASS |
 
 The differential oracles are committed and pinned to nginx 1.29.6, so CI compares without a real
 nginx binary; `SDKWORK_REQUIRE_NGINX_EVIDENCE=1` (set by the aggregate gate) turns any "this machine
-cannot execute the evidence" skip into a failure. Remaining catalogued gaps (`tls.ocsp-stapling`,
-`http.websocket.rfc8441`, `ops.reload.listener-handoff`, nested locations, `map` execution) are
-listed with commercial impact and priorities in the assessment report and are never claimed as
-supported.
+cannot execute the evidence" skip into a failure. The directive catalog now classifies 99 directives
+executable, 166 accepted-but-unenforced (each with a located diagnostic and a migration action), 250
+fail-closed and 229 excluded out of the 744 nginx 1.29.6 directives; a generated 744-row audit ledger
+records one decision and rationale per directive. Remaining catalogued gaps (`tls.ocsp-stapling`,
+`http.websocket.rfc8441`, `ops.reload.listener-handoff`, nested locations, chunked_transfer_encoding,
+charset/autoindex families, HTTP/2 tuning, stream module gaps) are listed with commercial impact and
+priorities in the assessment report and are never claimed as supported.
 
 
 ## 5. Browser clients

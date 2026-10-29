@@ -1152,7 +1152,7 @@ const FAIL_CLOSED: &[(&str, &str, &str)] = &[
     ("embedded wildcard server_name", "server_name www.*.example.com;", "not a supported nginx form"),
     ("empty hostname form", "server_name \"\";", "empty `server_name"),
     ("return 444", "location / { return 444; }", "return 444"),
-    ("variable return body", "location / { return 200 \"$host\"; }", "contains variables"),
+    ("variable return body", "location / { return 200 \"$upstream_addr\"; }", "uses variables the runtime does not expand"),
     // `=code` fallbacks are accepted since the runtime maps them to a static
     // resource without a SPA fallback (with `root`); without any root the
     // location fails closed on the serving-behavior rule.
@@ -1879,7 +1879,7 @@ fn accepted_but_unenforced_nginx_directives_surface_a_diagnostic() {
 server {
     listen 8080;
     server_name gzip.example.com;
-    gzip_static on;
+    gzip_comp_level 6;
     location / { return 200 "ok"; }
 }
 "#,
@@ -1889,7 +1889,7 @@ server {
     let report = load_nginx_compat(&config, "diagnostics").expect("load config");
     assert!(
         report.ignored.iter().any(|diagnostic| {
-            diagnostic.message.contains("gzip_static")
+            diagnostic.message.contains("gzip_comp_level")
                 && diagnostic.message.contains("not enforced")
         }),
         "an accepted-but-unenforced directive must warn instead of silently doing nothing: {:?}",

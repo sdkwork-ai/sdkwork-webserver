@@ -17,12 +17,12 @@ use axum::{
 };
 use futures_util::StreamExt;
 use sdkwork_webserver_core::{
-    apply_rewrites, evaluate_access, evaluate_auth_basic, normalize_authority_host,
+    apply_rewrites_with, evaluate_access, evaluate_auth_basic, normalize_authority_host,
     prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
-    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, ResourceConfig,
-    RewriteOutcome, RoutePathType, SecureLinkFailure, SecurityHeadersConfig, SelectedRoute,
-    XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
+    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, RedirectPolicyConfig,
+    ResourceConfig, RewriteOutcome, RoutePathType, SecureLinkFailure, SecurityHeadersConfig,
+    SelectedRoute, XFrameOptions, DEFAULT_MAX_RANGES, MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -158,11 +158,40 @@ const fn should_relay_to_sibling(serves_host: bool, from_sibling: bool) -> bool 
     serves_host && !from_sibling
 }
 
+/// Resolve the virtual host whose nginx request-boundary policies
+/// (`merge_slashes`, `underscores_in_headers`) govern this request.
+///
+/// The host comes from the request `Host` header when it selects a declared
+/// virtual host; otherwise the listener's default server applies, which is the
+/// host nginx would use while parsing the request line and headers.
+fn select_policy_host<'a>(
+    generation: &'a RuntimeGeneration,
+    listener_id: &str,
+    authority: Option<&str>,
+) -> Option<&'a sdkwork_webserver_core::VirtualHostConfig> {
+    if let Some(authority) = authority {
+        if let Some(host) = generation.app.select_virtual_host(listener_id, authority) {
+            return Some(host);
+        }
+    }
+    let default_ref = generation
+        .app
+        .listener(listener_id)?
+        .default_virtual_host_ref
+        .as_deref()?;
+    generation
+        .app
+        .config()
+        .virtual_hosts
+        .iter()
+        .find(|host| host.id == default_ref)
+}
+
 async fn route_admitted_request(
     peer: SocketAddr,
     transport_peer: SocketAddr,
     state: ListenerState,
-    request: Request<Body>,
+    mut request: Request<Body>,
     admitted: &mut super::request_gate::RequestAdmissionPermit,
 ) -> Response<Body> {
     // Captured before dispatch consumes the request: the compression layer
@@ -204,6 +233,31 @@ async fn route_admitted_request(
     };
     // nginx `$server_port`: the port this listener accepts on.
     let listener_port = listener.port;
+    // nginx request-boundary policies (`underscores_in_headers`,
+    // `merge_slashes`) resolve against the selected virtual host. The header
+    // policy is applied before any module observes the request headers, which
+    // is where nginx drops an underscore header during parsing. When the host
+    // is not declared the listener's default server governs, matching nginx's
+    // parse-before-virtual-server-selection behavior for the URI.
+    let peeked_authority = request
+        .headers()
+        .get(HOST)
+        .and_then(|value| value.to_str().ok())
+        .and_then(sdkwork_webserver_core::normalize_authority_host);
+    let policy_host =
+        select_policy_host(&generation, &state.listener_id, peeked_authority.as_deref());
+    if policy_host.is_some_and(|host| !host.underscores_in_headers) {
+        let underscored: Vec<HeaderName> = request
+            .headers()
+            .keys()
+            .filter(|name| name.as_str().contains('_'))
+            .cloned()
+            .collect();
+        for name in underscored {
+            request.headers_mut().remove(name);
+        }
+    }
+    let merge_slashes = policy_host.is_none_or(|host| host.merge_slashes);
     let client_ip = match resolve_client_ip(
         peer.ip(),
         request.headers(),
@@ -231,16 +285,6 @@ async fn route_admitted_request(
             return invalid_forwarded_scheme_response(request.version());
         }
     };
-    let normalized_path = match validate_request_uri(request.uri(), &generation.app.config().limits)
-    {
-        Ok(path) => path,
-        Err(error) => {
-            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-                return response;
-            }
-            return request_uri_error_response(request.version(), error);
-        }
-    };
     if content_length_exceeds(
         request.headers(),
         generation.app.config().limits.max_request_body_bytes,
@@ -259,8 +303,48 @@ async fn route_admitted_request(
             return text_response(status, message);
         }
     };
+    let normalized_path = match validate_request_uri(
+        request.uri(),
+        &generation.app.config().limits,
+        merge_slashes,
+    ) {
+        Ok(path) => path,
+        Err(error) => {
+            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
+                return response;
+            }
+            return request_uri_error_response(request.version(), error);
+        }
+    };
     let method = request.method().as_str().to_owned();
     let mut path = normalized_path;
+    // nginx `map` results for this request. The executable source vocabulary
+    // is the request facts below; every declared map is resolved once, before
+    // the rewrite loop, and reused by the rewrite phase and by every response
+    // layer. Bounded gap: a map keyed on `$uri`/`$document_uri` observes the
+    // pre-rewrite URI (nginx evaluates the variable lazily at first use).
+    let map_results = if generation.app.config().maps.is_empty() {
+        super::map_variables::MapResults::default()
+    } else {
+        let host_server_name = generation
+            .app
+            .select_virtual_host(&state.listener_id, &authority)
+            .and_then(|host| host.server_names.first().cloned())
+            .unwrap_or_default();
+        let facts = super::map_variables::MapRequestFacts {
+            scheme: scheme.as_str(),
+            authority: &authority,
+            client_ip,
+            listener_port,
+            request_uri: &raw_request_uri,
+            path: &path,
+            query: request_query.as_deref(),
+            method: &method,
+            server_name: &host_server_name,
+            headers: request.headers(),
+        };
+        super::map_variables::MapResults::evaluate(generation.app.config(), &facts)
+    };
     // nginx: once a rewrite changes the URI, proxying forwards the rewritten
     // URI; without rewrites the raw request path is preserved verbatim.
     let mut path_rewritten = false;
@@ -512,6 +596,10 @@ async fn route_admitted_request(
         }
     }
     let mut rewrite_redirects = 0_u32;
+    // nginx `r->internal`: set once the request has been internally redirected
+    // (`rewrite … last`, `try_files` named target, `error_page`). Only then may
+    // an `internal` location serve it.
+    let mut internal_request = false;
     let mut selected = loop {
         let Some(candidate) =
             generation
@@ -559,6 +647,7 @@ async fn route_admitted_request(
                         method: &method,
                         request_uri: &raw_request_uri,
                         server_name: host_config.server_names.first().map_or("", String::as_str),
+                        maps: Some(&map_results),
                     };
                     return apply_nginx_response_headers(
                         text_response(StatusCode::NOT_FOUND, "route was not found\n"),
@@ -571,11 +660,73 @@ async fn route_admitted_request(
             }
             return text_response(StatusCode::NOT_FOUND, "route was not found\n");
         };
+        // nginx `internal`: an external request that matches the location is
+        // answered with the generated 404 before the rewrite phase runs. The
+        // internal location still owns the response policy: its `add_header`
+        // array and `error_page` mappings apply to that 404
+        // (differential-confirmed against nginx 1.29.6).
+        if candidate.route.internal && !internal_request {
+            let response = text_response(StatusCode::NOT_FOUND, "route was not found\n");
+            let error_page_saved = if candidate.route.error_pages.is_empty()
+                && candidate.virtual_host.error_pages.is_empty()
+            {
+                None
+            } else {
+                Some((
+                    request.method().clone(),
+                    request.headers().clone(),
+                    request_query.clone(),
+                ))
+            };
+            let response = apply_error_pages(
+                &state,
+                &generation,
+                &candidate,
+                &authority,
+                response,
+                error_page_saved.as_ref(),
+                &path,
+                request_query.as_deref(),
+                scheme.as_str(),
+                &map_results,
+            )
+            .await;
+            let variables = ResponseHeaderVariables {
+                scheme: scheme.as_str(),
+                authority: &authority,
+                client_ip,
+                server_port: listener_port,
+                method: &method,
+                request_uri: &raw_request_uri,
+                server_name: candidate
+                    .virtual_host
+                    .server_names
+                    .first()
+                    .map_or("", String::as_str),
+                maps: Some(&map_results),
+            };
+            return finalize_response_headers(
+                response,
+                &candidate,
+                &variables,
+                &path,
+                request_query.as_deref(),
+            );
+        }
         if candidate.route.rewrite.is_empty() {
             break candidate;
         }
         let query = request.uri().query();
-        match apply_rewrites(&path, query, &candidate.route.rewrite) {
+        // nginx `rewrite` replacements are scripts: captures plus request
+        // variables. Resolve declared map results in the replacement after the
+        // captures have been substituted.
+        let expanded_replacement = |template: &str| map_results.expand_tokens(template);
+        match apply_rewrites_with(
+            &path,
+            query,
+            &candidate.route.rewrite,
+            &expanded_replacement,
+        ) {
             Ok(RewriteOutcome::Continue {
                 path: next_path, ..
             }) => {
@@ -587,6 +738,7 @@ async fn route_admitted_request(
                 path: next_path, ..
             }) => {
                 rewrite_redirects = rewrite_redirects.saturating_add(1);
+                internal_request = true;
                 if rewrite_redirects > MAX_REWRITE_INTERNAL_REDIRECTS {
                     if let Some(response) =
                         classify_request(&state, admitted, false, request.version())
@@ -613,6 +765,7 @@ async fn route_admitted_request(
                     &authority,
                     &path,
                     request.uri().query(),
+                    &map_results,
                 );
                 // nginx's headers filter runs for these redirect statuses too
                 // (301/302/303/307/308 are in the default `add_header` status
@@ -641,6 +794,7 @@ async fn route_admitted_request(
                     &path,
                     request_query.as_deref(),
                     scheme.as_str(),
+                    &map_results,
                 )
                 .await;
                 let variables = ResponseHeaderVariables {
@@ -655,6 +809,7 @@ async fn route_admitted_request(
                         .server_names
                         .first()
                         .map_or("", String::as_str),
+                    maps: Some(&map_results),
                 };
                 let response = apply_security_headers(
                     response,
@@ -697,6 +852,7 @@ async fn route_admitted_request(
             .server_names
             .first()
             .map_or("", String::as_str),
+        maps: Some(&map_results),
     };
     // nginx location-scoped gates run in the access/preaccess phases, before
     // the content handler and before `try_files` can redirect internally.
@@ -714,6 +870,7 @@ async fn route_admitted_request(
         &path,
         request.uri().query(),
         scheme.as_str(),
+        &map_results,
     )
     .await
     {
@@ -776,6 +933,7 @@ async fn route_admitted_request(
                 &path,
                 request.uri().query(),
                 scheme.as_str(),
+                &map_results,
             )
             .await
             {
@@ -796,6 +954,9 @@ async fn route_admitted_request(
                 location_leases.push(lease);
             }
         }
+        // Named locations are only reachable through this internal redirect, so
+        // the selected named route needs no further `internal` check; a
+        // following path re-selection cannot happen (redirect depth is one).
         selected = named;
     }
     let operations_reserved = is_operations_candidate(&request)
@@ -840,9 +1001,28 @@ async fn route_admitted_request(
         ResourceConfig::Respond {
             status,
             content_type,
+            content_type_from_uri,
             body,
             ..
         } => {
+            // A `return <status> "<body>"` body is a script in nginx; the
+            // runtime expands the response-header variable vocabulary plus the
+            // declared map results.
+            let expanded_body = response_variables.expand(body, &path, request_query.as_deref());
+            // nginx derives a `return` body's content type from the request URI
+            // extension through the resolved `types` table; the typed plane
+            // keeps declaring its content type explicitly.
+            let derived_type = content_type_from_uri.then(|| {
+                super::delivery_policy::MimePolicy::resolve(
+                    generation.app.config(),
+                    selected.virtual_host,
+                    selected.route,
+                )
+                .content_type_for_uri(&path)
+            });
+            let content_type_value = derived_type
+                .clone()
+                .or_else(|| HeaderValue::from_str(content_type).ok());
             let response = match drain_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -850,7 +1030,12 @@ async fn route_admitted_request(
             )
             .await
             {
-                Ok(_) => fixed_response(*status, content_type, body, method == "HEAD"),
+                Ok(_) => fixed_response_with_type(
+                    *status,
+                    content_type_value.as_ref(),
+                    &expanded_body,
+                    method == "HEAD",
+                ),
                 Err(response) => response,
             };
             // nginx maps `error_page` for a status produced by a rewrite-phase
@@ -868,6 +1053,7 @@ async fn route_admitted_request(
                 &path,
                 request_query.as_deref(),
                 scheme.as_str(),
+                &map_results,
             )
             .await
         }
@@ -889,6 +1075,7 @@ async fn route_admitted_request(
                     &authority,
                     &path,
                     query.as_deref(),
+                    &map_results,
                 ),
                 Err(response) => response,
             };
@@ -905,6 +1092,7 @@ async fn route_admitted_request(
                 &path,
                 query.as_deref(),
                 scheme.as_str(),
+                &map_results,
             )
             .await
         }
@@ -957,6 +1145,7 @@ async fn route_admitted_request(
                         static_spa_fallback,
                         &path,
                         request,
+                        static_delivery_policy(&generation, &selected),
                     )
                     .await
                 }
@@ -972,6 +1161,7 @@ async fn route_admitted_request(
                 &path,
                 None,
                 scheme.as_str(),
+                &map_results,
             )
             .await
         }
@@ -983,6 +1173,7 @@ async fn route_admitted_request(
             dynamic_target,
             proxy_pass_request_headers,
             proxy_intercept_errors,
+            proxy_response_policy,
             ..
         } => {
             let proxy_response = super::proxy::proxy_request_cached(
@@ -1012,6 +1203,8 @@ async fn route_admitted_request(
                     tunnel_supervisor: &state.runtime.tunnel_supervisor,
                     metrics: &state.runtime.metrics,
                     cache: generation.proxy_cache.clone(),
+                    map_results: &map_results,
+                    response_policy: proxy_response_policy.as_ref(),
                 },
                 request,
             )
@@ -1031,6 +1224,7 @@ async fn route_admitted_request(
                         &path,
                         query.as_deref(),
                         scheme.as_str(),
+                        &map_results,
                     )
                     .await
                 } else {
@@ -1238,6 +1432,20 @@ async fn route_admitted_request(
                 .clone()
                 .or_else(|| selected.virtual_host.compression.clone()),
         ));
+    // nginx `gzip_vary off`: the compression layer always declares
+    // `Vary: Accept-Encoding` when it selects a representation, so the handler
+    // states the exception for the outer suppression middleware.
+    if !super::delivery_policy::effective_gzip(
+        generation.app.config(),
+        selected.virtual_host,
+        selected.route,
+    )
+    .vary
+    {
+        response
+            .extensions_mut()
+            .insert(super::gzip_predicate::SuppressGzipVary);
+    }
     // Keep every limit_conn slot held for the whole response lifetime: the
     // leases drop when the response body completes or is abandoned. A bounded
     // named-location redirect can hold one lease for the path location and one
@@ -1249,6 +1457,28 @@ async fn route_admitted_request(
             response.map(|body| Body::new(super::limit_conn::LeaseBody { inner: body, lease }));
     }
     response
+}
+
+/// Effective static delivery policy for one selected route (nginx `types` /
+/// `default_type` / `gzip_static` / `gzip_vary`).
+fn static_delivery_policy<'a>(
+    generation: &'a RuntimeGeneration,
+    selected: &'a SelectedRoute<'a>,
+) -> super::static_files::StaticDeliveryPolicy<'a> {
+    let app = generation.app.config();
+    super::static_files::StaticDeliveryPolicy {
+        mime: super::delivery_policy::MimePolicy::resolve(
+            app,
+            selected.virtual_host,
+            selected.route,
+        ),
+        gzip: super::delivery_policy::effective_gzip(app, selected.virtual_host, selected.route),
+        max_ranges: selected
+            .route
+            .max_ranges
+            .or(selected.virtual_host.max_ranges)
+            .unwrap_or(DEFAULT_MAX_RANGES),
+    }
 }
 
 /// Result of running nginx's access/preaccess gates for one selected
@@ -1285,6 +1515,7 @@ async fn apply_location_gates(
     requested_path: &str,
     query: Option<&str>,
     scheme: &str,
+    maps: &super::map_variables::MapResults,
 ) -> Result<LocationGateOutcome, Response<Body>> {
     let mut path = requested_path.to_owned();
     if evaluate_access(client_ip, &selected.route.access) == AccessDecision::Deny {
@@ -1306,6 +1537,7 @@ async fn apply_location_gates(
             &path,
             query,
             scheme,
+            maps,
         )
         .await
         {
@@ -1350,7 +1582,12 @@ async fn apply_location_gates(
             .runtime
             .metrics
             .record_request_rejection(RequestRejection::RateLimited);
-        return Err(limit_req_rejected_response(version));
+        let status = selected
+            .route
+            .limit_req_status
+            .or(selected.virtual_host.limit_req_status)
+            .unwrap_or(503);
+        return Err(limit_req_rejected_response(version, status));
     }
     // nginx error_page applies to generated errors; keep the request identity
     // for the internal redirect before any dispatch consumes the request.
@@ -1374,7 +1611,12 @@ async fn apply_location_gates(
                 .runtime
                 .metrics
                 .record_request_rejection(RequestRejection::ConnectionLimited);
-            return Err(limit_conn_rejected_response(version));
+            let status = selected
+                .route
+                .limit_conn_status
+                .or(selected.virtual_host.limit_conn_status)
+                .unwrap_or(503);
+            return Err(limit_conn_rejected_response(version, status));
         }
         Err(LimitConnDecision::Allow) => {
             unreachable!("limit_conn admission only errors with Reject")
@@ -1481,6 +1723,7 @@ async fn run_error_page_hop<'a>(
     requested_path: &str,
     query: Option<&str>,
     scheme: &str,
+    maps: &super::map_variables::MapResults,
 ) -> Option<(Response<Body>, StatusCode, &'a [ErrorPageConfig])> {
     let entry = pages
         .iter()
@@ -1535,18 +1778,45 @@ async fn run_error_page_hop<'a>(
                 spa_fallback,
                 target_path,
                 rebuilt,
+                static_delivery_policy(generation, &candidate),
             )
             .await
         }
         ResourceConfig::Respond {
             status,
             content_type,
+            content_type_from_uri,
             body,
             ..
-        } => fixed_response(*status, content_type, body, method == Method::HEAD),
+        } => {
+            let expanded_body = maps.expand_tokens(body);
+            let derived_type = content_type_from_uri.then(|| {
+                super::delivery_policy::MimePolicy::resolve(
+                    generation.app.config(),
+                    candidate.virtual_host,
+                    candidate.route,
+                )
+                .content_type_for_uri(target_path)
+            });
+            let declared_type = HeaderValue::from_str(content_type).ok();
+            fixed_response_with_type(
+                *status,
+                derived_type.as_ref().or(declared_type.as_ref()),
+                &expanded_body,
+                method == Method::HEAD,
+            )
+        }
         ResourceConfig::Redirect {
             status, location, ..
-        } => redirect_response(*status, location, scheme, authority, requested_path, query),
+        } => redirect_response(
+            *status,
+            location,
+            scheme,
+            authority,
+            requested_path,
+            query,
+            maps,
+        ),
         // Proxy/provider targets cannot rebuild the consumed request body, so
         // they are not executable as an error page. Configuration validation
         // rejects a named proxy error_page target; a literal URI that selects
@@ -1591,6 +1861,7 @@ async fn resolve_error_pages(
     requested_path: &str,
     query: Option<&str>,
     scheme: &str,
+    maps: &super::map_variables::MapResults,
 ) -> Option<Response<Body>> {
     // nginx inheritance: a location that declares error_page replaces the
     // host-level set for that route.
@@ -1626,6 +1897,7 @@ async fn resolve_error_pages(
             requested_path,
             query,
             scheme,
+            maps,
         )
         .await?;
         let served_cleanly = !(target_status.is_client_error() || target_status.is_server_error());
@@ -1682,6 +1954,7 @@ async fn apply_error_pages(
     requested_path: &str,
     query: Option<&str>,
     scheme: &str,
+    maps: &super::map_variables::MapResults,
 ) -> Response<Body> {
     let status = response.status();
     let Some((method, headers, saved_query)) = saved else {
@@ -1711,6 +1984,7 @@ async fn apply_error_pages(
         requested_path,
         saved_query.as_deref().or(query),
         scheme,
+        maps,
     )
     .await
     else {
@@ -1750,6 +2024,9 @@ struct ResponseHeaderVariables<'a> {
     method: &'a str,
     request_uri: &'a str,
     server_name: &'a str,
+    /// nginx `map` results for this request; a result variable is expanded
+    /// exactly like a built-in request variable in an `add_header` value.
+    maps: Option<&'a super::map_variables::MapResults>,
 }
 
 impl ResponseHeaderVariables<'_> {
@@ -1775,6 +2052,19 @@ impl ResponseHeaderVariables<'_> {
                 })
                 .copied();
             let Some(variable) = matched else {
+                // A declared nginx `map` result is expanded here, exactly like
+                // a built-in request variable.
+                let name_end = rest
+                    .find(|character: char| {
+                        !(character.is_ascii_alphanumeric() || character == '_')
+                    })
+                    .unwrap_or(rest.len());
+                let name = &rest[..name_end];
+                if let Some(value) = self.maps.and_then(|maps| maps.lookup(name)) {
+                    output.push_str(value);
+                    remainder = &rest[name_end..];
+                    continue;
+                }
                 // Configuration validation rejects unknown variables, so this
                 // is unreachable; keep the `$` literal rather than dropping
                 // the rest of the value if an input ever bypasses validation.
@@ -1860,6 +2150,12 @@ fn apply_nginx_response_headers(
             continue;
         };
         let value = variables.expand(&header.value, uri, query);
+        // nginx omits a field whose expanded value is empty, whether the
+        // emptiness is declared (`add_header X "";`) or produced by a variable
+        // or map result that resolves to the empty string.
+        if value.is_empty() {
+            continue;
+        }
         if let Ok(value) = HeaderValue::from_str(&value) {
             // `append`, not `insert`: nginx emits duplicate add_header fields
             // as separate lines and preserves declaration order.
@@ -1887,7 +2183,117 @@ fn finalize_response_headers(
         Some(policy) => policy.as_deref(),
         None => effective_response_headers(selected),
     };
+    let response = apply_redirect_policy(response, effective_redirect_policy(selected), variables);
     apply_nginx_response_headers(response, policy, variables, uri, query)
+}
+
+/// Effective redirect construction policy for one selected route: a
+/// location-level declaration wins over the host's resolved
+/// `absolute_redirect` / `port_in_redirect` / `server_name_in_redirect`
+/// policy; a host that declares none keeps the nginx defaults.
+fn effective_redirect_policy(selected: &SelectedRoute<'_>) -> RedirectPolicyConfig {
+    selected
+        .route
+        .redirect_policy
+        .or(selected.virtual_host.redirect_policy)
+        .unwrap_or(RedirectPolicyConfig::NGINX_DEFAULT)
+}
+
+/// Rewrite a relative `Location` into the absolute form nginx's header filter
+/// would send (`ngx_http_header_filter`, differential-confirmed against nginx
+/// 1.29.6).
+///
+/// Only a target that starts with `/` is rewritten; an absolute upstream
+/// target is passed through untouched. With `absolute_redirect off` the
+/// relative target is kept. With `absolute_redirect on` the target becomes
+/// `<scheme>://<host>[:<port>]<path>`, where the host is the first
+/// `server_name` under `server_name_in_redirect on` (otherwise the request
+/// `Host`, or the request URI authority when a client speaks HTTP/2) and the
+/// port is the listener port, omitted when it is the scheme default
+/// (80/http, 443/https) or when `port_in_redirect off`.
+///
+/// The client-facing scheme is used for both the URL scheme and the
+/// scheme-default port check, which is the edge-proxy equivalent of nginx's
+/// `c->ssl` test (nginx cannot see a trusted proxy's `X-Forwarded-Proto`).
+fn apply_redirect_policy(
+    mut response: Response<Body>,
+    policy: RedirectPolicyConfig,
+    variables: &ResponseHeaderVariables<'_>,
+) -> Response<Body> {
+    let Some(location) = response.headers().get(LOCATION) else {
+        return response;
+    };
+    let Ok(location) = location.to_str() else {
+        return response;
+    };
+    let Some(absolute) = absolute_redirect_location(location, policy, variables) else {
+        return response;
+    };
+    if let Ok(value) = HeaderValue::from_str(&absolute) {
+        response.headers_mut().insert(LOCATION, value);
+    }
+    response
+}
+
+/// The absolute `Location` nginx's header filter would build for a relative
+/// target, or `None` when the target must stay as authored.
+fn absolute_redirect_location(
+    location: &str,
+    policy: RedirectPolicyConfig,
+    variables: &ResponseHeaderVariables<'_>,
+) -> Option<String> {
+    if !policy.absolute_redirect || !location.starts_with('/') {
+        return None;
+    }
+    let host = if policy.server_name_in_redirect {
+        variables.server_name
+    } else {
+        authority_host_without_port(variables.authority)
+    };
+    if host.is_empty() {
+        return None;
+    }
+    let default_port = match variables.scheme {
+        "https" => 443,
+        "http" => 80,
+        _ => 0,
+    };
+    let port = if policy.port_in_redirect && variables.server_port != default_port {
+        Some(variables.server_port)
+    } else {
+        None
+    };
+    let mut absolute =
+        String::with_capacity(variables.scheme.len() + host.len() + location.len() + 8);
+    absolute.push_str(variables.scheme);
+    absolute.push_str("://");
+    absolute.push_str(host);
+    if let Some(port) = port {
+        absolute.push(':');
+        absolute.push_str(&port.to_string());
+    }
+    absolute.push_str(location);
+    Some(absolute)
+}
+
+/// The authority's host part (port removed, IPv6 brackets kept, case
+/// preserved exactly as received — nginx echoes the `Host` header's host).
+fn authority_host_without_port(authority: &str) -> &str {
+    let authority = authority.rsplit('@').next().unwrap_or(authority);
+    if authority.starts_with('[') {
+        if let Some(end) = authority.find(']') {
+            return &authority[..=end];
+        }
+        return authority;
+    }
+    match authority.rsplit_once(':') {
+        Some((host, port))
+            if !host.contains(':') && port.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            host
+        }
+        _ => authority,
+    }
 }
 
 /// Applies the selected virtual host's security response headers. HSTS is
@@ -2163,26 +2569,31 @@ fn secure_link_rejected_response(version: Version) -> Response<Body> {
     response
 }
 
-fn limit_conn_rejected_response(version: Version) -> Response<Body> {
+fn limit_conn_rejected_response(version: Version, status: u16) -> Response<Body> {
+    // nginx `limit_conn_status` (default 503): the configured code is the
+    // whole client-observable rejection contract.
+    let status = StatusCode::from_u16(status).unwrap_or(StatusCode::SERVICE_UNAVAILABLE);
     let mut response = fixed_response(
-        503,
+        status.as_u16(),
         "text/plain; charset=utf-8",
         "too many connections",
         false,
     );
-    *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
+    *response.status_mut() = status;
     if version == Version::HTTP_09 {
         response.headers_mut().remove(CONTENT_TYPE);
     }
     response
 }
 
-fn limit_req_rejected_response(version: Version) -> Response<Body> {
-    // nginx's `limit_req` rejection is a bare 503 with no `Retry-After` (the
-    // delay that would give one is not known: the zone recovers continuously).
-    // The admission-pressure responses above do publish it, but this path is
-    // the nginx-compatible rate-limit answer and must match the oracle.
-    let mut response = text_response(StatusCode::SERVICE_UNAVAILABLE, "limiting requests\n");
+fn limit_req_rejected_response(version: Version, status: u16) -> Response<Body> {
+    // nginx's `limit_req` rejection is a bare status with no `Retry-After`
+    // (the delay that would give one is not known: the zone recovers
+    // continuously). The admission-pressure responses above do publish it, but
+    // this path is the nginx-compatible rate-limit answer and must match the
+    // oracle. `limit_req_status` (default 503) makes the code configurable.
+    let status = StatusCode::from_u16(status).unwrap_or(StatusCode::SERVICE_UNAVAILABLE);
+    let mut response = text_response(status, "limiting requests\n");
     if version != Version::HTTP_2 {
         response
             .headers_mut()
@@ -2407,6 +2818,24 @@ fn request_authority(request: &Request<Body>) -> Result<String, (StatusCode, &'s
 }
 
 fn fixed_response(status: u16, content_type: &str, body: &str, head: bool) -> Response<Body> {
+    fixed_response_with_type(
+        status,
+        HeaderValue::from_str(content_type).ok().as_ref(),
+        body,
+        head,
+    )
+}
+
+/// [`fixed_response`] with an explicit optional `Content-Type`. `None` omits
+/// the field (nginx sends no `Content-Type` for a bodyless 204/304, and a
+/// nginx `return` body derives its type from the request URI, which can be
+/// unknown when the URI carries no extension and no `default_type`).
+fn fixed_response_with_type(
+    status: u16,
+    content_type: Option<&HeaderValue>,
+    body: &str,
+    head: bool,
+) -> Response<Body> {
     let status = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let suppress_body =
         head || status == StatusCode::NO_CONTENT || status == StatusCode::NOT_MODIFIED;
@@ -2416,8 +2845,10 @@ fn fixed_response(status: u16, content_type: &str, body: &str, head: bool) -> Re
         Body::from(body.to_owned())
     });
     *response.status_mut() = status;
-    if let Ok(value) = HeaderValue::from_str(content_type) {
-        response.headers_mut().insert(CONTENT_TYPE, value);
+    if let Some(value) = content_type {
+        if !matches!(status, StatusCode::NO_CONTENT | StatusCode::NOT_MODIFIED) {
+            response.headers_mut().insert(CONTENT_TYPE, value.clone());
+        }
     }
     let declared_length = if matches!(status, StatusCode::NO_CONTENT | StatusCode::RESET_CONTENT) {
         0
@@ -2440,11 +2871,12 @@ fn redirect_response(
     authority: &str,
     path: &str,
     query: Option<&str>,
+    maps: &super::map_variables::MapResults,
 ) -> Response<Body> {
     let status = StatusCode::from_u16(status).unwrap_or(StatusCode::TEMPORARY_REDIRECT);
     let mut response = Response::new(Body::empty());
     *response.status_mut() = status;
-    let expanded = expand_redirect_variables(location, scheme, authority, path, query);
+    let expanded = expand_redirect_variables(location, scheme, authority, path, query, maps);
     if let Ok(value) = HeaderValue::from_str(&expanded) {
         response.headers_mut().insert(LOCATION, value);
     }
@@ -2459,16 +2891,25 @@ fn expand_redirect_variables(
     authority: &str,
     path: &str,
     query: Option<&str>,
+    maps: &super::map_variables::MapResults,
 ) -> String {
     let request_uri = match query {
         Some(query) if !query.is_empty() => format!("{path}?{query}"),
         _ => path.to_owned(),
     };
+    // Expand declared map results first; a `$` inside a resolved value is
+    // escaped so the built-in pass below cannot re-expand it.
+    let location = maps.expand_tokens_escaped(location);
     let mut output = String::with_capacity(location.len() + 16);
-    let mut remainder = location;
+    let mut remainder = location.as_str();
     while let Some(index) = remainder.find('$') {
         output.push_str(&remainder[..index]);
         let rest = &remainder[index..];
+        if let Some(escaped) = rest.strip_prefix("$$") {
+            output.push('$');
+            remainder = escaped;
+            continue;
+        }
         let variable = if rest.starts_with("$request_uri") {
             "$request_uri"
         } else if rest.starts_with("$host") {
@@ -2539,6 +2980,7 @@ mod tests {
             method: "GET",
             request_uri: "/request-path?q=1",
             server_name: "headers.example.com",
+            maps: None,
         }
     }
 
@@ -2546,6 +2988,191 @@ mod tests {
         let mut response = base_response();
         *response.status_mut() = StatusCode::from_u16(status).expect("status");
         response
+    }
+
+    fn redirect_response_with_location(location: &str) -> Response<Body> {
+        let mut response = response_with_status(301);
+        response
+            .headers_mut()
+            .insert(LOCATION, HeaderValue::from_str(location).expect("location"));
+        response
+    }
+
+    fn redirect_variables(
+        scheme: &'static str,
+        authority: &'static str,
+        server_port: u16,
+        server_name: &'static str,
+    ) -> ResponseHeaderVariables<'static> {
+        ResponseHeaderVariables {
+            scheme,
+            authority,
+            client_ip: "127.0.0.1".parse().unwrap(),
+            server_port,
+            method: "GET",
+            request_uri: "/dir",
+            server_name,
+            maps: None,
+        }
+    }
+
+    #[test]
+    fn redirect_policy_constructs_the_nginx_absolute_location() {
+        // Differential-confirmed against nginx 1.29.6
+        // (`ngx_http_header_filter`): a relative target becomes
+        // `<scheme>://<host>[:<port>]<path>`, the host is the request `Host`
+        // by default, the port is the listener port, and an absolute target is
+        // passed through untouched.
+        let variables =
+            redirect_variables("http", "first.example.com:9999", 8080, "first.example.com");
+        let default = RedirectPolicyConfig::NGINX_DEFAULT;
+        let response = apply_redirect_policy(
+            redirect_response_with_location("/dir/"),
+            default,
+            &variables,
+        );
+        assert_eq!(
+            response.headers()[LOCATION],
+            "http://first.example.com:8080/dir/"
+        );
+
+        // An absolute target is never rewritten.
+        let response = apply_redirect_policy(
+            redirect_response_with_location("https://other.example.test/x"),
+            default,
+            &variables,
+        );
+        assert_eq!(response.headers()[LOCATION], "https://other.example.test/x");
+
+        // A scheme-default listener port is omitted.
+        let variables = redirect_variables("http", "first.example.com", 80, "first.example.com");
+        let response = apply_redirect_policy(
+            redirect_response_with_location("/dir/"),
+            default,
+            &variables,
+        );
+        assert_eq!(
+            response.headers()[LOCATION],
+            "http://first.example.com/dir/"
+        );
+
+        // `port_in_redirect off` omits the listener port.
+        let variables = redirect_variables("http", "first.example.com", 8080, "first.example.com");
+        let response = apply_redirect_policy(
+            redirect_response_with_location("/dir/"),
+            RedirectPolicyConfig {
+                port_in_redirect: false,
+                ..RedirectPolicyConfig::NGINX_DEFAULT
+            },
+            &variables,
+        );
+        assert_eq!(
+            response.headers()[LOCATION],
+            "http://first.example.com/dir/"
+        );
+
+        // `server_name_in_redirect on` uses the first server_name, not `Host`.
+        let response = apply_redirect_policy(
+            redirect_response_with_location("/dir/"),
+            RedirectPolicyConfig {
+                server_name_in_redirect: true,
+                ..RedirectPolicyConfig::NGINX_DEFAULT
+            },
+            &variables,
+        );
+        assert_eq!(
+            response.headers()[LOCATION],
+            "http://first.example.com:8080/dir/"
+        );
+
+        // `absolute_redirect off` keeps the relative target.
+        let response = apply_redirect_policy(
+            redirect_response_with_location("/dir/"),
+            RedirectPolicyConfig {
+                absolute_redirect: false,
+                ..RedirectPolicyConfig::NGINX_DEFAULT
+            },
+            &variables,
+        );
+        assert_eq!(response.headers()[LOCATION], "/dir/");
+    }
+
+    #[test]
+    fn limit_status_resolution_prefers_the_location_then_the_host() {
+        // Documented resolution order used by `apply_location_gates`:
+        // route `limitReqStatus`/`limitConnStatus` wins, then the virtual
+        // host value, then the nginx default 503. The gate itself needs a
+        // running runtime, so the resolution rule is asserted here against
+        // the model fields it reads.
+        let host = sdkwork_webserver_core::VirtualHostConfig {
+            id: "vh".to_owned(),
+            listener_refs: Vec::new(),
+            server_names: vec!["example.test".to_owned()],
+            routes: Vec::new(),
+            security_headers: None,
+            compression: None,
+            mime_types: None,
+            default_type: None,
+            error_pages: Vec::new(),
+            recursive_error_pages: false,
+            cache_policy: None,
+            redirect_policy: None,
+            limit_req_status: Some(429),
+            limit_conn_status: Some(444),
+            max_ranges: None,
+            merge_slashes: true,
+            underscores_in_headers: false,
+            ignore_invalid_headers: true,
+        };
+        let mut route = sdkwork_webserver_core::RouteConfig {
+            id: "r".to_owned(),
+            route_match: sdkwork_webserver_core::RouteMatchConfig {
+                path_type: sdkwork_webserver_core::RoutePathType::Prefix,
+                path: "/".to_owned(),
+                methods: None,
+            },
+            resource_ref: "res".to_owned(),
+            access: Vec::new(),
+            limit_req: Vec::new(),
+            limit_conn: Vec::new(),
+            rewrite: Vec::new(),
+            auth_basic: None,
+            sub_filter: None,
+            secure_link: None,
+            compression: None,
+            mime_types: None,
+            default_type: None,
+            error_pages: Vec::new(),
+            response_headers: Vec::new(),
+            cache_policy: None,
+            redirect_policy: None,
+            limit_req_status: None,
+            limit_conn_status: Some(503),
+            max_ranges: None,
+            internal: false,
+        };
+        assert_eq!(
+            route
+                .limit_req_status
+                .or(host.limit_req_status)
+                .unwrap_or(503),
+            429
+        );
+        assert_eq!(
+            route
+                .limit_conn_status
+                .or(host.limit_conn_status)
+                .unwrap_or(503),
+            503
+        );
+        route.limit_req_status = Some(400);
+        assert_eq!(
+            route
+                .limit_req_status
+                .or(host.limit_req_status)
+                .unwrap_or(503),
+            400
+        );
     }
 
     #[test]

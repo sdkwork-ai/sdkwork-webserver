@@ -22,8 +22,9 @@ use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use sdkwork_webserver_core::{
-    CompiledWebServerApp, RouteConfig, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
-    UpstreamConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy, UpstreamRetryCondition,
+    CompiledWebServerApp, ProxyResponsePolicyConfig, RouteConfig, UpstreamActiveHealthConfig,
+    UpstreamActiveHealthMethod, UpstreamConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy,
+    UpstreamRetryCondition,
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
@@ -353,6 +354,13 @@ pub(super) struct ProxyRequestContext<'a> {
     pub metrics: &'a Arc<DataPlaneMetrics>,
     /// Shared HTTP response cache for proxied surfaces, when enabled.
     pub cache: Option<Arc<super::cache::HttpResponseCache>>,
+    /// nginx `map` results for this request, expandable in
+    /// `proxy_set_header` values and variable `proxy_pass` targets.
+    pub map_results: &'a super::map_variables::MapResults,
+    /// nginx proxy response-header policy (`proxy_hide_header`,
+    /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
+    /// `proxy_cookie_domain`) resolved for this proxy resource.
+    pub response_policy: Option<&'a ProxyResponsePolicyConfig>,
 }
 
 mod hash_lb;
@@ -826,8 +834,12 @@ async fn proxy_request_dynamic(
             )
         })
         .collect::<HashMap<_, _>>();
+    // A declared map result in a variable `proxy_pass` template is resolved
+    // first; a `$` surviving from the value is escaped so the nginx-variable
+    // pass below cannot re-expand it.
+    let template_with_maps = context.map_results.expand_tokens_escaped(template);
     let evaluated = match sdkwork_webserver_core::expand_proxy_pass_template(
-        template,
+        &template_with_maps,
         &host,
         server_port,
         request_path,
@@ -1089,6 +1101,7 @@ async fn proxy_http_request(
         context.external_scheme,
         context.external_authority,
         context.listener_port,
+        context.map_results,
     )
     .is_err()
     {
@@ -1284,6 +1297,38 @@ async fn proxy_http_request(
                 }
             };
         response_parts.headers = response_headers;
+        // nginx proxy response-header policy runs while the upstream response
+        // is copied into the client response, so it observes the final upstream
+        // header set (after hop-by-hop removal).
+        if let Some(policy) = context.response_policy {
+            // nginx `proxy_redirect default` is expanded to a literal rule at
+            // materialization time; a typed-plane `default` declaration is
+            // expanded here from the attempt target.
+            let typed_default_from = match policy.redirect.as_ref() {
+                Some(sdkwork_webserver_core::ProxyRedirectPolicyConfig::Default) => {
+                    let mut base = format!("{}://{}", target_url.scheme(), target_url.authority());
+                    match context.target_uri {
+                        Some(uri) => base.push_str(uri),
+                        None => base.push('/'),
+                    }
+                    Some(base)
+                }
+                _ => None,
+            };
+            let default_redirect_to = if context.target_uri.is_some() {
+                context.route.route_match.path.as_str()
+            } else {
+                "/"
+            };
+            super::proxy_response_policy::apply_proxy_response_policy(
+                &mut response_parts.headers,
+                &super::proxy_response_policy::ProxyResponsePolicyContext {
+                    policy,
+                    default_redirect_from: typed_default_from.as_deref(),
+                    default_redirect_to,
+                },
+            );
+        }
         if upstream.status_is_failure(response_parts.status) {
             upstream.record_failure(selected);
         } else {
@@ -1425,6 +1470,7 @@ async fn proxy_websocket_request(
         context.external_scheme,
         context.external_authority,
         context.listener_port,
+        context.map_results,
     )
     .is_err()
     {
@@ -1810,6 +1856,7 @@ fn apply_proxy_set_headers(
     external_scheme: &str,
     external_authority: &str,
     listener_port: u16,
+    maps: &super::map_variables::MapResults,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -1828,6 +1875,7 @@ fn apply_proxy_set_headers(
             external_scheme,
             external_authority,
             listener_port,
+            maps,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -1846,6 +1894,7 @@ fn expand_proxy_header_value(
     external_scheme: &str,
     external_authority: &str,
     listener_port: u16,
+    maps: &super::map_variables::MapResults,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -1921,7 +1970,14 @@ fn expand_proxy_header_value(
                     out.push_str(port);
                 }
             }
-            _ => return Err(()),
+            _ => {
+                // A declared nginx `map` result is expanded here exactly like a
+                // built-in request variable.
+                match maps.lookup(var) {
+                    Some(value) => out.push_str(value),
+                    None => return Err(()),
+                }
+            }
         }
     }
     Ok(out)

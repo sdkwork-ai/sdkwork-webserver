@@ -43,6 +43,15 @@ const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const FIXTURE = path.join(differentialDir, 'public', 'hello.txt');
 const BASELINE = path.join(differentialDir, 'nginx-oracle.json');
 const RENDERED = path.join(differentialDir, 'nginx.rendered.conf');
+/**
+ * The gateway is served from a *generated* configuration inside `tmp/`, not the
+ * committed `nginx.rendered.conf` review artifact: the empty-string-key `map`
+ * block is injected into it, and the committed artifact must stay parseable by
+ * the repository's JS configuration parser (the directive-matrix gate scans
+ * every committed `*.conf`).
+ */
+const GATEWAY_CONF_DIR = path.join(root, 'tmp', 'nginx-differential-http');
+const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-http-ours.json');
 const ORACLE_PORT = 20992;
 const GATEWAY_PORT = 20993;
@@ -55,7 +64,7 @@ const ORACLE_UPSTREAM_PORT = ORACLE_PORT + 2;
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_UPSTREAM_PORT = GATEWAY_PORT + 2;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
-const CASE_FLOOR = 87;
+const CASE_FLOOR = 182;
 /**
  * The exact nginx build the committed oracle was captured from. Bump it only
  * together with a fresh `--refresh-oracle` capture and the per-slice note in
@@ -161,13 +170,34 @@ function posixRoot(target) {
 }
 
 function renderConf(publicRoot, listenPort, upstreamPort, deadPort) {
-  const text = fs
+  const template = fs
     .readFileSync(path.join(differentialDir, 'nginx.conf'), 'utf8')
     .replaceAll('@PUBLIC@', publicRoot)
     .replaceAll('@PORT@', String(listenPort))
     .replaceAll('@UPSTREAM@', String(upstreamPort))
     .replaceAll('@DEAD@', String(deadPort))
     .replaceAll('@HTPASSWD@', posixRoot(path.join(differentialDir, 'htpasswd')));
+  const emptyKeyMaps = fs.readFileSync(
+    path.join(differentialDir, 'maps-empty-key.inc'),
+    'utf8',
+  );
+  // Gateway configuration: the empty-string-key maps are injected inline.
+  const gatewayText = template.replaceAll('# @EMPTY_KEY_MAP@', emptyKeyMaps.trimEnd());
+  if (gatewayText.includes('@EMPTY_KEY_MAP@')) {
+    throw new Error('empty-key map marker was left unrendered');
+  }
+  fs.mkdirSync(GATEWAY_CONF_DIR, { recursive: true });
+  fs.writeFileSync(GATEWAY_CONF, gatewayText);
+  // The configuration includes `maps.fragment`, which nginx resolves against
+  // the rendered configuration's own directory; mirror that for the gateway
+  // loader (its base directory is the served configuration's directory).
+  fs.copyFileSync(
+    path.join(differentialDir, 'maps.fragment'),
+    path.join(GATEWAY_CONF_DIR, 'maps.fragment'),
+  );
+  // The committed review artifact keeps the marker comment and the include, so
+  // the fixture-directive scan can parse it.
+  const text = template;
   for (const placeholder of [
     '@PUBLIC@',
     '@PORT@',
@@ -338,7 +368,7 @@ async function main() {
   const logPath = path.join(root, 'tmp', 'nginx-differential-http-gateway.log');
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logHandle = fs.openSync(logPath, 'w');
-  const gateway = spawn(binary, ['serve-nginx', RENDERED], {
+  const gateway = spawn(binary, ['serve-nginx', GATEWAY_CONF], {
     cwd: root,
     stdio: ['ignore', logHandle, logHandle],
   });

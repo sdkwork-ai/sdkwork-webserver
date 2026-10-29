@@ -59,6 +59,13 @@ sed \
     -e "s|@HTPASSWD@|$HERE/htpasswd|g" \
     "$HERE/nginx.conf" |
     sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF"
+# `include maps.fragment;` resolves against the rendered configuration's own
+# directory ($WORK), exactly like nginx's conf_prefix.
+cp "$HERE/maps.fragment" "$WORK/maps.fragment"
+# Inject the empty-string-key maps (the JS config parser cannot tokenise them).
+# `r` appends the file after the marker line, then the marker comment is removed.
+sed -i "\|# @EMPTY_KEY_MAP@|r $HERE/maps-empty-key.inc" "$CONF"
+sed -i "\|# @EMPTY_KEY_MAP@|d" "$CONF"
 
 probe_port() {
     "$PY" -c "import socket,sys; socket.create_connection(('127.0.0.1', $1), 1).close()" \

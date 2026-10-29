@@ -1299,7 +1299,12 @@ async fn serves_fixed_and_static_routes_and_drains() {
         .await
         .expect("request redirect route");
     assert_eq!(moved.status(), reqwest::StatusCode::PERMANENT_REDIRECT);
-    assert_eq!(moved.headers()[reqwest::header::LOCATION], "/healthz");
+    // nginx `absolute_redirect on` (the default) builds the Location from the
+    // request Host plus the listening port when it is not the scheme default.
+    assert_eq!(
+        moved.headers()[reqwest::header::LOCATION],
+        format!("http://test.localhost:{port}/healthz")
+    );
 
     let index = client
         .get(format!("http://127.0.0.1:{port}/"))
@@ -1327,9 +1332,11 @@ async fn serves_fixed_and_static_routes_and_drains() {
         nested_redirect.status(),
         reqwest::StatusCode::MOVED_PERMANENTLY
     );
+    // nginx `absolute_redirect on` (default): the directory redirect is
+    // absolute and keeps the query string.
     assert_eq!(
         nested_redirect.headers()[reqwest::header::LOCATION],
-        "/docs/?view=compact"
+        format!("http://test.localhost:{port}/docs/?view=compact").as_str()
     );
 
     let nested_index = client
@@ -6390,12 +6397,14 @@ server {{
         Some("srv"),
         "a rewrite-generated redirect must carry the host's add_header policy"
     );
+    // nginx `absolute_redirect on` (default): rewrite-generated redirects are
+    // absolute using the request Host and the non-default listener port.
     assert_eq!(
         redirect
             .headers()
             .get(reqwest::header::LOCATION)
             .and_then(|value| value.to_str().ok()),
-        Some("/hello.txt")
+        Some(format!("http://test.localhost:{port}/hello.txt").as_str())
     );
 
     let missing = client

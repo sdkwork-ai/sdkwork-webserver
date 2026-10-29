@@ -1201,6 +1201,10 @@ fn business_success_cannot_restore_an_actively_unhealthy_target() {
     );
 }
 
+fn no_maps() -> crate::data_plane::map_variables::MapResults {
+    crate::data_plane::map_variables::MapResults::default()
+}
+
 #[test]
 fn proxy_set_header_expands_supported_nginx_variables() {
     let mut source = HeaderMap::new();
@@ -1208,8 +1212,16 @@ fn proxy_set_header_expands_supported_nginx_variables() {
     source.insert("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
     let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
     assert_eq!(
-        expand_proxy_header_value("$host", &source, client, "https", "server.sdkwork.com", 443,)
-            .expect("expand"),
+        expand_proxy_header_value(
+            "$host",
+            &source,
+            client,
+            "https",
+            "server.sdkwork.com",
+            443,
+            &no_maps(),
+        )
+        .expect("expand"),
         "server.sdkwork.com"
     );
     assert_eq!(
@@ -1220,6 +1232,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
+            &no_maps(),
         )
         .expect("expand"),
         "https"
@@ -1232,6 +1245,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
+            &no_maps(),
         )
         .expect("expand"),
         "10.0.0.1, 127.0.0.1"
@@ -1244,14 +1258,63 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
+            &no_maps(),
         )
         .expect("expand"),
         "websocket"
     );
-    assert!(
-        expand_proxy_header_value("$uri", &source, client, "https", "server.sdkwork.com", 443,)
-            .is_err()
+    assert!(expand_proxy_header_value(
+        "$uri",
+        &source,
+        client,
+        "https",
+        "server.sdkwork.com",
+        443,
+        &no_maps(),
+    )
+    .is_err());
+}
+
+#[test]
+fn proxy_set_header_expands_map_results_and_omits_empty_ones() {
+    let mut source = HeaderMap::new();
+    source.insert("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
+    let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
+    let maps = crate::data_plane::map_variables::MapResults::from_pairs(&[
+        ("tenant_zone", "acme-zone"),
+        ("empty_tag", ""),
+    ]);
+
+    assert_eq!(
+        expand_proxy_header_value(
+            "$host/$tenant_zone",
+            &source,
+            client,
+            "https",
+            "app.example.com",
+            443,
+            &maps,
+        )
+        .expect("expand"),
+        "app.example.com/acme-zone"
     );
+
+    // An empty map result removes the forwarded header, exactly like an empty
+    // `proxy_set_header` value.
+    let mut target = HeaderMap::new();
+    target.insert("x-tenant", HeaderValue::from_static("stale"));
+    apply_proxy_set_headers(
+        &mut target,
+        &["X-Tenant $empty_tag".to_owned()],
+        &source,
+        client,
+        "https",
+        "app.example.com",
+        443,
+        &maps,
+    )
+    .expect("apply");
+    assert!(!target.contains_key("x-tenant"));
 }
 
 #[test]
@@ -1275,6 +1338,7 @@ fn apply_proxy_set_headers_overrides_host_and_forwarded_chain() {
         "https",
         "app.example.com:443",
         443,
+        &no_maps(),
     )
     .expect("apply");
     assert_eq!(
@@ -1310,6 +1374,7 @@ fn proxy_add_x_forwarded_for_does_not_chain_the_generated_default() {
         "http",
         "diff.example.com",
         80,
+        &no_maps(),
     )
     .expect("apply");
     assert_eq!(
