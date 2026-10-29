@@ -599,6 +599,257 @@ impl SemanticValidator {
                         );
                     }
                 }
+                ResourceConfig::FastCgi {
+                    upstream_ref,
+                    params,
+                    index,
+                    split_path_info,
+                    document_root,
+                    connect_timeout_ms,
+                    send_timeout_ms,
+                    read_timeout_ms,
+                    response_policy,
+                    retry,
+                    ..
+                } => {
+                    if !upstreams.contains_key(upstream_ref.as_str()) {
+                        self.push(
+                            format!("{path}/upstreamRef"),
+                            format!("unknown upstream {upstream_ref}"),
+                        );
+                    }
+                    if let Some(root) = document_root {
+                        if !root.starts_with('/') {
+                            self.push(
+                                format!("{path}/documentRoot"),
+                                "FastCGI document_root must be an absolute path",
+                            );
+                        }
+                    }
+                    if let Some(index) = index {
+                        validate_relative_path(self, &format!("{path}/index"), index, false);
+                    }
+                    if let Some(pattern) = split_path_info {
+                        match regex::Regex::new(pattern) {
+                            Ok(regex) if regex.captures_len() == 3 => {}
+                            Ok(_) => self.push(
+                                format!("{path}/splitPathInfo"),
+                                "fastcgi_split_path_info must contain exactly two capture groups",
+                            ),
+                            Err(_) => self.push(
+                                format!("{path}/splitPathInfo"),
+                                "fastcgi_split_path_info is not a valid regular expression",
+                            ),
+                        }
+                    }
+                    for (param_index, param) in params.iter().enumerate() {
+                        let param_path = format!("{path}/params/{param_index}");
+                        if let Err(message) =
+                            super::upstream_params::validate_param_name(&param.name)
+                        {
+                            self.push(format!("{param_path}/name"), message);
+                        }
+                        let map_variables: Vec<&str> =
+                            self.map_variables.iter().map(String::as_str).collect();
+                        if let Err(message) = super::upstream_params::validate_param_value(
+                            &param.value,
+                            &map_variables,
+                        ) {
+                            self.push(format!("{param_path}/value"), message);
+                        }
+                    }
+                    for (field, value) in [
+                        ("connectTimeoutMs", connect_timeout_ms),
+                        ("sendTimeoutMs", send_timeout_ms),
+                        ("readTimeoutMs", read_timeout_ms),
+                    ] {
+                        if *value == 0 || *value > 86_400_000 {
+                            self.push(
+                                format!("{path}/{field}"),
+                                "FastCGI timeout must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                    if let Some(policy) = response_policy {
+                        for (name_index, name) in policy.hide_headers.iter().enumerate() {
+                            if !super::header_block_token(name) {
+                                self.push(
+                                    format!("{path}/responsePolicy/hideHeaders/{name_index}"),
+                                    "hideHeaders entry is not a valid HTTP field name",
+                                );
+                            }
+                        }
+                        for (name_index, name) in policy.pass_headers.iter().enumerate() {
+                            if !super::header_block_token(name) {
+                                self.push(
+                                    format!("{path}/responsePolicy/passHeaders/{name_index}"),
+                                    "passHeaders entry is not a valid HTTP field name",
+                                );
+                            }
+                        }
+                    }
+                    if let Some(retry) = retry {
+                        if retry.max_attempts == 0 {
+                            self.push(
+                                format!("{path}/retry/maxAttempts"),
+                                "retry maxAttempts must be at least 1",
+                            );
+                        }
+                        if retry.timeout_ms == 0 || retry.timeout_ms > 86_400_000 {
+                            self.push(
+                                format!("{path}/retry/timeoutMs"),
+                                "retry timeoutMs must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                }
+                ResourceConfig::CgiUpstream {
+                    upstream_ref,
+                    params,
+                    document_root,
+                    connect_timeout_ms,
+                    send_timeout_ms,
+                    read_timeout_ms,
+                    response_policy,
+                    retry,
+                    extra_string,
+                    ..
+                } => {
+                    if !upstreams.contains_key(upstream_ref.as_str()) {
+                        self.push(
+                            format!("{path}/upstreamRef"),
+                            format!("unknown upstream {upstream_ref}"),
+                        );
+                    }
+                    if let Some(root) = document_root {
+                        if !root.starts_with('/') {
+                            self.push(
+                                format!("{path}/documentRoot"),
+                                "CGI-family document_root must be an absolute path",
+                            );
+                        }
+                    }
+                    for (param_index, param) in params.iter().enumerate() {
+                        let param_path = format!("{path}/params/{param_index}");
+                        if let Err(message) =
+                            super::upstream_params::validate_param_name(&param.name)
+                        {
+                            self.push(format!("{param_path}/name"), message);
+                        }
+                        let map_variables: Vec<&str> =
+                            self.map_variables.iter().map(String::as_str).collect();
+                        if let Err(message) = super::upstream_params::validate_param_value(
+                            &param.value,
+                            &map_variables,
+                        ) {
+                            self.push(format!("{param_path}/value"), message);
+                        }
+                    }
+                    for (field, value) in [
+                        ("connectTimeoutMs", connect_timeout_ms),
+                        ("sendTimeoutMs", send_timeout_ms),
+                        ("readTimeoutMs", read_timeout_ms),
+                    ] {
+                        if *value == 0 || *value > 86_400_000 {
+                            self.push(
+                                format!("{path}/{field}"),
+                                "CGI-family timeout must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                    if let Some(policy) = response_policy {
+                        for (name_index, name) in policy.hide_headers.iter().enumerate() {
+                            if !super::header_block_token(name) {
+                                self.push(
+                                    format!("{path}/responsePolicy/hideHeaders/{name_index}"),
+                                    "hideHeaders entry is not a valid HTTP field name",
+                                );
+                            }
+                        }
+                        for (name_index, name) in policy.pass_headers.iter().enumerate() {
+                            if !super::header_block_token(name) {
+                                self.push(
+                                    format!("{path}/responsePolicy/passHeaders/{name_index}"),
+                                    "passHeaders entry is not a valid HTTP field name",
+                                );
+                            }
+                        }
+                    }
+                    if let Some(extra) = extra_string {
+                        if extra
+                            .bytes()
+                            .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+                        {
+                            self.push(
+                                format!("{path}/extraString"),
+                                "uwsgi_string must not contain NUL or line breaks",
+                            );
+                        }
+                    }
+                    if let Some(retry) = retry {
+                        if retry.max_attempts == 0 {
+                            self.push(
+                                format!("{path}/retry/maxAttempts"),
+                                "retry maxAttempts must be at least 1",
+                            );
+                        }
+                        if retry.timeout_ms == 0 || retry.timeout_ms > 86_400_000 {
+                            self.push(
+                                format!("{path}/retry/timeoutMs"),
+                                "retry timeoutMs must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                }
+                ResourceConfig::Memcached {
+                    upstream_ref,
+                    key_template,
+                    connect_timeout_ms,
+                    send_timeout_ms,
+                    read_timeout_ms,
+                    retry,
+                    ..
+                } => {
+                    if !upstreams.contains_key(upstream_ref.as_str()) {
+                        self.push(
+                            format!("{path}/upstreamRef"),
+                            format!("unknown upstream {upstream_ref}"),
+                        );
+                    }
+                    let map_variables: Vec<&str> =
+                        self.map_variables.iter().map(String::as_str).collect();
+                    if let Err(message) =
+                        super::upstream_params::validate_param_value(key_template, &map_variables)
+                    {
+                        self.push(format!("{path}/keyTemplate"), message);
+                    }
+                    for (field, value) in [
+                        ("connectTimeoutMs", connect_timeout_ms),
+                        ("sendTimeoutMs", send_timeout_ms),
+                        ("readTimeoutMs", read_timeout_ms),
+                    ] {
+                        if *value == 0 || *value > 86_400_000 {
+                            self.push(
+                                format!("{path}/{field}"),
+                                "memcached timeout must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                    if let Some(retry) = retry {
+                        if retry.max_attempts == 0 {
+                            self.push(
+                                format!("{path}/retry/maxAttempts"),
+                                "retry maxAttempts must be at least 1",
+                            );
+                        }
+                        if retry.timeout_ms == 0 || retry.timeout_ms > 86_400_000 {
+                            self.push(
+                                format!("{path}/retry/timeoutMs"),
+                                "retry timeoutMs must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                }
                 ResourceConfig::EmptyGif { .. } | ResourceConfig::StubStatus { .. } => {}
                 ResourceConfig::Redirect {
                     status, location, ..

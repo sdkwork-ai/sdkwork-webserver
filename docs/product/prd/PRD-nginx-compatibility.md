@@ -53,7 +53,7 @@ The conformance catalog, not this summary, is the machine-readable authority for
 | Structure | `http`, `server`, `location`, bounded and sandboxed `include`, directive context validation, inheritance, and deterministic source order. |
 | Listeners and hosts | `listen`, `server_name`, default server, IPv4/IPv6, HTTP/1.0 compatibility, HTTP/1.1, HTTP/2 mapping, Proxy Protocol policy, and host validation. |
 | Static content | `root`, `alias`, `index`, `try_files`, `autoindex` policy, MIME types, conditional requests, ranges, and precompressed assets. |
-| Proxying | `proxy_pass`, upstream URI mapping, request/response headers, forwarding identity, buffering, streaming, WebSocket upgrade, SSE, timeouts, body limits, and bounded retries. |
+| Proxying | `proxy_pass`, upstream URI mapping, request/response headers, forwarding identity, buffering, streaming, WebSocket upgrade, SSE, timeouts, body limits, and bounded retries. Upstream protocol adapters: FastCGI (`fastcgi_pass/param/index/split_path_info` + settings), uWSGI (`uwsgi_pass/param` + settings), SCGI (`scgi_pass/param` + settings), `memcached_pass` with the bounded `set $memcached_key` idiom, and gRPC (`grpc_pass`) — each bounded and fail-closed outside its implemented forms. |
 | Upstreams | `upstream`, server weights, backup/drain behavior, failure policy, keepalive, round robin, least connections, IP hash, and supported hash policies. |
 | Routing | Exact, prefix, `^~`, case-sensitive regex, case-insensitive regex locations, named-location mapping where supported, `return`, and the supported `rewrite` subset. |
 | TLS | `ssl` listeners, certificate selection, protocols, policy-safe cipher mapping, session behavior, client certificate validation, OCSP policy, and SNI. |
@@ -71,7 +71,9 @@ V1 excludes:
 - Nginx Plus proprietary APIs, active health-check implementation details, key-value zones, and commercial-only features unless separately licensed and specified.
 - Mail proxy and HTTP/3 (QUIC). Generic TCP/UDP `stream` proxying is **in profile**: plaintext TCP relay, stream SSL termination, `ssl_preread` passthrough and UDP datagram forwarding execute on the Rust data plane and are cataloged as `stream.*` capabilities. Mail-protocol proxying remains excluded.
 - OS-specific directives that cannot be reproduced safely and portably.
-- Embedded CGI, FastCGI, uWSGI, SCGI, `memcached`, and arbitrary forward-proxy/`CONNECT` execution. These require separate protocol and security requirements; dynamic apps use HTTP/gRPC upstreams in the declared V1 profile.
+- Arbitrary forward-proxy/`CONNECT` execution and executable embedded configuration.
+- Perl, `geoip`, and the nginx mail proxy modules.
+- FastCGI, uWSGI, SCGI, `memcached` and gRPC are **in profile as of the upstream-protocol expansion**: the edge implements its own bounded protocol adapters (FastCGI/uWSGI/SCGI/memcached landed with real-nginx differential evidence; gRPC follows). They are not "embedded CGI" — no process is spawned; the edge is only a protocol client to a configured upstream, with SSRF policy, bounded bodies, timeouts and retry gates identical to HTTP proxying.
 - Arbitrary directives carried as opaque text into Rust activation.
 
 The importer may preserve unsupported source text only for inspection or Nginx-target round-trip. Preserved text is marked `notExecutableByRust`, cannot contribute hidden behavior, and blocks Rust publication when it is in an active context.

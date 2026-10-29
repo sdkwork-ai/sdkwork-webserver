@@ -1,0 +1,498 @@
+{
+ "_cases": 26,
+ "_server": "nginx/1.29.6",
+ "cases": {
+  "args-get": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"beta\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"name=value&flag\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/args?name=value&flag\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/args\"],[\"SCRIPT_NAME\",\"/echo/args\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/echo/args\"}",
+   "headers": {
+    "content-length": [
+     "623"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "basic-get": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"alpha\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"x=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/hello?x=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/hello\"],[\"SCRIPT_NAME\",\"/echo/hello\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/echo/hello\"}",
+   "headers": {
+    "content-length": [
+     "604"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "basic-get-again": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"mu\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"again=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/second?again=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/second\"],[\"SCRIPT_NAME\",\"/echo/second\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/echo/second\"}",
+   "headers": {
+    "content-length": [
+     "613"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "dir-index": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"zeta\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/dir/\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/dir/index.php\"],[\"SCRIPT_NAME\",\"/dir/index.php\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/dir/index.php\"}",
+   "headers": {
+    "content-length": [
+     "599"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "head": {
+   "body": "",
+   "headers": {
+    "content-length": [
+     "596"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "headers-policy": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"eta\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/headers\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/headers\"],[\"SCRIPT_NAME\",\"/headers\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/headers\"}",
+   "headers": {
+    "content-length": [
+     "583"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "intercept-404": {
+   "body": "FastCGI error-page fallback body\n",
+   "headers": {
+    "content-length": [
+     "33"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "etag": [
+     "\"6ae3cb95-21\""
+    ]
+   },
+   "status": 404
+  },
+  "memcached-head": {
+   "body": "",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "21"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200
+  },
+  "memcached-hit": {
+   "body": "cached-value:/mc/hit",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "20"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200
+  },
+  "memcached-large": {
+   "body": "cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-ca",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "8192"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200
+  },
+  "memcached-miss": {
+   "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "153"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 404
+  },
+  "memcached-post": {
+   "body": "<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not Allowed</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 405
+  },
+  "memcached-raw-502": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502
+  },
+  "post-upload": {
+   "body": "{\"body_hex\":\"68656c6c6f2d75706c6f6164\",\"params\":[[\"CONTENT_LENGTH\",\"12\"],[\"CONTENT_TYPE\",\"text/plain\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_CONTENT_LENGTH\",\"12\"],[\"HTTP_CONTENT_TYPE\",\"text/plain\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"gamma\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"q=2\"],[\"REQUEST_METHOD\",\"POST\"],[\"REQUEST_URI\",\"/echo/upload?q=2\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/upload\"],[\"SCRIPT_NAME\",\"/echo/upload\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"POST\",\"script_name\":\"/echo/upload\"}",
+   "headers": {
+    "content-length": [
+     "710"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "retry-upstream": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"kappa\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/retry/ok\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/retry/ok\"],[\"SCRIPT_NAME\",\"/retry/ok\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/retry/ok\"}",
+   "headers": {
+    "content-length": [
+     "589"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "scgi-auto-headers": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_NORMAL\",\"yes\"],[\"HTTP_X_SENT\",\"tau\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/scgi/headers\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/headers\"],[\"SCRIPT_NAME\",\"/scgi/headers\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "561"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  },
+  "scgi-basic": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"rho\"],[\"QUERY_STRING\",\"x=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/scgi/hello?x=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/hello\"],[\"SCRIPT_NAME\",\"/scgi/hello\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "538"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  },
+  "scgi-intercept-404": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"upsilon\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/scgi/errors/missing\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/errors/missing\"],[\"SCRIPT_NAME\",\"/scgi/errors/missing\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "562"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 404
+  },
+  "scgi-post": {
+   "body": "{\"body_hex\":\"68656c6c6f2d73636769\",\"params\":[[\"CONTENT_LENGTH\",\"10\"],[\"CONTENT_TYPE\",\"text/plain\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_CONTENT_LENGTH\",\"10\"],[\"HTTP_CONTENT_TYPE\",\"text/plain\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"sigma\"],[\"QUERY_STRING\",\"q=2\"],[\"REQUEST_METHOD\",\"POST\"],[\"REQUEST_URI\",\"/scgi/upload?q=2\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/upload\"],[\"SCRIPT_NAME\",\"/scgi/upload\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "639"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  },
+  "split-info": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"delta\"],[\"PATH_INFO\",\"/extra/path\"],[\"QUERY_STRING\",\"a=b\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/split/info.php/extra/path?a=b\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/split/info.php\"],[\"SCRIPT_NAME\",\"/split/info.php\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"/extra/path\",\"request_method\":\"GET\",\"script_name\":\"/split/info.php\"}",
+   "headers": {
+    "content-length": [
+     "653"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "split-nomatch": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"epsilon\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/split/plain\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/split/plain\"],[\"SCRIPT_NAME\",\"/split/plain\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/split/plain\"}",
+   "headers": {
+    "content-length": [
+     "603"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200
+  },
+  "status-503": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"iota\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/status/503\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/status/503\"],[\"SCRIPT_NAME\",\"/echo/status/503\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"request_method\":\"GET\",\"script_name\":\"/echo/status/503\"}",
+   "headers": {
+    "content-length": [
+     "616"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 503
+  },
+  "uwsgi-auto-headers": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4563002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f686561646572730b005343524950545f4e414d450e002f75777367692f686561646572730900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f5552490e002f75777367692f686561646572730c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5407006f6d6963726f6e0900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f73650d00485454505f585f4e4f524d414c030079657365787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1071"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  },
+  "uwsgi-basic": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4561002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f68656c6c6f0b005343524950545f4e414d450c002f75777367692f68656c6c6f0900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f75777367692f68656c6c6f3f783d310c0051554552595f535452494e470300783d310e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5402006e750900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f736565787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1023"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  },
+  "uwsgi-intercept-404": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d456a002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f6572726f72732f6d697373696e670b005343524950545f4e414d4515002f75777367692f6572726f72732f6d697373696e670900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524915002f75777367692f6572726f72732f6d697373696e670c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e54020070690900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f736565787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1063"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  },
+  "uwsgi-post": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4562002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f75706c6f61640b005343524950545f4e414d450d002f75777367692f75706c6f61640900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f440400504f53540b00524551554553545f55524911002f75777367692f75706c6f61643f713d320c0051554552595f535452494e470300713d320e00434f4e54454e545f4c454e475448020031310c00434f4e54454e545f545950450a00746578742f706c61696e0f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e54020078690900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f73651100485454505f434f4e54454e545f545950450a00746578742f706c61696e1300485454505f434f4e54454e545f4c454e4754480200313165787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1167"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200
+  }
+ }
+}

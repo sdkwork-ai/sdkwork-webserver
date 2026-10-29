@@ -80,10 +80,6 @@ export const RISKS = ['high', 'medium', 'low'];
 
 /** Present in the nginx OSS source but deliberately outside the http-core-v1 product profile (PRD section 4). */
 export const EXCLUDED_MODULES = new Set([
-  'ngx_http_fastcgi_module',
-  'ngx_http_uwsgi_module',
-  'ngx_http_scgi_module',
-  'ngx_http_memcached_module',
   'ngx_http_perl_module',
   'ngx_http_geoip_module',
   'ngx_stream_geoip_module',
@@ -103,13 +99,6 @@ export const EXCLUDED_MODULES = new Set([
  * module name alone is not in {@link EXCLUDED_MODULES}.
  */
 export const EXCLUDED_DIRECTIVE_NAMES = new Set([
-  'fastcgi_pass',
-  'fastcgi_index',
-  'fastcgi_param',
-  'fastcgi_split_path_info',
-  'uwsgi_pass',
-  'scgi_pass',
-  'memcached_pass',
   'perl',
   'perl_set',
   'perl_modules',
@@ -154,6 +143,63 @@ export const PARSER_EXECUTED = new Map([
   // directive loop runs.
   ['http:geo', 'crates/sdkwork-webserver-core/src/nginx/mapping.rs::materialize_nginx_app geo pre-scan'],
   ['http:split_clients', 'crates/sdkwork-webserver-core/src/nginx/mapping.rs::materialize_nginx_app split_clients pre-scan'],
+  ['http:fastcgi_pass', 'mapping materialize_location fastcgi arm'],
+  ['http:fastcgi_index', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_param', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_split_path_info', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_keep_conn', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_buffering', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_request_buffering', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_pass_request_headers', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_connect_timeout', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_send_timeout', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_read_timeout', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_hide_header', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_pass_header', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_intercept_errors', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_next_upstream', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_next_upstream_tries', 'mapping fastcgi settings pipeline'],
+  ['http:fastcgi_next_upstream_timeout', 'mapping fastcgi settings pipeline'],
+  ['http:uwsgi_pass', 'mapping materialize_location uwsgi arm'],
+  ['http:uwsgi_param', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_pass_request_headers', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_buffering', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_request_buffering', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_connect_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_send_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_read_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_hide_header', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_pass_header', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_intercept_errors', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_next_upstream', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_next_upstream_tries', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_next_upstream_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_modifier1', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_modifier2', 'mapping cgi-upstream settings pipeline'],
+  ['http:uwsgi_string', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_pass', 'mapping materialize_location scgi arm'],
+  ['http:scgi_param', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_pass_request_headers', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_buffering', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_request_buffering', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_connect_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_send_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_read_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_hide_header', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_pass_header', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_intercept_errors', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_next_upstream', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_next_upstream_tries', 'mapping cgi-upstream settings pipeline'],
+  ['http:scgi_next_upstream_timeout', 'mapping cgi-upstream settings pipeline'],
+  ['http:memcached_pass', 'mapping materialize_location memcached arm'],
+  ['http:memcached_connect_timeout', 'mapping memcached settings pipeline'],
+  ['http:memcached_send_timeout', 'mapping memcached settings pipeline'],
+  ['http:memcached_read_timeout', 'mapping memcached settings pipeline'],
+  ['http:memcached_buffering', 'mapping memcached settings pipeline'],
+  ['http:memcached_next_upstream', 'mapping memcached settings pipeline'],
+  ['http:memcached_next_upstream_tries', 'mapping memcached settings pipeline'],
+  ['http:memcached_next_upstream_timeout', 'mapping memcached settings pipeline'],
+  ['http:set', 'mapping materialize_location bounded set arm'],
 ]);
 
 /**
@@ -446,6 +492,15 @@ export function deriveUnenforcedTypedKeys(catalog, facts) {
 }
 
 /**
+ * Match arms may guard on a family prefix (`name if name.starts_with("fastcgi_")`)
+ * rather than naming a directive; those prefix markers are not directives and
+ * must not become catalog extensions or classification evidence.
+ */
+function directiveNames(names) {
+  return names.filter((name) => !name.endsWith('_'));
+}
+
+/**
  * Derive the directive recognition facts from the implementation sources.
  *
  * `contexts[context]` contains four sets:
@@ -476,11 +531,11 @@ export function deriveImplementation() {
         } else if (arm.catchall === 'unsupported') {
           for (const name of unsupportedSecurity) target.error.add(name);
         } else if (arm.kind === 'noop') {
-          for (const name of arm.names) target.noop.add(name);
+          for (const name of directiveNames(arm.names)) target.noop.add(name);
         } else if (arm.kind === 'error') {
-          for (const name of arm.names) target.error.add(name);
+          for (const name of directiveNames(arm.names)) target.error.add(name);
         } else {
-          for (const name of arm.names) target.execute.add(name);
+          for (const name of directiveNames(arm.names)) target.execute.add(name);
         }
       }
     }
@@ -1315,7 +1370,9 @@ test('migration CLI consumes the catalog classification (check g)', () => {
       problems.push(`catalog importer.mapped lists \`${name}\` but the CLI buildDraft cannot render it`);
     }
   }
-  // Behavioural drift: the two Lead-reproduced symptoms plus FastCGI exclusion.
+  // Behavioural drift: the two Lead-reproduced symptoms plus the now-supported
+  // FastCGI family, which must be reported (accepted or mapped) rather than
+  // silently dropped or blocked as out-of-profile.
   const fixture = `
 http {
   types { text/html html htm; }
@@ -1335,10 +1392,8 @@ http {
       problems.push(`CLI still reports catalogued data/executable directive \`${name}\` as unsupported`);
     }
   }
-  for (const name of ['fastcgi_pass']) {
-    if (!classified.blocked.some((item) => item.name === name)) {
-      problems.push(`CLI must report excluded directive \`${name}\` as blocked (notExecutableByRust)`);
-    }
+  if (classified.blocked.some((item) => item.name === 'fastcgi_pass')) {
+    problems.push('CLI still reports fastcgi_pass as out-of-profile/blocked although the module now executes');
   }
   // A directive whose typed TOML key is itself accepted-but-unenforced must not
   // be rendered into the draft as if the migration were enforced.

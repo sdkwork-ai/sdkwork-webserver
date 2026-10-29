@@ -226,12 +226,16 @@ impl AttemptedTargets {
             .is_some_and(|value| value & (1_u64 << bit) != 0)
     }
 
-    fn insert(&mut self, index: usize) {
+    pub(super) fn mark(&mut self, index: usize) {
         let word = index / u64::BITS as usize;
         let bit = index % u64::BITS as usize;
         if let Some(value) = self.words.get_mut(word) {
             *value |= 1_u64 << bit;
         }
+    }
+
+    fn insert(&mut self, index: usize) {
+        self.mark(index);
     }
 }
 
@@ -269,6 +273,19 @@ pub(super) struct SelectedTarget<'a> {
     url: &'a Url,
     probe: bool,
     ejection_deadline_ms: u64,
+}
+
+impl<'a> SelectedTarget<'a> {
+    /// Index of the target in the upstream's `targets` array.
+    pub(super) fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Target URL (`http://host:port[/]`); protocol adapters take the
+    /// authority and ignore the scheme/URI.
+    pub(super) fn url(&self) -> &'a Url {
+        self.url
+    }
 }
 
 /// Stream proxy selection handle that can report success/failure into the

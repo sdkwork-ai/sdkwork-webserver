@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Upstream-protocol expansion (2026-10-30, REQ-2026-0073 wave 5): FastCGI, uWSGI, SCGI and memcached moved from out-of-profile to executable end-to-end with a new committed differential-protocols slice (26/26 byte-identical vs nginx 1.29.6). A substrate codec crate for FastCGI/uWSGI/SCGI/memcached/gRPC landed with 89 tests; gRPC wiring is the next wave. Remaining out-of-profile after this wave: perl, geoip, mail proxy and third-party/Lua/njs modules. Catalog counts moved to 175 executable / 171 accepted-unenforced / 334 fail-closed / 64 excluded.",
     "Wave 4a execution (2026-10-30, REQ-2026-0073): referer module (valid_referers + $invalid_referer) and geo/split_clients variable blocks moved to executable; differential-http grew 237 -> 259 cases. chunked_transfer_encoding keeps a truthful diagnostic (pinned hyper HTTP/1.1 encoder cannot emit a close-delimited 1.1 body) and open_file_cache keeps its precise cache/staleness rationale. Subrequest filters (addition/auth_request/mirror) and userid/browser/random_index/degradation/slice remain fail-closed pending a bounded subrequest engine / module-sized work.",
     "Wave 3b execution (2026-10-30, REQ-2026-0073): http2_max_concurrent_streams (real ALPN h2 SETTINGS proof), proxy_method (differential), stream allow/deny and stream return moved to executable; the HTTP/2 directives nginx 1.29.6 made obsolete are accepted no-ops with truthful diagnostics; stream limit_conn/set/preread/proxy_protocol_timeout/stream-map/upstream-TLS and OCSP stapling stay unimplemented with exact architecture blockers reported. differential-http grew 236 -> 237 cases. Remaining behavior-gap after wave 3b: chunked framing, addition filter, referer, open_file_cache, http2_chunk_size, stream advanced gaps, OCSP.",
     "Wave 3a-2 execution (2026-10-30, REQ-2026-0073): autoindex family, empty_gif and stub_status moved to executable; differential-http grew 218 -> 236 cases against nginx 1.29.6. Remaining in this area: addition filter (needs a bounded subrequest engine), referer module ($invalid_referer threading; `if` still unsupported), typed-TOML parity for charset/gzip/autoindex. Later waves: HTTP/2 tuning, stream module gaps, OCSP/trust chain, open_file_cache, proxy_method, chunked_transfer_encoding.",
@@ -493,6 +494,36 @@
       "group": "variables",
       "status": "implemented",
       "summary": "nginx split_clients block: nginx ngx_murmur_hash2 over the expanded source with fixed-point percentage/cumulative thresholds and `*` catch-all, evaluated into the shared result-variable table; bucket assignment verified against real nginx for fixture keys (REQ-2026-0073 wave 4a)"
+    },
+    {
+      "id": "upstream.fastcgi",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "FastCGI 1.0 upstream adapter: fastcgi_pass (literal host:port or declared upstream; unix/variable fail closed), fastcgi_param with automatic HTTP_* mapping and nginx variable order, fastcgi_split_path_info/fastcgi_index, keep_conn wire flag (no pooling), buffering/request_buffering, connect/send/read timeouts, hide/pass headers, intercept_errors, bounded next_upstream retries; real nginx 1.29.6 differential-protocols slice (12 cases) byte-identical against a deterministic mock responder (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.uwsgi",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "uWSGI upstream adapter: uwsgi_pass/param (+if_not_empty), modifier1/modifier2, uwsgi_string, request body framing, timeouts, buffering, hide/pass, intercept_errors, bounded retries; byte-identical differential vs nginx 1.29.6 (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.scgi",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "SCGI upstream adapter: scgi_pass/param, netstring framing with synthesized CONTENT_LENGTH, timeouts, buffering, hide/pass, intercept_errors, bounded retries; byte-identical differential vs nginx 1.29.6; one documented bounded difference (declared CONTENT_LENGTH emitted once) (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.memcached",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "memcached upstream adapter: memcached_pass with bounded `set $memcached_key` (location, supported variable vocabulary), text-protocol GET/HEAD, nginx key escaping, hit/miss/404/502/504 mapping, Accept-Ranges and exact Content-Length parity, timeouts, buffering, bounded retries; 6 differential cases byte-identical vs nginx 1.29.6 (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.protocol-codecs",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "New crate sdkwork-webserver-upstream-protocol: pure bounded codecs for FastCGI/uWSGI/SCGI/memcached/gRPC framing with adversarial fail-closed tests (89 tests); the wiring plane for FastCGI/uWSGI/SCGI/memcached is live, gRPC framing is ready for the next wiring wave (REQ-2026-0073 wave 5)"
     }
   ]
 }

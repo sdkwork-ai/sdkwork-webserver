@@ -162,7 +162,7 @@ impl<T> ProxyUpstream<T> {
         )
     }
 
-    pub(super) fn try_admit(&self) -> Result<OwnedSemaphorePermit, ()> {
+    pub(in crate::data_plane) fn try_admit(&self) -> Result<OwnedSemaphorePermit, ()> {
         self.permits.clone().try_acquire_owned().map_err(|_| ())
     }
 
@@ -198,7 +198,7 @@ impl<T> ProxyUpstream<T> {
         )
     }
 
-    pub(super) fn select_target_excluding_observed(
+    pub(in crate::data_plane) fn select_target_excluding_observed(
         &self,
         attempted: &AttemptedTargets,
         client_ip: IpAddr,
@@ -608,11 +608,11 @@ impl<T> ProxyUpstream<T> {
         Some(selected)
     }
 
-    pub(super) fn status_is_failure(&self, status: StatusCode) -> bool {
+    pub(in crate::data_plane) fn status_is_failure(&self, status: StatusCode) -> bool {
         self.health.failure_statuses.contains(&status.as_u16())
     }
 
-    pub(super) fn record_success(&self, selected: SelectedTarget<'_>) {
+    pub(in crate::data_plane) fn record_success(&self, selected: SelectedTarget<'_>) {
         let target = &self.targets[selected.index];
         let recovered = if selected.ejection_deadline_ms == 0 {
             false
@@ -647,7 +647,7 @@ impl<T> ProxyUpstream<T> {
         }
     }
 
-    pub(super) fn record_failure(&self, selected: SelectedTarget<'_>) {
+    pub(in crate::data_plane) fn record_failure(&self, selected: SelectedTarget<'_>) {
         let target = &self.targets[selected.index];
         if target.ejected_until_ms.load(Ordering::Acquire) != selected.ejection_deadline_ms {
             if selected.probe {

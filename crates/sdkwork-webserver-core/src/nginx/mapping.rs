@@ -54,7 +54,8 @@ use crate::config::{
     MapEntryConfig, MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
     ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry,
     SplitClientsConfig, SplitClientsPartConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
-    WebServerAppConfig, WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX,
+    UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig, WebServerConfigError,
+    ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
 use super::parser::NginxDirective;
@@ -121,7 +122,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "client_body_buffer_size",
     "send_timeout",
     "sendfile_max_chunk",
-    "fastcgi_read_timeout",
     "open_file_cache",
     "open_file_cache_valid",
     "open_file_cache_min_uses",
@@ -476,6 +476,43 @@ pub fn materialize_nginx_app(
             "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
             // Collected by the order-independent pre-scan above.
             "map" | "geo" | "split_clients" => {}
+            "fastcgi_pass" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`fastcgi_pass` is only allowed inside a `location` block",
+                ));
+            }
+            name if name.starts_with("fastcgi_") => {
+                let map_results = mapper.map_results.clone();
+                let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                mapper.http_fastcgi.apply(directive, &map_variables)?;
+            }
+            "uwsgi_pass" | "scgi_pass" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` is only allowed inside a `location` block",
+                        directive.name
+                    ),
+                ));
+            }
+            name if name.starts_with("uwsgi_") || name.starts_with("scgi_") => {
+                let Some(kind) = CgiKind::from_directive(name) else {
+                    unreachable!();
+                };
+                let map_results = mapper.map_results.clone();
+                let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                mapper.http_cgi[kind.index()].apply(kind, directive, &map_variables)?;
+            }
+            "memcached_pass" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`memcached_pass` is only allowed inside a `location` block",
+                ));
+            }
+            name if name.starts_with("memcached_") => {
+                mapper.http_memcached.apply(directive)?;
+            }
             "proxy_set_header" => {
                 let map_variables = mapper.map_variable_refs();
                 let entry =
@@ -1020,6 +1057,18 @@ struct Mapper<'a> {
     gzip_vary: bool,
     /// http-level `gzip_static` mode (nginx default off).
     gzip_static: GzipStaticMode,
+    /// http-level `fastcgi_*` settings inherited by every server.
+    http_fastcgi: FastCgiSettings,
+    /// http → server resolved `fastcgi_*` settings inherited by locations.
+    server_fastcgi: FastCgiSettings,
+    /// http-level `uwsgi_*` (index 0) / `scgi_*` (index 1) settings.
+    http_cgi: [CgiSettings; 2],
+    /// http → server resolved `uwsgi_*` / `scgi_*` settings.
+    server_cgi: [CgiSettings; 2],
+    /// http-level `memcached_*` settings.
+    http_memcached: MemcachedSettings,
+    /// http → server resolved `memcached_*` settings.
+    server_memcached: MemcachedSettings,
     /// http-level `map` declarations collected in a pre-scan so their result
     /// variables are known before any `add_header`/`proxy_set_header` value is
     /// validated (nginx resolves the variable at configuration init, so
@@ -1159,6 +1208,12 @@ impl<'a> Mapper<'a> {
             gzip_min_length: 20,
             gzip_vary: false,
             gzip_static: GzipStaticMode::Off,
+            http_fastcgi: FastCgiSettings::default(),
+            server_fastcgi: FastCgiSettings::default(),
+            http_cgi: [CgiSettings::default(), CgiSettings::default()],
+            server_cgi: [CgiSettings::default(), CgiSettings::default()],
+            http_memcached: MemcachedSettings::default(),
+            server_memcached: MemcachedSettings::default(),
             maps: Vec::new(),
             geo: Vec::new(),
             split_clients: Vec::new(),
@@ -1669,6 +1724,9 @@ impl<'a> Mapper<'a> {
         // nginx http→server→location inheritance for the proxy
         // response-header policy and the request-boundary policies.
         let mut server_proxy_response = ProxyResponseDirectives::default();
+        let mut server_fastcgi_local = FastCgiSettings::default();
+        let mut server_cgi_local = [CgiSettings::default(), CgiSettings::default()];
+        let mut server_memcached_local = MemcachedSettings::default();
         let mut server_merge_slashes: Option<bool> = None;
         let mut server_underscores_in_headers: Option<bool> = None;
         let mut server_ignore_invalid_headers: Option<bool> = None;
@@ -1999,6 +2057,40 @@ impl<'a> Mapper<'a> {
                     validate_media_type(child, &child.args[0])?;
                     server_default_type = Some(child.args[0].clone());
                 }
+                "fastcgi_pass" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "`fastcgi_pass` is only allowed inside a `location` block",
+                    ));
+                }
+                name if name.starts_with("fastcgi_") => {
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    server_fastcgi_local.apply(child, &map_variables)?;
+                }
+                "uwsgi_pass" | "scgi_pass" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!("`{}` is only allowed inside a `location` block", child.name),
+                    ));
+                }
+                name if name.starts_with("uwsgi_") || name.starts_with("scgi_") => {
+                    let Some(kind) = CgiKind::from_directive(name) else {
+                        unreachable!();
+                    };
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    server_cgi_local[kind.index()].apply(kind, child, &map_variables)?;
+                }
+                "memcached_pass" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "`memcached_pass` is only allowed inside a `location` block",
+                    ));
+                }
+                name if name.starts_with("memcached_") => {
+                    server_memcached_local.apply(child)?;
+                }
                 "gzip" => match child.args.first().map(String::as_str) {
                     Some("on") => server_gzip = Some(true),
                     Some("off") => server_gzip = Some(false),
@@ -2225,6 +2317,12 @@ impl<'a> Mapper<'a> {
             .http_proxy_response
             .clone()
             .overlay(server_proxy_response);
+        self.server_fastcgi = self.http_fastcgi.overlay(&server_fastcgi_local);
+        self.server_cgi = [
+            self.http_cgi[0].overlay(&server_cgi_local[0]),
+            self.http_cgi[1].overlay(&server_cgi_local[1]),
+        ];
+        self.server_memcached = self.http_memcached.overlay(&server_memcached_local);
         let effective_merge_slashes =
             server_merge_slashes.unwrap_or(self.http_merge_slashes.unwrap_or(true));
         let effective_underscores_in_headers = server_underscores_in_headers
@@ -2885,12 +2983,89 @@ impl<'a> Mapper<'a> {
         let mut location_limit_req = Vec::new();
         let mut location_proxy_set_headers: Vec<String> = Vec::new();
         let mut location_proxy_method: Option<String> = None;
+        let mut location_fastcgi = FastCgiSettings::default();
+        let mut fastcgi_pass: Option<String> = None;
+        let mut location_cgi = [CgiSettings::default(), CgiSettings::default()];
+        let mut cgi_pass: [Option<String>; 2] = [None, None];
+        let mut location_memcached = MemcachedSettings::default();
+        let mut memcached_pass: Option<String> = None;
+        let mut memcached_key_template: Option<String> = None;
         let mut auth_realm = inherited_auth_realm.map(str::to_owned);
         let mut auth_file = inherited_auth_file.map(str::to_owned);
         let mut auth_off = inherited_auth_off;
         let mut location_proxy_ssl = ProxySslSettings::default();
         for child in &location.children {
             match child.name.as_str() {
+                "fastcgi_pass" => {
+                    if child.args.len() != 1 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "fastcgi_pass takes exactly one target",
+                        ));
+                    }
+                    fastcgi_pass = Some(child.args[0].clone());
+                }
+                name if name.starts_with("fastcgi_") => {
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    location_fastcgi.apply(child, &map_variables)?;
+                }
+                "uwsgi_pass" | "scgi_pass" => {
+                    if child.args.len() != 1 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("{} takes exactly one target", child.name),
+                        ));
+                    }
+                    let Some(kind) = CgiKind::from_directive(&child.name) else {
+                        unreachable!();
+                    };
+                    cgi_pass[kind.index()] = Some(child.args[0].clone());
+                }
+                name if name.starts_with("uwsgi_") || name.starts_with("scgi_") => {
+                    let Some(kind) = CgiKind::from_directive(name) else {
+                        unreachable!();
+                    };
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    location_cgi[kind.index()].apply(kind, child, &map_variables)?;
+                }
+                "memcached_pass" => {
+                    if child.args.len() != 1 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "memcached_pass takes exactly one target",
+                        ));
+                    }
+                    memcached_pass = Some(child.args[0].clone());
+                }
+                "set" => {
+                    let (name, value) = match child.args.as_slice() {
+                        [name, value] => (name, value),
+                        _ => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                "set requires `$variable value`",
+                            ))
+                        }
+                    };
+                    if name != "$memcached_key" {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!(
+                                "`set {name}` is not executable by the bounded adapter; only `set $memcached_key <value>` next to `memcached_pass` is supported"
+                            ),
+                        ));
+                    }
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    crate::config::validate_param_value(value, &map_variables)
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
+                    memcached_key_template = Some(value.clone());
+                }
+                name if name.starts_with("memcached_") => {
+                    location_memcached.apply(child)?;
+                }
                 "proxy_pass" => {
                     let Some(target) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
@@ -3428,6 +3603,9 @@ impl<'a> Mapper<'a> {
         };
         let serving = [
             proxy_pass.is_some() || dynamic_target.is_some(),
+            fastcgi_pass.is_some(),
+            cgi_pass[0].is_some() || cgi_pass[1].is_some(),
+            memcached_pass.is_some(),
             return_directive.is_some(),
             root.is_some(),
             alias.is_some(),
@@ -3469,7 +3647,7 @@ impl<'a> Mapper<'a> {
         {
             return Err(NginxConfigError::unsupported(
                 location,
-                "a location must declare exactly one of proxy_pass | return | root | alias (or inherit the server root with try_files, or Adaptive Web try_files → @named)",
+                "a location must declare exactly one of proxy_pass | fastcgi_pass | uwsgi_pass | scgi_pass | memcached_pass | return | root | alias (or inherit the server root with try_files, or Adaptive Web try_files → @named)",
             ));
         }
         self.note_client_max_body_size(client_max_body_size);
@@ -3675,6 +3853,421 @@ impl<'a> Mapper<'a> {
                     format!("proxy_pass references undefined upstream `{upstream_ref}`"),
                 ));
             }
+        } else if let Some(fastcgi_target) = fastcgi_pass {
+            let effective_fastcgi = self.server_fastcgi.overlay(&location_fastcgi);
+            if fastcgi_target.contains('$') {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    "variable `fastcgi_pass` targets are not executable by the bounded FastCGI adapter; use a literal `host:port` or a declared `upstream`",
+                ));
+            }
+            if fastcgi_target.starts_with("unix:") {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    "`fastcgi_pass unix:` sockets are not executable by the bounded FastCGI adapter (TCP upstreams only)",
+                ));
+            }
+            let (upstream_ref, upstream_target) = if fastcgi_target.contains(':') {
+                let Some((host, port)) = fastcgi_target.rsplit_once(':') else {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("fastcgi_pass `{fastcgi_target}` must be host:port"),
+                    ));
+                };
+                if host.is_empty() || port.parse::<u16>().map(|port| port == 0).unwrap_or(true) {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("fastcgi_pass `{fastcgi_target}` must be a valid host:port"),
+                    ));
+                }
+                let literal_id = format!("literal-{}", sanitize_id(&fastcgi_target));
+                if !self.upstream_names.contains(&literal_id) {
+                    let allowed_cidrs: Vec<String> = match host.parse::<std::net::IpAddr>() {
+                        Ok(std::net::IpAddr::V4(ip)) => vec![format!("{ip}/32")],
+                        Ok(std::net::IpAddr::V6(ip)) => vec![format!("{ip}/128")],
+                        Err(_) => hostname_upstream_allowed_cidrs()
+                            .into_iter()
+                            .map(|network| network.to_string())
+                            .collect(),
+                    };
+                    let mut literal_upstream = json!({
+                        "id": literal_id,
+                        "targets": [{"url": format!("http://{fastcgi_target}")}],
+                        "loadBalancing": "round-robin",
+                    });
+                    if !allowed_cidrs.is_empty() {
+                        literal_upstream["addressPolicy"] =
+                            json!({ "allowedCidrs": allowed_cidrs });
+                    }
+                    self.upstreams.push(literal_upstream);
+                    self.upstream_names.push(literal_id.clone());
+                }
+                (literal_id, format!("http://{fastcgi_target}"))
+            } else if self.upstream_names.contains(&fastcgi_target) {
+                (fastcgi_target.clone(), String::new())
+            } else {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!("fastcgi_pass references undefined upstream `{fastcgi_target}`"),
+                ));
+            };
+            let document_root = alias.clone().or_else(|| effective_root.clone());
+            let mut params = Vec::new();
+            for param in effective_fastcgi.params.clone().unwrap_or_default() {
+                params.push(json!({
+                    "name": param.name,
+                    "value": param.value,
+                    "ifNotEmpty": param.if_not_empty,
+                }));
+            }
+            let hide_headers = effective_fastcgi.hide_headers.clone().unwrap_or_default();
+            let pass_headers = effective_fastcgi.pass_headers.clone().unwrap_or_default();
+            let response_policy = ProxyResponsePolicyConfig {
+                hide_headers,
+                pass_headers,
+                redirect: None,
+                cookie_path: None,
+                cookie_domain: None,
+            };
+            let target_count = if upstream_target.is_empty() {
+                self.upstreams
+                    .iter()
+                    .find(|upstream| {
+                        upstream.get("id").and_then(Value::as_str) == Some(upstream_ref.as_str())
+                    })
+                    .and_then(|upstream| upstream.get("targets"))
+                    .and_then(Value::as_array)
+                    .map(|targets| targets.len())
+                    .unwrap_or(1)
+            } else {
+                1
+            };
+            let retry_conditions = effective_fastcgi.next_upstream.clone().unwrap_or_else(|| {
+                vec![
+                    UpstreamRetryCondition::TransportFailure,
+                    UpstreamRetryCondition::Timeout,
+                ]
+            });
+            let retry_condition_names: Vec<&str> = retry_conditions
+                .iter()
+                .map(|condition| match condition {
+                    UpstreamRetryCondition::TransportFailure => "error",
+                    UpstreamRetryCondition::Timeout => "timeout",
+                    UpstreamRetryCondition::Http502 => "http_502",
+                    UpstreamRetryCondition::Http503 => "http_503",
+                    UpstreamRetryCondition::Http504 => "http_504",
+                })
+                .collect();
+            let target_count_u8 = u8::try_from(target_count).unwrap_or(u8::MAX);
+            let max_attempts = effective_fastcgi
+                .next_upstream_tries
+                .filter(|tries| *tries != 0)
+                .unwrap_or(target_count_u8)
+                .clamp(1, target_count_u8.max(1));
+            let retry = UpstreamRetryConfig {
+                max_attempts,
+                timeout_ms: effective_fastcgi.next_upstream_timeout_ms.unwrap_or(30_000),
+                retry_on: retry_conditions,
+            };
+            let resource = json!({
+                "id": resource_id,
+                "type": "fast-cgi",
+                "upstreamRef": upstream_ref,
+                "params": params,
+                "index": effective_fastcgi.index,
+                "splitPathInfo": effective_fastcgi.split_path_info,
+                "documentRoot": document_root,
+                "passRequestHeaders": effective_fastcgi.pass_request_headers.unwrap_or(true),
+                "keepConn": effective_fastcgi.keep_conn.unwrap_or(false),
+                "buffering": effective_fastcgi.buffering.unwrap_or(true),
+                "requestBuffering": effective_fastcgi.request_buffering.unwrap_or(true),
+                "connectTimeoutMs": effective_fastcgi.connect_timeout_ms.unwrap_or(60_000),
+                "sendTimeoutMs": effective_fastcgi.send_timeout_ms.unwrap_or(60_000),
+                "readTimeoutMs": effective_fastcgi.read_timeout_ms.unwrap_or(60_000),
+                "responsePolicy": proxy_response_policy_json(&response_policy)?,
+                "interceptErrors": effective_fastcgi.intercept_errors.unwrap_or(false),
+                "retry": json!({
+                    "maxAttempts": retry.max_attempts,
+                    "timeoutMs": retry.timeout_ms,
+                    "retryOn": retry_condition_names,
+                }),
+            });
+            self.resources.push(resource);
+        } else if let Some((cgi_kind, cgi_target)) = cgi_pass[0]
+            .clone()
+            .map(|target| (CgiKind::Uwsgi, target))
+            .or_else(|| cgi_pass[1].clone().map(|target| (CgiKind::Scgi, target)))
+        {
+            let prefix = cgi_kind.prefix();
+            let effective_cgi =
+                self.server_cgi[cgi_kind.index()].overlay(&location_cgi[cgi_kind.index()]);
+            if cgi_target.contains('$') {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!(
+                        "variable `{prefix}_pass` targets are not executable by the bounded {prefix} adapter; use a literal `host:port` or a declared `upstream`"
+                    ),
+                ));
+            }
+            if cgi_target.starts_with("unix:") {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!(
+                        "`{prefix}_pass unix:` sockets are not executable by the bounded {prefix} adapter (TCP upstreams only)"
+                    ),
+                ));
+            }
+            let upstream_ref = if cgi_target.contains(':') {
+                let Some((host, port)) = cgi_target.rsplit_once(':') else {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("{prefix}_pass `{cgi_target}` must be host:port"),
+                    ));
+                };
+                if host.is_empty() || port.parse::<u16>().map(|port| port == 0).unwrap_or(true) {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("{prefix}_pass `{cgi_target}` must be a valid host:port"),
+                    ));
+                }
+                let literal_id = format!("literal-{}", sanitize_id(&cgi_target));
+                if !self.upstream_names.contains(&literal_id) {
+                    let allowed_cidrs: Vec<String> = match host.parse::<std::net::IpAddr>() {
+                        Ok(std::net::IpAddr::V4(ip)) => vec![format!("{ip}/32")],
+                        Ok(std::net::IpAddr::V6(ip)) => vec![format!("{ip}/128")],
+                        Err(_) => hostname_upstream_allowed_cidrs()
+                            .into_iter()
+                            .map(|network| network.to_string())
+                            .collect(),
+                    };
+                    let mut literal_upstream = json!({
+                        "id": literal_id,
+                        "targets": [{"url": format!("http://{cgi_target}")}],
+                        "loadBalancing": "round-robin",
+                    });
+                    if !allowed_cidrs.is_empty() {
+                        literal_upstream["addressPolicy"] =
+                            json!({ "allowedCidrs": allowed_cidrs });
+                    }
+                    self.upstreams.push(literal_upstream);
+                    self.upstream_names.push(literal_id.clone());
+                }
+                literal_id
+            } else if self.upstream_names.contains(&cgi_target) {
+                cgi_target.clone()
+            } else {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!("{prefix}_pass references undefined upstream `{cgi_target}`"),
+                ));
+            };
+            let document_root = alias.clone().or_else(|| effective_root.clone());
+            let mut params = Vec::new();
+            for param in effective_cgi.params.clone().unwrap_or_default() {
+                params.push(json!({
+                    "name": param.name,
+                    "value": param.value,
+                    "ifNotEmpty": param.if_not_empty,
+                }));
+            }
+            let response_policy = ProxyResponsePolicyConfig {
+                hide_headers: effective_cgi.hide_headers.clone().unwrap_or_default(),
+                pass_headers: effective_cgi.pass_headers.clone().unwrap_or_default(),
+                redirect: None,
+                cookie_path: None,
+                cookie_domain: None,
+            };
+            let target_count = self
+                .upstreams
+                .iter()
+                .find(|upstream| {
+                    upstream.get("id").and_then(Value::as_str) == Some(upstream_ref.as_str())
+                })
+                .and_then(|upstream| upstream.get("targets"))
+                .and_then(Value::as_array)
+                .map(|targets| targets.len())
+                .unwrap_or(1);
+            let retry_conditions = effective_cgi.next_upstream.clone().unwrap_or_else(|| {
+                vec![
+                    UpstreamRetryCondition::TransportFailure,
+                    UpstreamRetryCondition::Timeout,
+                ]
+            });
+            let retry_condition_names: Vec<&str> = retry_conditions
+                .iter()
+                .map(|condition| match condition {
+                    UpstreamRetryCondition::TransportFailure => "error",
+                    UpstreamRetryCondition::Timeout => "timeout",
+                    UpstreamRetryCondition::Http502 => "http_502",
+                    UpstreamRetryCondition::Http503 => "http_503",
+                    UpstreamRetryCondition::Http504 => "http_504",
+                })
+                .collect();
+            let target_count_u8 = u8::try_from(target_count).unwrap_or(u8::MAX);
+            let max_attempts = effective_cgi
+                .next_upstream_tries
+                .filter(|tries| *tries != 0)
+                .unwrap_or(target_count_u8)
+                .clamp(1, target_count_u8.max(1));
+            let retry = UpstreamRetryConfig {
+                max_attempts,
+                timeout_ms: effective_cgi.next_upstream_timeout_ms.unwrap_or(30_000),
+                retry_on: retry_conditions,
+            };
+            let mut resource = json!({
+                "id": resource_id,
+                "type": "cgi-upstream",
+                "protocol": cgi_kind.protocol(),
+                "upstreamRef": upstream_ref,
+                "params": params,
+                "documentRoot": document_root,
+                "passRequestHeaders": effective_cgi.pass_request_headers.unwrap_or(true),
+                "buffering": effective_cgi.buffering.unwrap_or(true),
+                "requestBuffering": effective_cgi.request_buffering.unwrap_or(true),
+                "connectTimeoutMs": effective_cgi.connect_timeout_ms.unwrap_or(60_000),
+                "sendTimeoutMs": effective_cgi.send_timeout_ms.unwrap_or(60_000),
+                "readTimeoutMs": effective_cgi.read_timeout_ms.unwrap_or(60_000),
+                "responsePolicy": proxy_response_policy_json(&response_policy)?,
+                "interceptErrors": effective_cgi.intercept_errors.unwrap_or(false),
+                "retry": json!({
+                    "maxAttempts": retry.max_attempts,
+                    "timeoutMs": retry.timeout_ms,
+                    "retryOn": retry_condition_names,
+                }),
+            });
+            if cgi_kind == CgiKind::Uwsgi {
+                if let Some(modifier1) = effective_cgi.modifier1 {
+                    resource["modifier1"] = json!(modifier1);
+                }
+                if let Some(modifier2) = effective_cgi.modifier2 {
+                    resource["modifier2"] = json!(modifier2);
+                }
+                if let Some(extra) = &effective_cgi.extra_string {
+                    resource["extraString"] = Value::String(extra.clone());
+                }
+            }
+            self.resources.push(resource);
+        } else if let Some(memcached_target) = memcached_pass {
+            let Some(key_template) = memcached_key_template.clone() else {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    "memcached_pass requires `set $memcached_key <value>` in the same location",
+                ));
+            };
+            let effective_memcached = self.server_memcached.overlay(&location_memcached);
+            if memcached_target.contains('$') {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    "variable `memcached_pass` targets are not executable by the bounded adapter; use a literal `host:port` or a declared `upstream`",
+                ));
+            }
+            if memcached_target.starts_with("unix:") {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    "`memcached_pass unix:` sockets are not executable by the bounded adapter (TCP upstreams only)",
+                ));
+            }
+            let upstream_ref = if memcached_target.contains(':') {
+                let Some((host, port)) = memcached_target.rsplit_once(':') else {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("memcached_pass `{memcached_target}` must be host:port"),
+                    ));
+                };
+                if host.is_empty() || port.parse::<u16>().map(|port| port == 0).unwrap_or(true) {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("memcached_pass `{memcached_target}` must be a valid host:port"),
+                    ));
+                }
+                let literal_id = format!("literal-{}", sanitize_id(&memcached_target));
+                if !self.upstream_names.contains(&literal_id) {
+                    let allowed_cidrs: Vec<String> = match host.parse::<std::net::IpAddr>() {
+                        Ok(std::net::IpAddr::V4(ip)) => vec![format!("{ip}/32")],
+                        Ok(std::net::IpAddr::V6(ip)) => vec![format!("{ip}/128")],
+                        Err(_) => hostname_upstream_allowed_cidrs()
+                            .into_iter()
+                            .map(|network| network.to_string())
+                            .collect(),
+                    };
+                    let mut literal_upstream = json!({
+                        "id": literal_id,
+                        "targets": [{"url": format!("http://{memcached_target}")}],
+                        "loadBalancing": "round-robin",
+                    });
+                    if !allowed_cidrs.is_empty() {
+                        literal_upstream["addressPolicy"] =
+                            json!({ "allowedCidrs": allowed_cidrs });
+                    }
+                    self.upstreams.push(literal_upstream);
+                    self.upstream_names.push(literal_id.clone());
+                }
+                literal_id
+            } else if self.upstream_names.contains(&memcached_target) {
+                memcached_target.clone()
+            } else {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!("memcached_pass references undefined upstream `{memcached_target}`"),
+                ));
+            };
+            let target_count = self
+                .upstreams
+                .iter()
+                .find(|upstream| {
+                    upstream.get("id").and_then(Value::as_str) == Some(upstream_ref.as_str())
+                })
+                .and_then(|upstream| upstream.get("targets"))
+                .and_then(Value::as_array)
+                .map(|targets| targets.len())
+                .unwrap_or(1);
+            let retry_conditions = effective_memcached
+                .next_upstream
+                .clone()
+                .unwrap_or_else(|| {
+                    vec![
+                        UpstreamRetryCondition::TransportFailure,
+                        UpstreamRetryCondition::Timeout,
+                    ]
+                });
+            let retry_condition_names: Vec<&str> = retry_conditions
+                .iter()
+                .map(|condition| match condition {
+                    UpstreamRetryCondition::TransportFailure => "error",
+                    UpstreamRetryCondition::Timeout => "timeout",
+                    UpstreamRetryCondition::Http502 => "http_502",
+                    UpstreamRetryCondition::Http503 => "http_503",
+                    UpstreamRetryCondition::Http504 => "http_504",
+                })
+                .collect();
+            let target_count_u8 = u8::try_from(target_count).unwrap_or(u8::MAX);
+            let max_attempts = effective_memcached
+                .next_upstream_tries
+                .filter(|tries| *tries != 0)
+                .unwrap_or(target_count_u8)
+                .clamp(1, target_count_u8.max(1));
+            let retry = UpstreamRetryConfig {
+                max_attempts,
+                timeout_ms: effective_memcached
+                    .next_upstream_timeout_ms
+                    .unwrap_or(30_000),
+                retry_on: retry_conditions,
+            };
+            self.resources.push(json!({
+                "id": resource_id,
+                "type": "memcached",
+                "upstreamRef": upstream_ref,
+                "keyTemplate": key_template,
+                "buffering": effective_memcached.buffering.unwrap_or(true),
+                "connectTimeoutMs": effective_memcached.connect_timeout_ms.unwrap_or(60_000),
+                "sendTimeoutMs": effective_memcached.send_timeout_ms.unwrap_or(60_000),
+                "readTimeoutMs": effective_memcached.read_timeout_ms.unwrap_or(60_000),
+                "retry": json!({
+                    "maxAttempts": retry.max_attempts,
+                    "timeoutMs": retry.timeout_ms,
+                    "retryOn": retry_condition_names,
+                }),
+            }));
         } else if let Some(return_args) = return_directive {
             let Some(first) = return_args.first() else {
                 return Err(NginxConfigError::unsupported(
@@ -6272,6 +6865,628 @@ fn parse_proxy_method(directive: &NginxDirective) -> Result<String, NginxConfigE
         ));
     }
     Ok(method.clone())
+}
+
+/// nginx `memcached_*` settings accumulated over the http → server → location
+/// inheritance chain (the module has no `*_param`; the request key comes from
+/// `set $memcached_key <value>` in the location).
+#[derive(Clone, Default)]
+struct MemcachedSettings {
+    buffering: Option<bool>,
+    connect_timeout_ms: Option<u64>,
+    send_timeout_ms: Option<u64>,
+    read_timeout_ms: Option<u64>,
+    next_upstream: Option<Vec<UpstreamRetryCondition>>,
+    next_upstream_tries: Option<u8>,
+    next_upstream_timeout_ms: Option<u64>,
+}
+
+impl MemcachedSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            buffering: inner.buffering.or(self.buffering),
+            connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
+            send_timeout_ms: inner.send_timeout_ms.or(self.send_timeout_ms),
+            read_timeout_ms: inner.read_timeout_ms.or(self.read_timeout_ms),
+            next_upstream: inner
+                .next_upstream
+                .clone()
+                .or_else(|| self.next_upstream.clone()),
+            next_upstream_tries: inner.next_upstream_tries.or(self.next_upstream_tries),
+            next_upstream_timeout_ms: inner
+                .next_upstream_timeout_ms
+                .or(self.next_upstream_timeout_ms),
+        }
+    }
+
+    fn apply(&mut self, directive: &NginxDirective) -> Result<(), NginxConfigError> {
+        let Some(suffix) = directive.name.strip_prefix("memcached_") else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "unsupported memcached directive",
+            ));
+        };
+        match suffix {
+            "buffering" => self.buffering = Some(parse_on_off(directive, &directive.name)?),
+            "connect_timeout" => self.connect_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "send_timeout" => self.send_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "read_timeout" => self.read_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "next_upstream" => self.next_upstream = Some(parse_fastcgi_next_upstream(directive)?),
+            "next_upstream_tries" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "memcached_next_upstream_tries requires a count",
+                    ));
+                };
+                self.next_upstream_tries = Some(value.parse::<u8>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid memcached_next_upstream_tries `{value}`"),
+                    )
+                })?);
+            }
+            "next_upstream_timeout" => {
+                self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`memcached_{other}` is not executable by the bounded memcached adapter; supported: memcached_pass/memcached_connect_timeout/memcached_send_timeout/memcached_read_timeout/memcached_buffering/memcached_next_upstream/_tries/_timeout (nginx's memcached module has no hide/pass/intercept_errors directives)"
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+/// CGI-family protocol of one location handler (`uwsgi_pass` / `scgi_pass`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CgiKind {
+    Uwsgi,
+    Scgi,
+}
+
+impl CgiKind {
+    fn from_directive(name: &str) -> Option<Self> {
+        if name.starts_with("uwsgi_") {
+            Some(Self::Uwsgi)
+        } else if name.starts_with("scgi_") {
+            Some(Self::Scgi)
+        } else {
+            None
+        }
+    }
+
+    fn prefix(self) -> &'static str {
+        match self {
+            Self::Uwsgi => "uwsgi",
+            Self::Scgi => "scgi",
+        }
+    }
+
+    fn index(self) -> usize {
+        match self {
+            Self::Uwsgi => 0,
+            Self::Scgi => 1,
+        }
+    }
+
+    fn protocol(self) -> crate::config::CgiUpstreamProtocol {
+        match self {
+            Self::Uwsgi => crate::config::CgiUpstreamProtocol::Uwsgi,
+            Self::Scgi => crate::config::CgiUpstreamProtocol::Scgi,
+        }
+    }
+}
+
+/// nginx `uwsgi_*` / `scgi_*` settings accumulated over the http → server →
+/// location inheritance chain (the two modules share one shape; `uwsgi_modifier*`
+/// and `uwsgi_string` are uWSGI-only).
+#[derive(Clone, Default)]
+struct CgiSettings {
+    params: Option<Vec<FastCgiParamSetting>>,
+    pass_request_headers: Option<bool>,
+    buffering: Option<bool>,
+    request_buffering: Option<bool>,
+    connect_timeout_ms: Option<u64>,
+    send_timeout_ms: Option<u64>,
+    read_timeout_ms: Option<u64>,
+    intercept_errors: Option<bool>,
+    hide_headers: Option<Vec<String>>,
+    pass_headers: Option<Vec<String>>,
+    next_upstream: Option<Vec<UpstreamRetryCondition>>,
+    next_upstream_tries: Option<u8>,
+    next_upstream_timeout_ms: Option<u64>,
+    modifier1: Option<u8>,
+    modifier2: Option<u8>,
+    extra_string: Option<String>,
+}
+
+impl CgiSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            params: inner.params.clone().or_else(|| self.params.clone()),
+            pass_request_headers: inner.pass_request_headers.or(self.pass_request_headers),
+            buffering: inner.buffering.or(self.buffering),
+            request_buffering: inner.request_buffering.or(self.request_buffering),
+            connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
+            send_timeout_ms: inner.send_timeout_ms.or(self.send_timeout_ms),
+            read_timeout_ms: inner.read_timeout_ms.or(self.read_timeout_ms),
+            intercept_errors: inner.intercept_errors.or(self.intercept_errors),
+            hide_headers: inner
+                .hide_headers
+                .clone()
+                .or_else(|| self.hide_headers.clone()),
+            pass_headers: inner
+                .pass_headers
+                .clone()
+                .or_else(|| self.pass_headers.clone()),
+            next_upstream: inner
+                .next_upstream
+                .clone()
+                .or_else(|| self.next_upstream.clone()),
+            next_upstream_tries: inner.next_upstream_tries.or(self.next_upstream_tries),
+            next_upstream_timeout_ms: inner
+                .next_upstream_timeout_ms
+                .or(self.next_upstream_timeout_ms),
+            modifier1: inner.modifier1.or(self.modifier1),
+            modifier2: inner.modifier2.or(self.modifier2),
+            extra_string: inner
+                .extra_string
+                .clone()
+                .or_else(|| self.extra_string.clone()),
+        }
+    }
+
+    fn apply(
+        &mut self,
+        kind: CgiKind,
+        directive: &NginxDirective,
+        map_variables: &[&str],
+    ) -> Result<(), NginxConfigError> {
+        let prefix = kind.prefix();
+        let Some(suffix) = directive
+            .name
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.strip_prefix('_'))
+        else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("`{}` is not a `{prefix}_*` directive", directive.name),
+            ));
+        };
+        match suffix {
+            "param" => {
+                let (name, value, if_not_empty) = match directive.args.as_slice() {
+                    [name, value] => (name, value, false),
+                    [name, value, flag] if flag.eq_ignore_ascii_case("if_not_empty") => {
+                        (name, value, true)
+                    }
+                    _ => {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("{prefix}_param requires `NAME VALUE [if_not_empty]`"),
+                        ))
+                    }
+                };
+                crate::config::validate_param_name(name)
+                    .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+                crate::config::validate_param_value(value, map_variables)
+                    .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+                self.params
+                    .get_or_insert_with(Vec::new)
+                    .push(FastCgiParamSetting {
+                        name: name.clone(),
+                        value: value.clone(),
+                        if_not_empty,
+                    });
+            }
+            "pass_request_headers" => {
+                self.pass_request_headers = Some(parse_on_off(directive, &directive.name)?)
+            }
+            "buffering" => self.buffering = Some(parse_on_off(directive, &directive.name)?),
+            "request_buffering" => {
+                self.request_buffering = Some(parse_on_off(directive, &directive.name)?)
+            }
+            "connect_timeout" => self.connect_timeout_ms = Some(parse_cgi_timeout(directive)?),
+            "send_timeout" => self.send_timeout_ms = Some(parse_cgi_timeout(directive)?),
+            "read_timeout" => self.read_timeout_ms = Some(parse_cgi_timeout(directive)?),
+            "intercept_errors" => {
+                self.intercept_errors = Some(parse_on_off(directive, &directive.name)?)
+            }
+            "hide_header" | "pass_header" => {
+                let Some(name) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a header name", directive.name),
+                    ));
+                };
+                if !crate::config::header_block_token(name) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} `{name}` is not a valid HTTP field name", directive.name),
+                    ));
+                }
+                let list = if suffix == "hide_header" {
+                    self.hide_headers.get_or_insert_with(Vec::new)
+                } else {
+                    self.pass_headers.get_or_insert_with(Vec::new)
+                };
+                list.push(name.clone());
+            }
+            "next_upstream" => self.next_upstream = Some(parse_fastcgi_next_upstream(directive)?),
+            "next_upstream_tries" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "next_upstream_tries requires a count",
+                    ));
+                };
+                self.next_upstream_tries = Some(value.parse::<u8>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} `{value}`", directive.name),
+                    )
+                })?);
+            }
+            "next_upstream_timeout" => {
+                self.next_upstream_timeout_ms = Some(parse_cgi_timeout(directive)?)
+            }
+            "modifier1" | "modifier2" if kind == CgiKind::Uwsgi => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a number", directive.name),
+                    ));
+                };
+                let parsed = value.parse::<u8>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("{} must be a byte 0..=255", directive.name),
+                    )
+                })?;
+                if suffix == "modifier1" {
+                    self.modifier1 = Some(parsed);
+                } else {
+                    self.modifier2 = Some(parsed);
+                }
+            }
+            "string" if kind == CgiKind::Uwsgi => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "uwsgi_string requires a value",
+                    ));
+                };
+                if value.bytes().any(|byte| byte == 0 || byte == b'\r' || byte == b'\n') {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "uwsgi_string must not contain NUL or line breaks",
+                    ));
+                }
+                self.extra_string = Some(value.clone());
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{prefix}_{other}` is not executable by the bounded {prefix} adapter; supported: {prefix}_pass/{prefix}_param/{prefix}_pass_request_headers/{prefix}_buffering/{prefix}_request_buffering/{prefix}_connect_timeout/{prefix}_send_timeout/{prefix}_read_timeout/{prefix}_hide_header/{prefix}_pass_header/{prefix}_intercept_errors/{prefix}_next_upstream/_tries/_timeout{}",
+                        if kind == CgiKind::Uwsgi {
+                            "/uwsgi_modifier1/uwsgi_modifier2/uwsgi_string"
+                        } else {
+                            ""
+                        }
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+fn parse_cgi_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    parse_fastcgi_timeout(directive)
+}
+
+/// nginx proxy response-header directives (`proxy_hide_header`,
+/// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
+/// nginx `fastcgi_*` settings accumulated over the http → server → location
+/// inheritance chain.
+///
+/// Each nginx directive family has its own inheritance rule: `fastcgi_param`
+/// and the hide/pass header lists replace/extend at the level that declares
+/// them, while the remaining single-value directives inherit independently.
+#[derive(Clone, Default)]
+struct FastCgiSettings {
+    params: Option<Vec<FastCgiParamSetting>>,
+    index: Option<String>,
+    split_path_info: Option<String>,
+    keep_conn: Option<bool>,
+    buffering: Option<bool>,
+    request_buffering: Option<bool>,
+    pass_request_headers: Option<bool>,
+    connect_timeout_ms: Option<u64>,
+    send_timeout_ms: Option<u64>,
+    read_timeout_ms: Option<u64>,
+    intercept_errors: Option<bool>,
+    hide_headers: Option<Vec<String>>,
+    pass_headers: Option<Vec<String>>,
+    next_upstream: Option<Vec<UpstreamRetryCondition>>,
+    next_upstream_tries: Option<u8>,
+    next_upstream_timeout_ms: Option<u64>,
+}
+
+#[derive(Clone)]
+struct FastCgiParamSetting {
+    name: String,
+    value: String,
+    if_not_empty: bool,
+}
+
+impl FastCgiSettings {
+    /// Overlay the more specific `inner` level on this (inherited) one.
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            params: inner.params.clone().or_else(|| self.params.clone()),
+            index: inner.index.clone().or_else(|| self.index.clone()),
+            split_path_info: inner
+                .split_path_info
+                .clone()
+                .or_else(|| self.split_path_info.clone()),
+            keep_conn: inner.keep_conn.or(self.keep_conn),
+            buffering: inner.buffering.or(self.buffering),
+            request_buffering: inner.request_buffering.or(self.request_buffering),
+            pass_request_headers: inner.pass_request_headers.or(self.pass_request_headers),
+            connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
+            send_timeout_ms: inner.send_timeout_ms.or(self.send_timeout_ms),
+            read_timeout_ms: inner.read_timeout_ms.or(self.read_timeout_ms),
+            intercept_errors: inner.intercept_errors.or(self.intercept_errors),
+            hide_headers: inner
+                .hide_headers
+                .clone()
+                .or_else(|| self.hide_headers.clone()),
+            pass_headers: inner
+                .pass_headers
+                .clone()
+                .or_else(|| self.pass_headers.clone()),
+            next_upstream: inner
+                .next_upstream
+                .clone()
+                .or_else(|| self.next_upstream.clone()),
+            next_upstream_tries: inner.next_upstream_tries.or(self.next_upstream_tries),
+            next_upstream_timeout_ms: inner
+                .next_upstream_timeout_ms
+                .or(self.next_upstream_timeout_ms),
+        }
+    }
+
+    /// Apply one `fastcgi_*` directive to this level's settings.
+    ///
+    /// `fastcgi_pass` is handled by the caller (it selects the handler), and
+    /// directives outside the executable subset return a located diagnostic.
+    fn apply(
+        &mut self,
+        directive: &NginxDirective,
+        map_variables: &[&str],
+    ) -> Result<(), NginxConfigError> {
+        match directive.name.as_str() {
+            "fastcgi_param" => {
+                let (name, value, if_not_empty) = match directive.args.as_slice() {
+                    [name, value] => (name, value, false),
+                    [name, value, flag] if flag.eq_ignore_ascii_case("if_not_empty") => {
+                        (name, value, true)
+                    }
+                    _ => {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "fastcgi_param requires `NAME VALUE [if_not_empty]`",
+                        ))
+                    }
+                };
+                crate::config::validate_param_name(name)
+                    .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+                crate::config::validate_param_value(value, map_variables)
+                    .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+                self.params
+                    .get_or_insert_with(Vec::new)
+                    .push(FastCgiParamSetting {
+                        name: name.clone(),
+                        value: value.clone(),
+                        if_not_empty,
+                    });
+            }
+            "fastcgi_index" => {
+                let Some(index) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "fastcgi_index requires a file name",
+                    ));
+                };
+                if index.is_empty()
+                    || index.starts_with('/')
+                    || index
+                        .bytes()
+                        .any(|byte| byte == 0 || byte < 0x20 || byte == 0x7f)
+                {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "fastcgi_index must be a relative file name",
+                    ));
+                }
+                self.index = Some(index.clone());
+            }
+            "fastcgi_split_path_info" => {
+                let Some(pattern) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "fastcgi_split_path_info requires a regular expression",
+                    ));
+                };
+                let regex = regex::Regex::new(pattern).map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        "fastcgi_split_path_info is not a valid regular expression",
+                    )
+                })?;
+                if regex.captures_len() != 3 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "fastcgi_split_path_info must contain exactly two capture groups",
+                    ));
+                }
+                self.split_path_info = Some(pattern.clone());
+            }
+            "fastcgi_keep_conn" => self.keep_conn = Some(parse_on_off(directive, "fastcgi_keep_conn")?),
+            "fastcgi_buffering" => {
+                self.buffering = Some(parse_on_off(directive, "fastcgi_buffering")?)
+            }
+            "fastcgi_request_buffering" => {
+                self.request_buffering = Some(parse_on_off(directive, "fastcgi_request_buffering")?)
+            }
+            "fastcgi_pass_request_headers" => {
+                self.pass_request_headers =
+                    Some(parse_on_off(directive, "fastcgi_pass_request_headers")?)
+            }
+            "fastcgi_connect_timeout" => {
+                self.connect_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
+            }
+            "fastcgi_send_timeout" => self.send_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "fastcgi_read_timeout" => self.read_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "fastcgi_intercept_errors" => {
+                self.intercept_errors = Some(parse_on_off(directive, "fastcgi_intercept_errors")?)
+            }
+            "fastcgi_hide_header" | "fastcgi_pass_header" => {
+                let Some(name) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a header name", directive.name),
+                    ));
+                };
+                if !crate::config::header_block_token(name) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "{} `{name}` is not a valid HTTP field name",
+                            directive.name
+                        ),
+                    ));
+                }
+                let list = if directive.name == "fastcgi_hide_header" {
+                    self.hide_headers.get_or_insert_with(Vec::new)
+                } else {
+                    self.pass_headers.get_or_insert_with(Vec::new)
+                };
+                list.push(name.clone());
+            }
+            "fastcgi_next_upstream" => {
+                self.next_upstream = Some(parse_fastcgi_next_upstream(directive)?);
+            }
+            "fastcgi_next_upstream_tries" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "fastcgi_next_upstream_tries requires a count",
+                    ));
+                };
+                let tries = value.parse::<u8>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid fastcgi_next_upstream_tries `{value}`"),
+                    )
+                })?;
+                self.next_upstream_tries = Some(tries);
+            }
+            "fastcgi_next_upstream_timeout" => {
+                self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{other}` is not executable by the bounded FastCGI adapter; supported: fastcgi_pass/fastcgi_param/fastcgi_index/fastcgi_split_path_info/fastcgi_keep_conn/fastcgi_buffering/fastcgi_request_buffering/fastcgi_pass_request_headers/fastcgi_connect_timeout/fastcgi_send_timeout/fastcgi_read_timeout/fastcgi_hide_header/fastcgi_pass_header/fastcgi_intercept_errors/fastcgi_next_upstream/_tries/_timeout"
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Parse one nginx timeout value into milliseconds (`ms`, `s`, `m`, `h`).
+fn parse_fastcgi_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} requires a time value", directive.name),
+        ));
+    };
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} takes exactly one time value", directive.name),
+        ));
+    }
+    let (number, multiplier) = if let Some(rest) = value.strip_suffix("ms") {
+        (rest, 1u64)
+    } else if let Some(rest) = value.strip_suffix('s') {
+        (rest, 1_000)
+    } else if let Some(rest) = value.strip_suffix('m') {
+        (rest, 60_000)
+    } else if let Some(rest) = value.strip_suffix('h') {
+        (rest, 3_600_000)
+    } else {
+        (value.as_str(), 1_000)
+    };
+    let number = number.trim().parse::<u64>().map_err(|_| {
+        NginxConfigError::unsupported(directive, format!("invalid time value `{value}`"))
+    })?;
+    number
+        .checked_mul(multiplier)
+        .filter(|millis| (1..=86_400_000).contains(millis))
+        .ok_or_else(|| {
+            NginxConfigError::unsupported(
+                directive,
+                format!("time value `{value}` is outside 1ms..=24h"),
+            )
+        })
+}
+
+/// Parse `fastcgi_next_upstream` flags into the runtime retry conditions.
+fn parse_fastcgi_next_upstream(
+    directive: &NginxDirective,
+) -> Result<Vec<UpstreamRetryCondition>, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} requires at least one condition", directive.name),
+        ));
+    }
+    let mut conditions = Vec::new();
+    for flag in &directive.args {
+        let condition = match flag.as_str() {
+            "error" => UpstreamRetryCondition::TransportFailure,
+            "timeout" => UpstreamRetryCondition::Timeout,
+            "http_502" => UpstreamRetryCondition::Http502,
+            "http_503" => UpstreamRetryCondition::Http503,
+            "http_504" => UpstreamRetryCondition::Http504,
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "{} condition `{other}` is not executable by the bounded adapter; supported: error timeout http_502 http_503 http_504",
+                        directive.name
+                    ),
+                ))
+            }
+        };
+        if !conditions.contains(&condition) {
+            conditions.push(condition);
+        }
+    }
+    Ok(conditions)
 }
 
 /// nginx proxy response-header directives (`proxy_hide_header`,
@@ -11277,5 +12492,289 @@ server { listen 80; server_name key.example.com; location / { return 200 "ok"; }
             .err()
             .expect("case-insensitively duplicate keys must fail closed");
         assert!(error.to_string().contains("duplicate key"), "{error}");
+    }
+
+    #[test]
+    fn materializes_fastcgi_location_with_inherited_params_and_split() {
+        let config = materialize(
+            r#"
+fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+fastcgi_param REQUEST_METHOD $request_method;
+fastcgi_read_timeout 30s;
+http {
+    server {
+        listen 80;
+        server_name fcgi.example.com;
+        root /srv/www;
+        location /app/ {
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_index index.php;
+            fastcgi_split_path_info ^(/app/[^/]+\.php)(/.*)$;
+            fastcgi_keep_conn on;
+            fastcgi_hide_header X-Mock-Hide;
+            fastcgi_pass_header X-Mock-Pass;
+            fastcgi_intercept_errors on;
+        }
+    }
+}
+"#,
+        );
+        // The `fastcgi_param` directives must be inside `http {}`.
+        assert!(config.is_err(), "params outside http must fail closed");
+
+        let config = materialize(
+            r#"
+http {
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param REQUEST_METHOD $request_method;
+    fastcgi_read_timeout 30s;
+    server {
+        listen 80;
+        server_name fcgi.example.com;
+        root /srv/www;
+        location /app/ {
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_index index.php;
+            fastcgi_split_path_info ^(/app/[^/]+\.php)(/.*)$;
+            fastcgi_keep_conn on;
+            fastcgi_hide_header X-Mock-Hide;
+            fastcgi_pass_header X-Mock-Pass;
+            fastcgi_intercept_errors on;
+        }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let resource = config
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::FastCgi {
+                    upstream_ref,
+                    params,
+                    index,
+                    split_path_info,
+                    document_root,
+                    keep_conn,
+                    read_timeout_ms,
+                    intercept_errors,
+                    response_policy,
+                    retry,
+                    ..
+                } => Some((
+                    upstream_ref.clone(),
+                    params.clone(),
+                    index.clone(),
+                    split_path_info.clone(),
+                    document_root.clone(),
+                    *keep_conn,
+                    *read_timeout_ms,
+                    *intercept_errors,
+                    response_policy.clone(),
+                    retry.clone(),
+                )),
+                _ => None,
+            })
+            .expect("fastcgi resource");
+        assert_eq!(resource.0, "literal-127-0-0-1-9000");
+        assert_eq!(resource.1.len(), 2);
+        assert_eq!(resource.1[0].name, "SCRIPT_FILENAME");
+        assert_eq!(resource.1[0].value, "$document_root$fastcgi_script_name");
+        assert_eq!(resource.2.as_deref(), Some("index.php"));
+        assert_eq!(resource.3.as_deref(), Some(r"^(/app/[^/]+\.php)(/.*)$"));
+        assert_eq!(resource.4.as_deref(), Some("/srv/www"));
+        assert!(resource.5);
+        assert_eq!(resource.6, 30_000);
+        assert!(resource.7);
+        let policy = resource.8.expect("response policy");
+        assert_eq!(policy.hide_headers, ["X-Mock-Hide"]);
+        assert_eq!(policy.pass_headers, ["X-Mock-Pass"]);
+        let retry = resource.9.expect("retry policy");
+        assert_eq!(retry.max_attempts, 1);
+        assert_eq!(config.upstreams[0].targets[0].url, "http://127.0.0.1:9000");
+    }
+
+    #[test]
+    fn fastcgi_unsupported_directives_fail_closed_with_located_diagnostics() {
+        for (directive, needle) in [
+            ("fastcgi_cache off;", "fastcgi_cache"),
+            ("fastcgi_pass unix:/run/php.sock;", "unix:"),
+            ("fastcgi_param BAD $upstream_addr;", "$upstream_addr"),
+            ("fastcgi_next_upstream http_500;", "http_500"),
+            (
+                "fastcgi_split_path_info ^(/x[.]php)$;",
+                "two capture groups",
+            ),
+        ] {
+            let text = format!(
+                "http {{ server {{ listen 80; server_name a.test; location / {{ {directive} }} }} }}"
+            );
+            let error = materialize(&text).expect_err("must fail closed");
+            assert!(
+                error.to_string().contains(needle),
+                "expected `{needle}` in: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn materializes_uwsgi_and_scgi_locations_with_shared_param_pipeline() {
+        let config = materialize(
+            r#"
+http {
+    uwsgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    uwsgi_param REQUEST_METHOD $request_method;
+    uwsgi_modifier1 0;
+    uwsgi_string "extra=1";
+    scgi_param REQUEST_METHOD $request_method;
+    server {
+        listen 80;
+        server_name cgi.example.com;
+        root /srv/www;
+        location /uwsgi/ {
+            uwsgi_pass 127.0.0.1:9100;
+            uwsgi_hide_header X-Mock-Hide;
+            uwsgi_intercept_errors on;
+        }
+        location /scgi/ {
+            scgi_pass 127.0.0.1:9200;
+            scgi_read_timeout 15s;
+        }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let resources: Vec<_> = config
+            .resources
+            .iter()
+            .filter_map(|resource| match resource {
+                crate::config::ResourceConfig::CgiUpstream {
+                    protocol,
+                    upstream_ref,
+                    params,
+                    read_timeout_ms,
+                    intercept_errors,
+                    modifier1,
+                    extra_string,
+                    ..
+                } => Some((
+                    *protocol,
+                    upstream_ref.clone(),
+                    params.clone(),
+                    *read_timeout_ms,
+                    *intercept_errors,
+                    *modifier1,
+                    extra_string.clone(),
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(resources.len(), 2);
+        let uwsgi = resources
+            .iter()
+            .find(|resource| resource.0 == crate::config::CgiUpstreamProtocol::Uwsgi)
+            .expect("uwsgi resource");
+        assert_eq!(uwsgi.1, "literal-127-0-0-1-9100");
+        assert_eq!(uwsgi.2.len(), 2);
+        assert_eq!(uwsgi.3, 60_000);
+        assert!(uwsgi.4);
+        assert_eq!(uwsgi.5, Some(0));
+        assert_eq!(uwsgi.6.as_deref(), Some("extra=1"));
+        let scgi = resources
+            .iter()
+            .find(|resource| resource.0 == crate::config::CgiUpstreamProtocol::Scgi)
+            .expect("scgi resource");
+        assert_eq!(scgi.1, "literal-127-0-0-1-9200");
+        assert_eq!(scgi.2.len(), 1);
+        assert_eq!(scgi.3, 15_000);
+    }
+
+    #[test]
+    fn uwsgi_and_scgi_unsupported_directives_fail_closed() {
+        for (directive, needle) in [
+            ("uwsgi_cache off;", "uwsgi_cache"),
+            ("uwsgi_pass unix:/run/uwsgi.sock;", "unix:"),
+            ("uwsgi_ssl_certificate /tmp/c.pem;", "uwsgi_ssl_certificate"),
+            ("scgi_param BAD $upstream_addr;", "$upstream_addr"),
+        ] {
+            let text = format!(
+                "http {{ server {{ listen 80; server_name a.test; location / {{ {directive} }} }} }}"
+            );
+            let error = materialize(&text).expect_err("must fail closed");
+            assert!(
+                error.to_string().contains(needle),
+                "expected `{needle}` in: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn materializes_memcached_location_with_set_key_template() {
+        let config = materialize(
+            r#"
+http {
+    server {
+        listen 80;
+        server_name mc.example.com;
+        location /mc/ {
+            set $memcached_key $uri;
+            memcached_pass 127.0.0.1:11211;
+            memcached_read_timeout 10s;
+        }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let resource = config
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::Memcached {
+                    upstream_ref,
+                    key_template,
+                    read_timeout_ms,
+                    ..
+                } => Some((upstream_ref.clone(), key_template.clone(), *read_timeout_ms)),
+                _ => None,
+            })
+            .expect("memcached resource");
+        assert_eq!(resource.0, "literal-127-0-0-1-11211");
+        assert_eq!(resource.1, "$uri");
+        assert_eq!(resource.2, 10_000);
+    }
+
+    #[test]
+    fn memcached_set_and_unsupported_directives_fail_closed() {
+        for (text, needle) in [
+            (
+                "http { server { listen 80; server_name a.test; location / { memcached_pass 127.0.0.1:11211; } } }",
+                "set $memcached_key",
+            ),
+            (
+                "http { server { listen 80; server_name a.test; location / { set $other 1; memcached_pass 127.0.0.1:11211; } } }",
+                "set $other",
+            ),
+            (
+                "http { server { listen 80; server_name a.test; location / { set $memcached_key $uri; set $other 1; memcached_pass 127.0.0.1:11211; } } }",
+                "set $other",
+            ),
+            (
+                "http { server { listen 80; server_name a.test; location / { set $memcached_key $uri; memcached_pass unix:/run/mc.sock; } } }",
+                "unix:",
+            ),
+            (
+                "http { server { listen 80; server_name a.test; location / { set $memcached_key $uri; memcached_cache off; memcached_pass 127.0.0.1:11211; } } }",
+                "memcached_cache",
+            ),
+        ] {
+            let error = materialize(text).expect_err("must fail closed");
+            assert!(
+                error.to_string().contains(needle),
+                "expected `{needle}` in: {error}"
+            );
+        }
     }
 }

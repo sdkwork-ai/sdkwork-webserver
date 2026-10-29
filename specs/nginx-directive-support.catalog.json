@@ -2431,9 +2431,9 @@
       ],
       "grammar": "1|2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_bind` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_buffer_size",
@@ -2447,9 +2447,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_buffer_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_buffering",
@@ -2462,10 +2462,55 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_buffering setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_buffers",
@@ -2479,9 +2524,9 @@
       ],
       "grammar": "2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_buffers` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_busy_buffers_size",
@@ -2495,9 +2540,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_busy_buffers_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache",
@@ -2511,9 +2556,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_background_update",
@@ -2527,9 +2572,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_background_update` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_bypass",
@@ -2543,9 +2588,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_bypass` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_key",
@@ -2559,9 +2604,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_key` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_lock",
@@ -2575,9 +2620,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_lock` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_lock_age",
@@ -2591,9 +2636,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_lock_age` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_lock_timeout",
@@ -2607,9 +2652,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_lock_timeout` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_max_range_offset",
@@ -2623,9 +2668,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_max_range_offset` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_methods",
@@ -2639,9 +2684,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_methods` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_min_uses",
@@ -2655,9 +2700,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_min_uses` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_path",
@@ -2669,9 +2714,9 @@
       ],
       "grammar": "2+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_path` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_revalidate",
@@ -2685,9 +2730,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_revalidate` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_use_stale",
@@ -2701,9 +2746,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_use_stale` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_cache_valid",
@@ -2717,9 +2762,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_cache_valid` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_catch_stderr",
@@ -2733,9 +2778,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_catch_stderr` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_connect_timeout",
@@ -2748,10 +2793,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_connect_timeout setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_force_ranges",
@@ -2765,9 +2855,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_force_ranges` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_hide_header",
@@ -2780,10 +2870,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_hide_header setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_ignore_client_abort",
@@ -2797,9 +2932,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_ignore_client_abort` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_ignore_headers",
@@ -2813,9 +2948,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_ignore_headers` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_index",
@@ -2828,10 +2963,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_index setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_intercept_errors",
@@ -2844,10 +3024,55 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_intercept_errors setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_keep_conn",
@@ -2860,10 +3085,55 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_keep_conn setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_limit_rate",
@@ -2877,9 +3147,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_limit_rate` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_max_temp_file_size",
@@ -2893,9 +3163,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_max_temp_file_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_next_upstream",
@@ -2908,10 +3178,55 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_next_upstream setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_next_upstream_timeout",
@@ -2924,10 +3239,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_next_upstream_timeout setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_next_upstream_tries",
@@ -2940,10 +3300,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_next_upstream_tries setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_no_cache",
@@ -2957,9 +3362,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_no_cache` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_param",
@@ -2972,10 +3377,55 @@
         "http-server"
       ],
       "grammar": "2|3",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_param setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_pass",
@@ -2987,10 +3437,54 @@
         "http-location"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http-if",
+        "http-location"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_pass setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_pass_header",
@@ -3003,10 +3497,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_pass_header setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_pass_request_body",
@@ -3020,9 +3559,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_pass_request_body` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_pass_request_headers",
@@ -3035,10 +3574,55 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_pass_request_headers setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_read_timeout",
@@ -3056,9 +3640,50 @@
         "http-location",
         "http-server"
       ],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_read_timeout setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_request_buffering",
@@ -3071,10 +3696,55 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_request_buffering setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_send_lowat",
@@ -3088,9 +3758,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_send_lowat` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_send_timeout",
@@ -3103,10 +3773,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_send_timeout setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_socket_keepalive",
@@ -3120,9 +3835,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_socket_keepalive` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_split_path_info",
@@ -3135,10 +3850,55 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" (fastcgi_split_path_info setting in the fastcgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "basic-get"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "post-upload"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-info"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "split-nomatch"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "headers-policy"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "intercept-404"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "retry-upstream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "status-503"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "head"
+        }
+      ],
+      "knownDifferences": [
+        "fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:fastcgi_store",
@@ -3152,9 +3912,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_store` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_store_access",
@@ -3168,9 +3928,9 @@
       ],
       "grammar": "1|2|3",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_store_access` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_temp_file_write_size",
@@ -3184,9 +3944,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_temp_file_write_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:fastcgi_temp_path",
@@ -3200,9 +3960,9 @@
       ],
       "grammar": "1|2|3|4",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`fastcgi_temp_path` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:flv",
@@ -5733,9 +6493,9 @@
       ],
       "grammar": "1|2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`memcached_bind` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:memcached_buffer_size",
@@ -5749,9 +6509,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`memcached_buffer_size` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:memcached_connect_timeout",
@@ -5764,10 +6524,43 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_connect_timeout setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_gzip_flag",
@@ -5781,9 +6574,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`memcached_gzip_flag` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:memcached_next_upstream",
@@ -5796,10 +6589,43 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_next_upstream setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_next_upstream_timeout",
@@ -5812,10 +6638,43 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_next_upstream_timeout setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_next_upstream_tries",
@@ -5828,10 +6687,43 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_next_upstream_tries setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_pass",
@@ -5843,10 +6735,42 @@
         "http-location"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http-if",
+        "http-location"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_pass setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_read_timeout",
@@ -5859,10 +6783,43 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_read_timeout setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_send_timeout",
@@ -5875,10 +6832,43 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"memcached\" (memcached_send_timeout setting in the memcached adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-large"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-raw-502"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-post"
+        }
+      ],
+      "knownDifferences": [
+        "memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:memcached_socket_keepalive",
@@ -5892,9 +6882,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`memcached_socket_keepalive` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:merge_slashes",
@@ -8403,9 +9393,9 @@
       ],
       "grammar": "1|2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_bind` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_buffer_size",
@@ -8419,9 +9409,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_buffer_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_buffering",
@@ -8434,10 +9424,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_buffering setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_buffers",
@@ -8451,9 +9466,9 @@
       ],
       "grammar": "2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_buffers` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_busy_buffers_size",
@@ -8467,9 +9482,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_busy_buffers_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache",
@@ -8483,9 +9498,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_background_update",
@@ -8499,9 +9514,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_background_update` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_bypass",
@@ -8515,9 +9530,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_bypass` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_key",
@@ -8531,9 +9546,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_key` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_lock",
@@ -8547,9 +9562,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_lock` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_lock_age",
@@ -8563,9 +9578,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_lock_age` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_lock_timeout",
@@ -8579,9 +9594,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_lock_timeout` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_max_range_offset",
@@ -8595,9 +9610,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_max_range_offset` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_methods",
@@ -8611,9 +9626,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_methods` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_min_uses",
@@ -8627,9 +9642,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_min_uses` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_path",
@@ -8641,9 +9656,9 @@
       ],
       "grammar": "2+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_path` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_revalidate",
@@ -8657,9 +9672,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_revalidate` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_use_stale",
@@ -8673,9 +9688,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_use_stale` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_cache_valid",
@@ -8689,9 +9704,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_cache_valid` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_connect_timeout",
@@ -8704,10 +9719,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_connect_timeout setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_force_ranges",
@@ -8721,9 +9761,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_force_ranges` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_hide_header",
@@ -8736,10 +9776,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_hide_header setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_ignore_client_abort",
@@ -8753,9 +9818,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_ignore_client_abort` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_ignore_headers",
@@ -8769,9 +9834,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_ignore_headers` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_intercept_errors",
@@ -8784,10 +9849,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_intercept_errors setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_limit_rate",
@@ -8801,9 +9891,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_limit_rate` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_max_temp_file_size",
@@ -8817,9 +9907,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_max_temp_file_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_next_upstream",
@@ -8832,10 +9922,35 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_next_upstream setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_next_upstream_timeout",
@@ -8848,10 +9963,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_next_upstream_timeout setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_next_upstream_tries",
@@ -8864,10 +10004,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_next_upstream_tries setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_no_cache",
@@ -8881,9 +10046,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_no_cache` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_param",
@@ -8896,10 +10061,35 @@
         "http-server"
       ],
       "grammar": "2|3",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_param setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_pass",
@@ -8911,10 +10101,34 @@
         "http-location"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http-if",
+        "http-location"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_pass setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_pass_header",
@@ -8927,10 +10141,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_pass_header setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_pass_request_body",
@@ -8944,9 +10183,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_pass_request_body` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_pass_request_headers",
@@ -8959,10 +10198,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_pass_request_headers setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_read_timeout",
@@ -8975,10 +10239,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_read_timeout setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_request_buffering",
@@ -8991,10 +10280,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_request_buffering setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_send_timeout",
@@ -9007,10 +10321,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"scgi\" (scgi_send_timeout setting in the scgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:scgi_socket_keepalive",
@@ -9024,9 +10363,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_socket_keepalive` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_store",
@@ -9040,9 +10379,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_store` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_store_access",
@@ -9056,9 +10395,9 @@
       ],
       "grammar": "1|2|3",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_store_access` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_temp_file_write_size",
@@ -9072,9 +10411,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_temp_file_write_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:scgi_temp_path",
@@ -9088,9 +10427,9 @@
       ],
       "grammar": "1|2|3|4",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`scgi_temp_path` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:secure_link",
@@ -9453,10 +10792,27 @@
         "http-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http-if",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "location-scoped variable table consumed by the memcached adapter ($memcached_key)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "memcached-miss"
+        }
+      ],
+      "knownDifferences": [
+        "only the bounded `set $memcached_key <literal-or-template>` form executes (location context, supported variable vocabulary); other set variables/sources fail closed"
+      ]
     },
     {
       "id": "http:set_real_ip_from",
@@ -10869,9 +12225,9 @@
       ],
       "grammar": "1|2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_bind` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_buffer_size",
@@ -10885,9 +12241,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_buffer_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_buffering",
@@ -10900,10 +12256,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_buffering setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_buffers",
@@ -10917,9 +12298,9 @@
       ],
       "grammar": "2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_buffers` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_busy_buffers_size",
@@ -10933,9 +12314,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_busy_buffers_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache",
@@ -10949,9 +12330,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_background_update",
@@ -10965,9 +12346,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_background_update` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_bypass",
@@ -10981,9 +12362,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_bypass` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_key",
@@ -10997,9 +12378,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_key` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_lock",
@@ -11013,9 +12394,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_lock` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_lock_age",
@@ -11029,9 +12410,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_lock_age` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_lock_timeout",
@@ -11045,9 +12426,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_lock_timeout` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_max_range_offset",
@@ -11061,9 +12442,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_max_range_offset` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_methods",
@@ -11077,9 +12458,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_methods` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_min_uses",
@@ -11093,9 +12474,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_min_uses` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_path",
@@ -11107,9 +12488,9 @@
       ],
       "grammar": "2+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_path` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_revalidate",
@@ -11123,9 +12504,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_revalidate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_use_stale",
@@ -11139,9 +12520,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_use_stale` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_cache_valid",
@@ -11155,9 +12536,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_cache_valid` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_connect_timeout",
@@ -11170,10 +12551,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_connect_timeout setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_force_ranges",
@@ -11187,9 +12593,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_force_ranges` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_hide_header",
@@ -11202,10 +12608,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_hide_header setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_ignore_client_abort",
@@ -11219,9 +12650,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ignore_client_abort` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ignore_headers",
@@ -11235,9 +12666,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ignore_headers` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_intercept_errors",
@@ -11250,10 +12681,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_intercept_errors setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_limit_rate",
@@ -11267,9 +12723,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_limit_rate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_max_temp_file_size",
@@ -11283,9 +12739,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_max_temp_file_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_modifier1",
@@ -11298,10 +12754,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_modifier1 setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_modifier2",
@@ -11314,10 +12795,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_modifier2 setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_next_upstream",
@@ -11330,10 +12836,35 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_next_upstream setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_next_upstream_timeout",
@@ -11346,10 +12877,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_next_upstream_timeout setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_next_upstream_tries",
@@ -11362,10 +12918,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_next_upstream_tries setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_no_cache",
@@ -11379,9 +12960,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_no_cache` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_param",
@@ -11394,10 +12975,35 @@
         "http-server"
       ],
       "grammar": "2|3",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_param setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_pass",
@@ -11409,10 +13015,34 @@
         "http-location"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http-if",
+        "http-location"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_pass setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_pass_header",
@@ -11425,10 +13055,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_pass_header setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_pass_request_body",
@@ -11442,9 +13097,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_pass_request_body` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_pass_request_headers",
@@ -11457,10 +13112,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_pass_request_headers setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_read_timeout",
@@ -11473,10 +13153,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_read_timeout setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_request_buffering",
@@ -11489,10 +13194,35 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_request_buffering setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_send_timeout",
@@ -11505,10 +13235,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_send_timeout setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_socket_keepalive",
@@ -11522,9 +13277,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_socket_keepalive` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_certificate",
@@ -11538,9 +13293,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_certificate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_certificate_cache",
@@ -11554,9 +13309,9 @@
       ],
       "grammar": "1|2|3",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_certificate_cache` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_certificate_key",
@@ -11570,9 +13325,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_certificate_key` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_ciphers",
@@ -11586,9 +13341,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_ciphers` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_conf_command",
@@ -11602,9 +13357,9 @@
       ],
       "grammar": "2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_conf_command` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_crl",
@@ -11618,9 +13373,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_crl` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_name",
@@ -11634,9 +13389,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_name` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_password_file",
@@ -11650,9 +13405,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_password_file` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_protocols",
@@ -11666,9 +13421,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_protocols` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_server_name",
@@ -11682,9 +13437,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_server_name` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_session_reuse",
@@ -11698,9 +13453,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_session_reuse` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_trusted_certificate",
@@ -11714,9 +13469,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_trusted_certificate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_verify",
@@ -11730,9 +13485,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_verify` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_ssl_verify_depth",
@@ -11746,9 +13501,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_ssl_verify_depth` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_store",
@@ -11762,9 +13517,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_store` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_store_access",
@@ -11778,9 +13533,9 @@
       ],
       "grammar": "1|2|3",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_store_access` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_string",
@@ -11793,10 +13548,35 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" (uwsgi_string setting in the uwsgi adapter)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-basic"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-post"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-auto-headers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-intercept-404"
+        }
+      ],
+      "knownDifferences": [
+        "uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:uwsgi_temp_file_write_size",
@@ -11810,9 +13590,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_temp_file_write_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:uwsgi_temp_path",
@@ -11826,9 +13606,9 @@
       ],
       "grammar": "1|2|3|4",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "`uwsgi_temp_path` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
     },
     {
       "id": "http:valid_referers",

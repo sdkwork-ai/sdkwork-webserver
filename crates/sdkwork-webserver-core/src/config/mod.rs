@@ -22,6 +22,7 @@ mod server_name;
 mod server_toml;
 mod source;
 mod sub_filter;
+mod upstream_params;
 mod uri;
 mod validate;
 
@@ -59,8 +60,8 @@ pub use map_variables::{
 pub use model::{
     AccessAction, AccessRuleConfig, AcmeHttp01Config, AppDomainFallbackConfig,
     AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, AutoindexConfig,
-    AutoindexFormat, CachePolicyConfig, CertificateConfig, CertificateSource, CharsetConfig,
-    ClientAuthConfig, ClientAuthMode, ConfigProviderType, CookieRewritePolicyConfig,
+    AutoindexFormat, CachePolicyConfig, CertificateConfig, CertificateSource, CgiUpstreamProtocol,
+    CharsetConfig, ClientAuthConfig, ClientAuthMode, ConfigProviderType, CookieRewritePolicyConfig,
     CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode, GeoConfig, GeoEntryConfig,
     GzipConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig,
     LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol,
@@ -76,10 +77,11 @@ pub use model::{
     SubFilterRule, TlsCertificateResolution, TlsPolicyConfig, TlsVersion, TrustedProxyConfig,
     TrustedProxyHeader, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
     UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar,
-    UpstreamLoadBalancingStrategy, UpstreamPassiveHealthConfig, UpstreamRetryCondition,
-    UpstreamRetryConfig, UpstreamTargetConfig, UpstreamTlsConfig, UpstreamTlsTrustMode,
-    UsageMeteringChannel, UsageMeteringConfig, VirtualHostConfig, WebServerAppConfig,
-    WebServerLimits, XFrameOptions, ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_MAX_RANGES,
+    UpstreamLoadBalancingStrategy, UpstreamParamConfig, UpstreamPassiveHealthConfig,
+    UpstreamRetryCondition, UpstreamRetryConfig, UpstreamTargetConfig, UpstreamTlsConfig,
+    UpstreamTlsTrustMode, UsageMeteringChannel, UsageMeteringConfig, VirtualHostConfig,
+    WebServerAppConfig, WebServerLimits, XFrameOptions, ACME_HTTP_01_CHALLENGE_PREFIX,
+    DEFAULT_MAX_RANGES,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
@@ -121,6 +123,9 @@ pub use source::{
 pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,
 };
+pub use upstream_params::{
+    validate_param_name, validate_param_value, UPSTREAM_PARAM_PREFIXES, UPSTREAM_PARAM_VARIABLES,
+};
 pub use uri::{normalize_uri_path, normalize_uri_path_with_options, UriPathNormalizationError};
 pub use validate::{
     normalize_server_name, normalize_tls_server_name, server_name_covers,
@@ -128,3 +133,29 @@ pub use validate::{
 };
 
 pub(crate) use validate::validate_webserver_config;
+
+/// Whether `name` is an RFC 9110 header-field token (used by configuration
+/// validators that accept upstream header policies).
+pub(crate) fn header_block_token(name: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        })
+}

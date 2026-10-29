@@ -195,11 +195,13 @@ pub fn encode_params(pairs: &[(String, String)]) -> Result<Vec<u8>> {
 }
 
 fn encode_params_payload(pairs: &[(String, String)]) -> Result<Vec<u8>> {
+    // FastCGI 1.0 section 3.4: a name-value pair is `nameLength`,
+    // `valueLength`, `name`, `value` — both lengths precede the bytes.
     let mut encoded = Vec::new();
     for (name, value) in pairs {
         write_length(&mut encoded, name.len())?;
-        encoded.extend_from_slice(name.as_bytes());
         write_length(&mut encoded, value.len())?;
+        encoded.extend_from_slice(name.as_bytes());
         encoded.extend_from_slice(value.as_bytes());
     }
     if encoded.len() > MAX_RECORD_CONTENT_BYTES {
@@ -260,22 +262,23 @@ pub fn decode_params(payload: &[u8], limits: &Limits) -> Result<Vec<(String, Str
     let mut pairs = Vec::new();
     let mut rest = payload;
     while !rest.is_empty() {
-        let (name_length, after_length) = take_length(rest)?;
-        let name = after_length.get(..name_length).ok_or(Error::Truncated {
-            protocol: PROTOCOL,
-            field: "FCGI_PARAMS name",
-            expected: name_length.saturating_sub(after_length.len()),
-        })?;
-        rest = &after_length[name_length..];
-        let (value_length, after_value_length) = take_length(rest)?;
-        let value = after_value_length
-            .get(..value_length)
+        // Both lengths precede the name and value bytes (FastCGI 1.0 §3.4).
+        let (name_length, after_name_length) = take_length(rest)?;
+        let (value_length, after_value_length) = take_length(after_name_length)?;
+        let name = after_value_length
+            .get(..name_length)
             .ok_or(Error::Truncated {
                 protocol: PROTOCOL,
-                field: "FCGI_PARAMS value",
-                expected: value_length.saturating_sub(after_value_length.len()),
+                field: "FCGI_PARAMS name",
+                expected: name_length.saturating_sub(after_value_length.len()),
             })?;
-        rest = &after_value_length[value_length..];
+        let after_name = &after_value_length[name_length..];
+        let value = after_name.get(..value_length).ok_or(Error::Truncated {
+            protocol: PROTOCOL,
+            field: "FCGI_PARAMS value",
+            expected: value_length.saturating_sub(after_name.len()),
+        })?;
+        rest = &after_name[value_length..];
         let name = std::str::from_utf8(name).map_err(|_| Error::InvalidUtf8 {
             protocol: PROTOCOL,
             field: "FCGI_PARAMS name",
@@ -852,7 +855,7 @@ mod tests {
         let short =
             FastCgiParams::from_variables(&[("A".to_owned(), "b".to_owned())], &Limits::default())
                 .expect("short");
-        assert_eq!(short.encode().unwrap(), b"\x01A\x01b");
+        assert_eq!(short.encode().unwrap(), b"\x01\x01Ab");
 
         let long_value = "v".repeat(128);
         let long = FastCgiParams::from_variables(
@@ -861,7 +864,8 @@ mod tests {
         )
         .expect("long");
         let encoded = long.encode().unwrap();
-        assert_eq!(&encoded[..6], &[1, b'A', 0x80, 0, 0, 128]);
+        // name length (1 byte), value length (4-byte form), then name + value.
+        assert_eq!(&encoded[..7], &[1, 0x80, 0, 0, 128, b'A', b'v']);
         assert_eq!(encoded.len(), 6 + 128);
     }
 
@@ -897,9 +901,9 @@ mod tests {
             decode_params(&[0x01, b'A', 0x05, b'b'], &Limits::default()),
             Err(Error::Truncated { .. })
         ));
-        // Non-UTF-8 value.
+        // Non-UTF-8 name (`nameLength=1`, `valueLength=1`, name 0xff, value `A`).
         assert!(matches!(
-            decode_params(&[0x01, b'A', 0x01, 0xff], &Limits::default()),
+            decode_params(&[0x01, 0x01, 0xff, b'A'], &Limits::default()),
             Err(Error::InvalidUtf8 { .. })
         ));
         // Pair-count bound.

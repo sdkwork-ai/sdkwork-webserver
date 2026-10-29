@@ -142,6 +142,7 @@ sdkwork-webserver-agent = { path = "crates/sdkwork-webserver-agent" }
 sdkwork-webserver-certificate-worker = { path = "crates/sdkwork-webserver-certificate-worker" }
 sdkwork-webserver-contract = { path = "crates/sdkwork-webserver-contract" }
 sdkwork-webserver-core = { path = "crates/sdkwork-webserver-core" }
+sdkwork-webserver-upstream-protocol = { path = "crates/sdkwork-webserver-upstream-protocol" }
 sdkwork-webserver-tunnel-core = { path = "crates/sdkwork-webserver-tunnel-core" }
 sdkwork-webserver-tunnel-protocol = { path = "crates/sdkwork-webserver-tunnel-protocol" }
 sdkwork-webserver-tunnel-transport = { path = "crates/sdkwork-webserver-tunnel-transport" }

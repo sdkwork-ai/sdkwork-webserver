@@ -1285,6 +1285,44 @@ pub struct ResolverConfig {
     pub max_concurrent_queries: usize,
 }
 
+/// One `fastcgi_param NAME VALUE [if_not_empty];` entry of a FastCGI resource.
+///
+/// `name` must be a FastCGI parameter name token (ASCII alphanumerics and `_`)
+/// and `value` is a template over the supported upstream variable vocabulary;
+/// the materializer validates both. `if_not_empty` mirrors nginx's
+/// `fastcgi_param ... if_not_empty`: when the expanded value is empty the
+/// parameter is omitted instead of sent with an empty value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpstreamParamConfig {
+    pub name: String,
+    pub value: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub if_not_empty: bool,
+}
+
+fn default_fastcgi_connect_timeout_ms() -> u64 {
+    // nginx `fastcgi_connect_timeout` default.
+    60_000
+}
+
+fn default_fastcgi_io_timeout_ms() -> u64 {
+    // nginx `fastcgi_send_timeout` / `fastcgi_read_timeout` default.
+    60_000
+}
+
+fn default_upstream_pass_request_headers() -> bool {
+    true
+}
+
+/// Upstream CGI-family protocol of a [`ResourceConfig::CgiUpstream`] resource.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CgiUpstreamProtocol {
+    Uwsgi,
+    Scgi,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     tag = "type",
@@ -1367,6 +1405,138 @@ pub enum ResourceConfig {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         proxy_response_policy: Option<ProxyResponsePolicyConfig>,
     },
+    /// nginx `fastcgi_pass` location handler: the FastCGI 1.0 upstream adapter
+    /// executes only the bounded directive subset below; unsupported FastCGI
+    /// directives fail closed at materialization with a located diagnostic.
+    FastCgi {
+        id: String,
+        /// Upstream id resolved by the materializer (a literal `host:port`
+        /// target or a declared `upstream` name).
+        upstream_ref: String,
+        /// `fastcgi_param` entries in effective order (a level that declares any
+        /// `fastcgi_param` replaces the inherited list, nginx inheritance).
+        #[serde(default)]
+        params: Vec<UpstreamParamConfig>,
+        /// `fastcgi_index`: appended to `$fastcgi_script_name` for requests
+        /// whose URI ends with `/`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<String>,
+        /// `fastcgi_split_path_info`: a regex with exactly two capture groups.
+        /// Captures 1/2 become `$fastcgi_script_name` / `$fastcgi_path_info`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        split_path_info: Option<String>,
+        /// Effective nginx `root` for the location (from `root`, inherited from
+        /// the server, or empty), used by `$document_root` and
+        /// `$request_filename`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document_root: Option<String>,
+        /// `fastcgi_pass_request_headers off`: suppress the automatic
+        /// `HTTP_<name>` request-header parameters.
+        #[serde(default = "default_upstream_pass_request_headers")]
+        pass_request_headers: bool,
+        /// `fastcgi_keep_conn`: sent in `BEGIN_REQUEST`. Connection reuse across
+        /// requests is not implemented (the adapter closes the upstream
+        /// connection after the response), which matches nginx's default-off
+        /// behaviour and only changes connection lifetime when explicitly on.
+        #[serde(default)]
+        keep_conn: bool,
+        /// `fastcgi_buffering` (materialized; the adapter always buffers the
+        /// bounded response, see crate docs for the bounded-difference note).
+        #[serde(default = "default_true")]
+        buffering: bool,
+        /// `fastcgi_request_buffering` (materialized; request bodies are
+        /// buffered bounded before the upstream exchange).
+        #[serde(default = "default_true")]
+        request_buffering: bool,
+        #[serde(default = "default_fastcgi_connect_timeout_ms")]
+        connect_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        send_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        read_timeout_ms: u64,
+        /// `fastcgi_hide_header` / `fastcgi_pass_header` / `fastcgi_ignore_headers`
+        /// resolved policy for the upstream response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        response_policy: Option<ProxyResponsePolicyConfig>,
+        /// `fastcgi_intercept_errors on`: an upstream error status is replaced
+        /// by the matched `error_page` target.
+        #[serde(default)]
+        intercept_errors: bool,
+        /// `fastcgi_next_upstream` / `fastcgi_next_upstream_tries` /
+        /// `fastcgi_next_upstream_timeout` as the runtime retry policy.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry: Option<UpstreamRetryConfig>,
+    },
+    /// nginx `memcached_pass` location handler: bounded text-protocol GET/HEAD
+    /// against one memcached upstream. The request key is the expansion of the
+    /// location's `set $memcached_key <value>` template (the only `set` form the
+    /// bounded materializer executes).
+    Memcached {
+        id: String,
+        /// Upstream id resolved by the materializer (literal `host:port` or a
+        /// declared `upstream`).
+        upstream_ref: String,
+        /// `set $memcached_key <value>` template, expanded per request.
+        key_template: String,
+        #[serde(default = "default_true")]
+        buffering: bool,
+        #[serde(default = "default_fastcgi_connect_timeout_ms")]
+        connect_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        send_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        read_timeout_ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry: Option<UpstreamRetryConfig>,
+    },
+    /// nginx `uwsgi_pass` / `scgi_pass` location handler: the uWSGI and SCGI
+    /// CGI-family adapters share the FastCGI parameter pipeline and a raw HTTP
+    /// response (nginx parses both modules' responses with the upstream header
+    /// machinery).
+    CgiUpstream {
+        id: String,
+        protocol: CgiUpstreamProtocol,
+        /// Upstream id resolved by the materializer (literal `host:port` or a
+        /// declared `upstream`).
+        upstream_ref: String,
+        /// `uwsgi_param` / `scgi_param` entries in effective order.
+        #[serde(default)]
+        params: Vec<UpstreamParamConfig>,
+        /// Effective nginx `root` for the location.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        document_root: Option<String>,
+        /// `*_pass_request_headers off`: suppress automatic `HTTP_<name>` params.
+        #[serde(default = "default_upstream_pass_request_headers")]
+        pass_request_headers: bool,
+        /// `*_buffering` (materialized; the adapter always buffers bounded).
+        #[serde(default = "default_true")]
+        buffering: bool,
+        /// `*_request_buffering` (materialized; request bodies are buffered bounded).
+        #[serde(default = "default_true")]
+        request_buffering: bool,
+        #[serde(default = "default_fastcgi_connect_timeout_ms")]
+        connect_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        send_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        read_timeout_ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        response_policy: Option<ProxyResponsePolicyConfig>,
+        #[serde(default)]
+        intercept_errors: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry: Option<UpstreamRetryConfig>,
+        /// nginx `uwsgi_modifier1` (uWSGI only; default 0 = WSGI request).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        modifier1: Option<u8>,
+        /// nginx `uwsgi_modifier2` (uWSGI only; default 0).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        modifier2: Option<u8>,
+        /// nginx `uwsgi_string`: extra variable bytes appended to the uWSGI
+        /// packet (uWSGI only).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        extra_string: Option<String>,
+    },
     Redirect {
         id: String,
         status: u16,
@@ -1417,6 +1587,9 @@ impl ResourceConfig {
         match self {
             Self::Static { id, .. }
             | Self::Proxy { id, .. }
+            | Self::FastCgi { id, .. }
+            | Self::CgiUpstream { id, .. }
+            | Self::Memcached { id, .. }
             | Self::Redirect { id, .. }
             | Self::EmptyGif { id }
             | Self::StubStatus { id }
@@ -1430,6 +1603,9 @@ impl ResourceConfig {
         match self {
             Self::Static { id: current, .. }
             | Self::Proxy { id: current, .. }
+            | Self::FastCgi { id: current, .. }
+            | Self::CgiUpstream { id: current, .. }
+            | Self::Memcached { id: current, .. }
             | Self::Redirect { id: current, .. }
             | Self::EmptyGif { id: current }
             | Self::StubStatus { id: current }
@@ -1459,6 +1635,9 @@ impl ResourceConfig {
             Self::Knowledgebase { .. } => Some(ConfigProviderType::Knowledgebase),
             Self::Static { .. }
             | Self::Proxy { .. }
+            | Self::FastCgi { .. }
+            | Self::CgiUpstream { .. }
+            | Self::Memcached { .. }
             | Self::Redirect { .. }
             | Self::EmptyGif { .. }
             | Self::StubStatus { .. }
@@ -1480,6 +1659,9 @@ impl ResourceConfig {
             } => Some(provider_resource_uuid),
             Self::Static { .. }
             | Self::Proxy { .. }
+            | Self::FastCgi { .. }
+            | Self::CgiUpstream { .. }
+            | Self::Memcached { .. }
             | Self::Redirect { .. }
             | Self::EmptyGif { .. }
             | Self::StubStatus { .. }
@@ -1493,6 +1675,9 @@ impl ResourceConfig {
             Self::Drive { cache, .. } | Self::Knowledgebase { cache, .. } => *cache,
             Self::Static { .. }
             | Self::Proxy { .. }
+            | Self::FastCgi { .. }
+            | Self::CgiUpstream { .. }
+            | Self::Memcached { .. }
             | Self::Redirect { .. }
             | Self::EmptyGif { .. }
             | Self::StubStatus { .. }

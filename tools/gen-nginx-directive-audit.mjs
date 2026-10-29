@@ -53,13 +53,13 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '65b1dd40';
+const AUDIT_HEAD = '1bcfd615';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b and 4a (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a and the upstream-protocol wave (wave 5) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
-const REMAINING_WAVE = 'wave 3 backlog';
+const REMAINING_WAVE = 'remaining backlog';
 
 /** Ordered decision vocabulary used by the ledger. */
 const DECISION_ORDER = [
@@ -176,6 +176,69 @@ const COMPLETED_WAVES = [
     summary:
       'geo and split_clients variable blocks plus the referer module (valid_referers / $invalid_referer)',
     ids: ['http:geo', 'http:split_clients', 'http:valid_referers'],
+  },
+  {
+    key: 'wave 5 (upstream-protocol)',
+    summary:
+      'FastCGI/uWSGI/SCGI/memcached end-to-end implemented forms plus the bounded memcached-backed `set` variable form',
+    ids: [
+      'http:fastcgi_buffering',
+      'http:fastcgi_connect_timeout',
+      'http:fastcgi_hide_header',
+      'http:fastcgi_index',
+      'http:fastcgi_intercept_errors',
+      'http:fastcgi_keep_conn',
+      'http:fastcgi_next_upstream',
+      'http:fastcgi_next_upstream_timeout',
+      'http:fastcgi_next_upstream_tries',
+      'http:fastcgi_param',
+      'http:fastcgi_pass',
+      'http:fastcgi_pass_header',
+      'http:fastcgi_pass_request_headers',
+      'http:fastcgi_read_timeout',
+      'http:fastcgi_request_buffering',
+      'http:fastcgi_send_timeout',
+      'http:fastcgi_split_path_info',
+      'http:memcached_connect_timeout',
+      'http:memcached_next_upstream',
+      'http:memcached_next_upstream_timeout',
+      'http:memcached_next_upstream_tries',
+      'http:memcached_pass',
+      'http:memcached_read_timeout',
+      'http:memcached_send_timeout',
+      'http:scgi_buffering',
+      'http:scgi_connect_timeout',
+      'http:scgi_hide_header',
+      'http:scgi_intercept_errors',
+      'http:scgi_next_upstream',
+      'http:scgi_next_upstream_timeout',
+      'http:scgi_next_upstream_tries',
+      'http:scgi_param',
+      'http:scgi_pass',
+      'http:scgi_pass_header',
+      'http:scgi_pass_request_headers',
+      'http:scgi_read_timeout',
+      'http:scgi_request_buffering',
+      'http:scgi_send_timeout',
+      'http:set',
+      'http:uwsgi_buffering',
+      'http:uwsgi_connect_timeout',
+      'http:uwsgi_hide_header',
+      'http:uwsgi_intercept_errors',
+      'http:uwsgi_modifier1',
+      'http:uwsgi_modifier2',
+      'http:uwsgi_next_upstream',
+      'http:uwsgi_next_upstream_timeout',
+      'http:uwsgi_next_upstream_tries',
+      'http:uwsgi_param',
+      'http:uwsgi_pass',
+      'http:uwsgi_pass_header',
+      'http:uwsgi_pass_request_headers',
+      'http:uwsgi_read_timeout',
+      'http:uwsgi_request_buffering',
+      'http:uwsgi_send_timeout',
+      'http:uwsgi_string',
+    ],
   },
 ];
 
@@ -327,6 +390,210 @@ const REMAINING_GAP_CATEGORIES = [
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables)',
     tests: 'stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6',
   },
+  {
+    key: 'grpc-wiring',
+    label: 'gRPC wiring',
+    priority: 'high (next wave)',
+    ids: [
+      'http:grpc_bind',
+      'http:grpc_buffer_size',
+      'http:grpc_connect_timeout',
+      'http:grpc_hide_header',
+      'http:grpc_ignore_headers',
+      'http:grpc_intercept_errors',
+      'http:grpc_next_upstream',
+      'http:grpc_next_upstream_timeout',
+      'http:grpc_next_upstream_tries',
+      'http:grpc_pass',
+      'http:grpc_pass_header',
+      'http:grpc_read_timeout',
+      'http:grpc_send_timeout',
+      'http:grpc_set_header',
+      'http:grpc_socket_keepalive',
+      'http:grpc_ssl_certificate',
+      'http:grpc_ssl_certificate_cache',
+      'http:grpc_ssl_certificate_key',
+      'http:grpc_ssl_ciphers',
+      'http:grpc_ssl_conf_command',
+      'http:grpc_ssl_crl',
+      'http:grpc_ssl_name',
+      'http:grpc_ssl_password_file',
+      'http:grpc_ssl_protocols',
+      'http:grpc_ssl_server_name',
+      'http:grpc_ssl_session_reuse',
+      'http:grpc_ssl_trusted_certificate',
+      'http:grpc_ssl_verify',
+      'http:grpc_ssl_verify_depth',
+    ],
+    rejectedLoss:
+      'a stock nginx.conf that proxies to a gRPC upstream fails to activate.',
+    why: 'the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile.',
+    surface:
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests',
+  },
+  {
+    key: 'fastcgi-residual',
+    label: 'FastCGI residual forms',
+    priority: 'medium',
+    ids: [
+      'http:fastcgi_bind',
+      'http:fastcgi_buffer_size',
+      'http:fastcgi_buffers',
+      'http:fastcgi_busy_buffers_size',
+      'http:fastcgi_cache',
+      'http:fastcgi_cache_background_update',
+      'http:fastcgi_cache_bypass',
+      'http:fastcgi_cache_key',
+      'http:fastcgi_cache_lock',
+      'http:fastcgi_cache_lock_age',
+      'http:fastcgi_cache_lock_timeout',
+      'http:fastcgi_cache_max_range_offset',
+      'http:fastcgi_cache_methods',
+      'http:fastcgi_cache_min_uses',
+      'http:fastcgi_cache_path',
+      'http:fastcgi_cache_revalidate',
+      'http:fastcgi_cache_use_stale',
+      'http:fastcgi_cache_valid',
+      'http:fastcgi_catch_stderr',
+      'http:fastcgi_force_ranges',
+      'http:fastcgi_ignore_client_abort',
+      'http:fastcgi_ignore_headers',
+      'http:fastcgi_limit_rate',
+      'http:fastcgi_max_temp_file_size',
+      'http:fastcgi_no_cache',
+      'http:fastcgi_pass_request_body',
+      'http:fastcgi_send_lowat',
+      'http:fastcgi_socket_keepalive',
+      'http:fastcgi_store',
+      'http:fastcgi_store_access',
+      'http:fastcgi_temp_file_write_size',
+      'http:fastcgi_temp_path',
+    ],
+    rejectedLoss:
+      'the directive is rejected at load; a stock nginx.conf that uses this FastCGI sub-family fails to activate.',
+    why: 'the implemented FastCGI request/response forms now execute end-to-end; the remaining cache/buffer/store/SSL sub-families, unix-socket/variable targets and connection-pool knobs are unimplemented and are backlog, not profile exclusions.',
+    surface:
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/fastcgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
+  },
+  {
+    key: 'uwsgi-residual',
+    label: 'uWSGI residual forms',
+    priority: 'medium',
+    ids: [
+      'http:uwsgi_bind',
+      'http:uwsgi_buffer_size',
+      'http:uwsgi_buffers',
+      'http:uwsgi_busy_buffers_size',
+      'http:uwsgi_cache',
+      'http:uwsgi_cache_background_update',
+      'http:uwsgi_cache_bypass',
+      'http:uwsgi_cache_key',
+      'http:uwsgi_cache_lock',
+      'http:uwsgi_cache_lock_age',
+      'http:uwsgi_cache_lock_timeout',
+      'http:uwsgi_cache_max_range_offset',
+      'http:uwsgi_cache_methods',
+      'http:uwsgi_cache_min_uses',
+      'http:uwsgi_cache_path',
+      'http:uwsgi_cache_revalidate',
+      'http:uwsgi_cache_use_stale',
+      'http:uwsgi_cache_valid',
+      'http:uwsgi_force_ranges',
+      'http:uwsgi_ignore_client_abort',
+      'http:uwsgi_ignore_headers',
+      'http:uwsgi_limit_rate',
+      'http:uwsgi_max_temp_file_size',
+      'http:uwsgi_no_cache',
+      'http:uwsgi_pass_request_body',
+      'http:uwsgi_socket_keepalive',
+      'http:uwsgi_ssl_certificate',
+      'http:uwsgi_ssl_certificate_cache',
+      'http:uwsgi_ssl_certificate_key',
+      'http:uwsgi_ssl_ciphers',
+      'http:uwsgi_ssl_conf_command',
+      'http:uwsgi_ssl_crl',
+      'http:uwsgi_ssl_name',
+      'http:uwsgi_ssl_password_file',
+      'http:uwsgi_ssl_protocols',
+      'http:uwsgi_ssl_server_name',
+      'http:uwsgi_ssl_session_reuse',
+      'http:uwsgi_ssl_trusted_certificate',
+      'http:uwsgi_ssl_verify',
+      'http:uwsgi_ssl_verify_depth',
+      'http:uwsgi_store',
+      'http:uwsgi_store_access',
+      'http:uwsgi_temp_file_write_size',
+      'http:uwsgi_temp_path',
+    ],
+    rejectedLoss:
+      'the directive is rejected at load; a stock nginx.conf that uses this uWSGI sub-family fails to activate.',
+    why: 'the implemented uWSGI request/response forms now execute end-to-end; the remaining cache/buffer/store/SSL sub-families, unix-socket/variable targets and connection-pool knobs are unimplemented and are backlog, not profile exclusions.',
+    surface:
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/uwsgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
+  },
+  {
+    key: 'scgi-residual',
+    label: 'SCGI residual forms',
+    priority: 'medium',
+    ids: [
+      'http:scgi_bind',
+      'http:scgi_buffer_size',
+      'http:scgi_buffers',
+      'http:scgi_busy_buffers_size',
+      'http:scgi_cache',
+      'http:scgi_cache_background_update',
+      'http:scgi_cache_bypass',
+      'http:scgi_cache_key',
+      'http:scgi_cache_lock',
+      'http:scgi_cache_lock_age',
+      'http:scgi_cache_lock_timeout',
+      'http:scgi_cache_max_range_offset',
+      'http:scgi_cache_methods',
+      'http:scgi_cache_min_uses',
+      'http:scgi_cache_path',
+      'http:scgi_cache_revalidate',
+      'http:scgi_cache_use_stale',
+      'http:scgi_cache_valid',
+      'http:scgi_force_ranges',
+      'http:scgi_ignore_client_abort',
+      'http:scgi_ignore_headers',
+      'http:scgi_limit_rate',
+      'http:scgi_max_temp_file_size',
+      'http:scgi_no_cache',
+      'http:scgi_pass_request_body',
+      'http:scgi_socket_keepalive',
+      'http:scgi_store',
+      'http:scgi_store_access',
+      'http:scgi_temp_file_write_size',
+      'http:scgi_temp_path',
+    ],
+    rejectedLoss:
+      'the directive is rejected at load; a stock nginx.conf that uses this SCGI sub-family fails to activate.',
+    why: 'the implemented SCGI request/response forms now execute end-to-end; the remaining cache/buffer/store/SSL sub-families, unix-socket/variable targets and connection-pool knobs are unimplemented and are backlog, not profile exclusions.',
+    surface:
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/scgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
+  },
+  {
+    key: 'memcached-residual',
+    label: 'memcached residual forms',
+    priority: 'low',
+    ids: [
+      'http:memcached_bind',
+      'http:memcached_buffer_size',
+      'http:memcached_gzip_flag',
+      'http:memcached_socket_keepalive',
+    ],
+    rejectedLoss:
+      'the directive is rejected at load; a stock nginx.conf that uses this memcached sub-family fails to activate.',
+    why: 'the implemented memcached request/response forms now execute end-to-end; the remaining bind/buffer/socket-pool and gzip-flag knobs are unimplemented and are backlog, not profile exclusions.',
+    surface:
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/memcached.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-protocols with buffer/socket/gzip-flag cases',
+  },
 
 ];
 
@@ -431,22 +698,6 @@ const RUNTIME_OWNED_NOTES = new Map([
 /** Out-of-profile groups: excluded by PRD-nginx-compatibility section 4. */
 const OUT_OF_PROFILE_REASONS = [
   [
-    /^ngx_http_fastcgi_module$/,
-    'FastCGI execution is excluded by PRD section 4 (embedded CGI family); it would need a FastCGI record-protocol client plus the CGI-variable security model.',
-  ],
-  [
-    /^ngx_http_uwsgi_module$/,
-    'uWSGI execution is excluded by PRD section 4; it would need the uWSGI packet protocol and argument marshalling.',
-  ],
-  [
-    /^ngx_http_scgi_module$/,
-    'SCGI execution is excluded by PRD section 4 (embedded CGI family); it would need SCGI framing and a CGI environment model.',
-  ],
-  [
-    /^ngx_http_memcached_module$/,
-    'memcached execution is excluded by PRD section 4; it would need a memcached protocol client plus cache-status mapping.',
-  ],
-  [
     /^ngx_http_perl_module$/,
     'embedded Perl execution is excluded by PRD section 4.',
   ],
@@ -480,7 +731,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_grpc_module$/,
-    'gRPC upstream execution is not in http-core-v1; it would need an HTTP/2 gRPC framing/trailer surface and is rejected.',
+    'gRPC wiring is tracked as the next wave in the remaining backlog, not as a profile exclusion.',
   ],
   [
     /^ngx_http_v2_module$/,
@@ -516,7 +767,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_rewrite_module$/,
-    '`if`/`set`/`break`/`rewrite_log` are outside the bounded rewrite state machine; only `return`, `rewrite` and `try_files` execute.',
+    '`if`/`break`/`rewrite_log` are outside the bounded rewrite state machine; `set`, `return`, `rewrite` and `try_files` execute.',
   ],
   [
     /^ngx_http_browser_module$/,
@@ -1256,6 +1507,41 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'unit test asserts wildcard/path/regex matching and missing-header validity; differential cases compare the resolved $invalid_referer against nginx',
   },
+  {
+    id: 'http:fastcgi_pass',
+    evidence: 'tests/nginx/differential-protocols/battery.py::basic-get',
+    claim: 'fastcgi_pass proxies to a FastCGI responder with nginx-exact params and response',
+    proves:
+      'the real-nginx oracle and the Rust data plane return byte-identical status/headers/body for GET, POST upload, split-path-info, intercept, retry, 503 and HEAD cases with a deterministic mock FastCGI responder',
+  },
+  {
+    id: 'http:uwsgi_pass',
+    evidence: 'tests/nginx/differential-protocols/battery.py::uwsgi-basic',
+    claim: 'uwsgi_pass proxies to a uWSGI responder',
+    proves:
+      'differential cases compare basic GET, POST upload, auto-generated CGI headers and intercept-404 against nginx 1.29.6',
+  },
+  {
+    id: 'http:scgi_pass',
+    evidence: 'tests/nginx/differential-protocols/battery.py::scgi-basic',
+    claim: 'scgi_pass proxies to an SCGI responder',
+    proves:
+      'differential cases compare basic GET, POST upload, auto-generated CGI headers and intercept-404 against nginx 1.29.6',
+  },
+  {
+    id: 'http:memcached_pass',
+    evidence: 'tests/nginx/differential-protocols/battery.py::memcached-hit',
+    claim: 'memcached_pass proxies a key lookup to a memcached responder',
+    proves:
+      'differential cases compare hit, HEAD, large value, miss, raw-error 502 and POST against nginx 1.29.6 with a deterministic mock memcached responder',
+  },
+  {
+    id: 'http:set',
+    evidence: 'tests/nginx/differential-protocols/battery.py::memcached-hit',
+    claim: 'the bounded `set $memcached_key` form feeds the memcached adapter',
+    proves:
+      'the location-scoped set variable is consumed by memcached_pass in the hit/miss differential cases; other set variables/sources fail closed',
+  },
 ];
 
 /**
@@ -1546,7 +1832,7 @@ function renderHeader(inventory, catalog) {
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
-  3a-2, 3b and 4a.** The code, tests, generated operator matrix and the re-synced directive
+  3a-2, 3b, 4a and the upstream-protocol wave (wave 5).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -1555,10 +1841,11 @@ function renderHeader(inventory, catalog) {
   policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
   (autoindex family, empty_gif, stub_status), Wave 3b (h2 stream ceiling,
-  proxy_method, stream allow/deny and literal return) and Wave 4a (geo and
-  split_clients variable blocks plus valid_referers) are recorded as completed in
-  section 3, and every one of them is asserted executable by
-  \`--verify-evidence\`.
+  proxy_method, stream allow/deny and literal return), Wave 4a (geo and
+  split_clients variable blocks plus valid_referers) and the upstream-protocol wave
+  (FastCGI/uWSGI/SCGI/memcached implemented forms plus the bounded memcached-backed
+  \`set\` form) are recorded as completed in section 3, and every one of them is
+  asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -1663,7 +1950,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b and 4a landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a and the upstream-protocol wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -1698,7 +1985,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-Wave-4a worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-upstream-protocol worktree, not a hand-maintained table; section 6 states
    the exact commands and the wave-3 landing procedure.
 `;
 }
@@ -1772,7 +2059,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -1783,7 +2070,9 @@ user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plu
 empty_gif and stub_status location handlers; Wave 3b added the advertised HTTP/2
 stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return;
 Wave 4a added the geo and split_clients variable blocks and the referer module
-(valid_referers / $invalid_referer).
+(valid_referers / $invalid_referer); the upstream-protocol wave moved FastCGI, uWSGI,
+SCGI and memcached from out-of-profile to executable for their implemented
+request/response forms and added the bounded memcached-backed \`set\` variable form.
 
 ${completedTable}
 ${completedRows}
@@ -1799,7 +2088,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-Wave 4a. An accepted-unenforced row is silently ignored today; a rejected row fails
+the upstream-protocol wave. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1807,18 +2096,17 @@ have to change, and the tests to add.
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest remaining item is a bounded **re-entrant subrequest
-engine**: the addition filter, \`auth_request\` and mirror all need nested subrequests
-that themselves proxy or serve, which the current internal-redirect/error-page engine
-cannot bound under PRD section 6. The stream advanced gaps are the next-largest surface
-(shared zone state for limit_conn, a stream variable engine for set/map, and an upstream
-TLS client for proxy_ssl identity). The userid, browser, random_index, degradation and
-slice modules are self-contained module-sized work. \`chunked_transfer_encoding\` and the
-static open-file cache are now precisely bounded: the pinned hyper HTTP/1.1 encoder
-cannot emit a close-delimited 1.1 response, and the open-file cache is a performance
-cache whose only semantic contract is staleness bounds. Two rows are architecture-blocked
-rather than effort-blocked: \`http2_chunk_size\` (hyper/h2 exposes no DATA-chunk knob) and
-the OCSP/trust-chain rows (rustls exposes no stapling/OCSP-fetch surface).
+Within the backlog, the largest surface is the residual sub-families of the four landed
+protocol modules (110 directives: cache/buffer/store/SSL, unix/variable targets and
+connection-pool knobs), followed by gRPC wiring (29): the shared upstream-protocol
+substrate has codecs for both, but the data-plane adapters are not complete. The
+bounded **re-entrant subrequest engine** (addition filter, \`auth_request\`, mirror) is
+the largest HTTP-side item, then the stream advanced gaps (zone state, stream variable
+engine, upstream TLS client). userid, browser, random_index, degradation and slice are
+self-contained module-sized work. \`chunked_transfer_encoding\` and the static open-file
+cache are precisely bounded (hyper HTTP/1.1 close-delimited framing; staleness-only
+performance cache), while \`http2_chunk_size\` and the OCSP/trust-chain rows are
+architecture-blocked (hyper/h2; rustls).
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -1866,7 +2154,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a and the upstream-protocol wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1973,25 +2261,27 @@ feature below.
 
 ${excludedByModule.map(([module, count]) => `- \`${module}\` - ${count} directive(s)`).join('\n')}
 
-What implementing each group would actually require:
+After the upstream-protocol wave, only the mail proxy, embedded Perl, GeoIP and dynamic
+module loading remain outside the declared profile. All four embedded application
+protocol modules moved **into** the profile and are audited in the ledger.
+
+What implementing each remaining group would actually require:
 
 | Group | Directives | What full parity would require |
 | --- | ---: | --- |
-| FastCGI | ${outOfProfile.filter((row) => row.module === 'ngx_http_fastcgi_module').length} | a FastCGI record-protocol client, request/response stream framing, CGI-variable marshalling, and a security model for app-supplied params; a separate protocol product surface with its own conformance corpus. |
-| uWSGI | ${outOfProfile.filter((row) => row.module === 'ngx_http_uwsgi_module').length} | the uWSGI packet protocol (modifier1/modifier2), params/body marshalling, and its own upstream TLS/cache policy surface. |
-| SCGI | ${outOfProfile.filter((row) => row.module === 'ngx_http_scgi_module').length} | SCGI netstring framing plus a CGI environment model; same security review as FastCGI. |
-| memcached | ${outOfProfile.filter((row) => row.module === 'ngx_http_memcached_module').length} | a memcached text/binary protocol client and cache-status mapping into the response pipeline. |
 | Mail proxy (SMTP/IMAP/POP3 + auth) | ${outOfProfile.filter((row) => row.module.startsWith('ngx_mail')).length} | three protocol state machines, STARTTLS, auth backends (HTTP/IMAP/POP3), and a mail-specific security review. |
 | Perl | ${outOfProfile.filter((row) => row.module === 'ngx_http_perl_module').length} | an embedded Perl interpreter - executable configuration, explicitly excluded. |
 | GeoIP | ${outOfProfile.filter((row) => row.module.includes('geoip')).length} | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | ${outOfProfile.filter((row) => row.module === 'ngx_core_module').length} | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
-Substrate note: a new crate, \`crates/sdkwork-webserver-upstream-protocol\`, has landed
-with FastCGI/uWSGI/SCGI/memcached/gRPC codecs and 89 tests. It is **not wired into the
-data plane yet**, so the corresponding nginx modules remain out-of-profile / fail-closed
-in this ledger. Wiring it would satisfy the protocol-codec half of the work above but
-still leaves the CGI-variable/security model, cache/status mapping, conformance corpus
-and the deployment-profile decision to be made separately.
+Substrate note: the landed \`crates/sdkwork-webserver-upstream-protocol\` substrate
+(FastCGI/uWSGI/SCGI/memcached/gRPC codecs, 89 tests) is now wired end-to-end for the four
+embedded protocols through \`crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs\`
+and the new \`tests/nginx/differential-protocols\` slice (26 cases, byte-identical against
+nginx 1.29.6). Implemented request/response forms execute; the residual cache/buffer/store/
+SSL sub-families and unix/variable-target/connection-pool knobs are backlog rows, not
+profile exclusions. gRPC wiring is the next wave: the grpc_* module is backlog, not
+excluded.
 
 ### 5.3 Fail-Closed Groups (${failClosed.length} directives, top modules)
 
@@ -2001,13 +2291,12 @@ Representative implementation cost:
 
 | Group | Directives | What parity would require |
 | --- | ---: | --- |
-| gRPC upstream (\`ngx_http_grpc_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_grpc_module').length} | an HTTP/2 gRPC transport with trailers, status mapping, :authority handling, upstream TLS/SNI policy, retry policy - a second proxy protocol family. |
 | Rejected proxy knobs (\`ngx_http_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_proxy_module').length} | cache locking/background update/bypass/method sets, body substitution, upstream-trust knobs: each is a bounded policy feature with its own security review. |
 | Rejected stream plumbing (\`ngx_stream_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_stream_proxy_module').length} | buffer sizing, TLS library caches/commands/CRL/password-file knobs; the routing/identity subset is instead in the wave-3 backlog. |
 | TLS extras (CRL/OCSP-response/ECH/ticket files) | ${failClosed.filter((row) => row.module === 'ngx_http_ssl_module' || row.module === 'ngx_stream_ssl_module').length} | rustls feature gaps (OCSP response handling, raw public keys, certificate compression, session ticket key files) plus a certificate-material pipeline. |
 | HTTP/3 + QUIC (\`ngx_http_v3_module\`, \`ngx_quic_bpf_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_v3_module' || row.module === 'ngx_quic_bpf_module').length} | a QUIC transport (UDP, TLS 1.3 QUIC keys, connection migration, congestion control) - a separate transport product, explicitly excluded by PRD section 4. |
 | Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | ${failClosed.filter((row) => ['ngx_http_ssi_filter_module', 'ngx_http_xslt_filter_module', 'ngx_http_image_filter_module', 'ngx_http_mp4_module', 'ngx_http_flv_module', 'ngx_http_empty_gif_module'].includes(row.module)).length} | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
-| \`if\`/\`set\` rewrite control (\`ngx_http_rewrite_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_rewrite_module').length} | a general conditional rewrite interpreter - contradicts the bounded rewrite state machine PRD section 6 requires. |
+| \`if\`/\`break\` rewrite control (\`ngx_http_rewrite_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_rewrite_module').length} | a general conditional rewrite interpreter - contradicts the bounded rewrite state machine PRD section 6 requires. |
 
 ### 5.4 Lua, njs, And Third-Party Modules
 
@@ -2021,13 +2310,15 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 
 ### 5.5 Conclusion
 
-A "parity" target would require: five extra application protocols (FastCGI/uWSGI/SCGI/
-memcached/gRPC), three mail protocols, a QUIC transport, three embedded languages/filters,
-and operator-tunable internals that the Rust runtime replaces by design - while the
-deployment profile forbids the stock nginx process those features exist to serve. The
-coherent target is the declared \`${PROFILE}\` profile with the four PRD section 2 grades
-(parse, semantic, behavioral, operational), a generated directive catalog, and a
-versioned evidence revision. That is what this ledger audits.
+A "parity" target would still require: the mail proxy (three protocols), embedded Perl,
+GeoIP, a QUIC transport, embedded template/language filters, dynamic module loading, and
+the residual protocol sub-families plus the gRPC adapter that are now backlog rather than
+profile exclusions. Four embedded application protocols (FastCGI/uWSGI/SCGI/memcached)
+are no longer in that excluded set: their implemented forms execute end-to-end on the
+Rust data plane against nginx 1.29.6. The coherent target remains the declared
+\`${PROFILE}\` profile with the four PRD section 2 grades (parse, semantic, behavioral,
+operational), a generated directive catalog, and a versioned evidence revision. That is
+what this ledger audits.
 `;
 }
 
@@ -2060,8 +2351,9 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after Wave 4a landed and the Lead re-synced the catalog.
-The table lists the cumulative completed-wave rows and their current state:
+This refresh was regenerated after the upstream-protocol wave landed and the Lead
+re-synced the catalog. The table lists the cumulative completed-wave rows and their
+current state:
 
 | Directive | Wave | Current state |
 | --- | --- | --- |

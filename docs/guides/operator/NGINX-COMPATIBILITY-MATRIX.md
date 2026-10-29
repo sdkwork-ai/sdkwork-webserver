@@ -35,10 +35,10 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 119 |
+| executable | 175 |
 | accepted, NOT enforced | 171 |
-| rejected (fail closed) | 225 |
-| excluded from profile | 229 |
+| rejected (fail closed) | 334 |
+| excluded from profile | 64 |
 | **total** | **744** |
 
 ## Differences From Nginx And Migration Guide
@@ -87,6 +87,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_core_module` (16) — `aio`, `aio_write`, `auth_delay`, `client_body_in_file_only`, `client_body_in_single_buffer`, `client_body_temp_path`, `early_hints`, `keepalive_min_timeout`, `limit_except`, `limit_rate`, `limit_rate_after`, `open_file_cache_errors`, `open_file_cache_events`, `post_action`, `satisfy`, `subrequest_output_buffer_size`
 - `ngx_http_dav_module` (4) — `create_full_put_path`, `dav_access`, `dav_methods`, `min_delete_depth`
 - `ngx_http_degradation_module` (2) — `degradation`, `degrade`
+- `ngx_http_fastcgi_module` (32) — `fastcgi_bind`, `fastcgi_buffer_size`, `fastcgi_buffers`, `fastcgi_busy_buffers_size`, `fastcgi_cache`, `fastcgi_cache_background_update`, `fastcgi_cache_bypass`, `fastcgi_cache_key`, `fastcgi_cache_lock`, `fastcgi_cache_lock_age`, `fastcgi_cache_lock_timeout`, `fastcgi_cache_max_range_offset`, `fastcgi_cache_methods`, `fastcgi_cache_min_uses`, `fastcgi_cache_path`, `fastcgi_cache_revalidate`, `fastcgi_cache_use_stale`, `fastcgi_cache_valid`, `fastcgi_catch_stderr`, `fastcgi_force_ranges`, `fastcgi_ignore_client_abort`, `fastcgi_ignore_headers`, `fastcgi_limit_rate`, `fastcgi_max_temp_file_size`, `fastcgi_no_cache`, `fastcgi_pass_request_body`, `fastcgi_send_lowat`, `fastcgi_socket_keepalive`, `fastcgi_store`, `fastcgi_store_access`, `fastcgi_temp_file_write_size`, `fastcgi_temp_path`
 - `ngx_http_flv_module` (1) — `flv`
 - `ngx_http_grpc_module` (29) — `grpc_bind`, `grpc_buffer_size`, `grpc_connect_timeout`, `grpc_hide_header`, `grpc_ignore_headers`, `grpc_intercept_errors`, `grpc_next_upstream`, `grpc_next_upstream_timeout`, `grpc_next_upstream_tries`, `grpc_pass`, `grpc_pass_header`, `grpc_read_timeout`, `grpc_send_timeout`, `grpc_set_header`, `grpc_socket_keepalive`, `grpc_ssl_certificate`, `grpc_ssl_certificate_cache`, `grpc_ssl_certificate_key`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_name`, `grpc_ssl_password_file`, `grpc_ssl_protocols`, `grpc_ssl_server_name`, `grpc_ssl_session_reuse`, `grpc_ssl_trusted_certificate`, `grpc_ssl_verify`, `grpc_ssl_verify_depth`
 - `ngx_http_gunzip_filter_module` (2) — `gunzip`, `gunzip_buffers`
@@ -96,18 +97,21 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_limit_conn_module` (1) — `limit_conn_dry_run`
 - `ngx_http_limit_req_module` (1) — `limit_req_dry_run`
 - `ngx_http_log_module` (1) — `open_log_file_cache`
+- `ngx_http_memcached_module` (4) — `memcached_bind`, `memcached_buffer_size`, `memcached_gzip_flag`, `memcached_socket_keepalive`
 - `ngx_http_mirror_module` (2) — `mirror`, `mirror_request_body`
 - `ngx_http_mp4_module` (4) — `mp4`, `mp4_buffer_size`, `mp4_max_buffer_size`, `mp4_start_key_frame`
 - `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
 - `ngx_http_random_index_module` (1) — `random_index`
 - `ngx_http_referer_module` (2) — `referer_hash_bucket_size`, `referer_hash_max_size`
-- `ngx_http_rewrite_module` (5) — `break`, `if`, `rewrite_log`, `set`, `uninitialized_variable_warn`
+- `ngx_http_rewrite_module` (4) — `break`, `if`, `rewrite_log`, `uninitialized_variable_warn`
+- `ngx_http_scgi_module` (30) — `scgi_bind`, `scgi_buffer_size`, `scgi_buffers`, `scgi_busy_buffers_size`, `scgi_cache`, `scgi_cache_background_update`, `scgi_cache_bypass`, `scgi_cache_key`, `scgi_cache_lock`, `scgi_cache_lock_age`, `scgi_cache_lock_timeout`, `scgi_cache_max_range_offset`, `scgi_cache_methods`, `scgi_cache_min_uses`, `scgi_cache_path`, `scgi_cache_revalidate`, `scgi_cache_use_stale`, `scgi_cache_valid`, `scgi_force_ranges`, `scgi_ignore_client_abort`, `scgi_ignore_headers`, `scgi_limit_rate`, `scgi_max_temp_file_size`, `scgi_no_cache`, `scgi_pass_request_body`, `scgi_socket_keepalive`, `scgi_store`, `scgi_store_access`, `scgi_temp_file_write_size`, `scgi_temp_path`
 - `ngx_http_slice_filter_module` (1) — `slice`
 - `ngx_http_ssi_filter_module` (7) — `ssi`, `ssi_ignore_recycled_buffers`, `ssi_last_modified`, `ssi_min_file_chunk`, `ssi_silent_errors`, `ssi_types`, `ssi_value_length`
 - `ngx_http_ssl_module` (13) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
 - `ngx_http_upstream_zone_module` (1) — `zone`
 - `ngx_http_userid_filter_module` (9) — `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`
+- `ngx_http_uwsgi_module` (44) — `uwsgi_bind`, `uwsgi_buffer_size`, `uwsgi_buffers`, `uwsgi_busy_buffers_size`, `uwsgi_cache`, `uwsgi_cache_background_update`, `uwsgi_cache_bypass`, `uwsgi_cache_key`, `uwsgi_cache_lock`, `uwsgi_cache_lock_age`, `uwsgi_cache_lock_timeout`, `uwsgi_cache_max_range_offset`, `uwsgi_cache_methods`, `uwsgi_cache_min_uses`, `uwsgi_cache_path`, `uwsgi_cache_revalidate`, `uwsgi_cache_use_stale`, `uwsgi_cache_valid`, `uwsgi_force_ranges`, `uwsgi_ignore_client_abort`, `uwsgi_ignore_headers`, `uwsgi_limit_rate`, `uwsgi_max_temp_file_size`, `uwsgi_no_cache`, `uwsgi_pass_request_body`, `uwsgi_socket_keepalive`, `uwsgi_ssl_certificate`, `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_certificate_key`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_name`, `uwsgi_ssl_password_file`, `uwsgi_ssl_protocols`, `uwsgi_ssl_server_name`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_trusted_certificate`, `uwsgi_ssl_verify`, `uwsgi_ssl_verify_depth`, `uwsgi_store`, `uwsgi_store_access`, `uwsgi_temp_file_write_size`, `uwsgi_temp_path`
 - `ngx_http_v2_module` (1) — `http2_chunk_size`
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
@@ -133,12 +137,8 @@ active Rust context uses them; use typed TOML upstreams instead of CGI/uWSGI/SCG
 memcached, and do not import mail or third-party module blocks.
 
 - `ngx_core_module` (1) — `load_module`
-- `ngx_http_fastcgi_module` (49) — `fastcgi_bind`, `fastcgi_buffer_size`, `fastcgi_buffering`, `fastcgi_buffers`, `fastcgi_busy_buffers_size`, `fastcgi_cache`, `fastcgi_cache_background_update`, `fastcgi_cache_bypass`, `fastcgi_cache_key`, `fastcgi_cache_lock`, `fastcgi_cache_lock_age`, `fastcgi_cache_lock_timeout`, `fastcgi_cache_max_range_offset`, `fastcgi_cache_methods`, `fastcgi_cache_min_uses`, `fastcgi_cache_path`, `fastcgi_cache_revalidate`, `fastcgi_cache_use_stale`, `fastcgi_cache_valid`, `fastcgi_catch_stderr`, `fastcgi_connect_timeout`, `fastcgi_force_ranges`, `fastcgi_hide_header`, `fastcgi_ignore_client_abort`, `fastcgi_ignore_headers`, `fastcgi_index`, `fastcgi_intercept_errors`, `fastcgi_keep_conn`, `fastcgi_limit_rate`, `fastcgi_max_temp_file_size`, `fastcgi_next_upstream`, `fastcgi_next_upstream_timeout`, `fastcgi_next_upstream_tries`, `fastcgi_no_cache`, `fastcgi_param`, `fastcgi_pass`, `fastcgi_pass_header`, `fastcgi_pass_request_body`, `fastcgi_pass_request_headers`, `fastcgi_read_timeout`, `fastcgi_request_buffering`, `fastcgi_send_lowat`, `fastcgi_send_timeout`, `fastcgi_socket_keepalive`, `fastcgi_split_path_info`, `fastcgi_store`, `fastcgi_store_access`, `fastcgi_temp_file_write_size`, `fastcgi_temp_path`
 - `ngx_http_geoip_module` (5) — `geoip_city`, `geoip_country`, `geoip_org`, `geoip_proxy`, `geoip_proxy_recursive`
-- `ngx_http_memcached_module` (11) — `memcached_bind`, `memcached_buffer_size`, `memcached_connect_timeout`, `memcached_gzip_flag`, `memcached_next_upstream`, `memcached_next_upstream_timeout`, `memcached_next_upstream_tries`, `memcached_pass`, `memcached_read_timeout`, `memcached_send_timeout`, `memcached_socket_keepalive`
 - `ngx_http_perl_module` (4) — `perl`, `perl_modules`, `perl_require`, `perl_set`
-- `ngx_http_scgi_module` (44) — `scgi_bind`, `scgi_buffer_size`, `scgi_buffering`, `scgi_buffers`, `scgi_busy_buffers_size`, `scgi_cache`, `scgi_cache_background_update`, `scgi_cache_bypass`, `scgi_cache_key`, `scgi_cache_lock`, `scgi_cache_lock_age`, `scgi_cache_lock_timeout`, `scgi_cache_max_range_offset`, `scgi_cache_methods`, `scgi_cache_min_uses`, `scgi_cache_path`, `scgi_cache_revalidate`, `scgi_cache_use_stale`, `scgi_cache_valid`, `scgi_connect_timeout`, `scgi_force_ranges`, `scgi_hide_header`, `scgi_ignore_client_abort`, `scgi_ignore_headers`, `scgi_intercept_errors`, `scgi_limit_rate`, `scgi_max_temp_file_size`, `scgi_next_upstream`, `scgi_next_upstream_timeout`, `scgi_next_upstream_tries`, `scgi_no_cache`, `scgi_param`, `scgi_pass`, `scgi_pass_header`, `scgi_pass_request_body`, `scgi_pass_request_headers`, `scgi_read_timeout`, `scgi_request_buffering`, `scgi_send_timeout`, `scgi_socket_keepalive`, `scgi_store`, `scgi_store_access`, `scgi_temp_file_write_size`, `scgi_temp_path`
-- `ngx_http_uwsgi_module` (61) — `uwsgi_bind`, `uwsgi_buffer_size`, `uwsgi_buffering`, `uwsgi_buffers`, `uwsgi_busy_buffers_size`, `uwsgi_cache`, `uwsgi_cache_background_update`, `uwsgi_cache_bypass`, `uwsgi_cache_key`, `uwsgi_cache_lock`, `uwsgi_cache_lock_age`, `uwsgi_cache_lock_timeout`, `uwsgi_cache_max_range_offset`, `uwsgi_cache_methods`, `uwsgi_cache_min_uses`, `uwsgi_cache_path`, `uwsgi_cache_revalidate`, `uwsgi_cache_use_stale`, `uwsgi_cache_valid`, `uwsgi_connect_timeout`, `uwsgi_force_ranges`, `uwsgi_hide_header`, `uwsgi_ignore_client_abort`, `uwsgi_ignore_headers`, `uwsgi_intercept_errors`, `uwsgi_limit_rate`, `uwsgi_max_temp_file_size`, `uwsgi_modifier1`, `uwsgi_modifier2`, `uwsgi_next_upstream`, `uwsgi_next_upstream_timeout`, `uwsgi_next_upstream_tries`, `uwsgi_no_cache`, `uwsgi_param`, `uwsgi_pass`, `uwsgi_pass_header`, `uwsgi_pass_request_body`, `uwsgi_pass_request_headers`, `uwsgi_read_timeout`, `uwsgi_request_buffering`, `uwsgi_send_timeout`, `uwsgi_socket_keepalive`, `uwsgi_ssl_certificate`, `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_certificate_key`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_name`, `uwsgi_ssl_password_file`, `uwsgi_ssl_protocols`, `uwsgi_ssl_server_name`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_trusted_certificate`, `uwsgi_ssl_verify`, `uwsgi_ssl_verify_depth`, `uwsgi_store`, `uwsgi_store_access`, `uwsgi_string`, `uwsgi_temp_file_write_size`, `uwsgi_temp_path`
 - `ngx_mail_auth_http_module` (4) — `auth_http`, `auth_http_header`, `auth_http_pass_client_cert`, `auth_http_timeout`
 - `ngx_mail_core_module` (9) — `error_log`, `listen`, `max_errors`, `protocol`, `resolver`, `resolver_timeout`, `server`, `server_name`, `timeout`
 - `ngx_mail_imap_module` (3) — `imap_auth`, `imap_capabilities`, `imap_client_buffer`
@@ -520,55 +520,55 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `fastcgi_bind` | 1\|2 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_buffer_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_buffering` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_buffers` | 2 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_busy_buffers_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_background_update` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_bypass` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_key` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_lock` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_lock_age` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_lock_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_max_range_offset` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_methods` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_min_uses` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_path` | 2+ | http | excluded from profile |  |
-| `fastcgi_cache_revalidate` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_use_stale` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_cache_valid` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_catch_stderr` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_connect_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_force_ranges` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_hide_header` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_ignore_client_abort` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_ignore_headers` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_index` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_intercept_errors` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_keep_conn` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_limit_rate` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_max_temp_file_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_next_upstream` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_next_upstream_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_next_upstream_tries` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_no_cache` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_param` | 2\|3 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_pass` | 1 | http-if, http-location | excluded from profile |  |
-| `fastcgi_pass_header` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_pass_request_body` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_pass_request_headers` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_read_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_request_buffering` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_send_lowat` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_send_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_socket_keepalive` | flag | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_split_path_info` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_store` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_store_access` | 1\|2\|3 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_temp_file_write_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `fastcgi_temp_path` | 1\|2\|3\|4 | http, http-location, http-server | excluded from profile |  |
+| `fastcgi_bind` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_buffer_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_buffering` | flag | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_buffering setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_buffers` | 2 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_busy_buffers_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_background_update` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_bypass` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_key` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_lock` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_lock_age` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_lock_timeout` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_max_range_offset` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_methods` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_min_uses` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_path` | 2+ | http | rejected (fail closed) |  |
+| `fastcgi_cache_revalidate` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_use_stale` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_cache_valid` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_catch_stderr` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_connect_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_connect_timeout setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_force_ranges` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_hide_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_hide_header setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_ignore_client_abort` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_ignore_headers` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_index` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_index setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_intercept_errors` | flag | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_intercept_errors setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_keep_conn` | flag | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_keep_conn setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_limit_rate` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_max_temp_file_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_next_upstream` | 1+ | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_next_upstream setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_next_upstream_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_next_upstream_timeout setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_next_upstream_tries` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_next_upstream_tries setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_no_cache` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_param` | 2\|3 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_param setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_pass` | 1 | http-if, http-location | executable | runtime: `resources[].type="fast-cgi" (fastcgi_pass setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_pass_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_pass_header setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_pass_request_body` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_pass_request_headers` | flag | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_pass_request_headers setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_read_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_read_timeout setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_request_buffering` | flag | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_request_buffering setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_send_lowat` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_send_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_send_timeout setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_socket_keepalive` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_split_path_info` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="fast-cgi" (fastcgi_split_path_info setting in the fastcgi adapter)`. fastcgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `fastcgi_store` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_store_access` | 1\|2\|3 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_temp_file_write_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `fastcgi_temp_path` | 1\|2\|3\|4 | http, http-location, http-server | rejected (fail closed) |  |
 
 #### `ngx_http_flv_module` (1 directives)
 
@@ -721,17 +721,17 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `memcached_bind` | 1\|2 | http, http-location, http-server | excluded from profile |  |
-| `memcached_buffer_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_connect_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_gzip_flag` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_next_upstream` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `memcached_next_upstream_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_next_upstream_tries` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_pass` | 1 | http-if, http-location | excluded from profile |  |
-| `memcached_read_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_send_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `memcached_socket_keepalive` | flag | http, http-location, http-server | excluded from profile |  |
+| `memcached_bind` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `memcached_buffer_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `memcached_connect_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="memcached" (memcached_connect_timeout setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_gzip_flag` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `memcached_next_upstream` | 1+ | http, http-location, http-server | executable | runtime: `resources[].type="memcached" (memcached_next_upstream setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_next_upstream_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="memcached" (memcached_next_upstream_timeout setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_next_upstream_tries` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="memcached" (memcached_next_upstream_tries setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_pass` | 1 | http-if, http-location | executable | runtime: `resources[].type="memcached" (memcached_pass setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_read_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="memcached" (memcached_read_timeout setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_send_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="memcached" (memcached_send_timeout setting in the memcached adapter)`. memcached: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `memcached_socket_keepalive` | flag | http, http-location, http-server | rejected (fail closed) |  |
 
 #### `ngx_http_mirror_module` (2 directives)
 
@@ -870,57 +870,57 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `return` | 1\|2 | http-if, http-location, http-server | executable | runtime: `virtualHosts[].routes[].resource (respond\|redirect)`. 444 and variable-bearing bodies are rejected |
 | `rewrite` | 2\|3 | http-if, http-location, http-server | executable | runtime: `routes[].rewrite`. only last\|break\|redirect\|permanent flags; bounded internal redirects |
 | `rewrite_log` | flag | http, http-if, http-location, http-server | rejected (fail closed) |  |
-| `set` | 2 | http-if, http-location, http-server | rejected (fail closed) |  |
+| `set` | 2 | http-if, http-location, http-server | executable | runtime: `location-scoped variable table consumed by the memcached adapter ($memcached_key)`. only the bounded `set $memcached_key <literal-or-template>` form executes (location context, supported variable vocabulary); other set variables/sources fail closed |
 | `uninitialized_variable_warn` | flag | http, http-if, http-location, http-server | rejected (fail closed) |  |
 
 #### `ngx_http_scgi_module` (44 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `scgi_bind` | 1\|2 | http, http-location, http-server | excluded from profile |  |
-| `scgi_buffer_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_buffering` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_buffers` | 2 | http, http-location, http-server | excluded from profile |  |
-| `scgi_busy_buffers_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_background_update` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_bypass` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_key` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_lock` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_lock_age` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_lock_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_max_range_offset` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_methods` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_min_uses` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_path` | 2+ | http | excluded from profile |  |
-| `scgi_cache_revalidate` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_use_stale` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_cache_valid` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_connect_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_force_ranges` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_hide_header` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_ignore_client_abort` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_ignore_headers` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_intercept_errors` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_limit_rate` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_max_temp_file_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_next_upstream` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_next_upstream_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_next_upstream_tries` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_no_cache` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `scgi_param` | 2\|3 | http, http-location, http-server | excluded from profile |  |
-| `scgi_pass` | 1 | http-if, http-location | excluded from profile |  |
-| `scgi_pass_header` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_pass_request_body` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_pass_request_headers` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_read_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_request_buffering` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_send_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_socket_keepalive` | flag | http, http-location, http-server | excluded from profile |  |
-| `scgi_store` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_store_access` | 1\|2\|3 | http, http-location, http-server | excluded from profile |  |
-| `scgi_temp_file_write_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `scgi_temp_path` | 1\|2\|3\|4 | http, http-location, http-server | excluded from profile |  |
+| `scgi_bind` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_buffer_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_buffering` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_buffering setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_buffers` | 2 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_busy_buffers_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_background_update` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_bypass` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_key` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_lock` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_lock_age` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_lock_timeout` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_max_range_offset` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_methods` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_min_uses` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_path` | 2+ | http | rejected (fail closed) |  |
+| `scgi_cache_revalidate` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_use_stale` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_cache_valid` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_connect_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_connect_timeout setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_force_ranges` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_hide_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_hide_header setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_ignore_client_abort` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_ignore_headers` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_intercept_errors` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_intercept_errors setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_limit_rate` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_max_temp_file_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_next_upstream` | 1+ | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_next_upstream setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_next_upstream_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_next_upstream_timeout setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_next_upstream_tries` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_next_upstream_tries setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_no_cache` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_param` | 2\|3 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_param setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_pass` | 1 | http-if, http-location | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_pass setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_pass_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_pass_header setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_pass_request_body` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_pass_request_headers` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_pass_request_headers setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_read_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_read_timeout setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_request_buffering` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_request_buffering setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_send_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="scgi" (scgi_send_timeout setting in the scgi adapter)`. scgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `scgi_socket_keepalive` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_store` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_store_access` | 1\|2\|3 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_temp_file_write_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `scgi_temp_path` | 1\|2\|3\|4 | http, http-location, http-server | rejected (fail closed) |  |
 
 #### `ngx_http_secure_link_module` (3 directives)
 
@@ -1077,67 +1077,67 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `uwsgi_bind` | 1\|2 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_buffer_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_buffering` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_buffers` | 2 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_busy_buffers_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_background_update` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_bypass` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_key` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_lock` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_lock_age` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_lock_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_max_range_offset` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_methods` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_min_uses` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_path` | 2+ | http | excluded from profile |  |
-| `uwsgi_cache_revalidate` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_use_stale` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_cache_valid` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_connect_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_force_ranges` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_hide_header` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ignore_client_abort` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ignore_headers` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_intercept_errors` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_limit_rate` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_max_temp_file_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_modifier1` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_modifier2` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_next_upstream` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_next_upstream_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_next_upstream_tries` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_no_cache` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_param` | 2\|3 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_pass` | 1 | http-if, http-location | excluded from profile |  |
-| `uwsgi_pass_header` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_pass_request_body` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_pass_request_headers` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_read_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_request_buffering` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_send_timeout` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_socket_keepalive` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_certificate` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_certificate_cache` | 1\|2\|3 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_certificate_key` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_ciphers` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_conf_command` | 2 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_crl` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_name` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_password_file` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_protocols` | 1+ | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_server_name` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_session_reuse` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_trusted_certificate` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_verify` | flag | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_ssl_verify_depth` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_store` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_store_access` | 1\|2\|3 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_string` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_temp_file_write_size` | 1 | http, http-location, http-server | excluded from profile |  |
-| `uwsgi_temp_path` | 1\|2\|3\|4 | http, http-location, http-server | excluded from profile |  |
+| `uwsgi_bind` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_buffer_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_buffering` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_buffering setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_buffers` | 2 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_busy_buffers_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_background_update` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_bypass` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_key` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_lock` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_lock_age` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_lock_timeout` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_max_range_offset` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_methods` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_min_uses` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_path` | 2+ | http | rejected (fail closed) |  |
+| `uwsgi_cache_revalidate` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_use_stale` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_cache_valid` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_connect_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_connect_timeout setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_force_ranges` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_hide_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_hide_header setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_ignore_client_abort` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ignore_headers` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_intercept_errors` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_intercept_errors setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_limit_rate` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_max_temp_file_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_modifier1` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_modifier1 setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_modifier2` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_modifier2 setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_next_upstream` | 1+ | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_next_upstream setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_next_upstream_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_next_upstream_timeout setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_next_upstream_tries` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_next_upstream_tries setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_no_cache` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_param` | 2\|3 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_param setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_pass` | 1 | http-if, http-location | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_pass setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_pass_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_pass_header setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_pass_request_body` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_pass_request_headers` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_pass_request_headers setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_read_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_read_timeout setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_request_buffering` | flag | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_request_buffering setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_send_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_send_timeout setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_socket_keepalive` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_certificate` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_certificate_cache` | 1\|2\|3 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_certificate_key` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_ciphers` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_conf_command` | 2 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_crl` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_name` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_password_file` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_protocols` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_server_name` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_session_reuse` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_trusted_certificate` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_verify` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_ssl_verify_depth` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_store` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_store_access` | 1\|2\|3 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_string` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_string setting in the uwsgi adapter)`. uwsgi: implemented forms execute against a real nginx 1.29.6 differential (tests/nginx/differential-protocols); unix-socket and variable targets fail closed; cache/buffer/store/ssl sub-families fail closed with located diagnostics |
+| `uwsgi_temp_file_write_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `uwsgi_temp_path` | 1\|2\|3\|4 | http, http-location, http-server | rejected (fail closed) |  |
 
 #### `ngx_http_v2_module` (15 directives)
 

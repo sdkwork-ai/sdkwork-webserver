@@ -107,6 +107,15 @@
             "$ref": "#/$defs/proxyResource"
           },
           {
+            "$ref": "#/$defs/fastcgiResource"
+          },
+          {
+            "$ref": "#/$defs/cgiUpstreamResource"
+          },
+          {
+            "$ref": "#/$defs/memcachedResource"
+          },
+          {
             "$ref": "#/$defs/redirectResource"
           },
           {
@@ -1312,6 +1321,263 @@
           ]
         }
       ]
+    },
+    "upstreamParam": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "ifNotEmpty": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "fastcgiResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx fastcgi_pass location handler (bounded FastCGI 1.0 adapter over TCP).",
+      "required": [
+        "id",
+        "type",
+        "upstreamRef"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "fast-cgi"
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/upstreamParam"
+          },
+          "default": []
+        },
+        "index": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "splitPathInfo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "documentRoot": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "passRequestHeaders": {
+          "type": "boolean",
+          "default": true
+        },
+        "keepConn": {
+          "type": "boolean",
+          "default": false
+        },
+        "buffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "requestBuffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "responsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "interceptErrors": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        }
+      }
+    },
+    "cgiUpstreamResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx uwsgi_pass / scgi_pass location handler (bounded CGI-family adapter over TCP).",
+      "required": [
+        "id",
+        "type",
+        "protocol",
+        "upstreamRef"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "cgi-upstream"
+        },
+        "protocol": {
+          "enum": [
+            "uwsgi",
+            "scgi"
+          ]
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/upstreamParam"
+          },
+          "default": []
+        },
+        "documentRoot": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "passRequestHeaders": {
+          "type": "boolean",
+          "default": true
+        },
+        "buffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "requestBuffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "responsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "interceptErrors": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        },
+        "modifier1": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "modifier2": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "extraString": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "memcachedResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx memcached_pass location handler (bounded memcached text-protocol GET/HEAD).",
+      "required": [
+        "id",
+        "type",
+        "upstreamRef",
+        "keyTemplate"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "memcached"
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "keyTemplate": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "buffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        }
+      }
     },
     "redirectPolicy": {
       "type": "object",

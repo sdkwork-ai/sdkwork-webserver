@@ -1325,6 +1325,305 @@ async fn route_admitted_request(
                 None => proxy_response,
             }
         }
+        ResourceConfig::FastCgi {
+            upstream_ref,
+            params,
+            index,
+            split_path_info,
+            document_root,
+            pass_request_headers,
+            keep_conn,
+            buffering: _,
+            request_buffering: _,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            response_policy,
+            intercept_errors,
+            retry,
+            ..
+        } => {
+            let fastcgi_arm = match collect_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok((request, request_body)) => {
+                    let response_variables = super::cgi_upstream::CgiRequestFacts {
+                        method: request.method(),
+                        scheme: scheme.as_str(),
+                        authority: &authority,
+                        path: &path,
+                        raw_request_uri: &raw_request_uri,
+                        query: request_query.as_deref(),
+                        client_ip,
+                        listener_port: state
+                            .runtime
+                            .current()
+                            .app
+                            .listeners()
+                            .find(|listener| listener.id == state.listener_id)
+                            .map(|listener| listener.port)
+                            .unwrap_or(0),
+                        server_protocol: match request.version() {
+                            axum::http::Version::HTTP_11 => "HTTP/1.1",
+                            axum::http::Version::HTTP_10 => "HTTP/1.0",
+                            axum::http::Version::HTTP_2 => "HTTP/2",
+                            axum::http::Version::HTTP_3 => "HTTP/3",
+                            _ => "HTTP/1.1",
+                        },
+                        server_name: selected
+                            .virtual_host
+                            .server_names
+                            .first()
+                            .map(String::as_str)
+                            .unwrap_or(""),
+                        headers: request.headers(),
+                        document_root: document_root.as_deref(),
+                        script_name: path.clone(),
+                        path_info: String::new(),
+                        maps: &map_results,
+                    };
+                    let fastcgi_response = super::cgi_upstream::serve_fastcgi(
+                        &generation,
+                        upstream_ref,
+                        params,
+                        split_path_info.as_deref(),
+                        index.as_deref(),
+                        *pass_request_headers,
+                        *keep_conn,
+                        *connect_timeout_ms,
+                        *send_timeout_ms,
+                        *read_timeout_ms,
+                        response_policy.as_ref(),
+                        retry.as_ref(),
+                        response_variables,
+                        &request_body,
+                        &state.runtime.metrics,
+                    )
+                    .await;
+                    // nginx `fastcgi_intercept_errors on`: an upstream error status is
+                    // replaced by the matched `error_page` target.
+                    let intercepted = if *intercept_errors {
+                        if let Some((method, headers, query)) = error_page_saved.as_ref() {
+                            resolve_error_pages(
+                                &state,
+                                &generation,
+                                &selected,
+                                &authority,
+                                fastcgi_response.status(),
+                                method,
+                                headers,
+                                &path,
+                                query.as_deref(),
+                                scheme.as_str(),
+                                &map_results,
+                            )
+                            .await
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    match intercepted {
+                        Some(paged) => paged,
+                        None => fastcgi_response,
+                    }
+                }
+                Err(response) => response,
+            };
+            fastcgi_arm
+        }
+        ResourceConfig::CgiUpstream {
+            protocol,
+            upstream_ref,
+            params,
+            document_root,
+            pass_request_headers,
+            buffering: _,
+            request_buffering: _,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            response_policy,
+            intercept_errors,
+            retry,
+            modifier1,
+            modifier2,
+            extra_string,
+            ..
+        } => {
+            let cgi_arm = match collect_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok((request, request_body)) => {
+                    let response_variables = super::cgi_upstream::CgiRequestFacts {
+                        method: request.method(),
+                        scheme: scheme.as_str(),
+                        authority: &authority,
+                        path: &path,
+                        raw_request_uri: &raw_request_uri,
+                        query: request_query.as_deref(),
+                        client_ip,
+                        listener_port: state
+                            .runtime
+                            .current()
+                            .app
+                            .listeners()
+                            .find(|listener| listener.id == state.listener_id)
+                            .map(|listener| listener.port)
+                            .unwrap_or(0),
+                        server_protocol: match request.version() {
+                            axum::http::Version::HTTP_11 => "HTTP/1.1",
+                            axum::http::Version::HTTP_10 => "HTTP/1.0",
+                            axum::http::Version::HTTP_2 => "HTTP/2",
+                            axum::http::Version::HTTP_3 => "HTTP/3",
+                            _ => "HTTP/1.1",
+                        },
+                        server_name: selected
+                            .virtual_host
+                            .server_names
+                            .first()
+                            .map(String::as_str)
+                            .unwrap_or(""),
+                        headers: request.headers(),
+                        document_root: document_root.as_deref(),
+                        script_name: path.clone(),
+                        path_info: String::new(),
+                        maps: &map_results,
+                    };
+                    let cgi_response = super::cgi_upstream::serve_cgi(
+                        &generation,
+                        *protocol,
+                        upstream_ref,
+                        params,
+                        *pass_request_headers,
+                        *connect_timeout_ms,
+                        *send_timeout_ms,
+                        *read_timeout_ms,
+                        response_policy.as_ref(),
+                        retry.as_ref(),
+                        *modifier1,
+                        *modifier2,
+                        extra_string.as_deref(),
+                        response_variables,
+                        &request_body,
+                        &state.runtime.metrics,
+                    )
+                    .await;
+                    // nginx `uwsgi_intercept_errors` / `scgi_intercept_errors`.
+                    let intercepted = if *intercept_errors {
+                        if let Some((method, headers, query)) = error_page_saved.as_ref() {
+                            resolve_error_pages(
+                                &state,
+                                &generation,
+                                &selected,
+                                &authority,
+                                cgi_response.status(),
+                                method,
+                                headers,
+                                &path,
+                                query.as_deref(),
+                                scheme.as_str(),
+                                &map_results,
+                            )
+                            .await
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    match intercepted {
+                        Some(paged) => paged,
+                        None => cgi_response,
+                    }
+                }
+                Err(response) => response,
+            };
+            cgi_arm
+        }
+        ResourceConfig::Memcached {
+            upstream_ref,
+            key_template,
+            buffering: _,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            retry,
+            ..
+        } => {
+            // The upstream exchange is GET/HEAD only; the bounded adapter
+            // answers other methods with 405 before touching the network.
+            let memcached_arm = match collect_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok((request, _request_body)) => {
+                    let response_variables = super::cgi_upstream::CgiRequestFacts {
+                        method: request.method(),
+                        scheme: scheme.as_str(),
+                        authority: &authority,
+                        path: &path,
+                        raw_request_uri: &raw_request_uri,
+                        query: request_query.as_deref(),
+                        client_ip,
+                        listener_port: state
+                            .runtime
+                            .current()
+                            .app
+                            .listeners()
+                            .find(|listener| listener.id == state.listener_id)
+                            .map(|listener| listener.port)
+                            .unwrap_or(0),
+                        server_protocol: match request.version() {
+                            axum::http::Version::HTTP_11 => "HTTP/1.1",
+                            axum::http::Version::HTTP_10 => "HTTP/1.0",
+                            axum::http::Version::HTTP_2 => "HTTP/2",
+                            axum::http::Version::HTTP_3 => "HTTP/3",
+                            _ => "HTTP/1.1",
+                        },
+                        server_name: selected
+                            .virtual_host
+                            .server_names
+                            .first()
+                            .map(String::as_str)
+                            .unwrap_or(""),
+                        headers: request.headers(),
+                        document_root: None,
+                        script_name: path.clone(),
+                        path_info: String::new(),
+                        maps: &map_results,
+                    };
+                    let method = response_variables.method.clone();
+                    super::cgi_upstream::serve_memcached(
+                        &generation,
+                        upstream_ref,
+                        key_template,
+                        *connect_timeout_ms,
+                        *send_timeout_ms,
+                        *read_timeout_ms,
+                        retry.as_ref(),
+                        response_variables,
+                        &method,
+                        &state.runtime.metrics,
+                    )
+                    .await
+                }
+                Err(response) => response,
+            };
+            memcached_arm
+        }
         ResourceConfig::Drive {
             id,
             resource_subpath,
@@ -2776,6 +3075,38 @@ fn request_uri_error_response(version: Version, error: RequestUriError) -> Respo
             .insert(CONNECTION, HeaderValue::from_static("close"));
     }
     response
+}
+
+/// Collect the whole request body (bounded before allocation growth) for
+/// upstream protocol adapters that need the raw bytes (FastCGI `STDIN`).
+async fn collect_bounded_request_body(
+    request: Request<Body>,
+    maximum: u64,
+    failure: &RequestBodyFailure,
+) -> Result<(Request<Body>, Vec<u8>), Response<Body>> {
+    let (parts, body) = request.into_parts();
+    let version = parts.version;
+    let mut stream = body.into_data_stream();
+    let mut collected = Vec::new();
+    let mut observed = 0_u64;
+    while let Some(frame) = stream.next().await {
+        let bytes = frame.map_err(|_| {
+            if failure.timed_out() {
+                request_body_timeout_response(version)
+            } else {
+                text_response(StatusCode::BAD_REQUEST, "request body framing is invalid\n")
+            }
+        })?;
+        observed = observed.saturating_add(bytes.len() as u64);
+        if observed > maximum {
+            return Err(text_response(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "request body is too large\n",
+            ));
+        }
+        collected.extend_from_slice(&bytes);
+    }
+    Ok((Request::from_parts(parts, Body::empty()), collected))
 }
 
 async fn drain_bounded_request_body(
