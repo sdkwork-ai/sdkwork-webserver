@@ -471,7 +471,7 @@ const REMAINING_GAP_CATEGORIES = [
       'http:fastcgi_temp_path',
     ],
     rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that uses this FastCGI sub-family fails to activate.',
+      'a stock nginx.conf that uses this FastCGI sub-family fails to activate.',
     why: 'the implemented FastCGI request/response forms now execute end-to-end; the remaining cache/buffer/store/SSL sub-families, unix-socket/variable targets and connection-pool knobs are unimplemented and are backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/fastcgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
@@ -528,7 +528,7 @@ const REMAINING_GAP_CATEGORIES = [
       'http:uwsgi_temp_path',
     ],
     rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that uses this uWSGI sub-family fails to activate.',
+      'a stock nginx.conf that uses this uWSGI sub-family fails to activate.',
     why: 'the implemented uWSGI request/response forms now execute end-to-end; the remaining cache/buffer/store/SSL sub-families, unix-socket/variable targets and connection-pool knobs are unimplemented and are backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/uwsgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
@@ -571,7 +571,7 @@ const REMAINING_GAP_CATEGORIES = [
       'http:scgi_temp_path',
     ],
     rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that uses this SCGI sub-family fails to activate.',
+      'a stock nginx.conf that uses this SCGI sub-family fails to activate.',
     why: 'the implemented SCGI request/response forms now execute end-to-end; the remaining cache/buffer/store/SSL sub-families, unix-socket/variable targets and connection-pool knobs are unimplemented and are backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/scgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
@@ -588,7 +588,7 @@ const REMAINING_GAP_CATEGORIES = [
       'http:memcached_socket_keepalive',
     ],
     rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that uses this memcached sub-family fails to activate.',
+      'a stock nginx.conf that uses this memcached sub-family fails to activate.',
     why: 'the implemented memcached request/response forms now execute end-to-end; the remaining bind/buffer/socket-pool and gzip-flag knobs are unimplemented and are backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/memcached.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
@@ -1850,7 +1850,7 @@ function renderHeader(inventory, catalog) {
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
   \`tools/check-nginx-directive-matrix.mjs\`; this audit embeds the catalog sha256, so
-  \`--check\` fails when the catalog moves. The Wave 3 remaining backlog in section 3.2
+  \`--check\` fails when the catalog moves. The remaining backlog in section 3.2
   is the only behavior-gap set that still moves to \`enforced\`; when it does, rerun
   \`node tools/check-nginx-directive-matrix.mjs --write\` and then this generator, and
   commit the regenerated report with the catalog change.
@@ -1960,7 +1960,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
      rows,
      'security-difference',
    )} are intentional, spec-justified security differences.
-2. **${remainingCount} behavior-gap directives remain in the wave-3 backlog** (${(
+2. **${remainingCount} behavior-gap directives remain in the remaining backlog** (${(
     (remainingCount / total) *
     100
   ).toFixed(1)}% of the surface): ${REMAINING_GAP_CATEGORIES.map(
@@ -1986,7 +1986,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
    snapshot of the post-upstream-protocol worktree, not a hand-maintained table; section 6 states
-   the exact commands and the wave-3 landing procedure.
+   the exact commands and the remaining-backlog landing procedure.
 `;
 }
 
@@ -2082,7 +2082,7 @@ timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the ngin
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
 \`knownDifferences\` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (${REMAINING_WAVE}, ${countRows(
+### 3.2 Remaining Behavior-Gap Backlog (${countRows(
     rows,
     'behavior-gap',
   )} directives)
@@ -2292,7 +2292,7 @@ Representative implementation cost:
 | Group | Directives | What parity would require |
 | --- | ---: | --- |
 | Rejected proxy knobs (\`ngx_http_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_proxy_module').length} | cache locking/background update/bypass/method sets, body substitution, upstream-trust knobs: each is a bounded policy feature with its own security review. |
-| Rejected stream plumbing (\`ngx_stream_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_stream_proxy_module').length} | buffer sizing, TLS library caches/commands/CRL/password-file knobs; the routing/identity subset is instead in the wave-3 backlog. |
+| Rejected stream plumbing (\`ngx_stream_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_stream_proxy_module').length} | buffer sizing, TLS library caches/commands/CRL/password-file knobs; the routing/identity subset is instead in the remaining backlog. |
 | TLS extras (CRL/OCSP-response/ECH/ticket files) | ${failClosed.filter((row) => row.module === 'ngx_http_ssl_module' || row.module === 'ngx_stream_ssl_module').length} | rustls feature gaps (OCSP response handling, raw public keys, certificate compression, session ticket key files) plus a certificate-material pipeline. |
 | HTTP/3 + QUIC (\`ngx_http_v3_module\`, \`ngx_quic_bpf_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_v3_module' || row.module === 'ngx_quic_bpf_module').length} | a QUIC transport (UDP, TLS 1.3 QUIC keys, connection migration, congestion control) - a separate transport product, explicitly excluded by PRD section 4. |
 | Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | ${failClosed.filter((row) => ['ngx_http_ssi_filter_module', 'ngx_http_xslt_filter_module', 'ngx_http_image_filter_module', 'ngx_http_mp4_module', 'ngx_http_flv_module', 'ngx_http_empty_gif_module'].includes(row.module)).length} | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
