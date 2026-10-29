@@ -23,18 +23,29 @@ PORT=${NGINX_DIFF_ORACLE_PORT:-20990}
 WORK=${NGINX_DIFF_WORK:-/tmp/ngx-differential}
 CONF="$WORK/nginx.conf"
 OUT=${NGINX_DIFF_ORACLE_OUT:-$HERE/nginx-oracle.json}
+NGINX_BIN=${NGINX_BIN:-nginx}
 
 oracle_unavailable() {
     echo "oracle-unavailable: $*" >&2
     exit 3
 }
 
-command -v nginx >/dev/null 2>&1 || oracle_unavailable "no nginx on PATH"
+command -v "$NGINX_BIN" >/dev/null 2>&1 || oracle_unavailable "no nginx binary at '$NGINX_BIN'"
 PY=$(command -v python3 || command -v python || true)
 [ -n "$PY" ] || oracle_unavailable "no python on PATH"
 
 mkdir -p "$WORK"
-sed -e "s|@PUBLIC@|$HERE/public|g" -e "s|@PORT@|$PORT|g" "$HERE/nginx.conf" >"$CONF"
+# The fixture uses only `daemon off; master_process off;` plus the shared
+# fixture body, so an unprivileged package binary still resolves its
+# compile-time defaults under /var/cache/nginx and /var/log/nginx. Redirect the
+# http temp paths and the startup error log into $WORK so the oracle runs from
+# any checkout without root. These directives never affect the response
+# contract the battery records.
+for sub in client_body proxy fastcgi uwsgi scgi; do
+    mkdir -p "$WORK/tmp/$sub"
+done
+sed -e "s|@PUBLIC@|$HERE/public|g" -e "s|@PORT@|$PORT|g" "$HERE/nginx.conf" |
+    sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF"
 
 probe() {
     "$PY" -c "import socket,sys; socket.create_connection(('127.0.0.1', $PORT), 1).close()" \
@@ -47,7 +58,7 @@ if probe; then
     oracle_unavailable "127.0.0.1:$PORT is already listening"
 fi
 
-env TZ=UTC nginx -c "$CONF" -p "$WORK/" -g "pid $WORK/nginx.pid;" >"$WORK/out.log" 2>&1 &
+env TZ=UTC "$NGINX_BIN" -c "$CONF" -p "$WORK/" -g "pid $WORK/nginx.pid; error_log $WORK/error.log notice;" >"$WORK/out.log" 2>&1 &
 NGINX_PID=$!
 # shellcheck disable=SC2064  # expand the PID now, not at trap time
 trap 'kill "$NGINX_PID" 2>/dev/null; wait "$NGINX_PID" 2>/dev/null' EXIT

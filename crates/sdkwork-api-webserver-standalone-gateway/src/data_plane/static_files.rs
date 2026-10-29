@@ -63,8 +63,15 @@ pub async fn serve_static(
             let Some(location) = append_request_path_slash(request.uri()) else {
                 return text_response(StatusCode::BAD_REQUEST, "invalid request path\n");
             };
+            // nginx answers a directory request without its trailing slash with
+            // 301 Moved Permanently (`ngx_http_static_module`), not 307: the
+            // redirect target is the canonical URI of the same resource. The
+            // Location is relative because the differential fixture declares
+            // `absolute_redirect off`; the runtime has no configurable absolute
+            // form, and the only difference from nginx's default absolute URL is
+            // the scheme/authority prefix, never the path or query.
             Response::builder()
-                .status(StatusCode::TEMPORARY_REDIRECT)
+                .status(StatusCode::MOVED_PERMANENTLY)
                 .header(axum::http::header::LOCATION, location)
                 .body(Body::empty())
                 .unwrap_or_else(|_| {

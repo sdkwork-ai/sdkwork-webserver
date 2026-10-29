@@ -10,6 +10,13 @@
  * Activation still requires [nginx].enabled = true and zero
  * unsupported/blocked directives. Emitted TOML is a review draft -- it does
  * not overwrite deployments/webserver/server.*.toml by default.
+ *
+ * Classification is not maintained here: every directive name is looked up in
+ * the committed directive support catalog
+ * (`specs/nginx-directive-support.catalog.json`), which the
+ * `check-nginx-directive-matrix` gate reconciles against the Rust
+ * implementation. Accepted-but-unenforced directives are reported as
+ * `accepted` (loadable, not rendered) instead of `unsupported`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,73 +30,81 @@ import { retiredNginxActivationBlock } from '../../sdkwork-specs/tools/webserver
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-const MAPPED = new Map([
-  ['listen', 'http.server.listen'],
-  ['server_name', 'http.server.serverName'],
-  ['http2', 'http.server.http2'],
-  ['root', 'http.server.location.root'],
-  ['alias', 'http.server.location.alias'],
-  ['try_files', 'http.server.location.tryFiles'],
-  ['index', 'http.server.location.index'],
-  ['proxy_pass', 'http.server.location.proxyPass'],
-  ['proxy_set_header', 'http.server.location.proxySetHeader'],
-  ['proxy_http_version', 'http.server.location.proxyHttpVersion'],
-  ['proxy_buffering', 'http.server.location.proxyBuffering'],
-  ['proxy_read_timeout', 'http.server.location.proxyReadTimeout'],
-  ['proxy_connect_timeout', 'http.server.location.proxyConnectTimeout'],
-  ['proxy_send_timeout', 'http.server.location.proxySendTimeout'],
-  ['ssl_certificate', 'http.certificates.certFile'],
-  ['ssl_certificate_key', 'http.certificates.certKeyFile'],
-  ['ssl_trusted_certificate', 'http.certificates.chainFile'],
-  ['ssl_protocols', 'http.server.tls.protocols'],
-  ['ssl_prefer_server_ciphers', 'http.server.tls.preferServerCiphers'],
-  ['ssl_session_cache', 'http.server.tls.sessionCache'],
-  ['ssl_stapling', 'http.server.tls.stapling'],
-  ['client_max_body_size', 'http.clientMaxBodySize'],
-  ['gzip', 'http.gzip'],
-  ['gzip_types', 'http.gzipTypes'],
-  ['keepalive_timeout', 'http.keepaliveTimeout'],
-  ['sendfile', 'http.sendfile'],
-  ['tcp_nopush', 'http.tcpNopush'],
-  ['tcp_nodelay', 'http.tcpNodelay'],
-  ['server_tokens', 'http.serverTokens'],
-  ['worker_processes', 'main.workerProcesses'],
-  ['worker_connections', 'main.events.workerConnections'],
-  ['user', 'main.user'],
-  ['error_log', 'main.errorLog'],
-  ['pid', 'main.pid'],
-  ['return', 'http.server.location.returnStatus'],
-  ['rewrite', 'http.server.location.rewrite'],
-  ['add_header', 'http.server.location.addHeader'],
-  ['allow', 'http.server.location.allow'],
-  ['deny', 'http.server.location.deny'],
-  ['limit_req', 'http.server.location.limitReq'],
-  ['limit_req_zone', 'http.limitReqZone'],
-  ['auth_basic', 'http.server.location.authBasic'],
-  ['auth_basic_user_file', 'http.server.location.authBasicUserFile'],
-  ['map', 'http.map'],
-  ['least_conn', 'http.upstream.loadBalancing'],
-  ['ip_hash', 'http.upstream.loadBalancing'],
-  ['hash', 'http.upstream.hashKey'],
-  ['keepalive', 'http.upstream.keepalive'],
-  // upstream member targets (context-sensitive; see classify)
-  ['server', 'http.upstream.target'],
-  // map body default line
-  ['default', 'http.map'],
-]);
+const CATALOG_PATH = path.join(REPO_ROOT, 'specs', 'nginx-directive-support.catalog.json');
 
-const BLOCKED = new Set([
-  'load_module',
-  'perl_set',
-  'js_content',
-  'lua_shared_dict',
-  'content_by_lua_block',
-  'access_by_lua_block',
-]);
+/**
+ * The committed directive support catalog is the single source of truth for
+ * how an nginx directive is classified (`executable`, `accepted-unenforced`,
+ * `unsupported-fail-closed`, `excluded`) and whether the importer can render
+ * it into typed TOML (`importer.mapped`). This module never keeps a private
+ * directive list; the matrix gate fails if this file stops consuming it.
+ */
+let cachedCatalog = null;
+
+export function loadDirectiveCatalog() {
+  if (cachedCatalog) return cachedCatalog;
+  const catalog = JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf8'));
+  const byName = new Map();
+  for (const entry of catalog.directives) {
+    const list = byName.get(entry.name) ?? [];
+    list.push(entry);
+    byName.set(entry.name, list);
+  }
+  for (const extension of catalog.extensions ?? []) {
+    const list = byName.get(extension.name) ?? [];
+    list.push({ ...extension, extension: true });
+    byName.set(extension.name, list);
+  }
+  cachedCatalog = { catalog, byName };
+  return cachedCatalog;
+}
+
+/** Map an importer block stack to the catalog's nginx context label. */
+export function catalogContextOf(item) {
+  const stack = item.context ?? [];
+  if (stack.length === 0) return 'main';
+  const first = stack[0];
+  const has = (kind) => stack.includes(kind);
+  if (first === 'http') {
+    if (has('upstream')) return 'http-upstream';
+    if (has('location')) return 'http-location';
+    if (has('server')) return 'http-server';
+    return 'http';
+  }
+  if (first === 'stream') {
+    if (has('upstream')) return 'stream-upstream';
+    if (has('server')) return 'stream-server';
+    return 'stream';
+  }
+  if (first === 'mail') return has('server') ? 'mail-server' : 'mail';
+  if (first === 'events') return 'events';
+  return 'main';
+}
+
+/** Look up the catalog entry that governs this directive in this context. */
+export function catalogEntryFor(item) {
+  const { byName } = loadDirectiveCatalog();
+  const entries = byName.get(item.name);
+  if (!entries || entries.length === 0) return { entry: null, context: catalogContextOf(item) };
+  const context = catalogContextOf(item);
+  const inContext = entries.find((entry) => (entry.contexts ?? []).includes(context)
+    || (entry.contexts ?? []).includes('any')
+    || entry.extension === true);
+  return { entry: inContext ?? entries[0], context, inContext: Boolean(inContext) };
+}
 
 const BLOCK_OPENERS = new Set([
   'http', 'server', 'location', 'upstream', 'stream', 'events', 'mail', 'map',
 ]);
+
+/**
+ * Block bodies that are data, not directives. `mapping.rs` treats these blocks
+ * as data as well (`every_accepted_ignored_directive_materializes`); flattening
+ * `types { text/html html; }` or a `map` body into "directives" was a real
+ * classification bug. A `map` block is still recorded as one declaration so it
+ * can be carried into the draft; its body lines are attached as opaque data.
+ */
+const DATA_BLOCKS = new Set(['types', 'charset_map', 'map']);
 
 function parseArgs(argv) {
   const out = {
@@ -462,7 +477,23 @@ function expandIncludes(nodes, baseDir, depth = 0) {
   return expanded;
 }
 
-/** Flatten a parsed tree into the importer's directive list with contexts. */
+/**
+ * Render a directive node as an nginx statement (used for data-block bodies
+ * that are preserved verbatim in the review draft).
+ */
+function statementOf(node) {
+  return `${[node.name, ...node.args].join(' ')};`;
+}
+
+/**
+ * Flatten a parsed tree into the importer's directive list with contexts.
+ *
+ * Block bodies that are data (`types`, `charset_map`, `map`) are not
+ * directives and are never emitted as such. `map` is emitted once as a block
+ * declaration whose body is carried as opaque data; `types`/`charset_map` are
+ * emitted as data-block declarations so the report can classify them without
+ * inventing child directives.
+ */
 function flattenDirectives(nodes) {
   const directives = [];
   const stack = [];
@@ -472,11 +503,30 @@ function flattenDirectives(nodes) {
     const name = node.name;
     if (hasBlock) {
       blockSeq += 1;
-      stack.push({
+      const frame = {
         kind: BLOCK_OPENERS.has(name) ? name : 'anonymous',
         header: [name, ...node.args].join(' '),
         id: blockSeq,
-      });
+      };
+      if (DATA_BLOCKS.has(name)) {
+        directives.push({
+          name,
+          statement: [name, ...node.args].join(' '),
+          dataBlock: true,
+          blockData: node.children.map(statementOf),
+          context: stack.map((item) => item.kind),
+          contextHeader: stack.map((item) => item.header || item.kind),
+          contextIds: stack.map((item) => item.id),
+          serverBlockId: [...stack].reverse().find((item) => item.kind === 'server')?.id ?? null,
+          upstreamBlockId: [...stack].reverse().find((item) => item.kind === 'upstream')?.id ?? null,
+          locationHeader: [...stack].reverse().find((item) => item.kind === 'location')?.header ?? null,
+          upstreamHeader: [...stack].reverse().find((item) => item.kind === 'upstream')?.header ?? null,
+          mapHeader: stack.some((item) => item.kind === 'map') ? frame.header : null,
+          blockHeader: frame.header,
+        });
+        return;
+      }
+      stack.push(frame);
       for (const child of node.children) visit(child);
       stack.pop();
       return;
@@ -491,50 +541,105 @@ function flattenDirectives(nodes) {
       upstreamBlockId: [...stack].reverse().find((frame) => frame.kind === 'upstream')?.id ?? null,
       locationHeader: [...stack].reverse().find((frame) => frame.kind === 'location')?.header ?? null,
       upstreamHeader: [...stack].reverse().find((frame) => frame.kind === 'upstream')?.header ?? null,
-      mapHeader: [...stack].reverse().find((frame) => frame.kind === 'map')?.header ?? null,
+      mapHeader: stack.some((frame) => frame.kind === 'map')
+        ? [...stack].reverse().find((frame) => frame.kind === 'map')?.header ?? null
+        : null,
     });
   };
   for (const node of nodes) visit(node);
   return directives;
 }
 
+/** Parse (and include-expand) an nginx configuration into its directive nodes. */
+export function parseConfigTree(source, sourcePath = null) {
+  const tree = new NginxLexer(source, sourcePath ?? '<conf>').parseDirectives(null);
+  return sourcePath ? expandIncludes(tree, path.dirname(sourcePath)) : tree;
+}
+
 function scanDirectives(source, options = {}) {
   const sourcePath = options.sourcePath ?? null;
-  const tree = new NginxLexer(source, sourcePath ?? '<conf>').parseDirectives(null);
-  const expanded = sourcePath ? expandIncludes(tree, path.dirname(sourcePath)) : tree;
-  return flattenDirectives(expanded);
+  return flattenDirectives(parseConfigTree(source, sourcePath));
 }
 
 
+/**
+ * Classify flattened directives against the committed support catalog.
+ *
+ * Buckets:
+ *   mapped      - catalog confirms the directive executes or is accepted, and
+ *                 the importer can render it into typed TOML.
+ *   accepted    - catalog says the runtime accepts/executes the directive but
+ *                 the importer does not render it into the TOML draft (it is
+ *                 not unsupported: nginx.conf loading still honors it), or the
+ *                 catalog marks it accepted-but-not-enforced.
+ *   unsupported - active context is rejected by the Rust engine (fail closed).
+ *   blocked     - excluded from the product profile (notExecutableByRust).
+ *   preserveOnly- include directives are expanded by the parser.
+ */
 function classify(directives) {
   const mapped = [];
+  const accepted = [];
   const unsupported = [];
   const blocked = [];
   const preserveOnly = [];
   for (const item of directives) {
-    if (BLOCKED.has(item.name)) {
-      blocked.push({ ...item, reason: 'notExecutableByRust' });
-      continue;
-    }
     if (item.name === 'include') {
-      preserveOnly.push({ ...item, reason: 'include-resolution-not-yet-implemented' });
+      preserveOnly.push({ ...item, reason: 'include-resolution-runs-before-classification' });
       continue;
     }
-    if (item.name === 'server' && !item.context.includes('upstream')) {
-      unsupported.push({ ...item, reason: 'server-as-statement-outside-upstream' });
+    const { entry, context, inContext } = catalogEntryFor(item);
+    if (!entry) {
+      unsupported.push({ ...item, reason: 'directive is not in the nginx directive support catalog' });
       continue;
     }
-    if (item.name === 'default' && !item.context.includes('map')) {
-      unsupported.push({ ...item, reason: 'default-outside-map' });
+    const classification = entry.classification;
+    if (classification === 'excluded') {
+      blocked.push({ ...item, reason: 'notExecutableByRust', catalog: entry.id });
       continue;
     }
-    if (MAPPED.has(item.name)) {
-      mapped.push({ ...item, tomlPath: MAPPED.get(item.name) });
+    if (classification === 'unsupported-fail-closed') {
+      unsupported.push({ ...item, reason: entry.diagnostics ?? 'unsupported in an active Rust context', catalog: entry.id });
       continue;
     }
-    unsupported.push(item);
+    if (!inContext) {
+      // Recognized by the runtime, but not in this nginx context: the Rust
+      // engine's context check fails closed, so do not render it.
+      unsupported.push({
+        ...item,
+        reason: `directive is supported only in ${(entry.supportedContexts ?? entry.contexts ?? []).join(', ')}; found in ${context}`,
+        catalog: entry.id,
+      });
+      continue;
+    }
+    if (entry.importer?.mapped && entry.importer.tomlEnforced !== false) {
+      mapped.push({ ...item, tomlPath: entry.importer.tomlPath, catalog: entry.id });
+      continue;
+    }
+    if (entry.importer?.mapped) {
+      // The typed TOML equivalent is itself accepted-but-unenforced
+      // (server_toml.rs UNENFORCED_BEHAVIOR_TOML_KEYS). Rendering it would turn
+      // one silent no-op into another, so keep the directive out of the draft
+      // and report the migration consequence instead.
+      accepted.push({
+        ...item,
+        catalog: entry.id,
+        classification,
+        tomlPath: entry.importer.tomlPath,
+        reason: `no enforced equivalent: typed TOML key \`${entry.importer.tomlPath}\` is also accepted-but-unenforced; `
+          + 'the nginx value is not rendered into the draft',
+      });
+      continue;
+    }
+    accepted.push({
+      ...item,
+      catalog: entry.id,
+      classification,
+      reason: classification === 'accepted-unenforced'
+        ? (entry.migrationImpact ?? entry.diagnostics ?? 'accepted for nginx compatibility but not enforced')
+        : 'executes when the nginx.conf is loaded directly; not rendered into the typed TOML draft',
+    });
   }
-  return { mapped, unsupported, blocked, preserveOnly };
+  return { mapped, accepted, unsupported, blocked, preserveOnly };
 }
 
 function parseUpstreamTarget(args) {
@@ -570,6 +675,7 @@ function buildDraft(mapped) {
       'proxySetHeader values with supported $vars execute on the Rust data plane after materialize.',
       '^~ locations materialize as pathType prefix-exclusive; ~ / ~* as regex / regex-ignore-case; rewrite last|break|redirect|permanent executes with bounded internal redirects.',
       'allow/deny, limit_req(+limit_req_zone), and auth_basic(+auth_basic_user_file) map into typed TOML; include stays preserve-only (manual resolution).',
+      'Directives whose typed TOML equivalent is itself accepted-but-unenforced are reported under `accepted`, never rendered as if enforced (server_toml.rs UNENFORCED_BEHAVIOR_TOML_KEYS).',
     ],
   };
 
@@ -666,12 +772,13 @@ function buildDraft(mapped) {
     else if (item.name === 'limit_req_zone') {
       draft.http.limitReqZone = draft.http.limitReqZone || [];
       draft.http.limitReqZone.push(args.join(' '));
-    } else if (item.name === 'map' || (item.name === 'default' && item.mapHeader)) {
-      const header = item.mapHeader || item.statement.replace(/;$/u, '');
-      const entry = header.startsWith('map ')
-        ? `${header.replace(/^map\s+/u, '')} ${args.join(' ')}`.trim()
-        : args.join(' ');
-      if (entry && !draft.http.map.includes(entry)) draft.http.map.push(entry);
+    } else if (item.name === 'map') {
+      // A map block is one declaration whose body lines are data. Keep the
+      // complete declaration in the review draft; never classify body lines
+      // as directives.
+      const body = (item.blockData ?? []).map((line) => line.trim()).filter(Boolean).join(' ');
+      const declaration = `${args.join(' ')}${body ? ` { ${body} }` : ''}`.trim();
+      if (declaration && !draft.http.map.includes(declaration)) draft.http.map.push(declaration);
     } else if (item.name === 'least_conn' || item.name === 'ip_hash' || item.name === 'hash') {
       const upstream = ensureUpstream(item);
       if (upstream) {
@@ -1022,6 +1129,7 @@ function main() {
     counts: {
       total: directives.length,
       mapped: classified.mapped.length,
+      accepted: classified.accepted.length,
       unsupported: classified.unsupported.length,
       blocked: classified.blocked.length,
       preserveOnly: classified.preserveOnly.length,
@@ -1030,6 +1138,7 @@ function main() {
       draftUpstreams: draft.http.upstream.length,
       draftCertificates: Object.keys(draft.http.certificates || {}).length,
     },
+    accepted: classified.accepted,
     unsupported: classified.unsupported,
     blocked: classified.blocked,
     preserveOnly: classified.preserveOnly,
@@ -1039,6 +1148,9 @@ function main() {
       && (!validation || validation.errors.length === 0),
     nextSteps: nginx.enabled
       ? [
+          classified.accepted.length > 0
+            ? `Review the ${classified.accepted.length} accepted directive(s): they load but are not rendered into the draft, or are accepted-but-unenforced; configure explicit typed TOML where behavior matters.`
+            : 'No accepted-but-unrendered directives were found.',
           args.writeToml
             ? `Review draft TOML at ${args.writeToml}; promote into deployments/webserver/ only after validation.`
             : 'Re-run with --write-toml <path> to emit a reviewable server.toml draft.',

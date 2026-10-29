@@ -37,6 +37,13 @@ const manifestPath = path.join(root, 'specs', 'nginx-behavioral-corpus.manifest.
 const SELF_ASSERTING_SLICE = 'full-surface';
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const EXECUTION_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * Developer runs may skip loudly when the local machine cannot execute the
+ * probe (no python, no cargo). A release gate must not accept that: with
+ * `SDKWORK_REQUIRE_NGINX_EVIDENCE=1` every skip becomes a failure, so a green
+ * release run always means the corpus actually executed against a fresh build.
+ */
+const REQUIRE_EVIDENCE = process.env.SDKWORK_REQUIRE_NGINX_EVIDENCE === '1';
 
 /**
  * Three kinds of slice, and the distinction is the point:
@@ -213,7 +220,7 @@ const { executed, delegated, skipped } = classifySlices(manifest);
 const python = resolvePython();
 if (!python) {
   process.stderr.write('[nginx-corpus] SKIP: no python3/python on PATH; cannot execute probes\n');
-  process.exit(0);
+  process.exit(REQUIRE_EVIDENCE ? 1 : 0);
 }
 
 let binary = findBinary();
@@ -222,7 +229,7 @@ if (!binary) {
     process.stderr.write(
       `[nginx-corpus] SKIP: no ${BINARY_STEM} binary found and SDKWORK_WEBSERVER_SKIP_BUILD is set\n`,
     );
-    process.exit(0);
+    process.exit(REQUIRE_EVIDENCE ? 1 : 0);
   }
   const built = buildBinary();
   if (!built.ok) {
@@ -230,7 +237,7 @@ if (!binary) {
       `[nginx-corpus] SKIP: cannot build the gateway binary (${built.reason}); ` +
         'the corpus was NOT executed\n',
     );
-    process.exit(0);
+    process.exit(REQUIRE_EVIDENCE ? 1 : 0);
   }
   binary = findBinary();
   if (!binary) {

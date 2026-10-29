@@ -1,0 +1,1544 @@
+{
+  "_etag": "\"5e0be100-12\"",
+  "_fixture_hello_bytes": 18,
+  "_last_modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+  "_port": 20992,
+  "_server": "nginx/1.29.6",
+  "_upstream_port": 20994,
+  "access.allow-then-deny": {
+    "body_len": 26,
+    "body_sha256": "116eb9e37f01ea72847773fc4d331abc8865eef31ba4f12052e4c4dff4db9892",
+    "body_text": "{\"path\": \"/admin/inside\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "26",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "access.deny-all": {
+    "body_len": 153,
+    "body_sha256": "97809b5484c45068de9f3d13869cbc459f42a5fbfcaf175640a16854d8a20fff",
+    "body_text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 403
+  },
+  "access.deny-first": {
+    "body_len": 153,
+    "body_sha256": "97809b5484c45068de9f3d13869cbc459f42a5fbfcaf175640a16854d8a20fff",
+    "body_text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 403
+  },
+  "auth.good": {
+    "body_len": 28,
+    "body_sha256": "6a9e4815333e465c9edcfcc35c9c6681f42b70ab2e0f05cfe0c0af4a2f62ac4d",
+    "body_text": "{\"path\": \"/private/inside\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "28",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "auth.missing": {
+    "body_len": 179,
+    "body_sha256": "ee8d2cae78f63f21bf6a5708dbf2a3270c4800103f58b2ab6d6cac9c476d7961",
+    "body_text": "<html>\r\n<head><title>401 Authorization Required</title></head>\r\n<body>\r\n<center><h1>401 Authorization Required</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "179",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "www-authenticate": "Basic realm=\"diff realm\"",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 401
+  },
+  "auth.wrong": {
+    "body_len": 179,
+    "body_sha256": "ee8d2cae78f63f21bf6a5708dbf2a3270c4800103f58b2ab6d6cac9c476d7961",
+    "body_text": "<html>\r\n<head><title>401 Authorization Required</title></head>\r\n<body>\r\n<center><h1>401 Authorization Required</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "179",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "www-authenticate": "Basic realm=\"diff realm\"",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 401
+  },
+  "error-page.code-override": {
+    "body_len": 39,
+    "body_sha256": "9f0332232c63ef9d51d733c72f54c3467f72dbd6ec7ce84dec829b94c863eb12",
+    "body_text": "<!doctype html><title>diff alt</title>\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "39",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-27\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "error-page.location-override": {
+    "body_len": 39,
+    "body_sha256": "9f0332232c63ef9d51d733c72f54c3467f72dbd6ec7ce84dec829b94c863eb12",
+    "body_text": "<!doctype html><title>diff alt</title>\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "39",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-27\"",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": false,
+    "status": 404
+  },
+  "error-page.recursive-chain": {
+    "body_len": 45,
+    "body_sha256": "785210cd590f4ac5eb0c5dc3ca2d117dc03352b41ed80b877c15197e911d3a8a",
+    "body_text": "<!doctype html><title>diff not found</title>\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": false,
+    "status": 404
+  },
+  "gzip.identity": {
+    "body_len": 231,
+    "body_sha256": "6eb7c89f275c67f11a9e316a919af5ec4adc12a592871ed1a336d4638f649953",
+    "body_text": "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "231",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-e7\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "vary": "Accept-Encoding",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.location-off": {
+    "body_len": 231,
+    "body_sha256": "6eb7c89f275c67f11a9e316a919af5ec4adc12a592871ed1a336d4638f649953",
+    "body_text": "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "231",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-e7\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.min-length": {
+    "body_len": 6,
+    "body_sha256": "4c47b3e816fbe7d40cef9f665ba8f0be1ae68b5e8e7ed70f5b6bab7f70528e8f",
+    "body_text": "small\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "6",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-6\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.no-accept-encoding": {
+    "body_len": 231,
+    "body_sha256": "6eb7c89f275c67f11a9e316a919af5ec4adc12a592871ed1a336d4638f649953",
+    "body_text": "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "231",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-e7\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "vary": "Accept-Encoding",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.q-low": {
+    "body_len": 231,
+    "body_sha256": "6eb7c89f275c67f11a9e316a919af5ec4adc12a592871ed1a336d4638f649953",
+    "body_text": "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\n",
+    "headers": {
+      "connection": "close",
+      "content-encoding": "gzip",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "W/\"5e0be100-e7\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.q0": {
+    "body_len": 231,
+    "body_sha256": "6eb7c89f275c67f11a9e316a919af5ec4adc12a592871ed1a336d4638f649953",
+    "body_text": "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "231",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-e7\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "vary": "Accept-Encoding",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.text": {
+    "body_len": 231,
+    "body_sha256": "6eb7c89f275c67f11a9e316a919af5ec4adc12a592871ed1a336d4638f649953",
+    "body_text": "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\nlorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor\n",
+    "headers": {
+      "connection": "close",
+      "content-encoding": "gzip",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "W/\"5e0be100-e7\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.types-css": {
+    "body_len": 20,
+    "body_sha256": "bfec0c7b339cfd4a9b9cb6ed35e27ca7f3dd173612261a0bd7063e5147d530de",
+    "body_text": "body{color:#123456}\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "20",
+      "content-type": "text/css",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-14\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "gzip.types.json": {
+    "body_len": 24,
+    "body_sha256": "896ebd83184fc803d7dccf4a7a90427c7e9eced24e17c5f7473435e5930a5512",
+    "body_text": "{\"diff\":true,\"value\":1}\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "24",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-18\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "headers.host-policy-on-unmatched-route": {
+    "body_len": 153,
+    "body_sha256": "eda336b0ba6d1927d4b2b52ffb153e8f0b5732d89c3b627cf6adda1c861cffaf",
+    "body_text": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 404
+  },
+  "headers.http-level-inherited": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "headers.http-level-on-301": {
+    "body_len": 169,
+    "body_sha256": "bf46cc2aaef8f92512afa7a6ec468e33239c7f323664e9c8b013b34b49f54e01",
+    "body_text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "169",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "location": "/hello.txt",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 301
+  },
+  "headers.location-always-on-generated-403": {
+    "body_len": 153,
+    "body_sha256": "97809b5484c45068de9f3d13869cbc459f42a5fbfcaf175640a16854d8a20fff",
+    "body_text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-loc-denied": "denied"
+    },
+    "nginx_error_page": true,
+    "status": 403
+  },
+  "headers.location-always-on-static-404": {
+    "body_len": 153,
+    "body_sha256": "eda336b0ba6d1927d4b2b52ffb153e8f0b5732d89c3b627cf6adda1c861cffaf",
+    "body_text": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-loc-file": "locfile"
+    },
+    "nginx_error_page": true,
+    "status": 404
+  },
+  "headers.location-replaces-server": {
+    "body_len": 7,
+    "body_sha256": "87251ba85aa614374c770f49ff9532850e10ed7794e6fcdcedd0bc92b7b9050a",
+    "body_text": "hdr-loc",
+    "headers": {
+      "connection": "close",
+      "content-length": "7",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-loc-dup": "one\ntwo",
+      "x-loc-level": "loc"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "headers.location-replaces-server-on-200": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-loc-file": "locfile"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "headers.redirect-error-page-301": {
+    "body_len": 39,
+    "body_sha256": "9f0332232c63ef9d51d733c72f54c3467f72dbd6ec7ce84dec829b94c863eb12",
+    "body_text": "<!doctype html><title>diff alt</title>\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "39",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-27\"",
+      "location": "/hello.txt",
+      "server": "nginx/1.29.6",
+      "x-content-type-options": "nosniff",
+      "x-server-always": "srv-always",
+      "x-server-level": "srv"
+    },
+    "nginx_error_page": false,
+    "status": 301
+  },
+  "headers.server-gating-on-404": {
+    "body_len": 153,
+    "body_sha256": "eda336b0ba6d1927d4b2b52ffb153e8f0b5732d89c3b627cf6adda1c861cffaf",
+    "body_text": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-content-type-options": "nosniff",
+      "x-server-always": "srv-always"
+    },
+    "nginx_error_page": true,
+    "status": 404
+  },
+  "headers.server-on-200": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-content-type-options": "nosniff",
+      "x-server-always": "srv-always",
+      "x-server-level": "srv"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "headers.server-on-301": {
+    "body_len": 169,
+    "body_sha256": "bf46cc2aaef8f92512afa7a6ec468e33239c7f323664e9c8b013b34b49f54e01",
+    "body_text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "169",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "location": "/hello.txt",
+      "server": "nginx/1.29.6",
+      "x-content-type-options": "nosniff",
+      "x-server-always": "srv-always",
+      "x-server-level": "srv"
+    },
+    "nginx_error_page": true,
+    "status": 301
+  },
+  "headers.variables": {
+    "body_len": 8,
+    "body_sha256": "3957764d027ebde06e6d74f873aeabfa4e4bf1a01c4105045905d32090d2d229",
+    "body_text": "hdr-vars",
+    "headers": {
+      "connection": "close",
+      "content-length": "8",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-vars": "headers.example.com|/hdr-vars|http|GET"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "limit-conn.first": {
+    "body_len": 10,
+    "body_sha256": "cef3e54e29d4c6c0bba7215b34efd2d83fdd5019c86c1afb2aa7c44239e024af",
+    "body_text": "slow-done\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "10",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "limit-conn.second": {
+    "body_len": 197,
+    "body_sha256": "0c43d148f613fd7586d08ebc7b5fd201c3df47ce880bb32f1b58e6d89d75bf66",
+    "body_text": "<html>\r\n<head><title>503 Service Temporarily Unavailable</title></head>\r\n<body>\r\n<center><h1>503 Service Temporarily Unavailable</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "197",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 503
+  },
+  "limit-req.first": {
+    "body_len": 20,
+    "body_sha256": "e06d38f9501defe2dc1a6ffcf658f14047b0a87ea6af40796d2c153988d450ea",
+    "body_text": "{\"path\": \"/rate/a\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "20",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "limit-req.second": {
+    "body_len": 20,
+    "body_sha256": "ca529ea19cdc57c8c481b1351075516fc7e31e1f836d4d54d6e3b1ef4a5d6193",
+    "body_text": "{\"path\": \"/rate/b\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "20",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "limit-req.third": {
+    "body_len": 197,
+    "body_sha256": "0c43d148f613fd7586d08ebc7b5fd201c3df47ce880bb32f1b58e6d89d75bf66",
+    "body_text": "<html>\r\n<head><title>503 Service Temporarily Unavailable</title></head>\r\n<body>\r\n<center><h1>503 Service Temporarily Unavailable</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "197",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 503
+  },
+  "proxy.forwarded-for": {
+    "body_len": 50,
+    "body_sha256": "90ebef38535d6a8ba717e66c4ba886dcf6dd07dab235a2a21f7aa8446fc9387a",
+    "body_text": "{\"name\": \"x-forwarded-for\", \"value\": \"127.0.0.1\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "50",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.forwarded-proto": {
+    "body_len": 47,
+    "body_sha256": "f12f1df4c9c465c960a5b816d90fe652ca1c2e87f2900a3ab4244992fa393061",
+    "body_text": "{\"name\": \"x-forwarded-proto\", \"value\": \"http\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "47",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.hop-by-hop-request": {
+    "body_len": 74,
+    "body_sha256": "b42ded5a5440528fade2c9d18f28a1ec1cbc456d38a2f54c4e7698e2b571a7c6",
+    "body_text": "{\"headers\": [[\"host\", \"127.0.0.1:<upstream>\"], [\"x-client-echo\", \"hop\"]]}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "69",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.host-default": {
+    "body_len": 33,
+    "body_sha256": "2752039a5e77d9e96e47f540392eb8f41f5aac8e21bc7cb2c9e6ef68baa331d1",
+    "body_text": "{\"host\": \"127.0.0.1:<upstream>\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "28",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.host-set": {
+    "body_len": 29,
+    "body_sha256": "e43ef381e7b9fa818b4f898edf9f702ef4b1399d5d953b238d5a7e34ef938734",
+    "body_text": "{\"host\": \"diff.example.com\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "29",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.pass-path": {
+    "body_len": 33,
+    "body_sha256": "e7a64fb3e83e5defc4e40bbeee0f9436cadcf47e1d5af69313605ae252e8d62a",
+    "body_text": "{\"path\": \"/proxy/echo/path?x=1\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "33",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.pass-uri-args": {
+    "body_len": 24,
+    "body_sha256": "b5f0ed9212d8c3a77119103166e609f5e412d7e5f35fb9ad5266d75fbfb2b403",
+    "body_text": "{\"path\": \"/v1/a/b?q=2\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "24",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.pass-uri-exact": {
+    "body_len": 17,
+    "body_sha256": "013fe7ed794cfade8e6a4d746f0c9f5072d5340986ba4d4a15d15b115747e208",
+    "body_text": "{\"path\": \"/v1/\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "17",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.pass-uri-replace": {
+    "body_len": 30,
+    "body_sha256": "f729ac86a002e623bed931c94ba0ee7b135baa5553e233f165ff2fb93af7c3d2",
+    "body_text": "{\"path\": \"/v1/echo/path?a=1\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "30",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.pass-uri-splice": {
+    "body_len": 21,
+    "body_sha256": "482f684db85dc63bd6bbe8fcec5c8a42d71bc104a2a2abaea43d07140b4ae301",
+    "body_text": "{\"path\": \"/v1inner\"}\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "21",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.response-pass-through": {
+    "body_len": 13,
+    "body_sha256": "96f6aa06ec442dcdde1cbd962b42a86ec9e7cdb87ce01dcc2b72745f1b3547ab",
+    "body_text": "hop-response\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "13",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "set-cookie": "sid=diff; Path=/",
+      "x-drop": "1",
+      "x-http-always": "http-always",
+      "x-http-level": "http",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "proxy.upstream-502": {
+    "body_len": 157,
+    "body_sha256": "59f790efa444a7f724e8f9bcfc8b46991e2df52c085d1b6060fcf489708df163",
+    "body_text": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "157",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 502
+  },
+  "proxy.upstream-503": {
+    "body_len": 20,
+    "body_sha256": "7fc498dcff18a9207a5f6a090d15e3d79426e31067ff7b8990f6e8e863ae66f9",
+    "body_text": "upstream-status-503\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "20",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:17 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-upstream": "yes"
+    },
+    "nginx_error_page": false,
+    "status": 503
+  },
+  "route.caret-tilde": {
+    "body_len": 70,
+    "body_sha256": "497790947d4666760ce38f3c00e852c71fdb66cae849bae8e9ede352719e1581",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "70",
+      "content-type": "image/png",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-46\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.exact": {
+    "body_len": 10,
+    "body_sha256": "38fba87074b486c53af8779972376588019bf2d0217f47a1b4965942235dccac",
+    "body_text": "exact-body",
+    "headers": {
+      "connection": "close",
+      "content-length": "10",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.prefix": {
+    "body_len": 11,
+    "body_sha256": "6dabb0de677ee9b10c6a633f688c54512a11d80a52a386c8a1bd4dd65c94ea98",
+    "body_text": "prefix-body",
+    "headers": {
+      "connection": "close",
+      "content-length": "11",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.regex": {
+    "body_len": 9,
+    "body_sha256": "9fa56b6c7751cc7f95c3be1fc93e4dd04bc29c1d2bfd321426ff1eb6b720b388",
+    "body_text": "regex-png",
+    "headers": {
+      "connection": "close",
+      "content-length": "9",
+      "content-type": "image/png",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.ret-404": {
+    "body_len": 45,
+    "body_sha256": "785210cd590f4ac5eb0c5dc3ca2d117dc03352b41ed80b877c15197e911d3a8a",
+    "body_text": "<!doctype html><title>diff not found</title>\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": false,
+    "status": 404
+  },
+  "route.ret-body": {
+    "body_len": 8,
+    "body_sha256": "6336a59da0f60220cb5cead18bbcbf5f48e02250e506a9fa493a431603200b0e",
+    "body_text": "ret-body",
+    "headers": {
+      "connection": "close",
+      "content-length": "8",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.ret-status": {
+    "body_len": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "body_text": "",
+    "headers": {
+      "connection": "close",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 204
+  },
+  "route.ret-url": {
+    "body_len": 169,
+    "body_sha256": "bf46cc2aaef8f92512afa7a6ec468e33239c7f323664e9c8b013b34b49f54e01",
+    "body_text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "169",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "location": "https://diff.example.com/moved",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 301
+  },
+  "route.rewrite-break": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.rewrite-capture": {
+    "body_len": 45,
+    "body_sha256": "785210cd590f4ac5eb0c5dc3ca2d117dc03352b41ed80b877c15197e911d3a8a",
+    "body_text": "<!doctype html><title>diff not found</title>\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": false,
+    "status": 404
+  },
+  "route.rewrite-last": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.rewrite-permanent": {
+    "body_len": 169,
+    "body_sha256": "bf46cc2aaef8f92512afa7a6ec468e33239c7f323664e9c8b013b34b49f54e01",
+    "body_text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "169",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "location": "/hello.txt",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 301
+  },
+  "route.rewrite-redirect": {
+    "body_len": 145,
+    "body_sha256": "2af3ec931a4158df83079f21fa76d1848724052617cc5d4025c70cbfe8ada13a",
+    "body_text": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "145",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "location": "/hello.txt",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 302
+  },
+  "route.server-root": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.try-files-fallback": {
+    "body_len": 45,
+    "body_sha256": "86bab7b843b3075abf48786ce2a5af862be2baaf148b6dc1b697b834850be156",
+    "body_text": "<!doctype html><title>diff app index</title>\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "route.try-files-hit": {
+    "body_len": 45,
+    "body_sha256": "86bab7b843b3075abf48786ce2a5af862be2baaf148b6dc1b697b834850be156",
+    "body_text": "<!doctype html><title>diff app index</title>\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.404": {
+    "body_len": 45,
+    "body_sha256": "785210cd590f4ac5eb0c5dc3ca2d117dc03352b41ed80b877c15197e911d3a8a",
+    "body_text": "<!doctype html><title>diff not found</title>\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": false,
+    "status": 404
+  },
+  "static.conditional.ims-equal": {
+    "body_len": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "body_text": "",
+    "headers": {
+      "connection": "close",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 304
+  },
+  "static.conditional.ims-older": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.conditional.inm-match": {
+    "body_len": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "body_text": "",
+    "headers": {
+      "connection": "close",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 304
+  },
+  "static.dir-no-index": {
+    "body_len": 153,
+    "body_sha256": "97809b5484c45068de9f3d13869cbc459f42a5fbfcaf175640a16854d8a20fff",
+    "body_text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "153",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always"
+    },
+    "nginx_error_page": true,
+    "status": 403
+  },
+  "static.dir-redirect": {
+    "body_len": 169,
+    "body_sha256": "bf46cc2aaef8f92512afa7a6ec468e33239c7f323664e9c8b013b34b49f54e01",
+    "body_text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "169",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "location": "/sub/",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 301
+  },
+  "static.head": {
+    "body_len": 0,
+    "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "body_text": "",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.css": {
+    "body_len": 20,
+    "body_sha256": "bfec0c7b339cfd4a9b9cb6ed35e27ca7f3dd173612261a0bd7063e5147d530de",
+    "body_text": "body{color:#123456}\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "20",
+      "content-type": "text/css",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-14\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.html": {
+    "body_len": 46,
+    "body_sha256": "5c47185d5de762585c743257f851d2412cb0368e817071a0175e20ca23568c03",
+    "body_text": "<!doctype html><title>diff root index</title>\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "46",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2e\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.js": {
+    "body_len": 21,
+    "body_sha256": "5c89dd5748adbb59f3530154a55556a49c3b3cfe0d24dcaa3e752e42def814c1",
+    "body_text": "console.log('diff');\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "21",
+      "content-type": "application/javascript",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-15\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.json": {
+    "body_len": 24,
+    "body_sha256": "896ebd83184fc803d7dccf4a7a90427c7e9eced24e17c5f7473435e5930a5512",
+    "body_text": "{\"diff\":true,\"value\":1}\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "24",
+      "content-type": "application/json",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-18\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.png": {
+    "body_len": 9,
+    "body_sha256": "9fa56b6c7751cc7f95c3be1fc93e4dd04bc29c1d2bfd321426ff1eb6b720b388",
+    "body_text": "regex-png",
+    "headers": {
+      "connection": "close",
+      "content-length": "9",
+      "content-type": "image/png",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.txt": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.mime.unknown": {
+    "body_len": 23,
+    "body_sha256": "b31a0c5d564de38e91e96bd209b6730d84bf1c99c42ce3884fda26ee7e59ea8e",
+    "body_text": "unknown extension body\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "23",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-17\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.range.clamped": {
+    "body_len": 18,
+    "body_sha256": "346124634a7df14c5bda8efd1748f90f2b3227c9f63975155fb1e7b2d9f97810",
+    "body_text": "hello static body\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "18",
+      "content-range": "bytes 0-17/18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 206
+  },
+  "static.range.invalid": {
+    "body_len": 197,
+    "body_sha256": "6118a69023c950a3445c8a6ee2405d1c220d2ecf4882dc09c115e9d4bef7c9cc",
+    "body_text": "<html>\r\n<head><title>416 Requested Range Not Satisfiable</title></head>\r\n<body>\r\n<center><h1>416 Requested Range Not Satisfiable</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "197",
+      "content-range": "bytes */18",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always\nhttp-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 416
+  },
+  "static.range.multi": {
+    "body_len": 198,
+    "body_sha256": "b722588ccbc3062472f23bb2404a315f9a3ceb3b7284fa277fd3317ff79f0941",
+    "body_text": "\r\n--00000000000000000001\r\nContent-Type: text/plain\r\nContent-Range: bytes 0-1/18\r\n\r\nhe\r\n--00000000000000000001\r\nContent-Type: text/plain\r\nContent-Range: bytes 4-5/18\r\n\r\no \r\n--00000000000000000001--\r\n",
+    "content_type_media": "multipart/byteranges",
+    "headers": {
+      "connection": "close",
+      "content-length": "198",
+      "content-type": "multipart/byteranges",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "multipart": {
+      "parts": [
+        {
+          "body_len": 2,
+          "body_sha256": "372f7e2fd2d01ce2a1d71dc072acbba4c6fd25a1087cd7f153f4ec0ce37e1ede",
+          "headers": {
+            "content-range": "bytes 0-1/18",
+            "content-type": "text/plain"
+          }
+        },
+        {
+          "body_len": 2,
+          "body_sha256": "86b0e1bbe2765839319e85e257c105811438d49e3cea15f0440bbe9ac33ea51c",
+          "headers": {
+            "content-range": "bytes 4-5/18",
+            "content-type": "text/plain"
+          }
+        }
+      ]
+    },
+    "nginx_error_page": false,
+    "status": 206
+  },
+  "static.range.open": {
+    "body_len": 12,
+    "body_sha256": "742506c7577fd8daf549c8103518d511c816dfbbcf7604c9815f2770c56f97a4",
+    "body_text": "static body\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "12",
+      "content-range": "bytes 6-17/18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 206
+  },
+  "static.range.simple": {
+    "body_len": 4,
+    "body_sha256": "0ebdc3317b75839f643387d783535adc360ca01f33c75f7c1e7373adcd675c0b",
+    "body_text": "hell",
+    "headers": {
+      "connection": "close",
+      "content-length": "4",
+      "content-range": "bytes 0-3/18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 206
+  },
+  "static.range.suffix": {
+    "body_len": 4,
+    "body_sha256": "bd6df0b38100592923d291efd030c280e81b26b32650b04cb2f9914af7c2d8b1",
+    "body_text": "ody\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "4",
+      "content-range": "bytes 14-17/18",
+      "content-type": "text/plain",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-12\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 206
+  },
+  "static.range.unsatisfiable": {
+    "body_len": 197,
+    "body_sha256": "6118a69023c950a3445c8a6ee2405d1c220d2ecf4882dc09c115e9d4bef7c9cc",
+    "body_text": "<html>\r\n<head><title>416 Requested Range Not Satisfiable</title></head>\r\n<body>\r\n<center><h1>416 Requested Range Not Satisfiable</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+    "headers": {
+      "connection": "close",
+      "content-length": "197",
+      "content-range": "bytes */18",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always\nhttp-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": true,
+    "status": 416
+  },
+  "static.root-index": {
+    "body_len": 46,
+    "body_sha256": "5c47185d5de762585c743257f851d2412cb0368e817071a0175e20ca23568c03",
+    "body_text": "<!doctype html><title>diff root index</title>\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "46",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2e\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  },
+  "static.subdir-index": {
+    "body_len": 45,
+    "body_sha256": "12cd8be7c03e469165cefea55471d8ab5c0f202584adb0a5fc5605a8700017d4",
+    "body_text": "<!doctype html><title>diff sub index</title>\n",
+    "headers": {
+      "accept-ranges": "bytes",
+      "connection": "close",
+      "content-length": "45",
+      "content-type": "text/html",
+      "date": "Thu, 29 Oct 2026 16:01:15 GMT",
+      "etag": "\"5e0be100-2d\"",
+      "last-modified": "Wed, 01 Jan 2020 00:00:00 GMT",
+      "server": "nginx/1.29.6",
+      "x-http-always": "http-always",
+      "x-http-level": "http"
+    },
+    "nginx_error_page": false,
+    "status": 200
+  }
+}

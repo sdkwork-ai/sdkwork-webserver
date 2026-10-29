@@ -5,3 +5,13 @@
 *.sh text eol=lf
 *.bash text eol=lf
 *.ps1 text eol=crlf
+
+# Differential-oracle fixtures are byte-pinned: nginx `ETag` is
+# `<mtime>-<size>`, so a checkout that converts LF to CRLF changes the expected
+# representation length and every conditional/range assertion in
+# tests/nginx/differential. `-text` disables all end-of-line conversion in both
+# directions so the committed bytes are the bytes under test. Every differential
+# slice that compares real nginx with the data plane inherits this rule.
+tests/nginx/differential/public/** -text
+tests/nginx/differential-http/public/** -text
+tests/nginx/differential-host/public/** -text

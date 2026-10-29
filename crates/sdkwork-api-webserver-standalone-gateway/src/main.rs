@@ -360,8 +360,15 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
         .as_ref()
         .map(|value| value.sha256().to_owned())
         .unwrap_or_else(|| "-".to_owned());
+    // PRD-nginx-compatibility §11: an accepted-but-unenforced directive must be
+    // reported, never silently dropped. The nginx-conf plane already prints its
+    // diagnostics; the typed TOML plane now carries the same information, so
+    // `validate` shows an operator which declared values have no runtime effect.
+    for diagnostic in &revision.compatibility {
+        eprintln!("compatibility: {}: {}", diagnostic.path, diagnostic.message);
+    }
     println!(
-        "validated format={} appKey={} revision={} bytes={} listeners={} virtualHosts={} routes={} resources={} upstreams={} tlsPolicies={} skipped={}",
+        "validated format={} appKey={} revision={} bytes={} listeners={} virtualHosts={} routes={} resources={} upstreams={} tlsPolicies={} skipped={} acceptedButUnenforced={}",
         revision.format.as_str(),
         compiled.config().app_key,
         revision_text,
@@ -373,6 +380,7 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
         compiled.config().upstreams.len(),
         compiled.config().tls_policies.len(),
         revision.skipped.len(),
+        revision.compatibility.len(),
     );
     validate_tunnel_section(compiled.config())?;
     Ok(())

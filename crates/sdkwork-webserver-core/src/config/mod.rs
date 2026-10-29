@@ -14,6 +14,7 @@ mod proxy_headers;
 mod proxy_pass;
 mod rewrite;
 mod secure_link;
+mod server_name;
 mod server_toml;
 mod source;
 mod sub_filter;
@@ -77,9 +78,15 @@ pub use secure_link::{
     md5_hex, validate_md5_template, verify_md5_link, verify_secret_link, verify_secure_link,
     SecureLinkFailure,
 };
+pub use server_name::{
+    normalize_virtual_host_server_name, parse_server_name, server_name_is_regex, ServerNameClaim,
+    ServerNameForm, ServerNameRegex,
+};
 pub use server_toml::{
-    load_server_toml_app, load_server_toml_app_effective, load_server_toml_file, materialize_app,
-    merge_common_profile, merge_effective, merge_overlay,
+    accepted_unenforced_toml_diagnostics, load_server_toml_app, load_server_toml_app_effective,
+    load_server_toml_app_with_compatibility, load_server_toml_file,
+    load_server_toml_file_with_compatibility, materialize_app, merge_common_profile,
+    merge_effective, merge_overlay,
 };
 pub use source::{
     ConfigFormat, ConfigLoadOptions, ConfigSource, JsonConfigSource, LoadedWebServerConfig,

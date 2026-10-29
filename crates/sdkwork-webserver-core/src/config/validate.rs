@@ -8,9 +8,10 @@ use ipnet::IpNet;
 use url::Url;
 
 use super::{
-    is_supported_upstream_allowed_cidr, upstream_ip_is_allowed, AppDomainFallbackLookup,
-    CachePolicyConfig, CertificateSource, ConfigDiagnostic, ExpiresMode, ListenerProtocol,
-    ResourceConfig, RouteConfig, RoutePathType, SecurityHeadersConfig, StreamTargetConfig,
+    is_supported_upstream_allowed_cidr, parse_server_name, server_name_is_regex,
+    upstream_ip_is_allowed, AppDomainFallbackLookup, CachePolicyConfig, CertificateSource,
+    ConfigDiagnostic, ErrorPageConfig, ExpiresMode, ListenerProtocol, ResourceConfig, RouteConfig,
+    RoutePathType, SecurityHeadersConfig, ServerNameForm, StreamTargetConfig,
     TlsCertificateResolution, TlsVersion, UpstreamConfig, UpstreamLoadBalancingStrategy,
     UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig, WebServerConfigError,
     WebServerLimits,
@@ -894,10 +895,17 @@ impl SemanticValidator {
             );
         }
 
+        // nginx server-name ownership is tracked per listener and per name
+        // table (`exact` / `leading-wildcard` / `trailing-wildcard`). A
+        // dot-prefixed name claims both the exact and the leading-wildcard
+        // entry. nginx only warns ("conflicting server name ... ignored") and
+        // keeps the first owner; silently dropping a name changes host
+        // selection, so the compiler rejects the ambiguity instead (PRD §5).
         let mut host_owners: HashMap<(String, String), String> = HashMap::new();
         let mut total_routes = 0usize;
         for (index, virtual_host) in config.virtual_hosts.iter().enumerate() {
             let path = format!("/virtualHosts/{index}");
+            let named_targets = named_location_targets(self, &path, virtual_host);
             for (listener_index, listener_ref) in virtual_host.listener_refs.iter().enumerate() {
                 if !listeners.contains_key(listener_ref.as_str()) {
                     self.push(
@@ -907,22 +915,43 @@ impl SemanticValidator {
                     continue;
                 }
                 for (name_index, server_name) in virtual_host.server_names.iter().enumerate() {
-                    let Some(normalized) = normalize_server_name(server_name) else {
+                    let name_path = format!("{path}/serverNames/{name_index}");
+                    if server_name_is_regex(server_name) {
+                        let Some(ServerNameForm::Regex(regex)) = parse_server_name(server_name)
+                        else {
+                            self.push(&name_path, "invalid `~` server_name regular expression");
+                            continue;
+                        };
+                        validate_regex_pattern(self, name_path, &regex.compiled_pattern());
+                        continue;
+                    }
+                    let Some(form) = parse_server_name(server_name) else {
                         self.push(
-                            format!("{path}/serverNames/{name_index}"),
-                            "invalid exact or leading-wildcard DNS server name",
+                            &name_path,
+                            "invalid server name; supported forms are an exact name, `*.suffix`, `prefix.*`, `.suffix`, and `~regex`",
                         );
                         continue;
                     };
-                    let key = (listener_ref.clone(), normalized.clone());
-                    if let Some(owner) = host_owners.insert(key, virtual_host.id.clone()) {
-                        if owner != virtual_host.id {
-                            self.push(
-                                format!("{path}/serverNames/{name_index}"),
-                                format!(
-                                    "server name {normalized} on listener {listener_ref} is already owned by {owner}"
-                                ),
-                            );
+                    for claim in form.claims() {
+                        let (table, value) = match claim {
+                            super::ServerNameClaim::Exact(value) => ("exact", value),
+                            super::ServerNameClaim::LeadingWildcard(value) => {
+                                ("leading-wildcard", value)
+                            }
+                            super::ServerNameClaim::TrailingWildcard(value) => {
+                                ("trailing-wildcard", value)
+                            }
+                        };
+                        let key = (listener_ref.clone(), format!("{table}:{value}"));
+                        if let Some(owner) = host_owners.insert(key, virtual_host.id.clone()) {
+                            if owner != virtual_host.id {
+                                self.push(
+                                    &name_path,
+                                    format!(
+                                        "server name {server_name} on listener {listener_ref} is already owned by {owner}"
+                                    ),
+                                );
+                            }
                         }
                     }
                 }
@@ -936,7 +965,20 @@ impl SemanticValidator {
                 &resources,
                 &config.limits,
                 &config.limit_req_zones,
+                &named_targets,
+                &virtual_host.error_pages,
+                virtual_host.recursive_error_pages,
             );
+            for (page_index, page) in virtual_host.error_pages.iter().enumerate() {
+                validate_error_page_target(
+                    self,
+                    &format!("{path}/errorPages/{page_index}"),
+                    page,
+                    &named_targets,
+                    &resources,
+                    false,
+                );
+            }
             validate_security_headers(self, &path, virtual_host.security_headers.as_ref());
             validate_cache_policy(
                 self,
@@ -973,6 +1015,7 @@ impl SemanticValidator {
             let policy_certificates = policy
                 .certificate_refs()
                 .filter_map(|certificate_ref| certificates.get(certificate_ref))
+                .copied()
                 .collect::<Vec<_>>();
             // A listener that also serves the assigned certificate set is
             // expected to leave server names to it. `policy-first` exists so a
@@ -993,25 +1036,74 @@ impl SemanticValidator {
                     .any(|listener_ref| listener_ref == &listener.id)
             }) {
                 for server_name in &virtual_host.server_names {
-                    if normalize_server_name(server_name)
-                        .is_some_and(|name| name.parse::<IpAddr>().is_ok())
-                    {
+                    // SNI certificate selection is index-based in this
+                    // runtime: exact names and one-level leading wildcards.
+                    // Regex names are evaluated by the HTTP host selector only
+                    // and a trailing wildcard has no index representation, so
+                    // both fail closed on a TLS listener instead of silently
+                    // serving the wrong certificate.
+                    if server_name_is_regex(server_name) {
                         self.push(
                             format!("/listeners/{listener_index}/tlsPolicyRef"),
                             format!(
-                                "strict SNI certificate selection requires a DNS server name, not IP address {server_name}"
+                                "regex server name {server_name} is not supported on a TLS listener: SNI certificate selection is an exact/wildcard index and nginx-compatible regex SNI matching is not implemented"
                             ),
                         );
                         continue;
                     }
+                    let Some(form) = parse_server_name(server_name) else {
+                        // Already reported at the virtual host.
+                        continue;
+                    };
+                    let coverage_name = match &form {
+                        ServerNameForm::Exact(name) => {
+                            if name.parse::<IpAddr>().is_ok() {
+                                self.push(
+                                    format!("/listeners/{listener_index}/tlsPolicyRef"),
+                                    format!(
+                                        "strict SNI certificate selection requires a DNS server name, not IP address {server_name}"
+                                    ),
+                                );
+                                continue;
+                            }
+                            name.clone()
+                        }
+                        ServerNameForm::LeadingWildcard(suffix) => format!("*.{suffix}"),
+                        ServerNameForm::DotPrefix(suffix) => {
+                            // `.example.com` selects one certificate for the
+                            // bare name and any subdomain: both claims have to
+                            // be covered.
+                            if !assignments_cover_unlisted_names
+                                && !certificate_covers_any(
+                                    &policy_certificates,
+                                    &suffix.to_string(),
+                                )
+                            {
+                                self.push(
+                                    format!("/listeners/{listener_index}/tlsPolicyRef"),
+                                    format!(
+                                        "TLS policy {policy_ref} has no certificate covering server name {server_name}"
+                                    ),
+                                );
+                                continue;
+                            }
+                            format!("*.{suffix}")
+                        }
+                        ServerNameForm::TrailingWildcard(_) => {
+                            self.push(
+                                format!("/listeners/{listener_index}/tlsPolicyRef"),
+                                format!(
+                                    "trailing-wildcard server name {server_name} is not supported on a TLS listener: SNI certificate selection is an exact/leading-wildcard index"
+                                ),
+                            );
+                            continue;
+                        }
+                        ServerNameForm::Regex(_) => continue,
+                    };
                     if assignments_cover_unlisted_names {
                         continue;
                     }
-                    if !policy_certificates.iter().any(|certificate| {
-                        certificate.server_names.iter().any(|certificate_name| {
-                            server_name_covers(certificate_name, server_name)
-                        })
-                    }) {
+                    if !certificate_covers_any(&policy_certificates, &coverage_name) {
                         self.push(
                             format!("/listeners/{listener_index}/tlsPolicyRef"),
                             format!(
@@ -1806,6 +1898,152 @@ fn valid_active_health_uri(uri: &str) -> bool {
     })
 }
 
+/// Index the named locations of one virtual host (`location @name { … }`).
+///
+/// A named location is carried as an ordinary route whose exact match path is
+/// `@name`: it can never be selected by a request path (request paths always
+/// start with `/`), only by a bounded internal redirect from `try_files` or
+/// `error_page`. The name namespace is per virtual host, matching nginx.
+fn named_location_targets<'a>(
+    validator: &mut SemanticValidator,
+    host_path: &str,
+    virtual_host: &'a super::VirtualHostConfig,
+) -> HashMap<&'a str, &'a RouteConfig> {
+    let mut named = HashMap::new();
+    for (index, route) in virtual_host.routes.iter().enumerate() {
+        let route_path = route.route_match.path.as_str();
+        if !route_path.starts_with('@') {
+            continue;
+        }
+        let path = format!("{host_path}/routes/{index}");
+        if !valid_named_location_name(route_path) {
+            validator.push(
+                format!("{path}/match/path"),
+                "named location name must be `@` followed by 1 to 256 letters, digits, `_`, `-`, `.`, or `~`",
+            );
+        }
+        if route.route_match.path_type != RoutePathType::Exact {
+            validator.push(
+                format!("{path}/match/pathType"),
+                "named location must use the exact match type (it is reached by name, not by request path)",
+            );
+        }
+        if route.route_match.methods.is_some() {
+            validator.push(
+                format!("{path}/match/methods"),
+                "named location cannot declare HTTP method restrictions",
+            );
+        }
+        if named.insert(route_path, route).is_some() {
+            validator.push(
+                format!("{path}/match/path"),
+                format!("duplicate named location {route_path}"),
+            );
+        }
+        if route.resource_ref.is_empty() {
+            validator.push(
+                format!("{path}/resourceRef"),
+                "named location requires a serving behavior",
+            );
+        }
+    }
+    named
+}
+
+fn valid_named_location_name(value: &str) -> bool {
+    let Some(name) = value.strip_prefix('@') else {
+        return false;
+    };
+    !name.is_empty()
+        && value.len() <= 257
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'~'))
+}
+
+/// Validate one `error_page` target: a literal URI, or a named-location
+/// reference that must resolve to a named location in the same virtual host.
+fn validate_error_page_target(
+    validator: &mut SemanticValidator,
+    path: &str,
+    page: &ErrorPageConfig,
+    named_targets: &HashMap<&str, &RouteConfig>,
+    resources: &HashMap<&str, &ResourceConfig>,
+    from_named_location: bool,
+) {
+    if !page.uri.starts_with('@') {
+        if !page.uri.starts_with('/') {
+            validator.push(
+                format!("{path}/uri"),
+                "error_page target must be an absolute `/path` or an `@named` location",
+            );
+        }
+        return;
+    }
+    if !valid_named_location_name(&page.uri) {
+        validator.push(
+            format!("{path}/uri"),
+            "named error_page target must be `@` followed by 1 to 256 letters, digits, `_`, `-`, `.`, or `~`",
+        );
+        return;
+    }
+    let Some(target) = named_targets.get(page.uri.as_str()) else {
+        validator.push(
+            format!("{path}/uri"),
+            format!(
+                "error_page target {} is not a declared named location",
+                page.uri
+            ),
+        );
+        return;
+    };
+    if from_named_location {
+        // One internal redirect per selection: a named location must resolve
+        // directly instead of chaining into another one (this also makes a
+        // cycle impossible to express). PRD §6 bounds the internal-redirect
+        // state machine; depth is one.
+        validator.push(
+            format!("{path}/uri"),
+            format!(
+                "named location must not internally redirect to {}; the internal redirect depth bound is one",
+                page.uri
+            ),
+        );
+        return;
+    }
+    if resources
+        .get(target.resource_ref.as_str())
+        .is_some_and(|resource| matches!(resource, ResourceConfig::Proxy { .. }))
+    {
+        validator.push(
+            format!("{path}/uri"),
+            format!(
+                "error_page cannot target the named proxy location {}: the request body is consumed before the error page runs; use `try_files ... {}` instead",
+                page.uri, page.uri
+            ),
+        );
+    }
+}
+
+fn certificate_covers_any(
+    policy_certificates: &[&super::CertificateConfig],
+    server_name: &str,
+) -> bool {
+    policy_certificates.iter().any(|certificate| {
+        certificate
+            .server_names
+            .iter()
+            .any(|certificate_name| server_name_covers(certificate_name, server_name))
+    })
+}
+
+// The route validator is the one place that needs the complete host context
+// (host path, routes, resources, limits, rate-limit zones, named-location index,
+// host error pages, recursion policy) and threading a context struct through it
+// would only move the same nine values behind one more indirection; grouping them
+// into a struct would still be a nine-field parameter bag. Keep the explicit
+// arguments.
+#[allow(clippy::too_many_arguments)]
 fn validate_routes(
     validator: &mut SemanticValidator,
     host_path: &str,
@@ -1813,6 +2051,9 @@ fn validate_routes(
     resources: &HashMap<&str, &ResourceConfig>,
     limits: &WebServerLimits,
     limit_req_zones: &[crate::config::LimitReqZoneConfig],
+    named_targets: &HashMap<&str, &RouteConfig>,
+    host_error_pages: &[ErrorPageConfig],
+    recursive_error_pages: bool,
 ) {
     let zone_names = limit_req_zones
         .iter()
@@ -1830,7 +2071,11 @@ fn validate_routes(
             route.route_match.path_type,
             RoutePathType::Regex | RoutePathType::RegexIgnoreCase
         );
-        if is_regex {
+        let is_named = configured_path.starts_with('@');
+        if is_named {
+            // Named locations are reached by name only; the `@name` string is
+            // not a request path and must not be canonicalized as one.
+        } else if is_regex {
             let pattern = if matches!(route.route_match.path_type, RoutePathType::RegexIgnoreCase) {
                 format!("(?i){configured_path}")
             } else {
@@ -1878,11 +2123,105 @@ fn validate_routes(
                 );
             }
         }
-        if !resources.contains_key(route.resource_ref.as_str()) {
+        let resource = resources.get(route.resource_ref.as_str()).copied();
+        if resource.is_none() {
             validator.push(
                 format!("{path}/resourceRef"),
                 format!("unknown resource {}", route.resource_ref),
             );
+        }
+        // `try_files $uri @fallback;` materializes on a static resource as a
+        // named fallback target. It must resolve inside this virtual host and
+        // a named location must never chain into another named location.
+        if let Some(ResourceConfig::Static {
+            spa_fallback: Some(target),
+            ..
+        }) = resource
+        {
+            if target.starts_with('@') {
+                if !valid_named_location_name(target) {
+                    validator.push(
+                        format!("{path}/resourceRef"),
+                        "named try_files fallback must be `@` followed by 1 to 256 letters, digits, `_`, `-`, `.`, or `~`",
+                    );
+                } else if is_named {
+                    validator.push(
+                        &path,
+                        format!(
+                            "named location must not internally redirect to {target}; the internal redirect depth bound is one"
+                        ),
+                    );
+                } else if !named_targets.contains_key(target.as_str()) {
+                    validator.push(
+                        format!("{path}/resourceRef"),
+                        format!(
+                            "try_files named fallback {target} is not a declared named location"
+                        ),
+                    );
+                }
+            }
+        }
+        if is_named {
+            match resource {
+                None => {}
+                Some(
+                    ResourceConfig::Static { .. }
+                    | ResourceConfig::Proxy { .. }
+                    | ResourceConfig::Respond { .. }
+                    | ResourceConfig::Redirect { .. },
+                ) => {}
+                Some(_) => validator.push(
+                    format!("{path}/resourceRef"),
+                    "named location serving behavior must be static, proxy, return, or try_files",
+                ),
+            }
+        }
+        for (page_index, page) in route.error_pages.iter().enumerate() {
+            validate_error_page_target(
+                validator,
+                &format!("{path}/errorPages/{page_index}"),
+                page,
+                named_targets,
+                resources,
+                is_named,
+            );
+        }
+        if is_named && recursive_error_pages {
+            // `recursive_error_pages on` lets a failure while serving the named
+            // target re-enter error-page mapping. Rejecting named -> named
+            // error-page edges (including a self-edge) makes a cycle or an
+            // unbounded chain impossible to express; without recursion the
+            // runtime already stops after one hop, so the same edge is a
+            // bounded, faithful mapping.
+            let effective_pages: &[ErrorPageConfig] = if route.error_pages.is_empty() {
+                host_error_pages
+            } else {
+                &route.error_pages
+            };
+            for (page_index, page) in effective_pages.iter().enumerate() {
+                if page.uri.starts_with('@') {
+                    validator.push(
+                        format!("{path}/errorPages/{page_index}"),
+                        format!(
+                            "named location would internally redirect to {} while `recursiveErrorPages` is enabled; this can form a cycle and the internal redirect depth bound is one",
+                            page.uri
+                        ),
+                    );
+                }
+            }
+        }
+        for (header_index, header) in route.response_headers.iter().enumerate() {
+            let header_path = format!("{path}/responseHeaders/{header_index}");
+            if HOP_BY_HOP_HEADERS.contains(&header.name.to_ascii_lowercase().as_str()) {
+                validator.push(
+                    format!("{header_path}/name"),
+                    format!(
+                        "hop-by-hop header {} is forbidden in responseHeaders",
+                        header.name
+                    ),
+                );
+            }
+            validate_custom_header_declaration(validator, &header_path, header);
         }
         for (rule_index, rule) in route.limit_req.iter().enumerate() {
             if !zone_names.contains(rule.zone.as_str()) {
@@ -1911,6 +2250,9 @@ fn validate_routes(
             route.cache_policy.as_ref(),
         );
 
+        if is_named {
+            continue;
+        }
         let matcher_key = (route.route_match.path_type, route.route_match.path.as_str());
         if let Some(earlier) = routes_by_matcher.get(&matcher_key) {
             for &other_index in earlier {
@@ -2065,9 +2407,32 @@ fn validate_security_headers(
                 format!("hop-by-hop header {name} is forbidden in customHeaders"),
             );
         }
+        validate_custom_header_declaration(
+            validator,
+            &format!("{host_path}/securityHeaders/customHeaders/{index}"),
+            header,
+        );
     }
 }
 
+/// Validate one `customHeaders` / `responseHeaders` declaration: HTTP field
+/// name shape, bounded value, and only the `$variables` the response-header
+/// layer expands. The nginx materializer validates the same rules at parse
+/// time; this covers the JSON and TOML configuration planes as well.
+fn validate_custom_header_declaration(
+    validator: &mut SemanticValidator,
+    path: &str,
+    header: &super::CustomHeaderConfig,
+) {
+    if let Err(message) =
+        super::CustomHeaderConfig::validate_declaration(&header.name, &header.value)
+    {
+        validator.push(path, message);
+    }
+}
+
+/// Headers the runtime owns (framing, hop-by-hop fields, the representation
+/// metadata it derives) and refuses to let a configuration duplicate.
 const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",
     "keep-alive",
@@ -2081,11 +2446,6 @@ const HOP_BY_HOP_HEADERS: &[&str] = &[
     "content-length",
     "content-encoding",
     "content-type",
-    "strict-transport-security",
-    "x-frame-options",
-    "content-security-policy",
-    "referrer-policy",
-    "x-content-type-options",
 ];
 
 fn validate_provider_resource_uuid(validator: &mut SemanticValidator, path: &str, value: &str) {

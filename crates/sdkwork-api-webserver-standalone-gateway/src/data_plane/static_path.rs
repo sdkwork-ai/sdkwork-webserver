@@ -14,6 +14,11 @@ pub(crate) struct OpenedStaticFile {
     pub(crate) path_hint: PathBuf,
 }
 
+// One of the two variants carries the opened file handle, its metadata and the
+// resolved path, so the enum is inherently as large as that struct. Boxing the
+// file variant would add one allocation to every static request for no size
+// benefit at the only use site, which matches on the value immediately.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum StaticPathTarget {
     File(OpenedStaticFile),
     RedirectToDirectory,
@@ -27,6 +32,9 @@ pub(crate) enum StaticPathError {
     Io,
 }
 
+// Same shape as `StaticPathTarget`: a transient stack value returned to the
+// caller and consumed in the same function, not a long-lived collection element.
+#[allow(clippy::large_enum_variant)]
 enum OpenedEntry {
     File(OpenedStaticFile),
     Directory(Dir),
@@ -69,7 +77,16 @@ fn open_static_path_sync(
         }
         Ok(OpenedEntry::Directory(directory)) => match open_index(directory, relative) {
             Ok(file) => Ok(StaticPathTarget::File(file)),
-            Err(StaticPathError::NotFound) => open_fallback(root, spa_fallback),
+            // nginx `autoindex off` + an `index` that names no existing file
+            // answers 403 Forbidden for a directory request, not 404: the
+            // directory exists, so the representation is present but not
+            // served/listed (probed against nginx 1.29.6: `/dir/` with a
+            // missing `index.html` is 403, with no `ETag`).
+            //
+            // This also pre-empts an SPA fallback: nginx's `try_files $uri/`
+            // matches the existing directory, the index module then refuses
+            // it, and the fallback target is never reached.
+            Err(StaticPathError::NotFound) => Err(StaticPathError::Forbidden),
             Err(error) => Err(error),
         },
         Err(StaticPathError::NotFound) => open_fallback(root, spa_fallback),
@@ -260,6 +277,40 @@ mod tests {
         let mut content = String::new();
         opened.file.read_to_string(&mut content).unwrap();
         assert_eq!(content, "original");
+    }
+
+    #[test]
+    fn a_directory_without_an_index_is_forbidden_like_nginx() {
+        let temp = TempDir::new().unwrap();
+        let public = temp.path().join("public");
+        let nodx = public.join("nodx");
+        std::fs::create_dir_all(&nodx).unwrap();
+        std::fs::write(nodx.join("keep.txt"), "keep").unwrap();
+        std::fs::write(public.join("asset.txt"), "asset").unwrap();
+
+        // A trailing-slash request for an existing directory with no index
+        // document is nginx's 403 (autoindex off), whether or not a try_files
+        // fallback is configured: `$uri/` matches the directory, then the index
+        // module refuses it.
+        for spa_fallback in [None, Some("index.html")] {
+            assert!(matches!(
+                open_static_path_sync(&public, "nodx/", true, spa_fallback),
+                Err(StaticPathError::Forbidden)
+            ));
+        }
+
+        // Without the trailing slash nginx first redirects to the canonical
+        // directory URI; that branch is unchanged by the 403 rule.
+        assert!(matches!(
+            open_static_path_sync(&public, "nodx", false, None),
+            Ok(StaticPathTarget::RedirectToDirectory)
+        ));
+
+        // A real file inside the directory is still served.
+        assert!(matches!(
+            open_static_path_sync(&public, "nodx/keep.txt", false, None),
+            Ok(StaticPathTarget::File(_))
+        ));
     }
 
     #[cfg(unix)]

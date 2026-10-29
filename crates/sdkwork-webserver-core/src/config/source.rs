@@ -26,7 +26,9 @@ use super::{
     error::{ConfigDiagnostic, WebServerConfigError},
     loader::{load_json_app_config, WebServerConfigFileRevision},
     model::WebServerAppConfig,
-    server_toml::{load_server_toml_app, load_server_toml_file},
+    server_toml::{
+        load_server_toml_app_with_compatibility, load_server_toml_file_with_compatibility,
+    },
     validate_webserver_config, CompiledWebServerApp,
 };
 
@@ -333,24 +335,25 @@ impl ConfigSource for TomlConfigSource {
                 .environment
                 .as_deref()
                 .unwrap_or(DEFAULT_TOML_ENVIRONMENT);
-            let app = load_server_toml_app(path, profile, environment, app_key)?;
+            let (app, compatibility) =
+                load_server_toml_app_with_compatibility(path, profile, environment, app_key)?;
             return Ok(LoadedWebServerConfig {
                 app,
                 format: ConfigFormat::Toml,
                 source: path.to_path_buf(),
                 revision: None,
                 skipped: Vec::new(),
-                compatibility: Vec::new(),
+                compatibility,
             });
         }
-        let app = load_server_toml_file(path, app_key)?;
+        let (app, compatibility) = load_server_toml_file_with_compatibility(path, app_key)?;
         Ok(LoadedWebServerConfig {
             app,
             format: ConfigFormat::Toml,
             source: path.to_path_buf(),
             revision: Some(super::loader::inspect_webserver_config_revision(path)?),
             skipped: Vec::new(),
-            compatibility: Vec::new(),
+            compatibility,
         })
     }
 }

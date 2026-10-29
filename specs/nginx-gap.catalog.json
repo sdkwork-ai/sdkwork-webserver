@@ -8,6 +8,12 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Response-semantics closure (2026-10-29, REQ-2026-0073): add_header now executes nginx semantics at http/server/location (replace-on-declare inheritance, authored order and duplicates, default status list plus `always`, bounded variable expansion, one response choke point covering static/proxy/cache/return/redirect/error/named-hop/generated responses); nginx-materialized hosts stop promoting add_header into the unconditional dedicated security fields. A directory without an index answers 403 instead of 404, and error_page also maps statuses produced by return/redirect routes. The broad differential slice grew to 87 cases (0 unexpected); two nginx generated-416 header-filter quirks are documented intentional differences (nginx runs its headers filter twice on a range-generated 416), and gzip policy on generated error pages remains a documented bounded gap because the compression layer sits outside the handler.",
+    "Release-gate repair (2026-10-29): the committed conditional-cache oracle had been captured from a CRLF working tree while the committed fixture is LF, so on a clean Linux checkout every tag/length/range asserted by tests/nginx/differential differed (103 unexpected differences, 4/50 matched). The oracle was recaptured from nginx 1.29.6 against the LF fixture, .gitattributes pins every differential fixture directory as `-text`, tests/nginx/differential/run-nginx.sh runs an unprivileged package binary by injecting its http temp paths, and tools/run-nginx-differential.mjs now pins REFERENCE_NGINX, rejects a baseline captured from another build, and rejects a fixture whose byte size no longer matches the recorded representation. The gate reports 50/50 with only allowlisted known differences. tools/run-nginx-compat-gate.mjs is the new release entrypoint (wired into _sdkwork:verify as check:nginx-compat): it discovers differential orchestrators from specs/nginx-behavioral-corpus.manifest.json and executes them with SDKWORK_REQUIRE_NGINX_EVIDENCE=1, so a gate that declines to run fails the release instead of passing silently.",
+    "Directive-level contract (2026-10-29): specs/nginx-directive-inventory.json snapshots the 744 nginx 1.29.6 OSS directives from the real ngx_command_t tables; specs/nginx-directive-support.catalog.json classifies each directive for http-core-v1 (executable / accepted-unenforced / unsupported-fail-closed / excluded) with runtime field, importer mapping, risk, migration impact/action and executable evidence; tools/check-nginx-directive-matrix.mjs (11 checks, offline, mutation-tested) binds inventory, catalog, mapping.rs, fixtures, the migration CLI and the generated docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md together. tools/import-nginx-conf.mjs no longer owns a classifier: it consumes the catalog, treats types/charset_map/map bodies as data, and never renders an accepted-but-unenforced typed TOML key.",
+    "Host-selection parity (2026-10-29, task REQ-2026-0073): nginx server_name forms now execute: exact, leading wildcard any depth (longest), trailing wildcard (longest), .suffix (claims bare + wildcard), ~ regex in authored order with nginx's real case-folding rule, then the listener default host; duplicate ownership fails closed. SNI certificate selection remains exact plus one-level wildcard, so regex/trailing-wildcard names on ssl listeners are rejected at import. Bounded named locations (location @name) execute for try_files … @name and error_page … = @name with one internal redirect, compile-time cycle rejection and nginx-faithful gate/phase behaviour. Evidence: tests/nginx/differential-host/ (39 cases against nginx 1.29.6, tools/run-nginx-differential-host.mjs).",
+    "Broad real-nginx surface evidence (2026-10-29): tests/nginx/differential-http/ compares 75 cases field by field with nginx 1.29.6 (static delivery/MIME/HEAD/multipart ranges/conditionals, rewrite/return/try_files, header emission for the covered response kinds (http/location add_header model gap tracked separately), error_page mapping, gzip negotiation, allow/deny + auth_basic, limit_req/limit_conn, proxy_pass URI splice/Host/forwarded/hop-by-hop/upstream status). It exposed and closed seven real divergences: proxy_pass non-slash URI splice, multi-range 416→multipart/byteranges, directory redirect 307→301, .js MIME, duplicate $proxy_add_x_forwarded_for, strong ETag on gzip-compressed responses, add_header on rewrite-generated redirects, spurious Retry-After on limit_req rejections, and error_page retained-status header details.",
+    "Accepted-but-unenforced awareness (2026-10-29): the typed TOML plane now reports behaviour-affecting accepted keys (TLS cipher/session/OCSP policy, proxy buffering/retry/header policy, map, autoindex, charset, MIME defaults) through server_toml::UNENFORCED_BEHAVIOR_TOML_KEYS and LoadedWebServerConfig.compatibility; `validate` prints one `compatibility:` line per occurrence and `acceptedButUnenforced=` in its summary, matching the nginx-conf import plane's per-directive diagnostics.",
     "This catalog tracks Rust data-plane and import/render progress toward the declared http-core-v1 profile.",
     "It is not a claim of full nginx OSS behavioral parity. Grades follow PRD-nginx-compatibility.md §2.",
     "Toggle: deployments/webserver/server.*.toml [nginx].enabled (nginx.enabled)",
@@ -173,7 +179,7 @@
       "id": "tls.ocsp-stapling",
       "group": "tls",
       "status": "missing",
-      "summary": "OCSP stapling"
+      "summary": "OCSP stapling is not implemented. Commercial impact is bounded: Let's Encrypt ended OCSP service (2025) and the declared fleet uses short-lived ACME certificates, nginx defaults ssl_stapling off, and rustls (0.23) supports the ocsp field only for TLS 1.2-style stapling with no refresh task. Declarations are now reported as accepted-but-unenforced instead of silently ignored (server_toml typed diagnostics + nginx-conf import diagnostics); implementation requires an OCSP fetch/refresh/verification owner and is not part of the declared commercial profile"
     },
     {
       "id": "tls.upstream-verify-mtls",
@@ -221,7 +227,7 @@
       "id": "nginx.behavioral-corpus",
       "group": "operations",
       "status": "implemented",
-      "summary": "Indexed REQ-linked Nginx differential slices under tests/nginx/ via specs/nginx-behavioral-corpus.manifest.json (pnpm check:nginx-corpus); the conditional-cache slice (REQ-2026-0071) additionally compares the data plane against a captured real-nginx oracle field by field (pnpm check:nginx-differential), so a conditional-request or cache-policy regression fails a gate instead of relying on a hand-run fixture; full OSS parity remains out of profile"
+      "summary": "Indexed real-nginx differential slices under tests/nginx/: conditional-cache (50 cases, tools/run-nginx-differential.mjs, captured nginx 1.29.6 oracle), broad HTTP surface (75 cases, tools/run-nginx-differential-http.mjs), virtual-host selection + named locations (39 cases, tools/run-nginx-differential-host.mjs), plus the in-process full-surface behavioural corpus (76 cases, tools/run-nginx-behavioral-corpus.mjs). tools/run-nginx-compat-gate.mjs executes them all as the release gate. Oracles are committed and pinned; a real nginx binary is needed only to refresh them. Full OSS parity remains out of profile"
     },
     {
       "id": "config.source-unified-loader",
@@ -233,7 +239,7 @@
       "id": "http.error-page",
       "group": "response",
       "status": "implemented",
-      "summary": "error_page http/server/location mappings with nginx replace-on-declare inheritance; generated static errors (including ACL 403) and proxy_intercept_errors-mapped upstream errors internally redirect to the target with optional =code replacement; recursive_error_pages chains through per-route sets bounded to three hops (REQ-2026-0042)"
+      "summary": "error_page http/server/location mappings with nginx replace-on-declare inheritance; generated static errors (including ACL 403), proxy_intercept_errors-mapped upstream errors, Respond/Redirect statuses and rewrite-generated redirects internally redirect to the target with optional =code status replacement; targets are static paths or bounded @named locations (one internal redirect); recursive_error_pages chains are bounded to three hops (REQ-2026-0042, REQ-2026-0073)"
     },
     {
       "id": "http.sub-filter",
@@ -264,6 +270,60 @@
       "group": "proxying",
       "status": "implemented",
       "summary": "proxy_pass_request_headers off strips client request headers upstream (fixed safe defaults still applied)"
+    },
+    {
+      "id": "routing.server-name-forms",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx server_name forms: exact, leading wildcard of any depth (longest wins), trailing wildcard (longest), .suffix (claims bare + wildcard), ~ regex in authored order with nginx case folding, and listener default fallback; duplicate ownership fails closed. TLS SNI stays exact plus one-level wildcard, so regex/trailing-wildcard names on ssl listeners fail closed. Evidence: core/server_name.rs + tests/server_name_selection.rs and tests/nginx/differential-host (39 cases)"
+    },
+    {
+      "id": "routing.named-location",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "Bounded named locations (location @name) as try_files … @name / error_page … = @name targets with exactly one internal redirect, compile-time rejection of chains/cycles, request-path unreachability, and nginx-faithful phase order (gates re-applied; named return short-circuits before access; header filters on the final response)"
+    },
+    {
+      "id": "nginx.directive-catalog",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Directive-level http-core-v1 contract: specs/nginx-directive-inventory.json (744 nginx 1.29.6 OSS directives from ngx_command_t tables), specs/nginx-directive-support.catalog.json (executable / accepted-unenforced / fail-closed / excluded with runtime field, evidence, risk, migration action), generated operator matrix docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md, and the offline drift gate tools/check-nginx-directive-matrix.mjs (11 checks)"
+    },
+    {
+      "id": "nginx.release-gate",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "tools/run-nginx-compat-gate.mjs wired into _sdkwork:verify as check:nginx-compat: runs the gap catalog, corpus manifest, directive matrix, in-process behavioural corpus and every manifest-indexed differential orchestrator with SDKWORK_REQUIRE_NGINX_EVIDENCE=1, so an unexecuted compatibility gate fails the release"
+    },
+    {
+      "id": "nginx.accepted-unenforced-diagnostics",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Both configuration planes report accepted-but-unenforced behaviour: nginx-conf import emits one diagnostic per accepted-ignored directive (mapping::ignored_directive_diagnostics); typed TOML reports behaviour-affecting accepted keys via server_toml::UNENFORCED_BEHAVIOR_TOML_KEYS, surfaced in LoadedWebServerConfig.compatibility and printed by `validate` (compatibility: lines + acceptedButUnenforced count)"
+    },
+    {
+      "id": "http.multi-range",
+      "group": "response",
+      "status": "implemented",
+      "summary": "Multipart byte-range responses: a multi-range request answers 206 multipart/byteranges with nginx-exact framing and 20-digit boundary (previously 416); unsatisfiable/invalid single ranges still answer 416 with nginx headers (REQ-2026-0073 differential-http)"
+    },
+    {
+      "id": "http.proxy-uri-splice",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "proxy_pass URI-part splice is nginx-exact: the matched location prefix is replaced by the proxy_pass URI without inserting a slash (/d + /v1/ -> /v1//inner for prefix locations, exact location keeps /v1/), proven against nginx 1.29.6"
+    },
+    {
+      "id": "http.add-header",
+      "group": "response",
+      "status": "implemented",
+      "summary": "nginx add_header semantics at http/server/location: a level that declares any add_header replaces the inherited array; authored order and duplicate names preserved; the nginx default status list (200,201,204,206,301,302,303,304,307,308) gates emission unless `always`; bounded $var expansion ($host/$scheme/$remote_addr/$server_port/$request_uri/$uri/$document_uri/$args/$is_args/$request_method/$server_name); unknown variables, non-ASCII and oversize declarations fail closed. Applied at one choke point on every response kind (static, proxy, cache, Respond/Redirect, rewrite redirects, error pages, named-location hops, generated and access-control rejections). nginx-materialized hosts no longer promote headers into the unconditional dedicated security fields; an explicit nosniff declaration is status-gated like nginx"
+    },
+    {
+      "id": "static.directory-no-index",
+      "group": "response",
+      "status": "implemented",
+      "summary": "A directory request with no index file answers 403 (nginx autoindex-off) without an ETag, and does not fall through to the SPA fallback; differential case static.dir-no-index against nginx 1.29.6"
     }
   ]
 }

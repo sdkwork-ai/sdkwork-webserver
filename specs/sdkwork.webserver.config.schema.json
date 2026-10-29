@@ -1760,25 +1760,7 @@
           "type": "array",
           "maxItems": 16,
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "name",
-              "value"
-            ],
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
-              },
-              "value": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 1024
-              }
-            }
+            "$ref": "#/$defs/customHeader"
           }
         }
       }
@@ -1863,6 +1845,15 @@
           },
           "default": []
         },
+        "responseHeaders": {
+          "description": "Location-level nginx add_header entries in declaration order; a non-empty list replaces the host securityHeaders.customHeaders policy (nginx inherits only when the level declares none).",
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/customHeader"
+          },
+          "default": []
+        },
         "cachePolicy": {
           "description": "Location-level nginx expires / etag / if_modified_since resolved for this route; absent inherits the host/app policy.",
           "oneOf": [
@@ -1873,6 +1864,32 @@
               "$ref": "#/$defs/cachePolicy"
             }
           ]
+        }
+      }
+    },
+    "customHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One nginx add_header (or equivalent custom response header) entry.",
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "always": {
+          "description": "nginx add_header ... always: emit on every status, including 4xx/5xx. Without it the field is only emitted for 200, 201, 204, 206, 301, 302, 303, 304, 307, and 308.",
+          "type": "boolean",
+          "default": false
         }
       }
     },

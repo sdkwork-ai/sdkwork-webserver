@@ -1,0 +1,161 @@
+{
+ "_cases": 39,
+ "_port": 21010,
+ "_server": "nginx/1.29.6",
+ "host.default-no-host-http10": {
+  "body": "default\n",
+  "status": 200
+ },
+ "host.default-unknown": {
+  "body": "default\n",
+  "status": 200
+ },
+ "host.dot-prefix-bare": {
+  "body": "dot\n",
+  "status": 200
+ },
+ "host.dot-prefix-deep": {
+  "body": "dot\n",
+  "status": 200
+ },
+ "host.dot-prefix-miss": {
+  "body": "default\n",
+  "status": 200
+ },
+ "host.dot-prefix-subdomain": {
+  "body": "dot\n",
+  "status": 200
+ },
+ "host.exact": {
+  "body": "exact\n",
+  "status": 200
+ },
+ "host.exact-beats-leading-wildcard": {
+  "body": "exact\n",
+  "status": 200
+ },
+ "host.exact-beats-trailing-wildcard": {
+  "body": "exact\n",
+  "status": 200
+ },
+ "host.exact-port": {
+  "body": "exact\n",
+  "status": 200
+ },
+ "host.exact-trailing-dot": {
+  "body": "exact\n",
+  "status": 200
+ },
+ "host.exact-uppercase": {
+  "body": "exact\n",
+  "status": 200
+ },
+ "host.leading-wildcard": {
+  "body": "lead-short\n",
+  "status": 200
+ },
+ "host.leading-wildcard-any-depth": {
+  "body": "lead-short\n",
+  "status": 200
+ },
+ "host.leading-wildcard-bare-suffix": {
+  "body": "default\n",
+  "status": 200
+ },
+ "host.leading-wildcard-beats-regex": {
+  "body": "mix-lead\n",
+  "status": 200
+ },
+ "host.leading-wildcard-longest": {
+  "body": "lead-long\n",
+  "status": 200
+ },
+ "host.regex-first-authored": {
+  "body": "regex-first\n",
+  "status": 200
+ },
+ "host.regex-second-not-reached": {
+  "body": "regex-second\n",
+  "status": 200
+ },
+ "host.regex-uppercase-caseless": {
+  "body": "regex-upper\n",
+  "status": 200
+ },
+ "host.trailing-wildcard": {
+  "body": "trail-long\n",
+  "status": 200
+ },
+ "host.trailing-wildcard-any-suffix": {
+  "body": "trail-long\n",
+  "status": 200
+ },
+ "host.trailing-wildcard-bare-prefix": {
+  "body": "default\n",
+  "status": 200
+ },
+ "host.trailing-wildcard-beats-regex": {
+  "body": "mix-trail\n",
+  "status": 200
+ },
+ "host.trailing-wildcard-longest": {
+  "body": "trail-long\n",
+  "status": 200
+ },
+ "host.trailing-wildcard-prefix-miss": {
+  "body": "default\n",
+  "status": 200
+ },
+ "named.access-allow": {
+  "body": "named-allow\n",
+  "status": 200
+ },
+ "named.error-page-default-status": {
+  "body": "named-return\n",
+  "status": 200
+ },
+ "named.error-page-static-body": {
+  "body": "custom-404\n",
+  "status": 404
+ },
+ "named.redirect": {
+  "body": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+  "status": 302
+ },
+ "named.return-skips-access": {
+  "body": "named-denied\n",
+  "status": 200
+ },
+ "named.static-hit": {
+  "body": "static-hit\n",
+  "status": 200
+ },
+ "named.static-miss-to-named-return": {
+  "body": "named-return\n",
+  "status": 200
+ },
+ "named.static-target-access-allow": {
+  "body": "named-return\n",
+  "status": 200
+ },
+ "named.static-target-access-deny": {
+  "body": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+  "status": 403
+ },
+ "named.try-files-hit": {
+  "body": "nf-hit\n",
+  "status": 200
+ },
+ "named.try-files-miss-to-named-return": {
+  "body": "named-return\n",
+  "status": 200
+ },
+ "named.try-files-proxy": {
+  "body": "mock /proxy/echo?x=1\n",
+  "status": 200
+ },
+ "static.builtin-404": {
+  "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+  "status": 404
+ }
+}

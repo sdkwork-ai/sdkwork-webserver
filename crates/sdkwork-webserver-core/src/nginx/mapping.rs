@@ -5,25 +5,34 @@
 //!
 //! - `upstream { server <addr> [weight=…] [max_fails=…] [fail_timeout=…]; keepalive …; }`
 //! - `server { listen …; server_name …; ssl_certificate(_key) …; location …; }`
+//!   where `server_name` accepts the exact, `*.suffix`, `prefix.*`, `.suffix`,
+//!   and `~regex` nginx forms (host selection follows nginx precedence; see
+//!   `crate::config::server_name`)
 //! - `location <match> { proxy_pass http(s)://<upstream|host:port>[/uri]; … }`
+//!   including variable `proxy_pass` targets
 //! - `location <match> { return <code> <url-with-$host/$request_uri/$scheme>; }`
 //! - `location <match> { root <absolute>; try_files $uri $uri/ /index.html; }`
+//! - `location <match> { try_files $uri … @fallback; }` with a named location
+//!   (`location @fallback { proxy_pass | return | root | alias | try_files }`)
+//!   as the one-hop internal redirect target
 //! - `location ^~ /.well-known/acme-challenge/ { root <webroot>; }` — the
 //!   reserved ACME HTTP-01 namespace. It declares the listener's
 //!   `acmeHttp01.webroot` instead of an ordinary static route, so the nginx
 //!   artifact and the JSON artifact describe the same narrow-precedence
 //!   challenge endpoint.
 //! - `location <match> { alias <absolute-dir>; }` (nginx prefix replacement)
-//! - `location` `rewrite`, `allow`/`deny`, `limit_req`, `auth_basic` +
-//!   `auth_basic_user_file` (htpasswd loaded at materialize)
-//! - http `limit_req_zone`, `gzip` / `gzip_types` / `gzip_min_length`
+//! - `location` `rewrite`, `allow`/`deny`, `limit_req`, `limit_conn`,
+//!   `auth_basic` + `auth_basic_user_file` (htpasswd loaded at materialize),
+//!   `sub_filter`, `gzip`, `expires`/`etag`/`if_modified_since`
+//! - http `limit_req_zone`, `limit_conn_zone`, `gzip` / `gzip_types` /
+//!   `gzip_min_length`
 //! - http `proxy_cache_path` / `proxy_cache` / `proxy_cache_valid`
 //! - http/server/location `proxy_set_header` (validated supported `$vars`)
 //! - `stream { upstream …; server { listen; proxy_pass; ssl_preread; … } }`
 //!
 //! Safe nginx tuning directives are accepted and ignored (the runtime owns
 //! timeouts, buffering, and TLS defaults). Directives the runtime cannot
-//! enforce — `sub_filter`, `limit_conn`, variable `proxy_pass` — are rejected.
+//! execute in an active context are rejected with a source-located diagnostic.
 
 use std::{
     collections::HashMap,
@@ -38,8 +47,8 @@ use crate::config::{
     cache_policy::{parse_expires_arguments, parse_if_modified_since_token},
     format_proxy_set_header_entry, hostname_upstream_allowed_cidrs, parse_htpasswd,
     parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
-    CachePolicyConfig, ConfigDiagnostic, ExpiresMode, IfModifiedSinceMode, StreamTargetConfig,
-    StreamTlsMode, TlsVersion, WebServerAppConfig, WebServerConfigError,
+    CachePolicyConfig, ConfigDiagnostic, CustomHeaderConfig, ExpiresMode, IfModifiedSinceMode,
+    StreamTargetConfig, StreamTlsMode, TlsVersion, WebServerAppConfig, WebServerConfigError,
     ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
@@ -292,6 +301,14 @@ pub fn materialize_nginx_app(
     let http_directives = extract_http_context(directives)?;
     let stream_directives = extract_stream_context(directives)?;
     let mut mapper = Mapper::new(app_key, base_dir);
+    // nginx `add_header` inherits from the http context into every server that
+    // declares none. Directive order inside `http {}` is irrelevant to that
+    // merge, so collect the http-level array before materializing any server.
+    for directive in &http_directives {
+        if directive.name == "add_header" {
+            mapper.http_add_headers.push(parse_add_header(directive)?);
+        }
+    }
     for (server_index, directive) in http_directives.iter().enumerate() {
         match directive.name.as_str() {
             "upstream" => mapper.materialize_upstream(directive)?,
@@ -315,6 +332,8 @@ pub fn materialize_nginx_app(
             "error_page" => {
                 mapper.http_error_pages.push(parse_error_page(directive)?);
             }
+            // Collected by the order-independent pre-scan above.
+            "add_header" => {}
             "recursive_error_pages" => {
                 mapper.http_recursive_error_pages =
                     parse_on_off(directive, "recursive_error_pages")?;
@@ -477,6 +496,9 @@ struct LocationExtras {
     gzip_types: Option<Vec<String>>,
     gzip_min_length: Option<u64>,
     error_pages: Vec<Value>,
+    /// Location-level `add_header` entries; a non-empty list replaces the
+    /// inherited host policy (nginx `add_header` inheritance).
+    response_headers: Vec<Value>,
     /// Location-level `expires` / `etag` / `if_modified_since` declarations;
     /// the route builder overlays them on the resolved host policy.
     cache: CacheDirectives,
@@ -663,6 +685,9 @@ struct Mapper<'a> {
     /// http-level `error_page` mappings inherited by every server
     /// (nginx http context inheritance, declaration order preserved).
     http_error_pages: Vec<Value>,
+    /// http-level `add_header` entries inherited by every server that declares
+    /// none (nginx http context inheritance, declaration order preserved).
+    http_add_headers: Vec<Value>,
     /// http-level `recursive_error_pages` inherited by every server.
     http_recursive_error_pages: bool,
     /// http-level `proxy_intercept_errors` inherited by every server.
@@ -724,6 +749,7 @@ impl<'a> Mapper<'a> {
             gzip_min_length: 20,
             http_proxy_set_headers: Vec::new(),
             http_error_pages: Vec::new(),
+            http_add_headers: Vec::new(),
             http_recursive_error_pages: false,
             http_proxy_intercept_errors: false,
             http_proxy_ssl: ProxySslSettings::default(),
@@ -1249,12 +1275,10 @@ impl<'a> Mapper<'a> {
                 "index" => {
                     server_index_files = child.args.clone();
                 }
-                // `add_header Name value [always];` -> security headers when
-                // the name matches a dedicated field, otherwise custom.
+                // `add_header Name value [always];` -> ordered response-header
+                // policy with nginx status gating (`always`).
                 "add_header" => {
-                    if child.args.len() >= 2 {
-                        add_headers.push(parse_add_header(&child.args[0], &child.args[1]));
-                    }
+                    add_headers.push(parse_add_header(child)?);
                 }
                 "client_max_body_size" => {
                     client_max_body_size = parse_body_size(child)?;
@@ -1470,9 +1494,13 @@ impl<'a> Mapper<'a> {
                 .unwrap_or_else(|| format!("nginx-{}", certificate_name_counter()));
             let any_http2 = listen_specs.iter().any(|spec| spec.ssl && spec.http2)
                 || (http2_on && listen_specs.iter().any(|spec| spec.ssl));
+            // The SNI certificate index selects exact and one-level leading
+            // wildcard names only; `.suffix` expands, regex/trailing wildcard
+            // fail closed here rather than serving the wrong certificate.
+            let certificate_names = certificate_server_names(directive, &server_names)?;
             self.certificates.push(json!({
                 "id": certificate_name,
-                "serverNames": server_names,
+                "serverNames": certificate_names,
                 "source": {
                     "type": "protected-file",
                     "certificateFile": certificate_file,
@@ -1622,21 +1650,33 @@ impl<'a> Mapper<'a> {
             self.apply_real_ip_to_listener(&listener_id);
         }
 
+        // Named locations (`location @name { … }`). Every declared name is
+        // valid on its own; only a reference (try_files / error_page) has to
+        // resolve. `@pc` / `@h5` keep their Adaptive Web placeholder meaning
+        // when they have the historical `root` (+ optional index/try_files)
+        // shape; anything else materializes as an ordinary named target.
         let mut named_pc_root = None;
         let mut named_h5_root = None;
-        for named in named_locations {
-            let (name, root) = named_adaptive_location_root(named)?;
-            match name.as_str() {
-                "@pc" => named_pc_root = Some(root),
-                "@h5" => named_h5_root = Some(root),
-                _ => {
-                    return Err(NginxConfigError::unsupported(
-                        named,
-                        format!(
-                            "named location `{name}` is not supported; only Adaptive Web @pc and @h5 are accepted"
-                        ),
-                    ));
+        let mut named_location_names: Vec<String> = Vec::new();
+        let mut generic_named_locations: Vec<&NginxDirective> = Vec::new();
+        for named in &named_locations {
+            let name = named_location_name(named)?;
+            if named_location_names.contains(&name) {
+                return Err(NginxConfigError::unsupported(
+                    named,
+                    format!("duplicate named location `{name}`"),
+                ));
+            }
+            named_location_names.push(name.clone());
+            if matches!(name.as_str(), "@pc" | "@h5") && named_location_has_adaptive_shape(named) {
+                let (_, root) = named_adaptive_location_root(named)?;
+                if name == "@pc" {
+                    named_pc_root = Some(root);
+                } else {
+                    named_h5_root = Some(root);
                 }
+            } else {
+                generic_named_locations.push(named);
             }
         }
 
@@ -1661,9 +1701,11 @@ impl<'a> Mapper<'a> {
                 &effective_proxy_ssl,
                 named_pc_root.as_deref(),
                 named_h5_root.as_deref(),
+                &named_location_names,
             )?;
             location_extras.push(extras);
         }
+
         if locations.is_empty() && catch_all_return.is_none() {
             return Err(NginxConfigError::unsupported(
                 directive,
@@ -1677,60 +1719,30 @@ impl<'a> Mapper<'a> {
             "serverNames": server_names,
             "routes": [],
         });
-        if !add_headers.is_empty() {
-            let mut security = serde_json::Map::new();
-            let mut custom = Vec::new();
-            for header in add_headers {
-                let name = header
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                let value = header
-                    .get("value")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                let lower = name.to_ascii_lowercase();
-                match lower.as_str() {
-                    "x-frame-options" => {
-                        let frame = if value.eq_ignore_ascii_case("SAMEORIGIN") {
-                            "SAMEORIGIN"
-                        } else {
-                            "DENY"
-                        };
-                        security
-                            .insert("xFrameOptions".to_owned(), Value::String(frame.to_owned()));
-                    }
-                    "x-content-type-options" if value.eq_ignore_ascii_case("nosniff") => {
-                        security.insert("xContentTypeOptions".to_owned(), Value::Bool(true));
-                    }
-                    "content-security-policy" => {
-                        security.insert(
-                            "contentSecurityPolicy".to_owned(),
-                            Value::String(value.to_owned()),
-                        );
-                    }
-                    "referrer-policy" => {
-                        security
-                            .insert("referrerPolicy".to_owned(), Value::String(value.to_owned()));
-                    }
-                    "strict-transport-security" => {
-                        let max_age = value
-                            .split(';')
-                            .find_map(|directive| directive.trim().strip_prefix("max-age="))
-                            .and_then(|value| value.parse::<u64>().ok())
-                            .unwrap_or(31_536_000);
-                        security.insert(
-                            "strictTransportSecurity".to_owned(),
-                            json!({ "maxAgeSeconds": max_age }),
-                        );
-                    }
-                    _ => custom.push(header),
-                }
-            }
-            if !custom.is_empty() {
-                security.insert("customHeaders".to_owned(), Value::Array(custom));
-            }
-            virtual_host["securityHeaders"] = Value::Object(security);
+        // nginx response headers: a level that declares any `add_header`
+        // replaces the inherited array, so the server-level list (or the
+        // http-level list when the server declares none) becomes the host
+        // policy. `always` and declaration order are preserved; the runtime
+        // applies nginx's status gating at the response choke point.
+        let effective_add_headers = if add_headers.is_empty() {
+            self.http_add_headers.clone()
+        } else {
+            add_headers
+        };
+        if !effective_add_headers.is_empty() {
+            // The runtime `securityHeaders` model defaults
+            // `xContentTypeOptions` to `true`, which emits an unconditional
+            // nosniff. That is a runtime-native security default, not an
+            // imported nginx declaration: nginx only sends nosniff when the
+            // configuration asks for it, and then with `add_header`'s status
+            // gating. Pin the dedicated default off so the imported policy is
+            // the single source (an explicitly configured
+            // `add_header X-Content-Type-Options nosniff` becomes an ordinary
+            // entry instead of an unconditional duplicate).
+            virtual_host["securityHeaders"] = json!({
+                "xContentTypeOptions": false,
+                "customHeaders": effective_add_headers,
+            });
         }
         // Server-level `gzip` resolution: emit a per-host policy only when
         // this server declared a gzip directive; otherwise the runtime
@@ -1774,6 +1786,62 @@ impl<'a> Mapper<'a> {
         if let Some(policy) = effective_cache.resolve() {
             virtual_host["cachePolicy"] = cache_policy_json(&policy);
         }
+        // Named locations are materialized after the path locations so their
+        // resource ids never collide; they are appended to `routes` with an
+        // exact `@name` matcher (unreachable by request path).
+        let mut named_route_entries = Vec::new();
+        if catch_all_return.is_none() {
+            for (named_index, named) in generic_named_locations.iter().enumerate() {
+                let index = locations.len() + named_index;
+                let extras = self.materialize_location(
+                    named,
+                    &primary_name,
+                    server_index,
+                    index,
+                    server_root.as_deref(),
+                    &server_try_files,
+                    &server_index_files,
+                    &inherited_access,
+                    &inherited_limit_req,
+                    inherited_auth_realm.as_deref(),
+                    inherited_auth_file.as_deref(),
+                    inherited_auth_off,
+                    server_sub_filter.as_ref(),
+                    inherited_proxy_intercept_errors,
+                    &inherited_proxy_set_headers,
+                    &effective_proxy_ssl,
+                    named_pc_root.as_deref(),
+                    named_h5_root.as_deref(),
+                    &named_location_names,
+                )?;
+                if !extras.rewrite.is_empty() {
+                    return Err(NginxConfigError::unsupported(
+                        named,
+                        "`rewrite` inside a named location is not supported; nginx does not run the rewrite phase for named locations, so executing it would differ",
+                    ));
+                }
+                if extras.secure_link.is_some() {
+                    return Err(NginxConfigError::unsupported(
+                        named,
+                        "`secure_link` inside a named location is not supported; only proxy_pass | return | root | alias | try_files serving behaviors are executed on the internal redirect",
+                    ));
+                }
+                let (path_type, path) = parse_location_match(named)?;
+                let mut route = json!({
+                    "id": format!("route-{server_index}-{index}"),
+                    "match": {"pathType": path_type, "path": path},
+                    "resourceRef": format!("loc-{server_index}-{index}"),
+                });
+                self.attach_location_extras(
+                    &mut route,
+                    &extras,
+                    virtual_host.get("compression"),
+                    effective_cache,
+                    None,
+                );
+                named_route_entries.push(route);
+            }
+        }
         // Rewrite route matches with their actual path types (exact/prefix).
         let mut route_entries = Vec::new();
         for (index, location) in locations.iter().enumerate().take(catch_all_iterations) {
@@ -1783,100 +1851,13 @@ impl<'a> Mapper<'a> {
                 "match": {"pathType": path_type, "path": path},
                 "resourceRef": format!("loc-{server_index}-{index}"),
             });
-            let mut route_rewrites = server_rewrite_rules.clone();
-            route_rewrites.extend(location_extras[index].rewrite.iter().cloned());
-            if !route_rewrites.is_empty() {
-                route["rewrite"] = Value::Array(route_rewrites);
-            }
-            if !location_extras[index].error_pages.is_empty() {
-                // nginx: a location that declares error_page replaces the
-                // inherited set for that location.
-                route["errorPages"] = Value::Array(location_extras[index].error_pages.clone());
-            }
-            if location_extras[index].gzip.is_some()
-                || location_extras[index].gzip_types.is_some()
-                || location_extras[index].gzip_min_length.is_some()
-            {
-                // Location gzip overlays the host policy (on/off inherits;
-                // types/min length replace when declared).
-                let host = virtual_host.get("compression");
-                let (host_enabled, host_types, host_min) = match host {
-                    Some(value) => (
-                        value
-                            .get("enabled")
-                            .and_then(Value::as_bool)
-                            .unwrap_or(false),
-                        value
-                            .get("types")
-                            .and_then(Value::as_array)
-                            .cloned()
-                            .unwrap_or_default(),
-                        value.get("minLength").and_then(Value::as_u64),
-                    ),
-                    None => (
-                        self.gzip_enabled,
-                        self.gzip_types.iter().cloned().map(Value::String).collect(),
-                        Some(self.gzip_min_length),
-                    ),
-                };
-                let enabled = location_extras[index].gzip.unwrap_or(host_enabled);
-                let mut types = location_extras[index]
-                    .gzip_types
-                    .clone()
-                    .map(|values| values.into_iter().map(Value::String).collect())
-                    .unwrap_or(host_types);
-                if enabled
-                    && !types.iter().any(|value| {
-                        value
-                            .as_str()
-                            .is_some_and(|v| v.eq_ignore_ascii_case("text/html"))
-                    })
-                {
-                    types.push(Value::String("text/html".to_owned()));
-                }
-                if types.is_empty() {
-                    types.push(Value::String("text/html".to_owned()));
-                }
-                // nginx gzip_min_length default (20 bytes) matches the
-                // mapper's http-level initial state.
-                let min_length = location_extras[index]
-                    .gzip_min_length
-                    .or(host_min)
-                    .unwrap_or(20);
-                route["compression"] = json!({
-                    "enabled": enabled,
-                    "types": types,
-                    "minLength": min_length,
-                });
-            }
-            if !location_extras[index].access.is_empty() {
-                route["access"] = Value::Array(location_extras[index].access.clone());
-            }
-            if !location_extras[index].limit_req.is_empty() {
-                route["limitReq"] = Value::Array(location_extras[index].limit_req.clone());
-            }
-            if !location_extras[index].limit_conn.is_empty() {
-                route["limitConn"] = Value::Array(location_extras[index].limit_conn.clone());
-            }
-            if let Some(auth_basic) = &location_extras[index].auth_basic {
-                route["authBasic"] = auth_basic.clone();
-            }
-            if let Some(sub_filter) = &location_extras[index].sub_filter {
-                route["subFilter"] = sub_filter.clone();
-            }
-            if let Some(secure_link) = &location_extras[index].secure_link {
-                route["secureLink"] = secure_link.clone();
-            }
-            // Location-level `expires`/`etag`/`if_modified_since` overlay the
-            // host policy per directive; a location that declares none keeps
-            // the host policy by omitting the key entirely.
-            if let Some(policy) = effective_cache
-                .overlay(location_extras[index].cache)
-                .resolve()
-                .filter(|_| !location_extras[index].cache.is_empty())
-            {
-                route["cachePolicy"] = cache_policy_json(&policy);
-            }
+            self.attach_location_extras(
+                &mut route,
+                &location_extras[index],
+                virtual_host.get("compression"),
+                effective_cache,
+                Some(&server_rewrite_rules),
+            );
             route_entries.push(route);
         }
         if let Some((_route, resource)) = &catch_all_return {
@@ -1884,11 +1865,123 @@ impl<'a> Mapper<'a> {
         }
         virtual_host["routes"] = match &catch_all_return {
             Some((route, _resource)) => Value::Array(vec![route.clone()]),
-            None => Value::Array(route_entries),
+            None => {
+                route_entries.extend(named_route_entries);
+                Value::Array(route_entries)
+            }
         };
         self.note_client_max_body_size(client_max_body_size);
         self.virtual_hosts.push(virtual_host);
         Ok(())
+    }
+
+    /// Attach the per-location policy shared by path routes and named
+    /// locations: `rewrite`, `error_page`, `gzip`, access/limit/auth filters,
+    /// `sub_filter`, `secure_link`, and the location cache policy.
+    fn attach_location_extras(
+        &self,
+        route: &mut Value,
+        extras: &LocationExtras,
+        host_compression: Option<&Value>,
+        effective_cache: CacheDirectives,
+        inherited_rewrites: Option<&[Value]>,
+    ) {
+        let mut route_rewrites: Vec<Value> = inherited_rewrites
+            .map(<[Value]>::to_vec)
+            .unwrap_or_default();
+        route_rewrites.extend(extras.rewrite.iter().cloned());
+        if !route_rewrites.is_empty() {
+            route["rewrite"] = Value::Array(route_rewrites);
+        }
+        if !extras.error_pages.is_empty() {
+            // nginx: a location that declares error_page replaces the
+            // inherited set for that location.
+            route["errorPages"] = Value::Array(extras.error_pages.clone());
+        }
+        if !extras.response_headers.is_empty() {
+            // nginx: a location that declares any add_header replaces the
+            // inherited array; the runtime treats a non-empty route list as
+            // the complete policy for that route.
+            route["responseHeaders"] = Value::Array(extras.response_headers.clone());
+        }
+        if extras.gzip.is_some() || extras.gzip_types.is_some() || extras.gzip_min_length.is_some()
+        {
+            // Location gzip overlays the host policy (on/off inherits;
+            // types/min length replace when declared).
+            let (host_enabled, host_types, host_min) = match host_compression {
+                Some(value) => (
+                    value
+                        .get("enabled")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    value
+                        .get("types")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default(),
+                    value.get("minLength").and_then(Value::as_u64),
+                ),
+                None => (
+                    self.gzip_enabled,
+                    self.gzip_types.iter().cloned().map(Value::String).collect(),
+                    Some(self.gzip_min_length),
+                ),
+            };
+            let enabled = extras.gzip.unwrap_or(host_enabled);
+            let mut types = extras
+                .gzip_types
+                .clone()
+                .map(|values| values.into_iter().map(Value::String).collect())
+                .unwrap_or(host_types);
+            if enabled
+                && !types.iter().any(|value| {
+                    value
+                        .as_str()
+                        .is_some_and(|v| v.eq_ignore_ascii_case("text/html"))
+                })
+            {
+                types.push(Value::String("text/html".to_owned()));
+            }
+            if types.is_empty() {
+                types.push(Value::String("text/html".to_owned()));
+            }
+            // nginx gzip_min_length default (20 bytes) matches the mapper's
+            // http-level initial state.
+            let min_length = extras.gzip_min_length.or(host_min).unwrap_or(20);
+            route["compression"] = json!({
+                "enabled": enabled,
+                "types": types,
+                "minLength": min_length,
+            });
+        }
+        if !extras.access.is_empty() {
+            route["access"] = Value::Array(extras.access.clone());
+        }
+        if !extras.limit_req.is_empty() {
+            route["limitReq"] = Value::Array(extras.limit_req.clone());
+        }
+        if !extras.limit_conn.is_empty() {
+            route["limitConn"] = Value::Array(extras.limit_conn.clone());
+        }
+        if let Some(auth_basic) = &extras.auth_basic {
+            route["authBasic"] = auth_basic.clone();
+        }
+        if let Some(sub_filter) = &extras.sub_filter {
+            route["subFilter"] = sub_filter.clone();
+        }
+        if let Some(secure_link) = &extras.secure_link {
+            route["secureLink"] = secure_link.clone();
+        }
+        // Location-level `expires`/`etag`/`if_modified_since` overlay the
+        // host policy per directive; a location that declares none keeps the
+        // host policy by omitting the key entirely.
+        if let Some(policy) = effective_cache
+            .overlay(extras.cache)
+            .resolve()
+            .filter(|_| !extras.cache.is_empty())
+        {
+            route["cachePolicy"] = cache_policy_json(&policy);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1912,8 +2005,10 @@ impl<'a> Mapper<'a> {
         inherited_proxy_ssl: &ProxySslSettings,
         named_pc_root: Option<&str>,
         named_h5_root: Option<&str>,
+        named_location_names: &[String],
     ) -> Result<LocationExtras, NginxConfigError> {
         let (path_type, location_path) = parse_location_match(location)?;
+        let is_named_location = location_path.starts_with('@');
         let resource_id = format!("loc-{server_index}-{index}");
         let mut proxy_pass = None;
         let mut dynamic_target = None;
@@ -2027,14 +2122,8 @@ impl<'a> Mapper<'a> {
                     client_max_body_size = parse_body_size(child)?;
                 }
                 "add_header" => {
-                    // Location-level response headers (e.g. `Vary`) are accepted
-                    // for nginx compatibility with Adaptive Web snippets.
-                    if child.args.len() < 2 {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "add_header requires a name and value",
-                        ));
-                    }
+                    // Location-level policy replaces the inherited host array.
+                    extras.response_headers.push(parse_add_header(child)?);
                 }
                 "proxy_set_header" => {
                     let entry = format_proxy_set_header_entry(&child.args)
@@ -2353,35 +2442,36 @@ impl<'a> Mapper<'a> {
         // A location with only `try_files` inherits the server-level root
         // (nginx SPA layout), which counts as static serving.
         let inherits_static = serving == 0 && inherited_root.is_some();
-        // Adaptive Web dispatch: `try_files … @$surface;` jumps to named
-        // locations (`@pc` / `@h5`) that own the document roots.
         let effective_try_files_for_check: &[String] = if try_files.is_empty() {
             inherited_try_files
         } else {
             try_files.as_slice()
         };
-        let adaptive_named_dispatch = serving == 0
-            && effective_try_files_for_check
-                .iter()
-                .any(|entry| entry.starts_with('@'));
-        if serving > 1 || (serving == 0 && !inherits_static && !adaptive_named_dispatch) {
-            return Err(NginxConfigError::unsupported(
-                location,
-                "a location must declare exactly one of proxy_pass | return | root | alias (or inherit the server root with try_files, or Adaptive Web try_files → @named)",
-            ));
-        }
-        // nginx `try_files … @named` with a serving behavior would dispatch
-        // internally to a named location; the runtime cannot execute that
-        // jump, so it fails closed (Adaptive Web dispatch is only supported
-        // on locations without another serving behavior).
-        if serving > 0
-            && effective_try_files_for_check
-                .last()
-                .is_some_and(|entry| entry.starts_with('@'))
+        // `try_files … @name;` is an internal redirect to a named location.
+        // The bounded subset executes it from a static location (root or
+        // alias, declared or inherited): the data plane probes the request
+        // path first and redirects once on a miss.
+        let named_fallback = effective_try_files_for_check
+            .last()
+            .filter(|entry| entry.starts_with('@'))
+            .cloned();
+        // Adaptive Web dispatch keeps its old placeholder behavior: the
+        // document roots live on `@pc` / `@h5` and the try_files sentinel
+        // target is not a declared location.
+        let adaptive_named_dispatch = !is_named_location
+            && serving == 0
+            && inherited_root.is_none()
+            && named_fallback.is_some()
+            && (named_pc_root.is_some() || named_h5_root.is_some());
+        if serving > 1
+            || (serving == 0
+                && !inherits_static
+                && !adaptive_named_dispatch
+                && named_fallback.is_none())
         {
             return Err(NginxConfigError::unsupported(
                 location,
-                "try_files `@named` dispatch cannot be combined with proxy_pass | return | root | alias; the runtime only supports Adaptive Web dispatch on a location with no other serving behavior".to_string(),
+                "a location must declare exactly one of proxy_pass | return | root | alias (or inherit the server root with try_files, or Adaptive Web try_files → @named)",
             ));
         }
         self.note_client_max_body_size(client_max_body_size);
@@ -2399,6 +2489,42 @@ impl<'a> Mapper<'a> {
         } else {
             root.or_else(|| inherited_root.map(str::to_owned))
         };
+
+        // Validate the named internal redirect now that the effective
+        // static root is known.
+        if let Some(target) = &named_fallback {
+            if is_named_location {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!(
+                        "named location must not internally redirect to {target}; the internal redirect depth bound is one"
+                    ),
+                ));
+            }
+            if adaptive_named_dispatch {
+                // Adaptive Web sentinel: not an ordinary named reference.
+            } else if !named_location_names.iter().any(|name| name == target) {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!("try_files named fallback `{target}` is not a declared named location"),
+                ));
+            } else if proxy_pass.is_some() || dynamic_target.is_some() || return_directive.is_some()
+            {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!(
+                        "try_files `{target}` dispatch cannot be combined with proxy_pass or return; declare the serving behavior on the named location `{target}` instead"
+                    ),
+                ));
+            } else if effective_root.is_none() && alias.is_none() {
+                return Err(NginxConfigError::unsupported(
+                    location,
+                    format!(
+                        "try_files `{target}` dispatch requires a root or alias (nginx probes the request path under a document root before it redirects)"
+                    ),
+                ));
+            }
+        }
 
         if let Some(target) = dynamic_target {
             if !effective_proxy_ssl.is_empty() {
@@ -2616,13 +2742,18 @@ impl<'a> Mapper<'a> {
             } else {
                 index_files.as_slice()
             };
-            let spa_fallback = match effective_try_files.last() {
-                // Only a trailing literal path is the SPA fallback; `=code`
-                // and `@named` fallbacks keep the miss behavior.
-                Some(last) if last.starts_with('/') && !last.starts_with('$') => {
-                    Some(last.trim_start_matches('/').to_owned())
+            // `@name` is the bounded named-location internal redirect;
+            // a trailing literal path is the SPA document fallback and
+            // `=code` keeps the miss behavior.
+            let spa_fallback = if let Some(target) = &named_fallback {
+                Some(target.clone())
+            } else {
+                match effective_try_files.last() {
+                    Some(last) if last.starts_with('/') && !last.starts_with('$') => {
+                        Some(last.trim_start_matches('/').to_owned())
+                    }
+                    _ => None,
                 }
-                _ => None,
             };
             let index_files: Vec<String> = if effective_index_files.is_empty() {
                 vec!["index.html".to_owned()]
@@ -2687,13 +2818,32 @@ impl<'a> Mapper<'a> {
             if alias_index_files.is_empty() {
                 alias_index_files = vec!["index.html".to_owned()];
             }
-            self.resources.push(json!({
+            let alias_effective_try_files: &[String] = if try_files.is_empty() {
+                inherited_try_files
+            } else {
+                try_files.as_slice()
+            };
+            let alias_spa_fallback = if let Some(target) = &named_fallback {
+                Some(target.clone())
+            } else {
+                match alias_effective_try_files.last() {
+                    Some(last) if last.starts_with('/') && !last.starts_with('$') => {
+                        Some(last.trim_start_matches('/').to_owned())
+                    }
+                    _ => None,
+                }
+            };
+            let mut alias_resource = json!({
                 "id": resource_id,
                 "type": "static",
                 "root": alias,
                 "indexFiles": alias_index_files,
                 "stripPrefix": true,
-            }));
+            });
+            if let Some(fallback) = alias_spa_fallback {
+                alias_resource["spaFallback"] = Value::String(fallback);
+            }
+            self.resources.push(alias_resource);
         }
         // nginx inheritance: `sub_filter` directives inherit from the
         // previous level only when the current level declares none.
@@ -3648,14 +3798,15 @@ fn parse_listen_address(address: &str, spec: &str) -> Result<(String, u16), Stri
     Ok((address.to_owned(), 80))
 }
 
-/// Validate `server_name` names against what the runtime can match.
+/// Validate `server_name` names against the nginx host-selection forms the
+/// runtime executes.
 ///
-/// nginx supports exact names, one-level leading wildcards (`*.example.com`
-/// matches subdomains of any depth in nginx, which the runtime implements),
-/// trailing wildcards, `.example.org`-style names, `~` regex names, and the
-/// empty name. The runtime model only matches exact and leading-wildcard
-/// names, so every other form fails closed instead of silently never
-/// matching.
+/// Supported: exact names, leading wildcards (`*.example.com`), trailing
+/// wildcards (`www.example.*`), dot-prefixed names (`.example.com`), IP
+/// literals, and regex names (`~pattern`, with captures). The empty
+/// `server_name ""` form and nginx's `$hostname` shorthand are still rejected;
+/// both are declared gaps, so a config that needs them fails closed at import
+/// instead of silently selecting a different host.
 fn validate_server_names(
     directive: &NginxDirective,
     server_names: &[String],
@@ -3667,40 +3818,92 @@ fn validate_server_names(
         ));
     }
     for name in server_names {
-        if name.is_empty() {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
             return Err(NginxConfigError::unsupported(
                 directive,
                 "the empty `server_name \"\"` (requests without a Host header) is not supported by the runtime model",
             ));
         }
-        if name.starts_with('~') {
+        if trimmed.eq_ignore_ascii_case("$hostname") {
             return Err(NginxConfigError::unsupported(
                 directive,
-                format!("regex server name `{name}` is not supported by the runtime model; use an exact or leading-wildcard name"),
+                "`server_name $hostname` is not supported by the runtime model; declare the host names explicitly",
             ));
         }
-        if name.starts_with('.') {
-            return Err(NginxConfigError::unsupported(
-                directive,
-                format!("`.example.org`-style server name `{name}` is not supported by the runtime model; use `{name}` plus `*{name}`"),
-            ));
-        }
-        if name.contains('*') && !name.starts_with("*.") {
-            return Err(NginxConfigError::unsupported(
-                directive,
-                format!("trailing/embedded wildcard server name `{name}` is not supported by the runtime model; use a leading `*.` wildcard"),
-            ));
-        }
-        if let Some(suffix) = name.strip_prefix("*.") {
-            if suffix.is_empty() || suffix.contains('*') {
+        match crate::config::parse_server_name(trimmed) {
+            Some(crate::config::ServerNameForm::Regex(regex)) => {
+                if let Err(error) = regex::Regex::new(&regex.compiled_pattern()) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "regex server name `{trimmed}` is not supported by the runtime regex engine: {error}"
+                        ),
+                    ));
+                }
+            }
+            Some(_) => {}
+            None => {
                 return Err(NginxConfigError::unsupported(
                     directive,
-                    format!("invalid leading-wildcard server name `{name}`"),
+                    format!(
+                        "server name `{trimmed}` is not a supported nginx form; use an exact name, `*.suffix`, `prefix.*`, `.suffix`, or `~regex`"
+                    ),
                 ));
             }
         }
     }
     Ok(())
+}
+
+/// Server names a TLS certificate can be selected for.
+///
+/// The certificate index only selects exact names and one-level leading
+/// wildcards. A dot-prefixed HTTP name expands into the exact name plus the
+/// leading wildcard; regex and trailing-wildcard names have no SNI
+/// representation and fail closed on an `ssl` server instead of serving a
+/// certificate that does not cover the requested name.
+fn certificate_server_names(
+    directive: &NginxDirective,
+    server_names: &[String],
+) -> Result<Vec<String>, NginxConfigError> {
+    let mut names = Vec::new();
+    for name in server_names {
+        let trimmed = name.trim();
+        match crate::config::parse_server_name(trimmed) {
+            Some(crate::config::ServerNameForm::Exact(name)) => names.push(name),
+            Some(crate::config::ServerNameForm::LeadingWildcard(suffix)) => {
+                names.push(format!("*.{suffix}"))
+            }
+            Some(crate::config::ServerNameForm::DotPrefix(suffix)) => {
+                names.push(suffix.clone());
+                names.push(format!("*.{suffix}"));
+            }
+            Some(crate::config::ServerNameForm::TrailingWildcard(_)) => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "trailing-wildcard server name `{trimmed}` cannot be represented by the SNI certificate index; use exact or leading-wildcard names on an ssl server"
+                    ),
+                ));
+            }
+            Some(crate::config::ServerNameForm::Regex(_)) => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "regex server name `{trimmed}` cannot be represented by the SNI certificate index; use exact or leading-wildcard names on an ssl server"
+                    ),
+                ));
+            }
+            None => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("server name `{trimmed}` is not a supported nginx form"),
+                ));
+            }
+        }
+    }
+    Ok(names)
 }
 
 /// Validate `try_files` arguments against what the runtime can execute.
@@ -4004,6 +4207,50 @@ fn split_proxy_pass_target(
     Ok((format!("{scheme}{authority}"), uri))
 }
 
+/// The `@name` of an nginx named location directive.
+fn named_location_name(location: &NginxDirective) -> Result<String, NginxConfigError> {
+    let Some(name) = location.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "named location requires an `@name` argument",
+        ));
+    };
+    let valid = name.strip_prefix('@').is_some_and(|rest| {
+        !rest.is_empty()
+            && name.len() <= 257
+            && rest.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'~')
+            })
+    });
+    if !valid {
+        return Err(NginxConfigError::unsupported(
+            location,
+            format!("invalid named location `{name}`"),
+        ));
+    }
+    Ok(name.clone())
+}
+
+/// Whether an `@pc` / `@h5` named location still has the Adaptive Web shape:
+/// an absolute `root` plus optional `index`, `try_files`, and `add_header`.
+/// Any other shape is treated as an ordinary named location.
+fn named_location_has_adaptive_shape(location: &NginxDirective) -> bool {
+    let mut has_root = false;
+    for child in &location.children {
+        match child.name.as_str() {
+            "root" => {
+                if child.args.is_empty() || !child.args[0].starts_with('/') {
+                    return false;
+                }
+                has_root = true;
+            }
+            "index" | "try_files" | "add_header" => {}
+            _ => return false,
+        }
+    }
+    has_root
+}
+
 /// Parse Adaptive Web named locations (`@pc`, `@h5`) into a document root.
 fn named_adaptive_location_root(
     location: &NginxDirective,
@@ -4048,8 +4295,8 @@ fn named_adaptive_location_root(
 }
 
 /// Parse a location match into (path_type, path). `= /x` exact, `^~ /x` and
-/// `/x` prefix, `~`/`~*` regex. Adaptive Web named locations (`@pc` / `@h5`)
-/// are collected before this parser runs.
+/// `/x` prefix, `~`/`~*` regex, and `@name` a named location (reached only by
+/// a bounded internal redirect; the returned path is the literal `@name`).
 fn parse_location_match(
     location: &NginxDirective,
 ) -> Result<(&'static str, String), NginxConfigError> {
@@ -4059,13 +4306,14 @@ fn parse_location_match(
             "location requires a match path",
         ));
     };
-    if match_value.starts_with('@') {
-        return Err(NginxConfigError::unsupported(
-            location,
-            format!(
-                "named location `{match_value}` is not supported; inline the location or fail closed"
-            ),
-        ));
+    if let Some(name) = match_value.strip_prefix('@') {
+        if name.is_empty() || match_value.len() > 257 {
+            return Err(NginxConfigError::unsupported(
+                location,
+                format!("invalid named location `{match_value}`"),
+            ));
+        }
+        return Ok(("exact", match_value.clone()));
     }
     match (match_value.as_str(), location.args.get(1)) {
         ("=", Some(path)) => Ok(("exact", path.clone())),
@@ -4170,12 +4418,32 @@ fn parse_size_bytes(value: &str) -> Option<u64> {
     number.trim().parse::<u64>().ok()?.checked_mul(multiplier)
 }
 
-/// Sanitize a bind address, upstream target, or hostname into the runtime id
-/// charset `[a-z0-9-]` (dots, colons, slashes become dashes).
-/// Map one `add_header Name value` entry into a security/custom header
-/// object; the dedicated security fields are recognized by name.
-fn parse_add_header(name: &str, value: &str) -> Value {
-    json!({ "name": name, "value": value })
+/// Parse `add_header <name> <value> [always];` into one ordered runtime
+/// response-header entry.
+///
+/// nginx accepts exactly two arguments, or three with the literal `always`;
+/// anything else is a configuration error (it is not silently ignored, because
+/// a security header silently dropped is worse than a refused start). The
+/// shared [`CustomHeaderConfig::validate_declaration`] check rejects an
+/// invalid field name, an oversized value, and any `$variable` the runtime
+/// cannot expand, so validation and execution always agree on the same
+/// vocabulary.
+fn parse_add_header(directive: &NginxDirective) -> Result<Value, NginxConfigError> {
+    let always = match directive.args.as_slice() {
+        [_, _] => false,
+        [_, _, flag] if flag.eq_ignore_ascii_case("always") => true,
+        _ => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "add_header requires `Name value [always]`",
+            ))
+        }
+    };
+    let name = &directive.args[0];
+    let value = &directive.args[1];
+    CustomHeaderConfig::validate_declaration(name, value)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(json!({ "name": name, "value": value, "always": always }))
 }
 
 /// Parse `rewrite <pattern> <replacement> <flag>` into a runtime rule.
@@ -4298,20 +4566,23 @@ fn parse_on_off(directive: &NginxDirective, name: &str) -> Result<bool, NginxCon
 fn parse_error_page(directive: &NginxDirective) -> Result<Value, NginxConfigError> {
     let mut codes = Vec::new();
     let mut response_code: Option<u16> = None;
+    // nginx `error_page <code> = <uri>;` (bare `=`, no status) uses the
+    // internally redirected target's own status; `=code` replaces it.
+    let mut from_target = false;
     let mut uri: Option<String> = None;
     for argument in &directive.args {
         if let Some(code) = argument.strip_prefix('=') {
-            if response_code.is_some() {
+            if response_code.is_some() || from_target {
                 return Err(NginxConfigError::unsupported(
                     directive,
-                    "error_page accepts at most one `=code` response override",
+                    "error_page accepts at most one `=` or `=code` response override",
                 ));
             }
-            let Some(parsed) = (if code.is_empty() {
-                None
-            } else {
-                code.parse::<u16>().ok()
-            }) else {
+            if code.is_empty() {
+                from_target = true;
+                continue;
+            }
+            let Some(parsed) = code.parse::<u16>().ok() else {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     "`=code` requires a response status (200-599)",
@@ -4324,7 +4595,7 @@ fn parse_error_page(directive: &NginxDirective) -> Result<Value, NginxConfigErro
                 ));
             }
             response_code = Some(parsed);
-        } else if argument.starts_with('/') {
+        } else if argument.starts_with('/') || argument.starts_with('@') {
             if uri.is_some() {
                 return Err(NginxConfigError::unsupported(
                     directive,
@@ -4344,7 +4615,7 @@ fn parse_error_page(directive: &NginxDirective) -> Result<Value, NginxConfigErro
             return Err(NginxConfigError::unsupported(
                 directive,
                 format!(
-                    "unsupported error_page argument `{argument}`; expected codes, an optional `=code`, and one `/target` URI"
+                    "unsupported error_page argument `{argument}`; expected codes, an optional `=code`, and one `/path` or `@named` target"
                 ),
             ));
         }
@@ -4358,13 +4629,14 @@ fn parse_error_page(directive: &NginxDirective) -> Result<Value, NginxConfigErro
     let Some(uri) = uri else {
         return Err(NginxConfigError::unsupported(
             directive,
-            "error_page requires a `/target` URI",
+            "error_page requires a `/path` or `@named` target",
         ));
     };
     Ok(json!({
         "codes": codes,
         "uri": uri,
         "responseCode": response_code,
+        "fromTarget": from_target,
     }))
 }
 
@@ -5172,6 +5444,104 @@ server {
     }
 
     #[test]
+    fn add_header_declarations_are_validated_and_ordered() {
+        // Supported variables, `always`, duplicate names, and declaration order
+        // survive materialization on both the host and location levels.
+        let config = materialize(
+            r#"
+add_header X-Http-Level http;
+server {
+    listen 80;
+    server_name headers.example.com;
+    location / {
+        add_header X-Dup one;
+        add_header X-Dup two always;
+        add_header X-Var "$host|$request_uri";
+        return 200 "ok";
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let headers = &config.virtual_hosts[0]
+            .security_headers
+            .as_ref()
+            .expect("http-level headers inherited")
+            .custom_headers;
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].name, "X-Http-Level");
+        assert_eq!(headers[0].value, "http");
+        assert!(!headers[0].always);
+        let route_headers = &config.virtual_hosts[0].routes[0].response_headers;
+        assert_eq!(
+            route_headers
+                .iter()
+                .map(|header| (header.name.as_str(), header.value.as_str(), header.always))
+                .collect::<Vec<_>>(),
+            vec![
+                ("X-Dup", "one", false),
+                ("X-Dup", "two", true),
+                ("X-Var", "$host|$request_uri", false),
+            ]
+        );
+        // The location declares its own array, so the inherited host array is
+        // replaced for that route (nginx `add_header` inheritance).
+        assert_eq!(
+            route_headers.first().map(|header| header.name.as_str()),
+            Some("X-Dup")
+        );
+    }
+
+    #[test]
+    fn add_header_rejects_unknown_variables_and_bad_arity() {
+        for (text, expected) in [
+            (
+                r#"server {
+    listen 80;
+    server_name bad.example.com;
+    add_header X-Bad "$unsupported_variable";
+    location / { return 200 "ok"; }
+}
+"#,
+                "$unsupported_variable",
+            ),
+            (
+                r#"server {
+    listen 80;
+    server_name bad.example.com;
+    add_header X-Bad value sometimes;
+    location / { return 200 "ok"; }
+}
+"#,
+                "Name value [always]",
+            ),
+            (
+                r#"server {
+    listen 80;
+    server_name bad.example.com;
+    add_header "Bad Name" value;
+    location / { return 200 "ok"; }
+}
+"#,
+                "not a valid HTTP field name",
+            ),
+            (
+                r#"server {
+    listen 80;
+    server_name bad.example.com;
+    add_header X-Bad "café";
+    location / { return 200 "ok"; }
+}
+"#,
+                "printable ASCII",
+            ),
+        ] {
+            let error = materialize(text).err().expect("must fail closed");
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+    }
+
+    #[test]
     fn materializes_gzip_limit_req_cache_and_stream() {
         let directory = tempfile::tempdir().expect("temp");
         let htpasswd = directory.path().join("htpasswd");
@@ -5935,7 +6305,7 @@ server {
     #[test]
     fn try_files_rejects_unsupported_forms() {
         for (suffix, expected) in [
-            ("@named", "try_files `@named` dispatch cannot be combined"),
+            ("@named", "not a declared named location"),
             ("$1", "try_files fallback"),
         ] {
             let error = materialize(&format!(
@@ -6077,11 +6447,40 @@ server {
     }
 
     #[test]
-    fn unsupported_server_name_forms_fail_closed() {
+    fn every_nginx_server_name_form_materializes() {
+        for name in [
+            "exact.example.com",
+            "*.lead.example.com",
+            "www.example.*",
+            ".dot.example.com",
+            r"~^www\d+\.example\.com$",
+        ] {
+            let config = materialize(&format!(
+                r#"
+server {{
+    listen 80;
+    server_name {name};
+    location / {{ return 200 "ok"; }}
+}}
+"#
+            ))
+            .unwrap_or_else(|error| panic!("{name:?} must materialize: {error}"));
+            assert_eq!(
+                config.virtual_hosts[0].server_names,
+                vec![name.to_owned()],
+                "authored server_name is preserved"
+            );
+        }
+    }
+
+    #[test]
+    fn server_name_forms_the_runtime_cannot_execute_fail_closed() {
         for (name, expected) in [
-            ("~^www\\d+\\.example\\.com$", "regex server name"),
-            ("www.example.*", "wildcard server name"),
             ("\"\"", "empty `server_name"),
+            ("$hostname", "server_name $hostname"),
+            ("*lead.example.com", "not a supported nginx form"),
+            ("www.*.example.com", "not a supported nginx form"),
+            ("~", "not a supported nginx form"),
         ] {
             let error = materialize(&format!(
                 r#"
@@ -6099,22 +6498,197 @@ server {{
     }
 
     #[test]
-    fn named_locations_and_named_try_files_fail_closed_unless_adaptive_dispatch() {
-        let error = materialize(
+    fn generic_named_locations_materialize_as_bounded_internal_redirect_targets() {
+        let config = materialize(
             r#"
 server {
     listen 80;
     server_name named.example.com;
-    location @fallback {
-        root /srv/www;
+    root /srv/www;
+    error_page 404 = @fallback;
+    location / {
+        try_files $uri $uri/ @fallback;
     }
-    location / { return 200 "ok"; }
+    location @fallback {
+        root /srv/fallback;
+    }
+}
+"#,
+        )
+        .expect("generic named location with root must materialize");
+        let named_route = config.virtual_hosts[0]
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "@fallback")
+            .expect("named route materialized");
+        assert_eq!(
+            named_route.route_match.path_type,
+            crate::config::RoutePathType::Exact
+        );
+        let main_route = config.virtual_hosts[0]
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/")
+            .expect("main route");
+        let crate::config::ResourceConfig::Static {
+            root, spa_fallback, ..
+        } = config
+            .resources
+            .iter()
+            .find(|resource| matches!(resource, crate::config::ResourceConfig::Static { .. }))
+            .expect("static resource")
+        else {
+            panic!("static resource");
+        };
+        assert_eq!(root, "/srv/www");
+        assert_eq!(
+            spa_fallback.as_deref(),
+            Some("@fallback"),
+            "try_files @named becomes the bounded named fallback"
+        );
+        let page = &config.virtual_hosts[0].error_pages[0];
+        assert_eq!(page.uri, "@fallback");
+        assert!(page.from_target, "bare `=` keeps the target status");
+        let _ = main_route;
+    }
+
+    #[test]
+    fn named_locations_support_return_proxy_and_try_files_serving_behaviors() {
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name named.example.com;
+    root /srv/www;
+    location /a { try_files $uri @ret; }
+    location /b { try_files $uri @proxy; }
+    location /c { try_files $uri @static; }
+    location @ret { return 200 "named-return"; }
+    location @proxy { proxy_pass http://127.0.0.1:9001; }
+    location @static { try_files $uri /index.html; }
+}
+"#,
+        )
+        .expect("named locations with return/proxy/try_files must materialize");
+        assert!(config.virtual_hosts[0]
+            .routes
+            .iter()
+            .any(|route| route.route_match.path == "@ret"));
+        assert!(config.virtual_hosts[0]
+            .routes
+            .iter()
+            .any(|route| route.route_match.path == "@proxy"));
+        assert!(config.virtual_hosts[0]
+            .routes
+            .iter()
+            .any(|route| route.route_match.path == "@static"));
+    }
+
+    #[test]
+    fn named_location_chains_and_unknown_targets_fail_closed() {
+        // One internal redirect per selection: a named location must not
+        // itself redirect to another named location.
+        let error = materialize(
+            r#"
+server {
+    listen 80;
+    server_name chain.example.com;
+    root /srv/www;
+    location / { try_files $uri @a; }
+    location @a { try_files $uri @b; }
+    location @b { root /srv/b; }
 }
 "#,
         )
         .err()
-        .expect("unknown named locations must fail closed");
-        assert!(error.to_string().contains("named location"), "{error}");
+        .expect("named -> named chain must fail closed");
+        assert!(
+            error.to_string().contains("internal redirect depth bound"),
+            "{error}"
+        );
+
+        let error = materialize(
+            r#"
+server {
+    listen 80;
+    server_name missing.example.com;
+    location / { try_files $uri @missing; }
+}
+"#,
+        )
+        .err()
+        .expect("unknown named target must fail closed");
+        assert!(
+            error.to_string().contains("not a declared named location"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn ssl_servers_reject_server_name_forms_the_certificate_index_cannot_select() {
+        for name in ["www.example.*", "~^www\\.example\\.com$"] {
+            let error = materialize(&format!(
+                r#"
+server {{
+    listen 443 ssl;
+    server_name {name};
+    ssl_certificate /etc/ssl/cert.pem;
+    ssl_certificate_key /etc/ssl/key.pem;
+    location / {{ return 200 "ok"; }}
+}}
+"#
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("{name:?} must fail closed on a TLS listener"));
+            assert!(
+                error.to_string().contains("SNI certificate index"),
+                "{name:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn dot_prefixed_server_name_expands_for_the_certificate_index() {
+        let config = materialize(
+            r#"
+server {
+    listen 443 ssl;
+    server_name .example.com;
+    ssl_certificate /etc/ssl/cert.pem;
+    ssl_certificate_key /etc/ssl/key.pem;
+    location / { return 200 "ok"; }
+}
+"#,
+        )
+        .expect(".example.com expands to the exact name plus the wildcard");
+        assert_eq!(
+            config.certificates[0].server_names,
+            vec!["example.com".to_owned(), "*.example.com".to_owned()]
+        );
+    }
+
+    #[test]
+    fn named_error_page_cycles_fail_closed_with_recursive_error_pages() {
+        let error = materialize(
+            r#"
+server {
+    listen 80;
+    server_name cycle.example.com;
+    root /srv/www;
+    recursive_error_pages on;
+    error_page 404 = @fallback;
+    location / { try_files $uri @fallback; }
+    location @fallback { root /srv/www; }
+}
+"#,
+        )
+        .err()
+        .expect("a recursive named error_page cycle must fail closed");
+        assert!(error.to_string().contains("cycle"), "{error}");
+    }
+
+    #[test]
+    fn adaptive_named_locations_keep_their_placeholder_semantics() {
         let config = materialize(
             r#"
 server {

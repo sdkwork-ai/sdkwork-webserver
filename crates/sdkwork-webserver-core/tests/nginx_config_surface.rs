@@ -869,7 +869,7 @@ server {
         },
     },
     SurfaceCase {
-        name: "add_header maps security headers",
+        name: "add_header materializes ordered nginx response headers",
         nginx: r#"
 server {
     listen 80;
@@ -882,21 +882,124 @@ server {
 }
 "#,
         check: |config| {
+            // nginx `add_header` is an ordered response-header policy with its
+            // own status gating, not a set of dedicated security-header
+            // fields: promoting it would apply every header to every status
+            // (the dedicated fields are unconditional), while nginx skips a
+            // non-`always` field on 4xx/5xx. Declaration order, duplicates, and
+            // the `always` flag must therefore survive materialization.
             let security = config.virtual_hosts[0]
                 .security_headers
                 .as_ref()
-                .expect("security headers");
-            assert!(security.x_frame_options.is_some());
-            assert!(security.x_content_type_options);
+                .expect("response headers");
+            // The runtime's unconditional nosniff default is a runtime-native
+            // security policy, not an imported nginx declaration; the mapping
+            // pins it off so an nginx `add_header` array is the only source.
+            assert!(!security.x_content_type_options);
+            let headers = &security.custom_headers;
+            let names = headers
+                .iter()
+                .map(|header| header.name.as_str())
+                .collect::<Vec<_>>();
             assert_eq!(
-                security
-                    .strict_transport_security
-                    .as_ref()
-                    .unwrap()
-                    .max_age_seconds,
-                63_072_000
+                names,
+                vec![
+                    "X-Frame-Options",
+                    "X-Content-Type-Options",
+                    "Strict-Transport-Security",
+                    "X-Custom",
+                ]
             );
-            assert!(security.custom_headers.iter().any(|h| h.name == "X-Custom"));
+            assert!(headers[0].always);
+            assert!(!headers[1].always);
+            assert_eq!(headers[2].value, "max-age=63072000");
+            assert_eq!(headers[3].value, "custom-value");
+        },
+    },
+    SurfaceCase {
+        name: "add_header inherits from http and is replaced at server and location",
+        nginx: r#"
+http {
+    add_header X-Http-Level http;
+    add_header X-Http-Always http-always always;
+    server {
+        listen 80;
+        server_name inherit.example.com;
+        location / { return 200 "ok"; }
+    }
+    server {
+        listen 80;
+        server_name replace.example.com;
+        add_header X-Server-Level srv;
+        location / {
+            add_header X-Location-Level loc;
+            return 200 "ok";
+        }
+        location /inherit/ { return 200 "ok"; }
+    }
+}
+"#,
+        check: |config| {
+            let inherit = config
+                .virtual_hosts
+                .iter()
+                .find(|host| {
+                    host.server_names
+                        .iter()
+                        .any(|name| name == "inherit.example.com")
+                })
+                .expect("inheriting host");
+            let headers = &inherit
+                .security_headers
+                .as_ref()
+                .expect("inherited response headers")
+                .custom_headers;
+            assert_eq!(
+                headers
+                    .iter()
+                    .map(|header| (header.name.as_str(), header.always))
+                    .collect::<Vec<_>>(),
+                vec![("X-Http-Level", false), ("X-Http-Always", true)]
+            );
+            let replace = config
+                .virtual_hosts
+                .iter()
+                .find(|host| {
+                    host.server_names
+                        .iter()
+                        .any(|name| name == "replace.example.com")
+                })
+                .expect("replacing host");
+            assert_eq!(
+                replace
+                    .security_headers
+                    .as_ref()
+                    .expect("server policy")
+                    .custom_headers
+                    .iter()
+                    .map(|header| header.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["X-Server-Level"]
+            );
+            let location_route = replace
+                .routes
+                .iter()
+                .find(|route| route.route_match.path == "/")
+                .expect("location route");
+            assert_eq!(
+                location_route
+                    .response_headers
+                    .iter()
+                    .map(|header| header.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["X-Location-Level"]
+            );
+            let inherit_route = replace
+                .routes
+                .iter()
+                .find(|route| route.route_match.path == "/inherit/")
+                .expect("inheriting route");
+            assert!(inherit_route.response_headers.is_empty());
         },
     },
     SurfaceCase {
@@ -1044,17 +1147,17 @@ server {
 
 /// Every fail-closed form with the diagnostic fragment it must produce.
 const FAIL_CLOSED: &[(&str, &str, &str)] = &[
-    ("named location", "location @fallback { root /srv; }", "named location"),
-    ("regex server_name", "server_name ~^www\\d+\\.example\\.com$;", "regex server name"),
-    ("trailing wildcard server_name", "server_name www.example.*;", "wildcard server name"),
-    ("empty server_name", "server_name \"\";", "empty `server_name"),
+    ("named location chain", "root /srv/www;\n    location / { try_files $uri @a; }\n    location @a { try_files $uri @b; }\n    location @b { root /srv; }", "internal redirect depth bound"),
+    ("invalid regex-like server_name", "server_name *lead.example.com;", "not a supported nginx form"),
+    ("embedded wildcard server_name", "server_name www.*.example.com;", "not a supported nginx form"),
+    ("empty hostname form", "server_name \"\";", "empty `server_name"),
     ("return 444", "location / { return 444; }", "return 444"),
     ("variable return body", "location / { return 200 \"$host\"; }", "contains variables"),
     // `=code` fallbacks are accepted since the runtime maps them to a static
     // resource without a SPA fallback (with `root`); without any root the
     // location fails closed on the serving-behavior rule.
     ("try_files =code fallback without a root", "location / { try_files $uri =404; }", "exactly one of"),
-    ("try_files @named with serving", "location / { try_files $uri @x; proxy_pass http://127.0.0.1:9001; }", "cannot be combined"),
+    ("try_files @named with serving", "location / { try_files $uri @x; proxy_pass http://127.0.0.1:9001; }", "not a declared named location"),
     // Literal intermediate probes are nginx-standard and accepted; the
     // rejection path covers non-`$uri`/non-literal probes (unit-tested). The
     // fixture below fails closed on the serving-behavior rule (no root).
@@ -1266,9 +1369,20 @@ const FAIL_CLOSED_HTTP: &[(&str, &str, &str)] = &[
 #[test]
 fn every_fail_closed_form_produces_a_precise_diagnostic() {
     for (name, body, expected) in FAIL_CLOSED {
+        // The synthetic host keeps the case isolated; sanitize every
+        // non-DNS character so only the fixture body under test can fail.
+        let host: String = name
+            .chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() {
+                    character.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
+            .collect();
         let text = format!(
-            "server {{\n    listen 80;\n    server_name fail-{}.example.com;\n    {body}\n}}\n",
-            name.replace(' ', "-")
+            "server {{\n    listen 80;\n    server_name fail-{host}.example.com;\n    {body}\n}}\n"
         );
         materialize_err(&text, expected);
     }
@@ -1749,7 +1863,7 @@ fn load_report_skips_unmaterializable_site_files_with_diagnostics() {
     assert_eq!(report.app.virtual_hosts.len(), 1);
     assert_eq!(report.skipped.len(), 1);
     assert!(
-        report.skipped[0].1.contains("named location"),
+        report.skipped[0].1.contains("at least one location"),
         "{:?}",
         report.skipped
     );

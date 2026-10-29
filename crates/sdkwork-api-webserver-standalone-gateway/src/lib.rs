@@ -8,6 +8,12 @@
 // Handler futures and refresh maps are inherently nested; aliases would not add
 // clarity across module boundaries.
 #![allow(clippy::type_complexity)]
+// MSRV is 1.89 (`Cargo.toml`), where `Atomic::<T>::try_update` does not exist
+// yet; the stable-1.99 clippy in this toolchain reports `fetch_update` as
+// deprecated because the method was later renamed with identical semantics.
+// The deprecation is toolchain-relative, not API risk; keep the MSRV-compatible
+// call sites and drop this allowance when the workspace MSRV reaches the rename.
+#![allow(deprecated)]
 
 #[cfg(feature = "management")]
 mod adaptive_surface;

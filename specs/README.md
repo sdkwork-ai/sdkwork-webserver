@@ -20,3 +20,15 @@ dependencies, dependency API surfaces, and the commands that prove the contract.
 - `sdkwork.website-provider-event-ingress.schema.json`: strict loopback ingress, subscription,
   tenant binding, secret-file reference, replay window, concurrency, and durable checkpoint config
   for Drive WebsiteRoot and Knowledgebase Wiki owner events
+- `nginx-gap.catalog.json`: living capability status for the declared `http-core-v1` nginx
+  compatibility profile (graded capability level, not a directive-level contract)
+- `nginx-directive-inventory.json`: canonical snapshot of the 744 nginx 1.29.6 OSS directives
+  (contexts, argument grammar, source module, declared reference build), reproduced from the nginx
+  source tree by `tools/gen-nginx-directive-inventory.mjs`
+- `nginx-directive-support.catalog.json`: per-directive support classification for `http-core-v1`
+  (`executable` / `accepted-unenforced` / `unsupported-fail-closed` / `excluded`), runtime field,
+  importer mapping, risk, migration impact/action, known differences and executable evidence; kept
+  in sync with the implementation by `tools/check-nginx-directive-matrix.mjs` and rendered as
+  `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md`
+- `nginx-behavioral-corpus.manifest.json`: index of the executed nginx behavioural/differential
+  slices under `tests/nginx/` (case floors, reference binary, orchestrator per slice)

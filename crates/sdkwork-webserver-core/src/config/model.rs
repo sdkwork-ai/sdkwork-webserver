@@ -1073,6 +1073,15 @@ pub enum ResourceConfig {
         h5_root: Option<String>,
         #[serde(default = "default_index_files")]
         index_files: Vec<String>,
+        /// nginx `try_files` fallback.
+        ///
+        /// A relative `/path`-style document fallback (SPA fallback) is served
+        /// from this resource's root. The reserved `@name` form is an nginx
+        /// named-location target: on a probe miss the data plane performs one
+        /// bounded internal redirect to the virtual host's `@name` route
+        /// instead of opening a file. It must reference a declared named
+        /// location; `config::validate` rejects an unknown, chained, or
+        /// duplicated target.
         spa_fallback: Option<String>,
         #[serde(default)]
         follow_symlinks: bool,
@@ -1544,7 +1553,25 @@ pub struct UpstreamTargetConfig {
 pub struct VirtualHostConfig {
     pub id: String,
     pub listener_refs: Vec<String>,
+    /// nginx `server_name` values in authored order.
+    ///
+    /// Supported forms are an exact DNS name, `*.suffix`, `prefix.*`,
+    /// `.suffix`, an IP literal, and the `~regex` form (a `~` entry is a
+    /// bounded regular expression, not a DNS name). Host selection follows
+    /// nginx exactly: exact, longest leading wildcard, longest trailing
+    /// wildcard, regexes in this authored order, then the listener's default
+    /// server. See `config::server_name`.
     pub server_names: Vec<String>,
+    /// Path-selected routes plus named locations.
+    ///
+    /// An nginx named location (`location @fallback { … }`) is carried as a
+    /// route whose exact match path is `@fallback`. Named routes are indexed
+    /// by name and can never be selected by a request path (request paths
+    /// start with `/`); they are reachable only through a bounded internal
+    /// redirect from a static `tryFiles` fallback (`spaFallback = "@fallback"`)
+    /// or from an `errorPages` entry whose `uri` is `@fallback`. The internal
+    /// redirect depth is one and reference/cycle validation rejects anything
+    /// longer; see `config::validate`.
     pub routes: Vec<RouteConfig>,
     #[serde(default)]
     pub security_headers: Option<SecurityHeadersConfig>,
@@ -1554,6 +1581,7 @@ pub struct VirtualHostConfig {
     pub compression: Option<GzipConfig>,
     /// nginx `error_page` mappings declared at http/server level for this
     /// host, in declaration order (later entries override earlier codes).
+    /// A `uri` of `@name` targets a named location in this virtual host.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub error_pages: Vec<ErrorPageConfig>,
     /// nginx `recursive_error_pages on`: an error produced while serving an
@@ -1572,12 +1600,19 @@ pub struct VirtualHostConfig {
 pub struct ErrorPageConfig {
     /// Status codes this mapping answers for.
     pub codes: Vec<u16>,
-    /// Internal-redirect target URI (re-runs location selection).
+    /// Internal-redirect target: an absolute `/path`, or `@name` for a named
+    /// location in the same virtual host.
     pub uri: String,
     /// Optional `=code` response-code replacement; `None` keeps the
     /// original error status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_code: Option<u16>,
+    /// nginx `error_page <code> = <target>;`: the bare `=` form (no explicit
+    /// `=code`) makes the internally redirected target's own response status
+    /// the final status. Without it the original error status is kept unless
+    /// `response_code` overrides it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub from_target: bool,
 }
 
 /// Per-virtual-host security response headers, applied to every response
@@ -1621,6 +1656,125 @@ pub enum XFrameOptions {
 pub struct CustomHeaderConfig {
     pub name: String,
     pub value: String,
+    /// nginx `add_header … always`: emit the field on every response status.
+    /// Without it nginx's header filter only adds the field to the statuses in
+    /// [`CustomHeaderConfig::NGINX_DEFAULT_STATUSES`] (200, 201, 204, 206, 301,
+    /// 302, 303, 304, 307, 308). Differential-confirmed against nginx 1.29.6,
+    /// including 403/404/500 responses that omit a non-`always` field.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub always: bool,
+}
+
+impl CustomHeaderConfig {
+    /// Response statuses an `add_header` entry without `always` applies to
+    /// (`ngx_http_headers_filter` `safe_status`).
+    pub const NGINX_DEFAULT_STATUSES: [u16; 10] =
+        [200, 201, 204, 206, 301, 302, 303, 304, 307, 308];
+
+    /// Variables the response-header layer expands in an `add_header` value.
+    /// Every other `$name` fails configuration validation, so a typo can never
+    /// silently reach clients as a literal `$…` string.
+    pub const SUPPORTED_VARIABLES: &'static [&'static str] = &[
+        "host",
+        "scheme",
+        "remote_addr",
+        "server_port",
+        "request_uri",
+        "uri",
+        "document_uri",
+        "args",
+        "is_args",
+        "request_method",
+        "server_name",
+    ];
+
+    /// Maximum header value length. nginx places no comparable bound; this is
+    /// large enough for a realistic Content-Security-Policy while keeping a
+    /// configuration (or an operator typo) from materializing an unbounded
+    /// response header.
+    pub const MAX_VALUE_BYTES: usize = 4096;
+
+    /// Validate one response header declaration (`add_header Name value
+    /// [always]` in nginx, or a JSON/TOML custom header): a valid HTTP field
+    /// name, a bounded value, and only the variables the runtime expands.
+    pub fn validate_declaration(name: &str, value: &str) -> Result<(), String> {
+        if name.is_empty() {
+            return Err("response header name must not be empty".to_owned());
+        }
+        if name.len() > 128 {
+            return Err(format!(
+                "response header name `{name}` exceeds the 128-byte bound"
+            ));
+        }
+        if !name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        }) {
+            return Err(format!(
+                "response header name `{name}` is not a valid HTTP field name"
+            ));
+        }
+        if value.len() > Self::MAX_VALUE_BYTES {
+            return Err(format!(
+                "response header `{name}` value is {} bytes; maximum is {}",
+                value.len(),
+                Self::MAX_VALUE_BYTES
+            ));
+        }
+        // Fail closed instead of silently dropping an unrepresentable value at
+        // response time: HTTP field values are visible ASCII plus SP/HTAB.
+        if !value
+            .bytes()
+            .all(|byte| byte == b'\t' || (0x20..=0x7e).contains(&byte))
+        {
+            return Err(format!(
+                "response header `{name}` value must be printable ASCII (HTTP field-value characters)"
+            ));
+        }
+        let mut rest = value;
+        while let Some(start) = rest.find('$') {
+            let after = &rest[start + 1..];
+            if let Some(escaped) = after.strip_prefix('$') {
+                rest = escaped;
+                continue;
+            }
+            let end = after
+                .find(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+                .unwrap_or(after.len());
+            let variable = &after[..end];
+            if variable.is_empty() {
+                return Err(format!("response header `{name}` contains a bare `$`"));
+            }
+            if !Self::SUPPORTED_VARIABLES.contains(&variable) {
+                return Err(format!(
+                    "response header `{name}` uses `${variable}`, which the runtime does not expand; supported: {}",
+                    Self::SUPPORTED_VARIABLES
+                        .iter()
+                        .map(|name| format!("${name}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ));
+            }
+            rest = &after[end..];
+        }
+        Ok(())
+    }
 }
 
 fn default_x_content_type_options() -> bool {
@@ -1770,6 +1924,13 @@ pub struct RouteConfig {
     /// replace the host-level set for this route (nginx inheritance).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub error_pages: Vec<ErrorPageConfig>,
+    /// Location-level nginx `add_header` entries in declaration order. nginx
+    /// replaces the inherited array when a level declares any `add_header`, so
+    /// a non-empty list here *replaces* the host's `securityHeaders.customHeaders`
+    /// for this route; an empty list inherits them. Duplicate names are
+    /// preserved as separate fields, and `always` controls status gating.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub response_headers: Vec<CustomHeaderConfig>,
     /// Location-level nginx `expires` / `etag` / `if_modified_since`
     /// resolved for this route; `None` inherits the host/app policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]

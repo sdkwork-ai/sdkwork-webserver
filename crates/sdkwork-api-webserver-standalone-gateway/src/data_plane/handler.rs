@@ -8,8 +8,9 @@ use axum::{
     extract::{ConnectInfo, State},
     http::{
         header::{
-            AUTHORIZATION, CONNECTION, CONTENT_LENGTH, CONTENT_TYPE, EXPECT, HOST, LOCATION,
-            RETRY_AFTER, TE, TRANSFER_ENCODING, USER_AGENT, WWW_AUTHENTICATE,
+            ACCEPT_ENCODING, ACCEPT_RANGES, AUTHORIZATION, CONNECTION, CONTENT_LENGTH,
+            CONTENT_TYPE, EXPECT, HOST, LAST_MODIFIED, LOCATION, RETRY_AFTER, TE,
+            TRANSFER_ENCODING, USER_AGENT, WWW_AUTHENTICATE,
         },
         HeaderMap, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Version,
     },
@@ -19,9 +20,9 @@ use sdkwork_webserver_core::{
     apply_rewrites, evaluate_access, evaluate_auth_basic, normalize_authority_host,
     prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
-    AccessDecision, AuthBasicDecision, ErrorPageConfig, ResourceConfig, RewriteOutcome,
-    RoutePathType, SecureLinkFailure, SecurityHeadersConfig, SelectedRoute, XFrameOptions,
-    MAX_REWRITE_INTERNAL_REDIRECTS,
+    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, ResourceConfig,
+    RewriteOutcome, RoutePathType, SecureLinkFailure, SecurityHeadersConfig, SelectedRoute,
+    XFrameOptions, MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -164,6 +165,21 @@ async fn route_admitted_request(
     request: Request<Body>,
     admitted: &mut super::request_gate::RequestAdmissionPermit,
 ) -> Response<Body> {
+    // Captured before dispatch consumes the request: the compression layer
+    // negotiates after the handler returns, so the handler needs the same input
+    // to publish a validator that matches the negotiated representation.
+    let accept_encoding = request.headers().get(ACCEPT_ENCODING).cloned();
+    // Captured before dispatch consumes the request: nginx `add_header` values
+    // may reference `$request_uri`/`$args`/`$request_method`, and the response
+    // header choke point runs after every content handler has taken the
+    // request. `$request_uri` is nginx's *original* target (normalization and
+    // rewrites do not change it), so it is captured from the raw URI.
+    let raw_request_uri = request
+        .uri()
+        .path_and_query()
+        .map(|target| target.as_str().to_owned())
+        .unwrap_or_else(|| request.uri().path().to_owned());
+    let request_query = request.uri().query().map(str::to_owned);
     // A request that arrives carrying the east-west hop marker was already
     // relayed once by a sibling, so this process is the last hop and serves it
     // locally (see `should_relay_to_sibling`). One listener accepts both
@@ -186,6 +202,8 @@ async fn route_admitted_request(
             "listener configuration is unavailable\n",
         );
     };
+    // nginx `$server_port`: the port this listener accepts on.
+    let listener_port = listener.port;
     let client_ip = match resolve_client_ip(
         peer.ip(),
         request.headers(),
@@ -494,7 +512,7 @@ async fn route_admitted_request(
         }
     }
     let mut rewrite_redirects = 0_u32;
-    let selected = loop {
+    let mut selected = loop {
         let Some(candidate) =
             generation
                 .app
@@ -519,6 +537,37 @@ async fn route_admitted_request(
             .await
             {
                 return fallback_response;
+            }
+            // The host *is* configured but no location matched. nginx still
+            // runs its headers filter for the generated 404, so the matched
+            // server's `add_header` policy applies here too.
+            if let Some(host_config) = generation
+                .app
+                .select_virtual_host(&state.listener_id, &authority)
+            {
+                let policy = host_config
+                    .security_headers
+                    .as_ref()
+                    .map(|security_headers| security_headers.custom_headers.as_slice())
+                    .filter(|headers| !headers.is_empty());
+                if policy.is_some() {
+                    let variables = ResponseHeaderVariables {
+                        scheme: scheme.as_str(),
+                        authority: &authority,
+                        client_ip,
+                        server_port: listener_port,
+                        method: &method,
+                        request_uri: &raw_request_uri,
+                        server_name: host_config.server_names.first().map_or("", String::as_str),
+                    };
+                    return apply_nginx_response_headers(
+                        text_response(StatusCode::NOT_FOUND, "route was not found\n"),
+                        policy,
+                        &variables,
+                        &path,
+                        request_query.as_deref(),
+                    );
+                }
             }
             return text_response(StatusCode::NOT_FOUND, "route was not found\n");
         };
@@ -557,13 +606,67 @@ async fn route_admitted_request(
                 {
                     return response;
                 }
-                return redirect_response(
+                let response = redirect_response(
                     status,
                     &location,
                     scheme.as_str(),
                     &authority,
                     &path,
                     request.uri().query(),
+                );
+                // nginx's headers filter runs for these redirect statuses too
+                // (301/302/303/307/308 are in the default `add_header` status
+                // list), and `error_page` can map a 3xx final status exactly as
+                // it maps a 4xx/5xx one (differential-confirmed against nginx
+                // 1.29.6: a mapped 301 keeps its `Location` and serves the
+                // mapped page under the 301 status).
+                let error_page_saved = if candidate.route.error_pages.is_empty()
+                    && candidate.virtual_host.error_pages.is_empty()
+                {
+                    None
+                } else {
+                    Some((
+                        request.method().clone(),
+                        request.headers().clone(),
+                        request_query.clone(),
+                    ))
+                };
+                let response = apply_error_pages(
+                    &state,
+                    &generation,
+                    &candidate,
+                    &authority,
+                    response,
+                    error_page_saved.as_ref(),
+                    &path,
+                    request_query.as_deref(),
+                    scheme.as_str(),
+                )
+                .await;
+                let variables = ResponseHeaderVariables {
+                    scheme: scheme.as_str(),
+                    authority: &authority,
+                    client_ip,
+                    server_port: listener_port,
+                    method: &method,
+                    request_uri: &raw_request_uri,
+                    server_name: candidate
+                        .virtual_host
+                        .server_names
+                        .first()
+                        .map_or("", String::as_str),
+                };
+                let response = apply_security_headers(
+                    response,
+                    candidate.virtual_host.security_headers.as_ref(),
+                    scheme.as_str(),
+                );
+                return finalize_response_headers(
+                    response,
+                    &candidate,
+                    &variables,
+                    &path,
+                    request_query.as_deref(),
                 );
             }
             Err(_) => {
@@ -578,129 +681,122 @@ async fn route_admitted_request(
             }
         }
     };
-    if evaluate_access(client_ip, &selected.route.access) == AccessDecision::Deny {
-        if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-            return response;
-        }
-        state
-            .runtime
-            .metrics
-            .record_request_rejection(RequestRejection::AccessDenied);
-        if let Some(paged) = resolve_error_pages(
-            &state,
-            &generation,
-            &selected,
-            &authority,
-            StatusCode::FORBIDDEN,
-            request.method(),
-            request.headers(),
-        )
-        .await
-        {
-            return paged;
-        }
-        return text_response(StatusCode::FORBIDDEN, "access denied\n");
-    }
-    match evaluate_auth_basic(
-        request
-            .headers()
-            .get(AUTHORIZATION)
-            .and_then(|value| value.to_str().ok()),
-        selected.route.auth_basic.as_ref(),
-    ) {
-        AuthBasicDecision::Inactive | AuthBasicDecision::Allow => {}
-        AuthBasicDecision::Challenge => {
-            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-                return response;
-            }
-            state
-                .runtime
-                .metrics
-                .record_request_rejection(RequestRejection::AuthRequired);
-            let realm = selected
-                .route
-                .auth_basic
-                .as_ref()
-                .map(|config| config.realm.as_str())
-                .unwrap_or("Restricted");
-            return auth_basic_challenge_response(realm);
-        }
-    }
-    if !selected.route.limit_req.is_empty()
-        && generation
-            .limit_req
-            .admit(client_ip, &selected.route.limit_req)
-            == LimitReqDecision::Reject
+    // Request facts an `add_header` value can reference. The matched host (and
+    // therefore `$server_name`) is fixed by host selection above, so this one
+    // binding serves the gate rejections, the named-location gates, and the
+    // final response choke point.
+    let response_variables = ResponseHeaderVariables {
+        scheme: scheme.as_str(),
+        authority: &authority,
+        client_ip,
+        server_port: listener_port,
+        method: &method,
+        request_uri: &raw_request_uri,
+        server_name: selected
+            .virtual_host
+            .server_names
+            .first()
+            .map_or("", String::as_str),
+    };
+    // nginx location-scoped gates run in the access/preaccess phases, before
+    // the content handler and before `try_files` can redirect internally.
+    let mut location_leases: Vec<super::limit_conn::ConnectionLease> = Vec::new();
+    let gate_outcome = match apply_location_gates(
+        &state,
+        admitted,
+        &generation,
+        &selected,
+        client_ip,
+        request.version(),
+        request.method(),
+        request.headers(),
+        &authority,
+        &path,
+        request.uri().query(),
+        scheme.as_str(),
+    )
+    .await
     {
-        if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-            return response;
-        }
-        state
-            .runtime
-            .metrics
-            .record_request_rejection(RequestRejection::RateLimited);
-        return limit_req_rejected_response(request.version());
-    }
-    // nginx error_page applies to generated errors; keep the request
-    // identity for the internal redirect before any dispatch consumes the
-    // request. Captured only when the route or host declares error pages.
-    let error_page_saved =
-        if selected.route.error_pages.is_empty() && selected.virtual_host.error_pages.is_empty() {
-            None
-        } else {
-            Some((request.method().clone(), request.headers().clone()))
-        };
-    let limit_conn_lease = match generation
-        .limit_conn
-        .admit(client_ip, &selected.route.limit_conn)
-    {
-        Ok(lease) => lease,
-        Err(LimitConnDecision::Reject) => {
-            if let Some(response) = classify_request(&state, admitted, false, request.version()) {
-                return response;
-            }
-            state
-                .runtime
-                .metrics
-                .record_request_rejection(RequestRejection::ConnectionLimited);
-            return limit_conn_rejected_response(request.version());
-        }
-        Err(LimitConnDecision::Allow) => {
-            unreachable!("limit_conn admission only errors with Reject")
+        Ok(outcome) => outcome,
+        // An access/auth/limit rejection is a final nginx response: its
+        // location's `add_header` policy applies with the same status gating
+        // (`always` fields are emitted on 401/403/503).
+        Err(response) => {
+            return finalize_response_headers(
+                response,
+                &selected,
+                &response_variables,
+                &path,
+                request_query.as_deref(),
+            )
         }
     };
-    if let Some(secure_link) = selected.route.secure_link.clone() {
-        let prefix = selected.route.route_match.path.as_str();
-        let query = request.uri().query();
-        let now_unix_seconds = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|elapsed| elapsed.as_secs())
-            .unwrap_or(0);
-        match verify_secure_link(
-            &path,
-            &client_ip.to_string(),
-            query,
-            &secure_link,
-            prefix,
-            now_unix_seconds,
-        ) {
-            Ok(Some(serving_uri)) => {
-                // secure_link_secret: serve the rewritten URI (`/prefix/<rest>`).
-                path = serving_uri;
-            }
-            Ok(None) => {}
-            Err(SecureLinkFailure) => {
-                if let Some(response) = classify_request(&state, admitted, false, request.version())
-                {
-                    return response;
+    path = gate_outcome.path;
+    let mut error_page_saved = gate_outcome.error_page_saved;
+    if let Some(lease) = gate_outcome.limit_conn_lease {
+        location_leases.push(lease);
+    }
+    // A static location with `try_files … @name;` redirects once on a probe
+    // miss. Selecting the named target before the request body is consumed
+    // keeps the request intact for the target's own serving behavior
+    // (including `proxy_pass`). nginx restarts the request phases after an
+    // internal redirect, so the same gates are re-applied to the target
+    // location: a named location can never bypass access control, auth_basic,
+    // limit_req, limit_conn, or secure_link.
+    if let Some(named) = named_fallback_selection(
+        &generation,
+        selected,
+        &state.listener_id,
+        &authority,
+        &path,
+        &method,
+    )
+    .await
+    {
+        // nginx executes a named location's rewrite-phase `return` before the
+        // access phase, so a `return` target short-circuits the gates. A
+        // static or proxy target runs the normal access/preaccess phases, so
+        // its filters are re-applied exactly like nginx after the internal
+        // redirect.
+        let return_target = matches!(
+            *named.resource,
+            ResourceConfig::Respond { .. } | ResourceConfig::Redirect { .. }
+        );
+        if !return_target {
+            let named_outcome = match apply_location_gates(
+                &state,
+                admitted,
+                &generation,
+                &named,
+                client_ip,
+                request.version(),
+                request.method(),
+                request.headers(),
+                &authority,
+                &path,
+                request.uri().query(),
+                scheme.as_str(),
+            )
+            .await
+            {
+                Ok(outcome) => outcome,
+                Err(response) => {
+                    return finalize_response_headers(
+                        response,
+                        &named,
+                        &response_variables,
+                        &path,
+                        request_query.as_deref(),
+                    )
                 }
-                state
-                    .runtime
-                    .metrics
-                    .record_request_rejection(RequestRejection::LinkInvalid);
-                return secure_link_rejected_response(request.version());
+            };
+            path = named_outcome.path;
+            error_page_saved = named_outcome.error_page_saved;
+            if let Some(lease) = named_outcome.limit_conn_lease {
+                location_leases.push(lease);
             }
         }
+        selected = named;
     }
     let operations_reserved = is_operations_candidate(&request)
         && selected.route.route_match.path_type == RoutePathType::Exact
@@ -746,21 +842,40 @@ async fn route_admitted_request(
             content_type,
             body,
             ..
-        } => match drain_bounded_request_body(
-            request,
-            generation.app.config().limits.max_request_body_bytes,
-            &request_failure,
-        )
-        .await
-        {
-            Ok(_) => fixed_response(*status, content_type, body, method == "HEAD"),
-            Err(response) => response,
-        },
+        } => {
+            let response = match drain_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok(_) => fixed_response(*status, content_type, body, method == "HEAD"),
+                Err(response) => response,
+            };
+            // nginx maps `error_page` for a status produced by a rewrite-phase
+            // `return`, not only for statuses generated by a resource handler:
+            // the internal redirect re-selects the target location and serves
+            // it under the original status (differential-confirmed against
+            // nginx 1.29.6 for `return 404`).
+            apply_error_pages(
+                &state,
+                &generation,
+                &selected,
+                &authority,
+                response,
+                error_page_saved.as_ref(),
+                &path,
+                request_query.as_deref(),
+                scheme.as_str(),
+            )
+            .await
+        }
         ResourceConfig::Redirect {
             status, location, ..
         } => {
             let query = request.uri().query().map(str::to_owned);
-            match drain_bounded_request_body(
+            let response = match drain_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
                 &request_failure,
@@ -776,7 +891,22 @@ async fn route_admitted_request(
                     query.as_deref(),
                 ),
                 Err(response) => response,
-            }
+            };
+            // nginx maps `error_page` for a `return <3xx> <url>` final status as
+            // well (probed against nginx 1.29.6: the mapped page keeps the
+            // redirect's `Location`); without a mapping this is a no-op.
+            apply_error_pages(
+                &state,
+                &generation,
+                &selected,
+                &authority,
+                response,
+                error_page_saved.as_ref(),
+                &path,
+                query.as_deref(),
+                scheme.as_str(),
+            )
+            .await
         }
         ResourceConfig::Static {
             id,
@@ -784,6 +914,11 @@ async fn route_admitted_request(
             spa_fallback,
             ..
         } => {
+            // `@name` is a named-location internal redirect handled before
+            // dispatch; it must never be resolved as a document-root path.
+            let static_spa_fallback = spa_fallback
+                .as_deref()
+                .filter(|fallback| !fallback.starts_with('@'));
             let prefer_h5 = prefer_h5_surface(
                 request
                     .headers()
@@ -819,7 +954,7 @@ async fn route_admitted_request(
                         root,
                         selected.route,
                         *strip_prefix,
-                        spa_fallback.as_deref(),
+                        static_spa_fallback,
                         &path,
                         request,
                     )
@@ -834,6 +969,9 @@ async fn route_admitted_request(
                 &authority,
                 static_response,
                 error_page_saved.as_ref(),
+                &path,
+                None,
+                scheme.as_str(),
             )
             .await
         }
@@ -881,7 +1019,7 @@ async fn route_admitted_request(
             // nginx `proxy_intercept_errors on`: a proxied response whose
             // status has an error_page mapping is replaced by the page.
             let intercepted = if *proxy_intercept_errors {
-                if let Some((method, headers)) = error_page_saved.as_ref() {
+                if let Some((method, headers, query)) = error_page_saved.as_ref() {
                     resolve_error_pages(
                         &state,
                         &generation,
@@ -890,6 +1028,9 @@ async fn route_admitted_request(
                         proxy_response.status(),
                         method,
                         headers,
+                        &path,
+                        query.as_deref(),
+                        scheme.as_str(),
                     )
                     .await
                 } else {
@@ -1052,6 +1193,19 @@ async fn route_admitted_request(
             std::time::SystemTime::now(),
         );
     }
+    // nginx `add_header` (`ngx_http_headers_filter`) on the final response of
+    // every content kind — static, proxy, cache, `return`/redirect, error page,
+    // and the generated errors that reached this choke point. The policy is the
+    // selected location's array when it declares one, otherwise the inherited
+    // host array; an `error_page` internal redirect may have attached the
+    // target location's policy instead.
+    let mut response = finalize_response_headers(
+        response,
+        &selected,
+        &response_variables,
+        &path,
+        request_query.as_deref(),
+    );
     // Route-level `sub_filter` rides on the response so the substitution
     // layer can apply it without re-selecting the route.
     if let Some(sub_filter) = selected.route.sub_filter.clone() {
@@ -1059,6 +1213,20 @@ async fn route_admitted_request(
             .extensions_mut()
             .insert(super::sub_filter::SubFilterExtension(sub_filter));
     }
+    // nginx publishes a weak entity tag for a representation it gzips. The
+    // compression layer runs after the handler, so the validator is weakened
+    // here, using the same policy and negotiation input the predicate uses.
+    let negotiated_compression = selected
+        .route
+        .compression
+        .as_ref()
+        .or(selected.virtual_host.compression.as_ref());
+    let mut response = super::gzip_predicate::weaken_etag_for_negotiated_gzip(
+        response,
+        &generation.app.config().gzip,
+        negotiated_compression,
+        accept_encoding.as_ref(),
+    );
     // Route the per-vhost compression policy (server-level nginx `gzip`) to
     // the compression layer; `None` inherits the app-level policy.
     response
@@ -1070,21 +1238,238 @@ async fn route_admitted_request(
                 .clone()
                 .or_else(|| selected.virtual_host.compression.clone()),
         ));
-    // Keep the limit_conn slot held for the whole response lifetime: the
-    // lease drops when the response body completes or is abandoned.
-    response.map(|body| {
-        Body::new(super::limit_conn::LeaseBody {
-            inner: body,
-            lease: limit_conn_lease,
-        })
+    // Keep every limit_conn slot held for the whole response lifetime: the
+    // leases drop when the response body completes or is abandoned. A bounded
+    // named-location redirect can hold one lease for the path location and one
+    // for the named location, mirroring nginx re-running the limit_conn
+    // handler after the internal redirect.
+    let mut response = response;
+    for lease in location_leases.into_iter().rev() {
+        response =
+            response.map(|body| Body::new(super::limit_conn::LeaseBody { inner: body, lease }));
+    }
+    response
+}
+
+/// Result of running nginx's access/preaccess gates for one selected
+/// location.
+struct LocationGateOutcome {
+    /// The request path after `secure_link` URI substitution.
+    path: String,
+    /// Request identity kept for an `error_page` internal redirect. Captured
+    /// only when the route or host declares error-page mappings.
+    error_page_saved: Option<(Method, HeaderMap, Option<String>)>,
+    /// The `limit_conn` slot(s) taken for this location; held until the
+    /// response body is finished.
+    limit_conn_lease: Option<super::limit_conn::ConnectionLease>,
+}
+
+/// Run the nginx location-scoped gates: access rules, `auth_basic`,
+/// `limit_req`, `limit_conn`, and `secure_link`.
+///
+/// These are the phases nginx runs before the content handler. They are one
+/// function because a bounded named-location internal redirect re-runs them
+/// for the target location, exactly like nginx restarts the request phases
+/// after an internal redirect.
+#[allow(clippy::too_many_arguments)]
+async fn apply_location_gates(
+    state: &ListenerState,
+    admitted: &mut super::request_gate::RequestAdmissionPermit,
+    generation: &RuntimeGeneration,
+    selected: &SelectedRoute<'_>,
+    client_ip: IpAddr,
+    version: Version,
+    method: &Method,
+    headers: &HeaderMap,
+    authority: &str,
+    requested_path: &str,
+    query: Option<&str>,
+    scheme: &str,
+) -> Result<LocationGateOutcome, Response<Body>> {
+    let mut path = requested_path.to_owned();
+    if evaluate_access(client_ip, &selected.route.access) == AccessDecision::Deny {
+        if let Some(response) = classify_request(state, admitted, false, version) {
+            return Err(response);
+        }
+        state
+            .runtime
+            .metrics
+            .record_request_rejection(RequestRejection::AccessDenied);
+        if let Some(paged) = resolve_error_pages(
+            state,
+            generation,
+            selected,
+            authority,
+            StatusCode::FORBIDDEN,
+            method,
+            headers,
+            &path,
+            query,
+            scheme,
+        )
+        .await
+        {
+            return Err(paged);
+        }
+        return Err(text_response(StatusCode::FORBIDDEN, "access denied\n"));
+    }
+    match evaluate_auth_basic(
+        headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok()),
+        selected.route.auth_basic.as_ref(),
+    ) {
+        AuthBasicDecision::Inactive | AuthBasicDecision::Allow => {}
+        AuthBasicDecision::Challenge => {
+            if let Some(response) = classify_request(state, admitted, false, version) {
+                return Err(response);
+            }
+            state
+                .runtime
+                .metrics
+                .record_request_rejection(RequestRejection::AuthRequired);
+            let realm = selected
+                .route
+                .auth_basic
+                .as_ref()
+                .map(|config| config.realm.as_str())
+                .unwrap_or("Restricted");
+            return Err(auth_basic_challenge_response(realm));
+        }
+    }
+    if !selected.route.limit_req.is_empty()
+        && generation
+            .limit_req
+            .admit(client_ip, &selected.route.limit_req)
+            == LimitReqDecision::Reject
+    {
+        if let Some(response) = classify_request(state, admitted, false, version) {
+            return Err(response);
+        }
+        state
+            .runtime
+            .metrics
+            .record_request_rejection(RequestRejection::RateLimited);
+        return Err(limit_req_rejected_response(version));
+    }
+    // nginx error_page applies to generated errors; keep the request identity
+    // for the internal redirect before any dispatch consumes the request.
+    // Captured only when the route or host declares error pages.
+    let error_page_saved =
+        if selected.route.error_pages.is_empty() && selected.virtual_host.error_pages.is_empty() {
+            None
+        } else {
+            Some((method.clone(), headers.clone(), query.map(str::to_owned)))
+        };
+    let limit_conn_lease = match generation
+        .limit_conn
+        .admit(client_ip, &selected.route.limit_conn)
+    {
+        Ok(lease) => Some(lease),
+        Err(LimitConnDecision::Reject) => {
+            if let Some(response) = classify_request(state, admitted, false, version) {
+                return Err(response);
+            }
+            state
+                .runtime
+                .metrics
+                .record_request_rejection(RequestRejection::ConnectionLimited);
+            return Err(limit_conn_rejected_response(version));
+        }
+        Err(LimitConnDecision::Allow) => {
+            unreachable!("limit_conn admission only errors with Reject")
+        }
+    };
+    if let Some(secure_link) = selected.route.secure_link.clone() {
+        let prefix = selected.route.route_match.path.as_str();
+        let now_unix_seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        match verify_secure_link(
+            &path,
+            &client_ip.to_string(),
+            query,
+            &secure_link,
+            prefix,
+            now_unix_seconds,
+        ) {
+            Ok(Some(serving_uri)) => {
+                // secure_link_secret: serve the rewritten URI (`/prefix/<rest>`).
+                path = serving_uri;
+            }
+            Ok(None) => {}
+            Err(SecureLinkFailure) => {
+                if let Some(response) = classify_request(state, admitted, false, version) {
+                    return Err(response);
+                }
+                state
+                    .runtime
+                    .metrics
+                    .record_request_rejection(RequestRejection::LinkInvalid);
+                return Err(secure_link_rejected_response(version));
+            }
+        }
+    }
+    Ok(LocationGateOutcome {
+        path,
+        error_page_saved,
+        limit_conn_lease,
     })
 }
 
-/// One nginx `error_page` hop: resolve the mapping for `status`, re-run
-/// location selection for the target URI, and serve the target route.
-/// Returns `None` when no mapping applies or the target is not a static
-/// resource (v1). The response keeps the target's own status; the caller
-/// applies the `=code` override only when the target served successfully.
+/// Resolve the one-hop `try_files … @name;` internal redirect for a static
+/// location whose document probes miss.
+///
+/// The probe runs before the request is consumed, so the named target executes
+/// with the intact request (a `proxy_pass` target still forwards the body).
+/// A named location is never redirected again: the redirect depth is one.
+async fn named_fallback_selection<'a>(
+    generation: &'a RuntimeGeneration,
+    selected: SelectedRoute<'a>,
+    listener_id: &str,
+    authority: &str,
+    path: &str,
+    method: &str,
+) -> Option<SelectedRoute<'a>> {
+    // A named location is already the redirect target; one hop per selection.
+    if selected.route.route_match.path.starts_with('@') {
+        return None;
+    }
+    let ResourceConfig::Static {
+        id,
+        strip_prefix,
+        spa_fallback,
+        ..
+    } = selected.resource
+    else {
+        return None;
+    };
+    let name = spa_fallback.as_deref()?;
+    if !name.starts_with('@') {
+        return None;
+    }
+    let root = generation.app.static_root(id)?;
+    let relative = super::static_files::relative_request_path(selected.route, *strip_prefix, path);
+    let miss = matches!(
+        super::static_path::open_static_path(root, relative, path.ends_with('/'), None).await,
+        Err(super::static_path::StaticPathError::NotFound)
+    );
+    if !miss {
+        return None;
+    }
+    generation
+        .app
+        .select_named_route(listener_id, authority, name, method)
+}
+
+/// One nginx `error_page` hop: resolve the mapping for `status`, run the
+/// target (an absolute `/path` or a named `@location`), and return the target
+/// response with the target's own status. Returns `None` when no mapping
+/// applies or the target cannot be executed here: a named proxy target is
+/// rejected at configuration time because the request body has already been
+/// consumed by the time error-page processing runs.
+#[allow(clippy::too_many_arguments)]
 async fn run_error_page_hop<'a>(
     state: &ListenerState,
     generation: &'a RuntimeGeneration,
@@ -1093,47 +1478,90 @@ async fn run_error_page_hop<'a>(
     status: StatusCode,
     method: &Method,
     headers: &HeaderMap,
+    requested_path: &str,
+    query: Option<&str>,
+    scheme: &str,
 ) -> Option<(Response<Body>, StatusCode, &'a [ErrorPageConfig])> {
     let entry = pages
         .iter()
         .rev()
         .find(|page| page.codes.contains(&status.as_u16()))?;
-    let candidate =
+    // A named target keeps the current request URI (nginx
+    // `ngx_http_named_location`); an absolute path becomes the new URI.
+    let named_target = entry.uri.starts_with('@');
+    let target_path = if named_target {
+        requested_path
+    } else {
+        entry.uri.as_str()
+    };
+    let candidate = if named_target {
+        generation.app.select_named_route(
+            &state.listener_id,
+            authority,
+            &entry.uri,
+            method.as_str(),
+        )?
+    } else {
         generation
             .app
-            .select_route(&state.listener_id, authority, &entry.uri, method.as_str())?;
-    let ResourceConfig::Static {
-        root,
-        strip_prefix,
-        spa_fallback,
-        ..
-    } = candidate.resource
-    else {
-        return None;
+            .select_route(&state.listener_id, authority, &entry.uri, method.as_str())?
     };
-    // Conditionals and ranges are stripped so the error page serves cleanly
-    // instead of re-triggering the original 304/416 semantics.
-    let mut rebuilt_headers = headers.clone();
-    rebuilt_headers.remove(axum::http::header::RANGE);
-    rebuilt_headers.remove(axum::http::header::IF_RANGE);
-    rebuilt_headers.remove(axum::http::header::IF_NONE_MATCH);
-    rebuilt_headers.remove(axum::http::header::IF_MODIFIED_SINCE);
-    let rebuilt = {
-        let mut builder = Request::builder()
-            .method(method.clone())
-            .uri(entry.uri.as_str());
-        *builder.headers_mut()? = rebuilt_headers;
-        builder.body(Body::empty()).ok()?
+    let mut response = match candidate.resource {
+        ResourceConfig::Static {
+            root,
+            strip_prefix,
+            spa_fallback,
+            ..
+        } => {
+            // Conditionals and ranges are stripped so the error page serves
+            // cleanly instead of re-triggering the original 304/416 semantics.
+            let mut rebuilt_headers = headers.clone();
+            rebuilt_headers.remove(axum::http::header::RANGE);
+            rebuilt_headers.remove(axum::http::header::IF_RANGE);
+            rebuilt_headers.remove(axum::http::header::IF_NONE_MATCH);
+            rebuilt_headers.remove(axum::http::header::IF_MODIFIED_SINCE);
+            let rebuilt = {
+                let mut builder = Request::builder().method(method.clone()).uri(target_path);
+                *builder.headers_mut()? = rebuilt_headers;
+                builder.body(Body::empty()).ok()?
+            };
+            let spa_fallback = spa_fallback
+                .as_deref()
+                .filter(|fallback| !fallback.starts_with('@'));
+            serve_static(
+                std::path::Path::new(root),
+                candidate.route,
+                *strip_prefix,
+                spa_fallback,
+                target_path,
+                rebuilt,
+            )
+            .await
+        }
+        ResourceConfig::Respond {
+            status,
+            content_type,
+            body,
+            ..
+        } => fixed_response(*status, content_type, body, method == Method::HEAD),
+        ResourceConfig::Redirect {
+            status, location, ..
+        } => redirect_response(*status, location, scheme, authority, requested_path, query),
+        // Proxy/provider targets cannot rebuild the consumed request body, so
+        // they are not executable as an error page. Configuration validation
+        // rejects a named proxy error_page target; a literal URI that selects
+        // one falls back to the original error response.
+        _ => return None,
     };
-    let response = serve_static(
-        std::path::Path::new(root),
-        candidate.route,
-        *strip_prefix,
-        spa_fallback.as_deref(),
-        &entry.uri,
-        rebuilt,
-    )
-    .await;
+    // The internal redirect re-runs location selection, so the *target*
+    // location's `add_header` policy decides the final response headers. Attach
+    // it even when the target has none: that "no headers" answer must suppress
+    // the original location's array rather than inheriting it.
+    response
+        .extensions_mut()
+        .insert(ResponseHeaderPolicyOverride(
+            effective_response_headers(&candidate).map(<[CustomHeaderConfig]>::to_vec),
+        ));
     let target_status = response.status();
     // A recursive chain re-enters mapping with the target route's own
     // error_page set when the target declares one (nginx: each internal
@@ -1147,10 +1575,11 @@ async fn run_error_page_hop<'a>(
 }
 
 /// nginx `error_page` resolution for a generated error: internally redirect
-/// to the mapped page, honoring `=code` overrides and, when the host enables
-/// `recursive_error_pages`, mapping an error produced while serving the page
-/// itself (bounded hops). Returns `None` when nothing maps and the original
-/// response must stand.
+/// to the mapped page, honoring `=code` / bare-`=` overrides and, when the host
+/// enables `recursive_error_pages`, mapping an error produced while serving
+/// the page itself (bounded hops). Returns `None` when nothing maps and the
+/// original response must stand.
+#[allow(clippy::too_many_arguments)]
 async fn resolve_error_pages(
     state: &ListenerState,
     generation: &RuntimeGeneration,
@@ -1159,6 +1588,9 @@ async fn resolve_error_pages(
     status: StatusCode,
     method: &Method,
     headers: &HeaderMap,
+    requested_path: &str,
+    query: Option<&str>,
+    scheme: &str,
 ) -> Option<Response<Body>> {
     // nginx inheritance: a location that declares error_page replaces the
     // host-level set for that route.
@@ -1191,16 +1623,38 @@ async fn resolve_error_pages(
             current_status,
             method,
             headers,
+            requested_path,
+            query,
+            scheme,
         )
         .await?;
         let served_cleanly = !(target_status.is_client_error() || target_status.is_server_error());
         if served_cleanly {
-            let final_status = entry
-                .response_code
-                .and_then(|code| StatusCode::from_u16(code).ok())
-                .unwrap_or(current_status);
+            // nginx `error_page <code> = <target>;` (bare `=`) uses the
+            // target's own status; `=code` overrides it; a plain mapping keeps
+            // the original error status.
+            let final_status = if entry.from_target {
+                target_status
+            } else {
+                entry
+                    .response_code
+                    .and_then(|code| StatusCode::from_u16(code).ok())
+                    .unwrap_or(current_status)
+            };
             let (mut parts, body) = hop_response.into_parts();
             parts.status = final_status;
+            if !final_status.is_success() {
+                // nginx keeps the original error (or redirect) status when
+                // `error_page` names a URI without `=code`; the response is
+                // then the page body under that status, and nginx's header
+                // filters do not publish the representation validators for it
+                // (the static handler's `Last-Modified`/`Accept-Ranges` never
+                // reach the client, while the `ETag` does). Differentially
+                // confirmed against nginx 1.29.6 for 404 and 301 mappings; a
+                // `=200` override keeps them.
+                parts.headers.remove(LAST_MODIFIED);
+                parts.headers.remove(ACCEPT_RANGES);
+            }
             return Some(Response::from_parts(parts, body));
         }
         // The target itself failed: with recursion the failure maps again
@@ -1215,31 +1669,225 @@ async fn resolve_error_pages(
     }
 }
 
-/// Applies the route/host `error_page` mapping to a generated static error
+/// Applies the route/host `error_page` mapping to a generated error or redirect
 /// response when the request identity was captured for the redirect.
+#[allow(clippy::too_many_arguments)]
 async fn apply_error_pages(
     state: &ListenerState,
     generation: &RuntimeGeneration,
     selected: &SelectedRoute<'_>,
     authority: &str,
     response: Response<Body>,
-    saved: Option<&(Method, HeaderMap)>,
+    saved: Option<&(Method, HeaderMap, Option<String>)>,
+    requested_path: &str,
+    query: Option<&str>,
+    scheme: &str,
 ) -> Response<Body> {
     let status = response.status();
-    let Some((method, headers)) = saved else {
+    let Some((method, headers, saved_query)) = saved else {
         return response;
     };
-    if !(status.is_client_error() || status.is_server_error()) {
+    // nginx maps any final status, including a redirect produced by a
+    // rewrite-phase `return` (probed against nginx 1.29.6: `error_page 301`
+    // serves the mapped page under the 301 status).
+    if !(status.is_redirection() || status.is_client_error() || status.is_server_error()) {
         return response;
     }
-    let Some(paged) = resolve_error_pages(
-        state, generation, selected, authority, status, method, headers,
+    // A redirect's `Location` is not part of the representation the mapping
+    // replaces: nginx keeps the handler-computed target while swapping in the
+    // mapped page's body.
+    let redirect_location = status
+        .is_redirection()
+        .then(|| response.headers().get(LOCATION).cloned())
+        .flatten();
+    let Some(mut paged) = resolve_error_pages(
+        state,
+        generation,
+        selected,
+        authority,
+        status,
+        method,
+        headers,
+        requested_path,
+        saved_query.as_deref().or(query),
+        scheme,
     )
     .await
     else {
         return response;
     };
+    if let Some(location) = redirect_location {
+        if !paged.headers().contains_key(LOCATION) {
+            paged.headers_mut().insert(LOCATION, location);
+        }
+    }
     paged
+}
+
+/// nginx `add_header` policy of the location an `error_page` internal redirect
+/// resolved to.
+///
+/// nginx re-runs location selection for the redirect, so the *target*
+/// location's `add_header` array (or the host array it inherits) decides the
+/// response headers; the original location's array must not leak through. The
+/// wrapper exists even when the target has no policy at all, because that
+/// "no headers" answer must suppress the original location's headers instead
+/// of falling back to them.
+#[derive(Clone)]
+struct ResponseHeaderPolicyOverride(Option<Vec<CustomHeaderConfig>>);
+
+/// Request facts an `add_header` value may reference.
+///
+/// `$uri`/`$document_uri` are passed at application time because they follow
+/// an internal rewrite (`secure_link`), while `$request_uri` keeps the original
+/// request target. Only the variables validated by
+/// [`CustomHeaderConfig::validate_declaration`] are expanded.
+struct ResponseHeaderVariables<'a> {
+    scheme: &'a str,
+    authority: &'a str,
+    client_ip: IpAddr,
+    server_port: u16,
+    method: &'a str,
+    request_uri: &'a str,
+    server_name: &'a str,
+}
+
+impl ResponseHeaderVariables<'_> {
+    fn expand(&self, template: &str, uri: &str, query: Option<&str>) -> String {
+        let mut output = String::with_capacity(template.len() + 16);
+        let mut remainder = template;
+        while let Some(index) = remainder.find('$') {
+            output.push_str(&remainder[..index]);
+            let rest = &remainder[index + 1..];
+            if let Some(literal) = rest.strip_prefix('$') {
+                output.push('$');
+                remainder = literal;
+                continue;
+            }
+            let matched = CustomHeaderConfig::SUPPORTED_VARIABLES
+                .iter()
+                .find(|name| {
+                    rest.strip_prefix(**name).is_some_and(|after| {
+                        after.chars().next().is_none_or(|character| {
+                            !(character.is_ascii_alphanumeric() || character == '_')
+                        })
+                    })
+                })
+                .copied();
+            let Some(variable) = matched else {
+                // Configuration validation rejects unknown variables, so this
+                // is unreachable; keep the `$` literal rather than dropping
+                // the rest of the value if an input ever bypasses validation.
+                output.push('$');
+                remainder = rest;
+                continue;
+            };
+            match variable {
+                "host" => output.push_str(
+                    &normalize_authority_host(self.authority)
+                        .unwrap_or_else(|| self.authority.to_ascii_lowercase()),
+                ),
+                "scheme" => output.push_str(self.scheme),
+                "remote_addr" => output.push_str(&self.client_ip.to_string()),
+                "server_port" => output.push_str(&self.server_port.to_string()),
+                "request_uri" => output.push_str(self.request_uri),
+                "uri" | "document_uri" => output.push_str(uri),
+                "args" => output.push_str(query.unwrap_or("")),
+                "is_args" => {
+                    if query.is_some_and(|query| !query.is_empty()) {
+                        output.push('?');
+                    }
+                }
+                "request_method" => output.push_str(self.method),
+                "server_name" => output.push_str(self.server_name),
+                _ => {}
+            }
+            remainder = &rest[variable.len()..];
+        }
+        output.push_str(remainder);
+        output
+    }
+}
+
+/// The effective nginx `add_header` policy for a selected route: a location
+/// that declares any `add_header` replaces the inherited host array (nginx
+/// inheritance), so the route list wins when present and the host's
+/// `securityHeaders.customHeaders` is used only when it is empty.
+fn effective_response_headers<'a>(
+    selected: &'a SelectedRoute<'_>,
+) -> Option<&'a [CustomHeaderConfig]> {
+    if !selected.route.response_headers.is_empty() {
+        return Some(selected.route.response_headers.as_slice());
+    }
+    selected
+        .virtual_host
+        .security_headers
+        .as_ref()
+        .map(|security_headers| security_headers.custom_headers.as_slice())
+        .filter(|headers| !headers.is_empty())
+}
+
+/// Apply the nginx `add_header` policy at the response choke point.
+///
+/// This is `ngx_http_headers_filter` as observed on nginx 1.29.6:
+/// - a field without `always` is emitted only for the statuses in
+///   [`CustomHeaderConfig::NGINX_DEFAULT_STATUSES`];
+/// - `always` fields are emitted for every status, including 4xx/5xx;
+/// - entries are emitted in declaration order and duplicate names are
+///   preserved as separate fields;
+/// - `$variables` are expanded from the request, and an empty value is
+///   omitted (nginx parses `add_header X ""` but sends no field).
+fn apply_nginx_response_headers(
+    mut response: Response<Body>,
+    policy: Option<&[CustomHeaderConfig]>,
+    variables: &ResponseHeaderVariables<'_>,
+    uri: &str,
+    query: Option<&str>,
+) -> Response<Body> {
+    let Some(policy) = policy else {
+        return response;
+    };
+    let status = response.status().as_u16();
+    let default_status = CustomHeaderConfig::NGINX_DEFAULT_STATUSES.contains(&status);
+    for header in policy {
+        if !header.always && !default_status {
+            continue;
+        }
+        if header.value.is_empty() {
+            continue;
+        }
+        let Ok(name) = HeaderName::from_bytes(header.name.as_bytes()) else {
+            continue;
+        };
+        let value = variables.expand(&header.value, uri, query);
+        if let Ok(value) = HeaderValue::from_str(&value) {
+            // `append`, not `insert`: nginx emits duplicate add_header fields
+            // as separate lines and preserves declaration order.
+            response.headers_mut().append(name, value);
+        }
+    }
+    response
+}
+
+/// Apply nginx response headers to a response produced before the main dispatch
+/// choke point — an access/auth/limit rejection, or an `error_page`-generated
+/// response — honoring an error-page target's overriding policy.
+fn finalize_response_headers(
+    mut response: Response<Body>,
+    selected: &SelectedRoute<'_>,
+    variables: &ResponseHeaderVariables<'_>,
+    uri: &str,
+    query: Option<&str>,
+) -> Response<Body> {
+    let policy_override = response
+        .extensions_mut()
+        .remove::<ResponseHeaderPolicyOverride>()
+        .map(|override_value| override_value.0);
+    let policy = match &policy_override {
+        Some(policy) => policy.as_deref(),
+        None => effective_response_headers(selected),
+    };
+    apply_nginx_response_headers(response, policy, variables, uri, query)
 }
 
 /// Applies the selected virtual host's security response headers. HSTS is
@@ -1294,15 +1942,11 @@ fn apply_security_headers(
             HeaderValue::from_static("nosniff"),
         );
     }
-    for custom in &security_headers.custom_headers {
-        let Ok(name) = HeaderName::from_bytes(custom.name.as_bytes()) else {
-            continue;
-        };
-        let Ok(value) = HeaderValue::from_str(&custom.value) else {
-            continue;
-        };
-        headers.insert(name, value);
-    }
+    // `securityHeaders.customHeaders` is deliberately *not* applied here: those
+    // entries are nginx `add_header` semantics (status gating, `always`,
+    // duplicate order, variable expansion) and are applied by
+    // [`apply_nginx_response_headers`] at the response choke point so a
+    // non-`always` security header is not emitted on a 4xx/5xx response.
     response
 }
 
@@ -1534,10 +2178,11 @@ fn limit_conn_rejected_response(version: Version) -> Response<Body> {
 }
 
 fn limit_req_rejected_response(version: Version) -> Response<Body> {
+    // nginx's `limit_req` rejection is a bare 503 with no `Retry-After` (the
+    // delay that would give one is not known: the zone recovers continuously).
+    // The admission-pressure responses above do publish it, but this path is
+    // the nginx-compatible rate-limit answer and must match the oracle.
     let mut response = text_response(StatusCode::SERVICE_UNAVAILABLE, "limiting requests\n");
-    response
-        .headers_mut()
-        .insert(RETRY_AFTER, HeaderValue::from_static("1"));
     if version != Version::HTTP_2 {
         response
             .headers_mut()
@@ -1868,12 +2513,144 @@ mod tests {
             custom_headers: vec![CustomHeaderConfig {
                 name: "X-Custom-Tag".to_owned(),
                 value: "web-1".to_owned(),
+                always: false,
             }],
         }
     }
 
     fn base_response() -> Response<Body> {
         Response::new(Body::from("ok"))
+    }
+
+    fn response_header(name: &str, value: &str, always: bool) -> CustomHeaderConfig {
+        CustomHeaderConfig {
+            name: name.to_owned(),
+            value: value.to_owned(),
+            always,
+        }
+    }
+
+    fn response_header_variables() -> ResponseHeaderVariables<'static> {
+        ResponseHeaderVariables {
+            scheme: "http",
+            authority: "headers.example.com",
+            client_ip: "127.0.0.1".parse().unwrap(),
+            server_port: 8080,
+            method: "GET",
+            request_uri: "/request-path?q=1",
+            server_name: "headers.example.com",
+        }
+    }
+
+    fn response_with_status(status: u16) -> Response<Body> {
+        let mut response = base_response();
+        *response.status_mut() = StatusCode::from_u16(status).expect("status");
+        response
+    }
+
+    #[test]
+    fn add_header_status_gating_matches_nginx() {
+        // nginx `ngx_http_headers_filter` default status list (differentially
+        // confirmed against nginx 1.29.6).
+        let policy = vec![
+            response_header("X-Default", "d", false),
+            response_header("X-Always", "a", true),
+        ];
+        for status in [200_u16, 201, 204, 206, 301, 302, 303, 304, 307, 308] {
+            let response = apply_nginx_response_headers(
+                response_with_status(status),
+                Some(&policy),
+                &response_header_variables(),
+                "/request-path",
+                Some("q=1"),
+            );
+            assert_eq!(response.headers()["x-default"], "d", "status {status}");
+            assert_eq!(response.headers()["x-always"], "a", "status {status}");
+        }
+        for status in [400_u16, 401, 403, 404, 416, 500, 502, 503] {
+            let response = apply_nginx_response_headers(
+                response_with_status(status),
+                Some(&policy),
+                &response_header_variables(),
+                "/request-path",
+                Some("q=1"),
+            );
+            assert!(
+                response.headers().get("x-default").is_none(),
+                "status {status} must not receive a non-`always` field"
+            );
+            assert_eq!(response.headers()["x-always"], "a", "status {status}");
+        }
+    }
+
+    #[test]
+    fn add_header_preserves_declaration_order_and_duplicates() {
+        let policy = vec![
+            response_header("X-Dup", "one", false),
+            response_header("X-Other", "middle", false),
+            response_header("X-Dup", "two", false),
+        ];
+        let response = apply_nginx_response_headers(
+            response_with_status(200),
+            Some(&policy),
+            &response_header_variables(),
+            "/request-path",
+            None,
+        );
+        let duplicates = response
+            .headers()
+            .get_all("x-dup")
+            .iter()
+            .map(|value| value.to_str().expect("header value"))
+            .collect::<Vec<_>>();
+        assert_eq!(duplicates, vec!["one", "two"]);
+        assert_eq!(response.headers()["x-other"], "middle");
+    }
+
+    #[test]
+    fn add_header_expands_the_supported_variables() {
+        let template = "$host|$request_uri|$scheme|$server_port|$remote_addr|$uri|$args|$is_args|$request_method|$server_name|$$literal";
+        let policy = vec![response_header("X-Vars", template, false)];
+        let response = apply_nginx_response_headers(
+            response_with_status(200),
+            Some(&policy),
+            &response_header_variables(),
+            "/current-uri",
+            Some("a=1"),
+        );
+        assert_eq!(
+            response.headers()["x-vars"],
+            "headers.example.com|/request-path?q=1|http|8080|127.0.0.1|/current-uri|a=1|?|GET|headers.example.com|$literal"
+        );
+
+        // `$host` is the request host without its port (nginx lowercases it);
+        // absent query arguments expand to empty strings.
+        let variables = ResponseHeaderVariables {
+            authority: "Headers.Example.com:8443",
+            ..response_header_variables()
+        };
+        let response = apply_nginx_response_headers(
+            response_with_status(200),
+            Some(&[response_header("X-Args", "$host|$args|$is_args", false)]),
+            &variables,
+            "/current-uri",
+            None,
+        );
+        assert_eq!(response.headers()["x-args"], "headers.example.com||");
+    }
+
+    #[test]
+    fn add_header_omits_an_empty_value_like_nginx() {
+        // Probed against nginx 1.29.6: `add_header X-Empty "";` is accepted by
+        // the parser but sends no field at all.
+        let response = apply_nginx_response_headers(
+            response_with_status(200),
+            Some(&[response_header("X-Empty", "", false)]),
+            &response_header_variables(),
+            "/request-path",
+            None,
+        );
+        assert!(response.headers().get("x-empty").is_none());
     }
 
     #[test]
@@ -1915,7 +2692,9 @@ mod tests {
             response.headers().get("x-content-type-options").unwrap(),
             "nosniff"
         );
-        assert_eq!(response.headers().get("x-custom-tag").unwrap(), "web-1");
+        // Custom headers are nginx `add_header` entries and are applied by the
+        // status-gated choke point, never unconditionally here.
+        assert!(response.headers().get("x-custom-tag").is_none());
     }
 
     #[test]

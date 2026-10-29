@@ -1696,25 +1696,40 @@ fn build_target_url(
     path_rewritten: bool,
     query: Option<&str>,
 ) -> Result<Url, ()> {
-    // nginx `proxy_pass` URI replacement: when the target has a URI part,
-    // the location-matched prefix is replaced with that URI and the
-    // forwarded path is appended. Legacy `stripPrefix` resources (no URI
-    // part) keep the upstream target's own path as the base.
-    if strip_prefix || target_uri.is_some() {
+    // nginx `proxy_pass` URI replacement is a literal splice: the URI written
+    // on the directive replaces exactly the matched location prefix, and the
+    // remainder of the normalized request URI is appended unchanged — no slash
+    // is added or removed at the seam. Verified against nginx 1.29.6:
+    //   location /a/ { proxy_pass http://up/x; }   /a/inner -> /xinner
+    //   location /b/ { proxy_pass http://up/v1/; } /b/inner -> /v1/inner
+    //   location /d  { proxy_pass http://up/v1/; } /d/inner -> /v1//inner
+    // A trailing-slash URI therefore keeps working while a non-slash URI
+    // inherits the remainder directly (nginx's documented caveat).
+    if let Some(uri) = target_uri {
         let forwarded_path = normalized_path
             .strip_prefix(route_path)
             .unwrap_or(normalized_path);
         let mut rewritten = target.clone();
-        let replacement = match target_uri {
-            Some(uri) => uri.to_owned(),
-            None => rewritten.path().to_owned(),
-        };
-        let base_path = replacement.trim_end_matches('/');
+        let combined_path = format!("{uri}{forwarded_path}");
+        let encoded_path =
+            utf8_percent_encode(&combined_path, CANONICAL_PROXY_PATH_ENCODE_SET).to_string();
+        rewritten.set_path(&encoded_path);
+        rewritten.set_query(query);
+        return Ok(rewritten);
+    }
+    // Legacy typed-config `stripPrefix` resources (no URI part) keep the
+    // upstream target's own path as a base and join the remainder with a `/`.
+    if strip_prefix {
+        let forwarded_path = normalized_path
+            .strip_prefix(route_path)
+            .unwrap_or(normalized_path);
+        let mut rewritten = target.clone();
+        let base_path = rewritten.path().trim_end_matches('/').to_owned();
         let combined_path = if forwarded_path.is_empty() {
             if base_path.is_empty() {
                 "/".to_owned()
             } else {
-                base_path.to_owned()
+                base_path
             }
         } else {
             format!("{base_path}/{}", forwarded_path.trim_start_matches('/'))
@@ -1813,7 +1828,6 @@ fn apply_proxy_set_headers(
             external_scheme,
             external_authority,
             listener_port,
-            target,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -1832,7 +1846,6 @@ fn expand_proxy_header_value(
     external_scheme: &str,
     external_authority: &str,
     listener_port: u16,
-    current: &HeaderMap,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -1865,10 +1878,13 @@ fn expand_proxy_header_value(
             "scheme" => out.push_str(external_scheme),
             "remote_addr" => out.push_str(&client_ip.to_string()),
             "proxy_add_x_forwarded_for" => {
-                let existing = current
-                    .get("x-forwarded-for")
-                    .and_then(|v| v.to_str().ok())
-                    .or_else(|| source.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
+                // nginx's `$proxy_add_x_forwarded_for` appends the client
+                // address to the *inbound* `X-Forwarded-For` field, never to a
+                // value the proxy generated for this same request. Reading the
+                // target map here would duplicate the runtime's own safe
+                // default (`127.0.0.1` -> `127.0.0.1, 127.0.0.1`) instead of the
+                // single address nginx sends.
+                let existing = source.get("x-forwarded-for").and_then(|v| v.to_str().ok());
                 match existing {
                     Some(prior) if !prior.is_empty() => {
                         out.push_str(prior);
