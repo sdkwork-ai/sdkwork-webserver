@@ -194,6 +194,9 @@ async fn route_admitted_request(
     mut request: Request<Body>,
     admitted: &mut super::request_gate::RequestAdmissionPermit,
 ) -> Response<Body> {
+    // `$invalid_referer` needs the inbound `Referer`; capture the headers
+    // before dispatch consumes the request.
+    let request_headers = request.headers().clone();
     // Captured before dispatch consumes the request: the compression layer
     // negotiates after the handler returns, so the handler needs the same input
     // to publish a validator that matches the negotiated representation.
@@ -660,6 +663,7 @@ async fn route_admitted_request(
                         request_uri: &raw_request_uri,
                         server_name: host_config.server_names.first().map_or("", String::as_str),
                         maps: Some(&map_results),
+                        invalid_referer: referer_invalid_for(host_config, None, &request_headers),
                     };
                     return apply_nginx_response_headers(
                         text_response(StatusCode::NOT_FOUND, "route was not found\n"),
@@ -716,6 +720,11 @@ async fn route_admitted_request(
                     .first()
                     .map_or("", String::as_str),
                 maps: Some(&map_results),
+                invalid_referer: referer_invalid_for(
+                    &candidate.virtual_host,
+                    Some(candidate.route),
+                    &request_headers,
+                ),
             };
             return finalize_response_headers(
                 response,
@@ -822,6 +831,11 @@ async fn route_admitted_request(
                         .first()
                         .map_or("", String::as_str),
                     maps: Some(&map_results),
+                    invalid_referer: referer_invalid_for(
+                        &candidate.virtual_host,
+                        Some(candidate.route),
+                        &request_headers,
+                    ),
                 };
                 let response = apply_security_headers(
                     response,
@@ -865,6 +879,11 @@ async fn route_admitted_request(
             .first()
             .map_or("", String::as_str),
         maps: Some(&map_results),
+        invalid_referer: referer_invalid_for(
+            selected.virtual_host,
+            Some(selected.route),
+            &request_headers,
+        ),
     };
     // nginx location-scoped gates run in the access/preaccess phases, before
     // the content handler and before `try_files` can redirect internally.
@@ -2103,6 +2122,8 @@ struct ResponseHeaderVariables<'a> {
     /// nginx `map` results for this request; a result variable is expanded
     /// exactly like a built-in request variable in an `add_header` value.
     maps: Option<&'a super::map_variables::MapResults>,
+    /// nginx `$invalid_referer` for this request (`valid_referers` policy).
+    invalid_referer: bool,
 }
 
 impl ResponseHeaderVariables<'_> {
@@ -2166,6 +2187,11 @@ impl ResponseHeaderVariables<'_> {
                 }
                 "request_method" => output.push_str(self.method),
                 "server_name" => output.push_str(self.server_name),
+                "invalid_referer" => {
+                    if self.invalid_referer {
+                        output.push('1');
+                    }
+                }
                 _ => {}
             }
             remainder = &rest[variable.len()..];
@@ -2173,6 +2199,22 @@ impl ResponseHeaderVariables<'_> {
         output.push_str(remainder);
         output
     }
+}
+
+/// Evaluate nginx `$invalid_referer` for one request: the location policy
+/// replaces the host policy; otherwise the host policy applies.
+fn referer_invalid_for(
+    virtual_host: &sdkwork_webserver_core::VirtualHostConfig,
+    route: Option<&sdkwork_webserver_core::RouteConfig>,
+    headers: &axum::http::HeaderMap,
+) -> bool {
+    let policy = route
+        .and_then(|route| route.referer.as_ref())
+        .or(virtual_host.referer.as_ref());
+    let referer = headers
+        .get(axum::http::header::REFERER)
+        .and_then(|value| value.to_str().ok());
+    sdkwork_webserver_core::invalid_referer(policy, &virtual_host.server_names, referer)
 }
 
 /// The effective nginx `add_header` policy for a selected route: a location
@@ -3109,6 +3151,7 @@ mod tests {
             request_uri: "/request-path?q=1",
             server_name: "headers.example.com",
             maps: None,
+            invalid_referer: false,
         }
     }
 
@@ -3141,6 +3184,7 @@ mod tests {
             request_uri: "/dir",
             server_name,
             maps: None,
+            invalid_referer: false,
         }
     }
 
@@ -3253,6 +3297,7 @@ mod tests {
             ignore_invalid_headers: true,
             charset: None,
             autoindex: None,
+            referer: None,
         };
         let mut route = sdkwork_webserver_core::RouteConfig {
             id: "r".to_owned(),
@@ -3282,6 +3327,7 @@ mod tests {
             internal: false,
             charset: None,
             autoindex: None,
+            referer: None,
         };
         assert_eq!(
             route

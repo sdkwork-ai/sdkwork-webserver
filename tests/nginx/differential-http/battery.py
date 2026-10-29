@@ -126,6 +126,10 @@ AUTOINDEX_HOST = "autoindex.example.com"
 EMPTY_GIF_HOST = "emptygif.example.com"
 # Nineteenth host: the `stub_status` page (loopback/allow-gated).
 STATUS_HOST = "status.example.com"
+# Twentieth host: nginx `valid_referers` / `$invalid_referer`.
+REFERER_HOST = "referer.example.com"
+# Twenty-first host: `geo` / `split_clients` variable blocks.
+GEOSPLIT_HOST = "geosplit.example.com"
 # 2020-01-01T00:00:00Z. Both endpoints serve these exact files, so pinning the
 # mtime makes `ETag` and `Last-Modified` stable across checkouts (git does not
 # preserve mtimes). The battery pins it on both runs before any request.
@@ -1432,6 +1436,44 @@ def main() -> int:
         case("autoindex.dir-redirect", "/list", host=AUTOINDEX_HOST)
         # HEAD keeps the generated headers and drops the body.
         case("autoindex.head", "/list/", host=AUTOINDEX_HOST, method="HEAD")
+
+        # ---- geo / split_clients ---------------------------------------
+        def geosplit_case(label, headers=None):
+            case(label, "/gs/", host=GEOSPLIT_HOST, headers=headers or [])
+
+        geosplit_case("geo.loopback")
+        geosplit_case("geo.xff-range", [("X-Forwarded-For", "10.0.0.7")])
+        geosplit_case("geo.xff-v6", [("X-Forwarded-For", "2001:db8::10")])
+        geosplit_case("geo.xff-default", [("X-Forwarded-For", "8.8.8.8")])
+        for key in ("alpha", "beta", "gamma", "delta", "epsilon", "nginx"):
+            geosplit_case(
+                f"split.{key}",
+                [("X-Split-Key", key)],
+            ) if False else case(
+                f"split.{key}",
+                f"/gs/?key={key}",
+                host=GEOSPLIT_HOST,
+            )
+
+        # ---- valid_referers / $invalid_referer -------------------------
+        # `X-Referer-Invalid: 1` is emitted only for rejected referers; a
+        # valid referer expands to an empty value and nginx omits the field.
+        def referer_case(label, referer=None, path="/ref/", host=REFERER_HOST):
+            headers = [] if referer is None else [("Referer", referer)]
+            case(label, path, host=host, headers=headers)
+
+        referer_case("referer.missing")
+        referer_case("referer.blocked", "relative/path")
+        referer_case("referer.uppercase-scheme", "HTTP://REFERER.EXAMPLE.COM/x")
+        referer_case("referer.server-names", "http://referer.example.com/x")
+        referer_case("referer.wildcard", "http://a.allowed.test/x")
+        referer_case("referer.path-match", "http://allowed.org/galleries/pic")
+        referer_case("referer.path-mismatch", "http://allowed.org/other")
+        referer_case("referer.regex", "http://www.google.com/search")
+        referer_case("referer.invalid", "http://evil.test/x")
+        referer_case("referer.port", "http://sub.allowed.test:8443/x")
+        referer_case("referer.location-override-valid", "http://referer.example.com/x", "/ref-own/")
+        referer_case("referer.location-override-invalid", "http://a.allowed.test/x", "/ref-own/")
 
         # ---- proxy_method ----------------------------------------------
         # The client's GET is forwarded upstream as POST (`proxy_method POST`).

@@ -3227,10 +3227,34 @@
         "http"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "http.geo[] (GeoConfig: source/entries range+CIDR/default; evaluated into the shared result-variable table)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "geo.loopback"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "geo.xff-range"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/geo.rs",
+          "case": "geo_matches_longest_prefix_and_default"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/geo.rs",
+          "case": "geo_ranges_match_inclusive_bounds"
+        }
+      ],
+      "knownDifferences": [
+        "IPv4 `ranges;` only (nginx range tables are IPv4-only; an IPv6 range entry is a located config error)",
+        "variable-valued geo entries fail closed (values are bounded literals)"
+      ]
     },
     {
       "id": "http:geoip_city",
@@ -4270,7 +4294,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
-      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_body_preread_size` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
       "knownDifferences": [
         "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
@@ -4309,7 +4333,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_idle_timeout` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4332,7 +4356,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_max_concurrent_pushes` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4387,7 +4411,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_max_field_size` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4410,7 +4434,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_max_header_size` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4433,7 +4457,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_max_requests` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4456,7 +4480,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
-      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_pool_size` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
       "knownDifferences": [
         "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
@@ -4481,7 +4505,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_push` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4506,7 +4530,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_push_preload` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4527,7 +4551,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
-      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_recv_buffer_size` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
       "knownDifferences": [
         "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
@@ -4550,7 +4574,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
-      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_recv_timeout` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
       "knownDifferences": [
         "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
@@ -4573,7 +4597,7 @@
       "classification": "accepted-unenforced",
       "risk": "low",
       "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
-      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:http2_streams_index_size` (specs/nginx-gap.catalog.json).",
       "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
       "knownDifferences": [
         "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
@@ -9519,10 +9543,25 @@
         "http"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "http.splitClients[] (SplitClientsConfig: source template/percentage buckets; ngx_murmur_hash2 + fixed-point percentages)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "split.{key}"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/geo.rs",
+          "case": "split_clients_uses_nginx_murmur_hash_and_buckets"
+        }
+      ],
+      "knownDifferences": [
+        "the bucket hash is pinned to nginx ngx_murmur_hash2 and verified against real nginx for the fixture keys"
+      ]
     },
     {
       "id": "http:ssi",
@@ -11801,10 +11840,38 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "virtualHosts[].referer / routes[].referer (RefererConfig) + $invalid_referer in header/return expansion",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "referer.missing"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "referer.wildcard"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "referer.regex"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/referer.rs",
+          "case": "missing_referer_is_valid_only_with_none"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/referer.rs",
+          "case": "wildcards_paths_and_regexes"
+        }
+      ],
+      "knownDifferences": [
+        "regex entries are compiled case-insensitively and the bounded pattern set fails closed on PCRE-only constructs"
+      ]
     },
     {
       "id": "http:variables_hash_bucket_size",

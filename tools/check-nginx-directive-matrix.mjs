@@ -149,6 +149,11 @@ export const PARSER_EXECUTED = new Map([
   // Keyed by catalog id, not name: the stream `map` directive is still
   // accepted-unenforced because the stream plane evaluates no variables.
   ['http:map', 'crates/sdkwork-webserver-core/src/nginx/mapping.rs::materialize_nginx_app map pre-scan'],
+  // `geo` / `split_clients` are materialized by the same context pre-scan in
+  // `materialize_nginx_app` (parse_geo / parse_split_clients), before the
+  // directive loop runs.
+  ['http:geo', 'crates/sdkwork-webserver-core/src/nginx/mapping.rs::materialize_nginx_app geo pre-scan'],
+  ['http:split_clients', 'crates/sdkwork-webserver-core/src/nginx/mapping.rs::materialize_nginx_app split_clients pre-scan'],
 ]);
 
 /**
@@ -617,10 +622,16 @@ export function cliHandledDirectiveNames(cliSource) {
 /**
  * Walk an nginx configuration tree and return the directive names it uses,
  * including block directives but excluding the bodies of data blocks whose
- * children are not directives (`types`, `charset_map`, `map`).
+ * children are not directives (`types`, `charset_map`, `map`, `geo`,
+ * `split_clients`).
  */
 export function collectConfigDirectiveNames(tree, options = {}) {
-  const dataBlocks = new Set(options.dataBlocks ?? ['types', 'charset_map', 'map']);
+  // `geo` / `split_clients` block bodies are address/percentage rows, not
+  // directives (same as `map`); the fixture scan must not require a catalog
+  // entry for every row.
+  const dataBlocks = new Set(
+    options.dataBlocks ?? ['types', 'charset_map', 'map', 'geo', 'split_clients'],
+  );
   const names = [];
   const visit = (node) => {
     names.push(node.name);

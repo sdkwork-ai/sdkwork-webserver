@@ -135,13 +135,26 @@ pub(crate) struct MapResults {
 impl MapResults {
     /// Evaluate every `map` declaration against the request facts.
     pub(crate) fn evaluate(config: &WebServerAppConfig, facts: &MapRequestFacts<'_>) -> Self {
-        if config.maps.is_empty() {
+        if config.maps.is_empty() && config.geo.is_empty() && config.split_clients.is_empty() {
             return Self::default();
         }
-        let mut values = Vec::with_capacity(config.maps.len());
+        let mut values =
+            Vec::with_capacity(config.maps.len() + config.geo.len() + config.split_clients.len());
         for map in &config.maps {
             let value = sdkwork_webserver_core::evaluate_map(map, facts);
             if let Some(name) = map.result.strip_prefix('$') {
+                values.push((name.to_owned(), value));
+            }
+        }
+        for geo in &config.geo {
+            let value = sdkwork_webserver_core::evaluate_geo(geo, facts);
+            if let Some(name) = geo.result.strip_prefix('$') {
+                values.push((name.to_owned(), value));
+            }
+        }
+        for split in &config.split_clients {
+            let value = sdkwork_webserver_core::evaluate_split_clients(split, facts);
+            if let Some(name) = split.result.strip_prefix('$') {
                 values.push((name.to_owned(), value));
             }
         }

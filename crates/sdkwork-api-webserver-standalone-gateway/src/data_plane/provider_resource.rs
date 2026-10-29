@@ -436,6 +436,7 @@ mod tests {
             internal: false,
             charset: None,
             autoindex: None,
+            referer: None,
         }
     }
 

@@ -64,7 +64,7 @@ const ORACLE_UPSTREAM_PORT = ORACLE_PORT + 2;
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_UPSTREAM_PORT = GATEWAY_PORT + 2;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
-const CASE_FLOOR = 237;
+const CASE_FLOOR = 259;
 /**
  * The exact nginx build the committed oracle was captured from. Bump it only
  * together with a fresh `--refresh-oracle` capture and the per-slice note in

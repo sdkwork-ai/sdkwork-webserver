@@ -1278,12 +1278,44 @@ impl SemanticValidator {
             .filter_map(super::map_variables::map_result_name)
             .map(str::to_owned)
             .collect();
+        for (index, geo) in config.geo.iter().enumerate() {
+            if let Err(message) = super::validate_geo_config(geo) {
+                self.push(format!("/geo/{index}"), message);
+            }
+            if let Some(result) = geo.result.strip_prefix('$') {
+                self.note_variable_block_result(result, &format!("/geo/{index}/result"));
+            }
+        }
+        for (index, split) in config.split_clients.iter().enumerate() {
+            if let Err(message) = super::validate_split_clients_config(split) {
+                self.push(format!("/splitClients/{index}"), message);
+            }
+            if let Some(result) = split.result.strip_prefix('$') {
+                self.note_variable_block_result(result, &format!("/splitClients/{index}/result"));
+            }
+        }
         if config.maps.is_empty() {
             return;
         }
         if let Err(message) = super::map_variables::validate_map_definitions(&config.maps) {
             self.push("/maps", message);
         }
+    }
+
+    /// One result-variable namespace: `map`, `geo` and `split_clients` all
+    /// define request variables, so a duplicate is a configuration error (the
+    /// runtime refuses silently shadowed variables).
+    fn note_variable_block_result(&mut self, result: &str, path: &str) {
+        if self.map_variables.iter().any(|name| name == result) {
+            self.push(
+                path,
+                format!(
+                    "result variable `${result}` is already declared by another variable block; the runtime rejects duplicate variable definitions"
+                ),
+            );
+            return;
+        }
+        self.map_variables.push(result.to_owned());
     }
 
     fn validate_limits(&mut self, config: &WebServerAppConfig) {
@@ -1902,6 +1934,22 @@ impl SemanticValidator {
         }
         for (host_index, virtual_host) in config.virtual_hosts.iter().enumerate() {
             self.register_id(&virtual_host.id, format!("/virtualHosts/{host_index}/id"));
+            if let Some(referer) = &virtual_host.referer {
+                validate_referer_policy(
+                    self,
+                    &format!("/virtualHosts/{host_index}/referer"),
+                    referer,
+                );
+            }
+            for (route_index, route) in virtual_host.routes.iter().enumerate() {
+                if let Some(referer) = &route.referer {
+                    validate_referer_policy(
+                        self,
+                        &format!("/virtualHosts/{host_index}/routes/{route_index}/referer"),
+                        referer,
+                    );
+                }
+            }
             for (route_index, route) in virtual_host.routes.iter().enumerate() {
                 self.register_id(
                     &route.id,
@@ -1936,6 +1984,73 @@ impl SemanticValidator {
             Err(WebServerConfigError::Validation {
                 diagnostics: self.diagnostics,
             })
+        }
+    }
+}
+
+/// Validate an nginx `valid_referers` policy: nginx rejects `none`/`blocked`
+/// without at least one positive matcher, and every host/wildcard/regex must be
+/// well formed (the runtime executes them, so a bad pattern fails at load).
+fn validate_referer_policy(
+    validator: &mut SemanticValidator,
+    path: &str,
+    policy: &crate::config::model::RefererConfig,
+) {
+    if (policy.none || policy.blocked)
+        && policy.hosts.is_empty()
+        && policy.regexes.is_empty()
+        && !policy.server_names
+    {
+        validator.push(
+            path,
+            "`valid_referers none`/`blocked` requires at least one host, wildcard, `~regex`, or `server_names` matcher (nginx rejects the configuration)",
+        );
+    }
+    if policy.hosts.len() > 64 {
+        validator.push(
+            format!("{path}/hosts"),
+            "at most 64 host entries are supported",
+        );
+    }
+    if policy.regexes.len() > 16 {
+        validator.push(
+            format!("{path}/regexes"),
+            "at most 16 `~regex` entries are supported",
+        );
+    }
+    for (index, entry) in policy.hosts.iter().enumerate() {
+        let entry_path = format!("{path}/hosts/{index}");
+        let host = entry.host.as_str();
+        let suffix = host.strip_prefix("*.").or_else(|| host.strip_prefix('.'));
+        let valid_host = !host.is_empty()
+            && host.len() <= 253
+            && !host.chars().any(char::is_whitespace)
+            && match suffix {
+                Some(suffix) => {
+                    !suffix.is_empty() && !suffix.contains('*') && !suffix.starts_with('.')
+                }
+                None => !host.contains('*'),
+            };
+        if !valid_host {
+            validator.push(
+                &entry_path,
+                "invalid `valid_referers` host; supported forms are an exact host, `*.suffix`, `.suffix`, and a host with a `/path` prefix",
+            );
+        }
+        if entry
+            .path
+            .as_deref()
+            .is_some_and(|path| !path.starts_with('/'))
+        {
+            validator.push(&entry_path, "a referer URI prefix must start with `/`");
+        }
+    }
+    for (index, pattern) in policy.regexes.iter().enumerate() {
+        if crate::config::compile_referer_regex(pattern).is_none() {
+            validator.push(
+                format!("{path}/regexes/{index}"),
+                "invalid `~regex` referer pattern (must compile with the runtime regex engine)",
+            );
         }
     }
 }

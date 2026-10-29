@@ -456,6 +456,16 @@ pub struct WebServerAppConfig {
     /// value subset.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub maps: Vec<MapConfig>,
+    /// nginx `geo` address-variable blocks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub geo: Vec<GeoConfig>,
+    /// nginx `split_clients` buckets.
+    #[serde(
+        rename = "splitClients",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub split_clients: Vec<SplitClientsConfig>,
     /// nginx http-level `types { <mime> <ext…>; }` table, in authored order.
     /// `None` keeps the runtime's built-in MIME table; `Some` (including an
     /// explicitly empty `types {}` block) *replaces* it for this application,
@@ -640,6 +650,48 @@ pub struct MapConfig {
     pub default: Option<String>,
     /// Authored key/value entries in declaration order.
     pub entries: Vec<MapEntryConfig>,
+}
+
+/// One entry of a nginx `geo` block: a CIDR/IP (or an `a-b` range with
+/// `ranges;`) mapped to a literal value; `key == "default"` is the fallback.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GeoEntryConfig {
+    pub key: String,
+    pub value: String,
+}
+
+/// nginx `geo [$address] $variable { … }`: address-based variable assignment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GeoConfig {
+    /// Source address variable, written with its `$` (default `$remote_addr`).
+    pub source: String,
+    pub result: String,
+    /// `ranges;` — keys are `first-last` address ranges instead of CIDRs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ranges: bool,
+    pub entries: Vec<GeoEntryConfig>,
+}
+
+/// One `split_clients` bucket: `percent` is the authored percentage in
+/// hundredths (`30%` → 3000); `None` is the `*` catch-all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SplitClientsPartConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub percent: Option<u32>,
+    pub value: String,
+}
+
+/// nginx `split_clients $source $result { … }`: deterministic MurmurHash2
+/// bucketing of an expanded source value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SplitClientsConfig {
+    pub source: String,
+    pub result: String,
+    pub parts: Vec<SplitClientsPartConfig>,
 }
 
 /// One `<key> <value>;` entry of a `map` block.
@@ -1886,6 +1938,10 @@ pub struct VirtualHostConfig {
     /// means no level declared it (directory listings off).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autoindex: Option<AutoindexConfig>,
+    /// Server-level nginx `valid_referers` policy; `None` means no level
+    /// declared it (`$invalid_referer` is empty).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referer: Option<RefererConfig>,
 }
 
 /// `true` is the serde default for the nginx `merge_slashes` /
@@ -2178,6 +2234,9 @@ impl CustomHeaderConfig {
         "is_args",
         "request_method",
         "server_name",
+        // nginx `ngx_http_referer_module`: "1" when `valid_referers` rejects
+        // the request's Referer, empty otherwise.
+        "invalid_referer",
     ];
 
     /// Maximum header value length. nginx places no comparable bound; this is
@@ -2479,6 +2538,45 @@ pub struct RouteConfig {
     /// Location-level nginx `autoindex` family resolved over the host value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autoindex: Option<AutoindexConfig>,
+    /// Location-level nginx `valid_referers` policy resolved over the host
+    /// value (a location declaration replaces the inherited list).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referer: Option<RefererConfig>,
+}
+
+/// One `valid_referers` host entry: a lowercased host (optionally a leading
+/// `*.` or `.` wildcard) plus the optional URI-prefix part after the first
+/// `/` (nginx splits the configured value there).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RefererHostEntry {
+    pub host: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// nginx `valid_referers` policy (ngx_http_referer_module): the ordered
+/// matchers that decide `$invalid_referer`. A declared directive replaces the
+/// inherited list entirely (nginx merge semantics).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RefererConfig {
+    /// `none`: a missing `Referer` header is valid.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub none: bool,
+    /// `blocked`: a `Referer` without an `http://`/`https://` scheme is valid.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub blocked: bool,
+    /// `server_names`: the host must match one of this virtual host's
+    /// `server_name` entries.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub server_names: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<RefererHostEntry>,
+    /// `~regex` entries, matched case-insensitively against the referer value
+    /// with the scheme stripped (nginx `ngx_http_add_regex_referer`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub regexes: Vec<String>,
 }
 
 /// nginx `secure_link` module modes (ngx_http_secure_link_module).

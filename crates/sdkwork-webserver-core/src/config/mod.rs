@@ -5,7 +5,8 @@ pub mod cache_policy;
 mod compiled;
 mod discovery;
 mod error;
-pub mod gzip_disable;
+pub mod geo;
+mod gzip_disable;
 mod limit_conn;
 mod limit_req;
 mod loader;
@@ -14,6 +15,7 @@ mod model;
 mod network;
 mod proxy_headers;
 mod proxy_pass;
+mod referer;
 mod rewrite;
 mod secure_link;
 mod server_name;
@@ -35,6 +37,10 @@ pub use discovery::{
     NGINX_CONFIG_FILE_ENV, WEBSERVER_CONFIG_FILE_ENV, WEBSERVER_CONFIG_FILE_NAME,
 };
 pub use error::{ConfigDiagnostic, WebServerConfigError};
+pub use geo::{
+    evaluate_geo, evaluate_split_clients, murmur_hash2, parse_split_percent, validate_geo_config,
+    validate_split_clients_config,
+};
 pub use gzip_disable::{
     gzip_disabled_for_user_agent, user_agent_is_msie6, user_agent_matches_disable_patterns,
 };
@@ -55,24 +61,25 @@ pub use model::{
     AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, AutoindexConfig,
     AutoindexFormat, CachePolicyConfig, CertificateConfig, CertificateSource, CharsetConfig,
     ClientAuthConfig, ClientAuthMode, ConfigProviderType, CookieRewritePolicyConfig,
-    CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode, GzipConfig,
-    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig, LimitConnZoneConfig,
-    LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
-    MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig, ObservabilityConfig,
-    ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
-    ProxyProtocolVersion, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
-    ProxyRewriteRuleConfig, RedirectPolicyConfig, ReloadConfig, ReloadMode, ResolverConfig,
-    ResourceConfig, ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag,
-    RewriteRuleConfig, RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode,
-    SecurityHeadersConfig, StreamProtocol, StreamServerConfig, StreamTargetConfig, StreamTlsMode,
-    StrictTransportSecurityConfig, SubFilterConfig, SubFilterRule, TlsCertificateResolution,
-    TlsPolicyConfig, TlsVersion, TrustedProxyConfig, TrustedProxyHeader,
-    UpstreamActiveHealthConfig, UpstreamActiveHealthMethod, UpstreamAddressPolicyConfig,
-    UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy,
-    UpstreamPassiveHealthConfig, UpstreamRetryCondition, UpstreamRetryConfig, UpstreamTargetConfig,
-    UpstreamTlsConfig, UpstreamTlsTrustMode, UsageMeteringChannel, UsageMeteringConfig,
-    VirtualHostConfig, WebServerAppConfig, WebServerLimits, XFrameOptions,
-    ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_MAX_RANGES,
+    CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode, GeoConfig, GeoEntryConfig,
+    GzipConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig,
+    LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol,
+    ListenerTlsRuntime, MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig,
+    ObservabilityConfig, ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig,
+    ProxyProtocolCrc32cPolicy, ProxyProtocolVersion, ProxyRedirectPolicyConfig,
+    ProxyResponsePolicyConfig, ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig,
+    RefererHostEntry, ReloadConfig, ReloadMode, ResolverConfig, ResourceConfig,
+    ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag, RewriteRuleConfig,
+    RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode, SecurityHeadersConfig,
+    SplitClientsConfig, SplitClientsPartConfig, StreamProtocol, StreamServerConfig,
+    StreamTargetConfig, StreamTlsMode, StrictTransportSecurityConfig, SubFilterConfig,
+    SubFilterRule, TlsCertificateResolution, TlsPolicyConfig, TlsVersion, TrustedProxyConfig,
+    TrustedProxyHeader, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
+    UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar,
+    UpstreamLoadBalancingStrategy, UpstreamPassiveHealthConfig, UpstreamRetryCondition,
+    UpstreamRetryConfig, UpstreamTargetConfig, UpstreamTlsConfig, UpstreamTlsTrustMode,
+    UsageMeteringChannel, UsageMeteringConfig, VirtualHostConfig, WebServerAppConfig,
+    WebServerLimits, XFrameOptions, ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_MAX_RANGES,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
@@ -86,6 +93,7 @@ pub use proxy_pass::{
     expand_proxy_pass_template, validate_proxy_pass_template,
     validate_proxy_pass_template_with_maps,
 };
+pub use referer::{compile_referer_regex, invalid_referer};
 pub use rewrite::{
     apply_rewrites, apply_rewrites_with, parse_rewrite, RewriteApplyError, RewriteOutcome,
     RewriteParseError, MAX_REWRITE_INTERNAL_REDIRECTS,

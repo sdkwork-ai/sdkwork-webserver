@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 116 |
+| executable | 119 |
 | accepted, NOT enforced | 171 |
-| rejected (fail closed) | 228 |
+| rejected (fail closed) | 225 |
 | excluded from profile | 229 |
 | **total** | **744** |
 
@@ -88,7 +88,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_dav_module` (4) — `create_full_put_path`, `dav_access`, `dav_methods`, `min_delete_depth`
 - `ngx_http_degradation_module` (2) — `degradation`, `degrade`
 - `ngx_http_flv_module` (1) — `flv`
-- `ngx_http_geo_module` (1) — `geo`
 - `ngx_http_grpc_module` (29) — `grpc_bind`, `grpc_buffer_size`, `grpc_connect_timeout`, `grpc_hide_header`, `grpc_ignore_headers`, `grpc_intercept_errors`, `grpc_next_upstream`, `grpc_next_upstream_timeout`, `grpc_next_upstream_tries`, `grpc_pass`, `grpc_pass_header`, `grpc_read_timeout`, `grpc_send_timeout`, `grpc_set_header`, `grpc_socket_keepalive`, `grpc_ssl_certificate`, `grpc_ssl_certificate_cache`, `grpc_ssl_certificate_key`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_name`, `grpc_ssl_password_file`, `grpc_ssl_protocols`, `grpc_ssl_server_name`, `grpc_ssl_session_reuse`, `grpc_ssl_trusted_certificate`, `grpc_ssl_verify`, `grpc_ssl_verify_depth`
 - `ngx_http_gunzip_filter_module` (2) — `gunzip`, `gunzip_buffers`
 - `ngx_http_gzip_filter_module` (3) — `gzip_hash`, `gzip_no_buffer`, `postpone_gzipping`
@@ -101,10 +100,9 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_mp4_module` (4) — `mp4`, `mp4_buffer_size`, `mp4_max_buffer_size`, `mp4_start_key_frame`
 - `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
 - `ngx_http_random_index_module` (1) — `random_index`
-- `ngx_http_referer_module` (3) — `referer_hash_bucket_size`, `referer_hash_max_size`, `valid_referers`
+- `ngx_http_referer_module` (2) — `referer_hash_bucket_size`, `referer_hash_max_size`
 - `ngx_http_rewrite_module` (5) — `break`, `if`, `rewrite_log`, `set`, `uninitialized_variable_warn`
 - `ngx_http_slice_filter_module` (1) — `slice`
-- `ngx_http_split_clients_module` (1) — `split_clients`
 - `ngx_http_ssi_filter_module` (7) — `ssi`, `ssi_ignore_recycled_buffers`, `ssi_last_modified`, `ssi_min_file_chunk`, `ssi_silent_errors`, `ssi_types`, `ssi_value_length`
 - `ngx_http_ssl_module` (13) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
@@ -582,7 +580,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `geo` | 1\|2 | http | rejected (fail closed) |  |
+| `geo` | 1\|2 | http | executable | runtime: `http.geo[] (GeoConfig: source/entries range+CIDR/default; evaluated into the shared result-variable table)`. IPv4 `ranges;` only (nginx range tables are IPv4-only; an IPv6 range entry is a located config error); variable-valued geo entries fail closed (values are bounded literals) |
 
 #### `ngx_http_geoip_module` (5 directives)
 
@@ -861,7 +859,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | --- | --- | --- | --- | --- |
 | `referer_hash_bucket_size` | 1 | http-location, http-server | rejected (fail closed) |  |
 | `referer_hash_max_size` | 1 | http-location, http-server | rejected (fail closed) |  |
-| `valid_referers` | 1+ | http-location, http-server | rejected (fail closed) |  |
+| `valid_referers` | 1+ | http-location, http-server | executable | runtime: `virtualHosts[].referer / routes[].referer (RefererConfig) + $invalid_referer in header/return expansion`. regex entries are compiled case-insensitively and the bounded pattern set fails closed on PCRE-only constructs |
 
 #### `ngx_http_rewrite_module` (7 directives)
 
@@ -942,7 +940,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `split_clients` | 2 | http | rejected (fail closed) |  |
+| `split_clients` | 2 | http | executable | runtime: `http.splitClients[] (SplitClientsConfig: source template/percentage buckets; ngx_murmur_hash2 + fixed-point percentages)`. the bucket hash is pinned to nginx ngx_murmur_hash2 and verified against real nginx for the fixture keys |
 
 #### `ngx_http_ssi_filter_module` (7 directives)
 

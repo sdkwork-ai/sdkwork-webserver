@@ -697,6 +697,7 @@ mod tests {
             ignore_invalid_headers: true,
             charset: None,
             autoindex: None,
+            referer: None,
         }
     }
 
@@ -711,6 +712,8 @@ mod tests {
             app_key: "test".to_owned(),
             nginx: Default::default(),
             maps: Vec::new(),
+            geo: Vec::new(),
+            split_clients: Vec::new(),
             mime_types: None,
             default_type: None,
             gzip: Default::default(),

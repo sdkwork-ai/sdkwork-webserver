@@ -194,6 +194,20 @@
     },
     "usageMetering": {
       "$ref": "#/$defs/usageMetering"
+    },
+    "geo": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/geo"
+      }
+    },
+    "splitClients": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/splitClients"
+      }
     }
   },
   "$defs": {
@@ -2000,6 +2014,9 @@
         },
         "autoindex": {
           "$ref": "#/$defs/autoindex"
+        },
+        "referer": {
+          "$ref": "#/$defs/referer"
         }
       }
     },
@@ -2207,6 +2224,9 @@
         "autoindex": {
           "description": "Location-level nginx autoindex policy resolved over the host value.",
           "$ref": "#/$defs/autoindex"
+        },
+        "referer": {
+          "$ref": "#/$defs/referer"
         }
       }
     },
@@ -3334,6 +3354,146 @@
         },
         "type": {
           "const": "stub-status"
+        }
+      }
+    },
+    "refererHost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      }
+    },
+    "referer": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx valid_referers policy for $invalid_referer.",
+      "properties": {
+        "none": {
+          "type": "boolean"
+        },
+        "blocked": {
+          "type": "boolean"
+        },
+        "serverNames": {
+          "type": "boolean"
+        },
+        "hosts": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/refererHost"
+          }
+        },
+        "regexes": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "geoEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "geo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "result",
+        "entries"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^\\$"
+        },
+        "result": {
+          "type": "string",
+          "pattern": "^\\$"
+        },
+        "ranges": {
+          "type": "boolean"
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/geoEntry"
+          }
+        }
+      }
+    },
+    "splitClientsPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "percent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "splitClients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "result",
+        "parts"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string",
+          "pattern": "^\\$"
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/splitClientsPart"
+          }
         }
       }
     }

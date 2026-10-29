@@ -50,10 +50,11 @@ use crate::config::{
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
     validate_proxy_pass_template_with_maps, AutoindexConfig, AutoindexFormat, CachePolicyConfig,
     CharsetConfig, ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode,
-    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig, MapEntryConfig,
-    MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
-    RedirectPolicyConfig, StreamTargetConfig, StreamTlsMode, TlsVersion, WebServerAppConfig,
-    WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX,
+    GeoConfig, GeoEntryConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
+    MapEntryConfig, MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
+    ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry,
+    SplitClientsConfig, SplitClientsPartConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
+    WebServerAppConfig, WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
 use super::parser::NginxDirective;
@@ -86,7 +87,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_http_version",
     "proxy_buffering",
     "proxy_request_buffering",
-    "proxy_method",
     "proxy_next_upstream",
     "proxy_connect_timeout",
     "proxy_read_timeout",
@@ -242,6 +242,22 @@ const NGINX_OCSP_STAPLING_UNSUPPORTED: &[&str] = &[
     "ssl_trusted_certificate",
 ];
 
+/// Static-file descriptor/metadata cache. The runtime opens static paths per
+/// request through `cap-std` and owns no cross-request descriptor cache; nginx's
+/// only observable contract here is a staleness window, which the runtime will
+/// not fake.
+const OPEN_FILE_CACHE_FAMILY: &[&str] = &[
+    "open_file_cache",
+    "open_file_cache_valid",
+    "open_file_cache_min_uses",
+    "open_file_cache_errors",
+];
+
+/// Response framing switches the pinned hyper HTTP/1.1 encoder cannot express:
+/// hyper only emits a close-delimited response body for HTTP/1.0 responses, so
+/// an HTTP/1.1 response with an unknown body length always uses chunked framing.
+const HYPER_FRAMING_LIMITED: &[&str] = &["chunked_transfer_encoding"];
+
 /// Directives that tune nginx's own buffers/index tables. The runtime owns its
 /// buffer and hash-table sizing, so the value is accepted-unenforced.
 const RUNTIME_OWNED_MEMORY_TUNING: &[&str] = &[
@@ -263,6 +279,16 @@ pub(crate) fn ignored_directive_diagnostics(
         } else if NGINX_OCSP_STAPLING_UNSUPPORTED.contains(&directive.name.as_str()) {
             format!(
                 "`{}` has no effect: OCSP stapling is not implemented because the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface; the runtime does not publish an OCSP response",
+                directive.name
+            )
+        } else if OPEN_FILE_CACHE_FAMILY.contains(&directive.name.as_str()) {
+            format!(
+                "`{}` has no effect: it configures nginx's static-file descriptor/metadata cache, whose only observable contract is a staleness window; the runtime opens static paths per request through cap-std and does not fake cached-fd staleness",
+                directive.name
+            )
+        } else if HYPER_FRAMING_LIMITED.contains(&directive.name.as_str()) {
+            format!(
+                "`{}` cannot be honored by the pinned hyper HTTP/1.1 encoder: hyper emits a close-delimited body only for HTTP/1.0 responses, so an HTTP/1.1 response with an unknown body length always uses `Transfer-Encoding: chunked`; the value is accepted but has no effect",
                 directive.name
             )
         } else if RUNTIME_OWNED_MEMORY_TUNING.contains(&directive.name.as_str()) {
@@ -377,6 +403,42 @@ pub fn materialize_nginx_app(
             mapper.maps.push(map);
         }
     }
+    // nginx `geo` / `split_clients` also register variables at configuration
+    // init, so a header template may reference them before/after declaration.
+    for directive in &http_directives {
+        // Deliberately `if` chains rather than a `match`: the directive-matrix
+        // gate derives the http-context execute set from the match arms in this
+        // function, and a preliminary catch-all match would hide them.
+        if directive.name == "geo" {
+            let geo = parse_geo(directive)?;
+            if let Some(result) = geo.result.strip_prefix('$') {
+                if mapper.map_results.iter().any(|name| name == result) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "geo result variable `${result}` is already declared by another variable block; the runtime rejects duplicate variable definitions"
+                        ),
+                    ));
+                }
+                mapper.map_results.push(result.to_owned());
+            }
+            mapper.geo.push(geo);
+        } else if directive.name == "split_clients" {
+            let split = parse_split_clients(directive)?;
+            if let Some(result) = split.result.strip_prefix('$') {
+                if mapper.map_results.iter().any(|name| name == result) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "split_clients result variable `${result}` is already declared by another variable block; the runtime rejects duplicate variable definitions"
+                        ),
+                    ));
+                }
+                mapper.map_results.push(result.to_owned());
+            }
+            mapper.split_clients.push(split);
+        }
+    }
     // nginx `add_header` inherits from the http context into every server that
     // declares none. Directive order inside `http {}` is irrelevant to that
     // merge, so collect the http-level array before materializing any server.
@@ -413,7 +475,7 @@ pub fn materialize_nginx_app(
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
             "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
             // Collected by the order-independent pre-scan above.
-            "map" => {}
+            "map" | "geo" | "split_clients" => {}
             "proxy_set_header" => {
                 let map_variables = mapper.map_variable_refs();
                 let entry =
@@ -738,6 +800,8 @@ struct LocationExtras {
     empty_gif: bool,
     /// nginx `stub_status` location handler.
     stub_status: bool,
+    /// Location-level nginx `valid_referers` policy (replaces the server one).
+    referer: Option<RefererConfig>,
 }
 
 /// Resolved nginx `ssl_protocols` policy as an inclusive version window.
@@ -961,6 +1025,8 @@ struct Mapper<'a> {
     /// validated (nginx resolves the variable at configuration init, so
     /// declaration order inside `http {}` does not matter).
     maps: Vec<MapConfig>,
+    geo: Vec<GeoConfig>,
+    split_clients: Vec<SplitClientsConfig>,
     /// Result variable names (without `$`) declared by `self.maps`.
     map_results: Vec<String>,
     /// http-level `types` table; `None` keeps the runtime's built-in table.
@@ -1061,6 +1127,10 @@ struct Mapper<'a> {
     http2_max_concurrent_streams_conflict: bool,
     /// `proxy_method` inherited from the http level.
     http_proxy_method: Option<String>,
+    /// Server-level nginx `valid_referers` policy currently being
+    /// materialized (nginx allows the directive at server/location only, so
+    /// there is no http-level inheritance).
+    server_referer: Option<RefererConfig>,
     /// Ordered nginx stream-context `allow`/`deny` rules inherited by every
     /// stream server that declares none.
     stream_access: Vec<Value>,
@@ -1090,6 +1160,8 @@ impl<'a> Mapper<'a> {
             gzip_vary: false,
             gzip_static: GzipStaticMode::Off,
             maps: Vec::new(),
+            geo: Vec::new(),
+            split_clients: Vec::new(),
             map_results: Vec::new(),
             mime_types: None,
             default_type: None,
@@ -1139,6 +1211,7 @@ impl<'a> Mapper<'a> {
             http2_max_concurrent_streams_conflict: false,
             http_proxy_method: None,
             server_proxy_method: None,
+            server_referer: None,
             stream_access: Vec::new(),
         }
     }
@@ -1601,6 +1674,8 @@ impl<'a> Mapper<'a> {
         let mut server_ignore_invalid_headers: Option<bool> = None;
         let mut server_charset = CharsetDeclarations::default();
         let mut server_autoindex = AutoindexDeclarations::default();
+        // nginx `valid_referers` has no http context; each server starts unset.
+        self.server_referer = None;
         let mut server_proxy_method: Option<String> = None;
         // nginx http-level gzip state snapshot: server-level `gzip*`
         // directives overlay it (single-value on/off inherits; the type list
@@ -1790,6 +1865,9 @@ impl<'a> Mapper<'a> {
                 }
                 "autoindex_format" => {
                     server_autoindex.format = Some(parse_autoindex_format(child)?);
+                }
+                "valid_referers" => {
+                    self.server_referer = Some(parse_valid_referers(child)?);
                 }
                 "http2_max_concurrent_streams" => {
                     self.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
@@ -2454,6 +2532,11 @@ impl<'a> Mapper<'a> {
                 NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
+        if let Some(referer) = &self.server_referer {
+            virtual_host["referer"] = serde_json::to_value(referer).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         // Named locations are materialized after the path locations so their
         // resource ids never collide; they are appended to `routes` with an
         // exact `@name` matcher (unreachable by request path).
@@ -2735,6 +2818,13 @@ impl<'a> Mapper<'a> {
                 })?;
             }
         }
+        // nginx `valid_referers`: a location declaration replaces the server
+        // policy; otherwise the server policy applies.
+        if let Some(referer) = extras.referer.as_ref().or(self.server_referer.as_ref()) {
+            route["referer"] = serde_json::to_value(referer).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         // nginx autoindex family: a location that declares any directive gets
         // the fully resolved policy (its declarations over the inherited ones).
         if !extras.autoindex.is_empty() {
@@ -2967,6 +3057,9 @@ impl<'a> Mapper<'a> {
                 }
                 "autoindex_format" => {
                     extras.autoindex.format = Some(parse_autoindex_format(child)?);
+                }
+                "valid_referers" => {
+                    extras.referer = Some(parse_valid_referers(child)?);
                 }
                 "empty_gif" => {
                     if !child.args.is_empty() {
@@ -4612,6 +4705,8 @@ impl<'a> Mapper<'a> {
                 "unknownDirectivePolicy": "error",
             },
             "maps": self.maps,
+            "geo": self.geo,
+            "splitClients": self.split_clients,
             "mimeTypes": self.mime_types,
             "defaultType": self.default_type,
             "gzip": {
@@ -5647,6 +5742,142 @@ fn validate_media_type(directive: &NginxDirective, value: &str) -> Result<(), Ng
 /// (already expanded by the parser) and any other statement shape fail closed;
 /// regex keys and unsupported variables are rejected by the shared map
 /// validator with a located diagnostic.
+/// Parse nginx `geo [$address] $variable { … }` (http context).
+fn parse_geo(directive: &NginxDirective) -> Result<GeoConfig, NginxConfigError> {
+    if directive.children.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "geo requires a `{ … }` block",
+        ));
+    }
+    let (source, result) = match directive.args.as_slice() {
+        [result] => ("$remote_addr".to_owned(), result.clone()),
+        [source, result] => (source.clone(), result.clone()),
+        _ => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "geo takes `geo [$address] $variable { … }`",
+            ))
+        }
+    };
+    if !source.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("geo source `{source}` must be a `$variable`"),
+        ));
+    }
+    if !result.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("geo result `{result}` must be a `$variable`"),
+        ));
+    }
+    let mut ranges = false;
+    let mut entries: Vec<GeoEntryConfig> = Vec::new();
+    for child in &directive.children {
+        if child.name == "ranges" {
+            if !child.args.is_empty() {
+                return Err(NginxConfigError::unsupported(
+                    child,
+                    "geo `ranges` takes no arguments",
+                ));
+            }
+            ranges = true;
+            continue;
+        }
+        if child.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!("geo entry `{}` requires exactly one value", child.name),
+            ));
+        }
+        let value = &child.args[0];
+        if value.contains('$') {
+            return Err(NginxConfigError::unsupported(
+                child,
+                "geo values must be literal strings; variable values are not supported",
+            ));
+        }
+        entries.push(GeoEntryConfig {
+            key: child.name.clone(),
+            value: value.clone(),
+        });
+    }
+    let geo = GeoConfig {
+        source,
+        result,
+        ranges,
+        entries,
+    };
+    crate::config::validate_geo_config(&geo)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(geo)
+}
+
+/// Parse nginx `split_clients <source-template> $variable { <percent>% <value>; … }`.
+fn parse_split_clients(directive: &NginxDirective) -> Result<SplitClientsConfig, NginxConfigError> {
+    let [source, result] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "split_clients takes `split_clients <source> $variable { … }`",
+        ));
+    };
+    if !result.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("split_clients result `{result}` must be a `$variable`"),
+        ));
+    }
+    crate::config::map_variables::validate_map_value_template(source)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    if directive.children.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "split_clients requires a `{ … }` block",
+        ));
+    }
+    let mut parts: Vec<SplitClientsPartConfig> = Vec::new();
+    for child in &directive.children {
+        let Some(percent) = crate::config::parse_split_percent(&child.name) else {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "invalid split_clients percentage `{}`; expected `NN%`, `NN.NN%`, or `*`",
+                    child.name
+                ),
+            ));
+        };
+        if child.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "split_clients bucket `{}` requires exactly one value",
+                    child.name
+                ),
+            ));
+        }
+        let value = &child.args[0];
+        if value.contains('$') {
+            return Err(NginxConfigError::unsupported(
+                child,
+                "split_clients values must be literal strings; variable values are not supported",
+            ));
+        }
+        parts.push(SplitClientsPartConfig {
+            percent,
+            value: value.clone(),
+        });
+    }
+    let split = SplitClientsConfig {
+        source: source.clone(),
+        result: result.clone(),
+        parts,
+    };
+    crate::config::validate_split_clients_config(&split)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(split)
+}
+
 fn parse_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfigError> {
     if directive.args.len() != 2 {
         return Err(NginxConfigError::unsupported(
@@ -5882,6 +6113,101 @@ fn apply_sub_filter_types(
 }
 
 /// Shared `on|off` parser for simple switch directives.
+/// Parse nginx `valid_referers` (server/location context; a declared
+/// directive replaces the inherited list).
+fn parse_valid_referers(directive: &NginxDirective) -> Result<RefererConfig, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "valid_referers requires at least one matcher",
+        ));
+    }
+    if directive.args.len() > 256 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "valid_referers supports at most 256 matchers",
+        ));
+    }
+    let mut config = RefererConfig::default();
+    for argument in &directive.args {
+        let argument = argument.trim();
+        if argument.is_empty() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "invalid empty valid_referers argument",
+            ));
+        }
+        match argument {
+            "none" => {
+                config.none = true;
+                continue;
+            }
+            "blocked" => {
+                config.blocked = true;
+                continue;
+            }
+            "server_names" => {
+                config.server_names = true;
+                continue;
+            }
+            _ => {}
+        }
+        if let Some(pattern) = argument.strip_prefix('~') {
+            if pattern.is_empty() || pattern.len() > 512 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("invalid valid_referers regex `{argument}`"),
+                ));
+            }
+            if crate::config::compile_referer_regex(pattern).is_none() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("valid_referers regex `{argument}` does not compile"),
+                ));
+            }
+            config.regexes.push(pattern.to_owned());
+            continue;
+        }
+        // `host[/path]`: nginx splits at the first `/` into a host matcher and
+        // an optional URI prefix.
+        let (host, path) = match argument.split_once('/') {
+            Some((host, path)) => (host, Some(format!("/{path}"))),
+            None => (argument, None),
+        };
+        let host = host.to_ascii_lowercase();
+        let wildcard_suffix = host.strip_prefix("*.").or_else(|| host.strip_prefix('.'));
+        let valid_host = !host.is_empty()
+            && host.len() <= 253
+            && match wildcard_suffix {
+                Some(suffix) => {
+                    !suffix.is_empty() && !suffix.contains('*') && !suffix.starts_with('.')
+                }
+                None => !host.contains('*'),
+            };
+        if !valid_host {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "invalid valid_referers host `{argument}`; supported forms are an exact host, `*.suffix`, `.suffix`, `server_names`, `none`, `blocked`, and `~regex`"
+                ),
+            ));
+        }
+        config.hosts.push(RefererHostEntry { host, path });
+    }
+    // nginx rejects `none`/`blocked` when no positive matcher is declared.
+    if (config.none || config.blocked)
+        && config.hosts.is_empty()
+        && config.regexes.is_empty()
+        && !config.server_names
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "valid_referers `none`/`blocked` requires at least one host, wildcard, `~regex`, or `server_names` matcher (nginx rejects the configuration)",
+        ));
+    }
+    Ok(config)
+}
+
 /// Parse `http2_max_concurrent_streams <1..10000>` (nginx http/server
 /// context; the runtime ingress model owns one value).
 fn parse_http2_max_concurrent_streams(directive: &NginxDirective) -> Result<u32, NginxConfigError> {
@@ -9999,8 +10325,8 @@ http {
             "ssl_trusted_certificate diagnostic must state the OCSP blocker"
         );
         assert!(
-            message("open_file_cache").contains("not enforced"),
-            "open_file_cache stays truthfully accepted-unenforced"
+            message("open_file_cache").contains("descriptor/metadata cache"),
+            "open_file_cache must state its precise runtime rationale"
         );
         // `http2_chunk_size` is active in nginx but not exposed by hyper/h2:
         // fail closed with a precise diagnostic instead of faking it.
@@ -10136,6 +10462,165 @@ stream {
             let error = materialize(&format!("stream {{ server {{ {body} }} }}"))
                 .err()
                 .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_valid_referers_policy() {
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name referer.example.test;
+    valid_referers none blocked server_names *.example.com example.org/galleries ~\.google\.;
+    location /inherit/ { return 200 "ok"; }
+    location /own/ { valid_referers server_names; return 200 "ok"; }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_referer = host.referer.as_ref().expect("host referer policy");
+        assert!(host_referer.none);
+        assert!(host_referer.blocked);
+        assert!(host_referer.server_names);
+        assert_eq!(host_referer.hosts.len(), 2);
+        assert_eq!(host_referer.hosts[0].host, "*.example.com");
+        assert_eq!(host_referer.hosts[1].host, "example.org");
+        assert_eq!(host_referer.hosts[1].path.as_deref(), Some("/galleries"));
+        assert_eq!(host_referer.regexes.len(), 1);
+        // A location without a declaration inherits the host policy (the
+        // mapping emits it on the route so the data plane has one lookup).
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit/")
+            .expect("inherit route");
+        assert_eq!(inherit.referer.as_ref(), Some(host_referer));
+        // A location declaration replaces the inherited list.
+        let own = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/own/")
+            .expect("own route");
+        let own_referer = own.referer.as_ref().expect("own referer policy");
+        assert!(own_referer.server_names);
+        assert!(!own_referer.none);
+        assert!(own_referer.hosts.is_empty());
+        // Fail-closed forms.
+        for (label, body, needle) in [
+            (
+                "none without a positive matcher",
+                "valid_referers none;",
+                "requires at least one host",
+            ),
+            (
+                "bad regex",
+                "valid_referers ~(unclosed;",
+                "does not compile",
+            ),
+            (
+                "invalid wildcard host",
+                "valid_referers a*b.example.com;",
+                "invalid valid_referers host",
+            ),
+            (
+                "empty directive",
+                "valid_referers;",
+                "requires at least one matcher",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name referer.example.test; {body} location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_geo_and_split_clients_blocks() {
+        let config = materialize(
+            r#"
+geo $geo_zone {
+    default "none";
+    127.0.0.0/8 "loopback";
+    127.0.0.1/32 "loopback-host";
+}
+geo $http_x_forwarded_for $xff_zone {
+    ranges;
+    default "no";
+    10.0.0.5-10.0.0.10 "ten";
+}
+split_clients "$arg_key" $split_bucket {
+    30% "a";
+    30% "b";
+    40% "c";
+}
+server { listen 80; server_name geo.example.test; location / { return 200 "ok"; } }
+"#,
+        )
+        .expect("materialize");
+        assert_eq!(config.geo.len(), 2);
+        assert_eq!(config.geo[0].source, "$remote_addr");
+        assert_eq!(config.geo[0].result, "$geo_zone");
+        assert!(!config.geo[0].ranges);
+        assert_eq!(config.geo[0].entries.len(), 3);
+        assert_eq!(config.geo[0].entries[2].key, "127.0.0.1/32");
+        assert!(config.geo[1].ranges);
+        assert_eq!(config.geo[1].source, "$http_x_forwarded_for");
+        assert_eq!(config.split_clients.len(), 1);
+        let split = &config.split_clients[0];
+        assert_eq!(split.source, "$arg_key");
+        assert_eq!(split.result, "$split_bucket");
+        assert_eq!(
+            split
+                .parts
+                .iter()
+                .map(|part| part.percent)
+                .collect::<Vec<_>>(),
+            vec![Some(3000), Some(3000), Some(4000)]
+        );
+        // Fail-closed forms.
+        for (label, block, needle) in [
+            (
+                "geo CIDR in ranges mode",
+                "geo $z { ranges; default \"no\"; 10.0.0.0/8 \"x\"; }",
+                "must be an `start-end` address range",
+            ),
+            (
+                "geo range without ranges",
+                "geo $z { default \"no\"; 10.0.0.0-10.0.0.10 \"x\"; }",
+                "must be a CIDR or IP address",
+            ),
+            (
+                "geo variable value",
+                "geo $z { default \"no\"; 10.0.0.0/8 \"$host\"; }",
+                "must be literal strings",
+            ),
+            (
+                "split bad percent",
+                "split_clients \"$arg_k\" $b { 0% \"x\"; }",
+                "invalid split_clients percentage",
+            ),
+            (
+                "split over 100%",
+                "split_clients \"$arg_k\" $b { 60% \"x\"; 60% \"y\"; }",
+                "total more than 100%",
+            ),
+            (
+                "duplicate variable block",
+                "geo $z { default \"a\"; }\ngeo $z { default \"b\"; }",
+                "already declared",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "{block}\nserver {{ listen 80; server_name geo.example.test; location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
             assert!(error.to_string().contains(needle), "`{label}`: {error}");
         }
     }
