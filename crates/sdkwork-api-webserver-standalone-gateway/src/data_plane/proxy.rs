@@ -361,6 +361,8 @@ pub(super) struct ProxyRequestContext<'a> {
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`) resolved for this proxy resource.
     pub response_policy: Option<&'a ProxyResponsePolicyConfig>,
+    /// nginx `proxy_method`: override the method sent upstream.
+    pub proxy_method: Option<&'a str>,
 }
 
 mod hash_lb;
@@ -1158,7 +1160,11 @@ async fn proxy_http_request(
             ))
         };
         let mut upstream_request = Request::new(upstream_body);
-        *upstream_request.method_mut() = request_parts.method.clone();
+        *upstream_request.method_mut() = match context.proxy_method {
+            Some(method) => Method::from_bytes(method.as_bytes())
+                .unwrap_or_else(|_| request_parts.method.clone()),
+            None => request_parts.method.clone(),
+        };
         *upstream_request.uri_mut() = target_uri;
         *upstream_request.headers_mut() = headers.clone();
 

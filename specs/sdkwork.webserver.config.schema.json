@@ -1277,6 +1277,13 @@
         },
         "proxyResponsePolicy": {
           "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "proxyMethod": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+          "description": "nginx proxy_method: method sent upstream instead of the client's method."
         }
       },
       "oneOf": [
@@ -2598,8 +2605,7 @@
       "required": [
         "id",
         "bind",
-        "port",
-        "target"
+        "port"
       ],
       "properties": {
         "id": {
@@ -2709,6 +2715,39 @@
             "tcp",
             "udp"
           ]
+        },
+        "access": {
+          "type": "array",
+          "maxItems": 256,
+          "description": "Ordered nginx stream allow/deny rules: first match wins; a peer matching no rule is allowed.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "network"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "allow",
+                  "deny"
+                ]
+              },
+              "network": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "`all`, an IP, or a CIDR."
+              }
+            }
+          }
+        },
+        "returnValue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "nginx stream `return <value>`: literal bytes written to the connection before it is closed; mutually exclusive with `target`."
         }
       }
     },

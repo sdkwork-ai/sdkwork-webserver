@@ -1240,6 +1240,7 @@ async fn route_admitted_request(
             proxy_pass_request_headers,
             proxy_intercept_errors,
             proxy_response_policy,
+            proxy_method,
             ..
         } => {
             let proxy_response = super::proxy::proxy_request_cached(
@@ -1271,6 +1272,7 @@ async fn route_admitted_request(
                     cache: generation.proxy_cache.clone(),
                     map_results: &map_results,
                     response_policy: proxy_response_policy.as_ref(),
+                    proxy_method: proxy_method.as_deref(),
                 },
                 request,
             )

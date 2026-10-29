@@ -1039,7 +1039,7 @@ stream {
             let upstream_target = config.streams.iter().find(|s| s.port == 5101).unwrap();
             assert!(matches!(
                 upstream_target.target,
-                sdkwork_webserver_core::config::StreamTargetConfig::Upstream { .. }
+                Some(sdkwork_webserver_core::config::StreamTargetConfig::Upstream { .. })
             ));
             let preread = config.streams.iter().find(|s| s.port == 5102).unwrap();
             assert_eq!(preread.tls, Some(StreamTlsMode::Preread));

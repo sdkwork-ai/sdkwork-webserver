@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 111 |
-| accepted, NOT enforced | 160 |
-| rejected (fail closed) | 244 |
+| executable | 116 |
+| accepted, NOT enforced | 171 |
+| rejected (fail closed) | 228 |
 | excluded from profile | 229 |
 | **total** | **744** |
 
@@ -52,7 +52,6 @@ states what is lost and what to configure instead.
 | Directive | Contexts | What an operator loses | Migration action |
 | --- | --- | --- | --- |
 | `open_file_cache` | http, http-location, http-server | the static-file descriptor cache policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:open_file_cache` (specs/nginx-gap.catalog.json). |
-| `proxy_method` | http, http-location, http-server | the proxied HTTP method override is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_method` (specs/nginx-gap.catalog.json). |
 | `proxy_next_upstream` | http, http-location, http-server | the upstream retry condition list is not applied; the runtime uses its own retry policy | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_next_upstream` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_ciphers` | http, http-location, http-server | the upstream TLS cipher policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_ssl_ciphers` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_protocols` | http, http-location, http-server | the upstream TLS protocol window is not applied from nginx.conf (typed TOML owns upstream TLS) | No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_ssl_protocols` (specs/nginx-gap.catalog.json). |
@@ -111,12 +110,11 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
 - `ngx_http_upstream_zone_module` (1) — `zone`
 - `ngx_http_userid_filter_module` (9) — `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`
-- `ngx_http_v2_module` (14) — `http2_body_preread_size`, `http2_chunk_size`, `http2_idle_timeout`, `http2_max_concurrent_pushes`, `http2_max_concurrent_streams`, `http2_max_field_size`, `http2_max_header_size`, `http2_max_requests`, `http2_pool_size`, `http2_push`, `http2_push_preload`, `http2_recv_buffer_size`, `http2_recv_timeout`, `http2_streams_index_size`
+- `ngx_http_v2_module` (1) — `http2_chunk_size`
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
 - `ngx_openssl_cache_module` (1) — `ssl_object_cache_inheritable`
 - `ngx_quic_bpf_module` (1) — `quic_bpf`
-- `ngx_stream_access_module` (2) — `allow`, `deny`
 - `ngx_stream_core_module` (4) — `preread_buffer_size`, `preread_timeout`, `proxy_protocol_timeout`, `server_name`
 - `ngx_stream_geo_module` (1) — `geo`
 - `ngx_stream_limit_conn_module` (3) — `limit_conn`, `limit_conn_dry_run`, `limit_conn_zone`
@@ -124,7 +122,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_stream_pass_module` (1) — `pass`
 - `ngx_stream_proxy_module` (21) — `proxy_bind`, `proxy_download_rate`, `proxy_downstream_buffer`, `proxy_half_close`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_requests`, `proxy_responses`, `proxy_ssl`, `proxy_ssl_certificate`, `proxy_ssl_certificate_cache`, `proxy_ssl_certificate_key`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_ssl_server_name`, `proxy_ssl_trusted_certificate`, `proxy_ssl_verify`, `proxy_upload_rate`, `proxy_upstream_buffer`
 - `ngx_stream_realip_module` (1) — `set_real_ip_from`
-- `ngx_stream_return_module` (1) — `return`
 - `ngx_stream_set_module` (1) — `set`
 - `ngx_stream_split_clients_module` (1) — `split_clients`
 - `ngx_stream_ssl_module` (14) — `ssl_alpn`, `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_ech_file`, `ssl_handshake_timeout`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
@@ -187,7 +184,6 @@ UNENFORCED_BEHAVIOR_TOML_KEYS + actual materializer reads).
 | `proxyHideHeader` | documented unenforced behavior key — upstream response headers are filtered by the runtime hop-by-hop policy, not this key |
 | `proxyHttpVersion` | documented unenforced behavior key — the upstream protocol is negotiated by the runtime, not this key |
 | `proxyInterceptErrors` | documented unenforced behavior key — upstream error interception is not materialized from this key; the upstream status is relayed |
-| `proxyMethod` | documented unenforced behavior key — the upstream method follows the client method, not this key |
 | `proxyNextUpstream` | documented unenforced behavior key — retry eligibility follows the runtime bounded retry policy, not this key |
 | `proxyReadTimeout` | documented unenforced behavior key — upstream response timeouts follow the resolved upstream policy, not this location key |
 | `proxyRequestBuffering` | documented unenforced behavior key — request bodies are streamed to the upstream, never buffered by this key |
@@ -808,7 +804,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `proxy_intercept_errors` | flag | http, http-location, http-server | executable | runtime: `virtualHosts[].errorPages / routes[].errorPages` |
 | `proxy_limit_rate` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_max_temp_file_size` | 1 | http, http-location, http-server | accepted, NOT enforced | the nginx proxy tuning value is ignored; the runtime proxy policy applies |
-| `proxy_method` | 1 | http, http-location, http-server | accepted, NOT enforced | the proxied HTTP method override is not applied |
+| `proxy_method` | 1 | http, http-location, http-server | executable | runtime: `routes[].resource.proxy.proxyMethod` |
 | `proxy_next_upstream` | 1+ | http, http-location, http-server | accepted, NOT enforced | the upstream retry condition list is not applied; the runtime uses its own retry policy |
 | `proxy_next_upstream_timeout` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_next_upstream_tries` | 1 | http, http-location, http-server | rejected (fail closed) |  |
@@ -1150,20 +1146,20 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
 | `http2` | flag | http, http-server | executable | runtime: `listeners[].protocols (h2)` |
-| `http2_body_preread_size` | 1 | http, http-server | rejected (fail closed) |  |
+| `http2_body_preread_size` | 1 | http, http-server | accepted, NOT enforced | ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value |
 | `http2_chunk_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `http2_idle_timeout` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_max_concurrent_pushes` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_max_concurrent_streams` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_max_field_size` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_max_header_size` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_max_requests` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_pool_size` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_push` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `http2_push_preload` | flag | http, http-location, http-server | rejected (fail closed) |  |
-| `http2_recv_buffer_size` | 1 | http | rejected (fail closed) |  |
-| `http2_recv_timeout` | 1 | http, http-server | rejected (fail closed) |  |
-| `http2_streams_index_size` | 1 | http, http-server | rejected (fail closed) |  |
+| `http2_idle_timeout` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_max_concurrent_pushes` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_max_concurrent_streams` | 1 | http, http-server | executable | runtime: `limits.http2MaxConcurrentStreams (advertised as h2 SETTINGS_MAX_CONCURRENT_STREAMS)`. conflicting values at http/server levels fail closed (the ingress profile owns one ceiling); the runtime always advertises SETTINGS_MAX_HEADER_LIST_SIZE from its own ingress profile; nginx 1.29.6 advertises none because http2_max_header_size is obsolete there |
+| `http2_max_field_size` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_max_header_size` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_max_requests` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_pool_size` | 1 | http, http-server | accepted, NOT enforced | ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value |
+| `http2_push` | 1 | http, http-location, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_push_preload` | flag | http, http-location, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_recv_buffer_size` | 1 | http | accepted, NOT enforced | ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value |
+| `http2_recv_timeout` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
+| `http2_streams_index_size` | 1 | http, http-server | accepted, NOT enforced | ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value |
 
 #### `ngx_http_v3_module` (8 directives)
 
@@ -1293,8 +1289,8 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `allow` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `deny` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `allow` | 1 | stream, stream-server | executable | runtime: `streamServers[].access (ordered AccessRuleConfig; first match wins)`. a denied peer is closed with no bytes, matching nginx stream access |
+| `deny` | 1 | stream, stream-server | executable | runtime: `streamServers[].access (ordered AccessRuleConfig; first match wins)`. a denied peer is closed with no bytes, matching nginx stream access |
 
 #### `ngx_stream_core_module` (14 directives)
 
@@ -1413,7 +1409,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `return` | 1 | stream-server | rejected (fail closed) |  |
+| `return` | 1 | stream-server | executable | runtime: `streamServers[].returnValue (literal value written then close; mutually exclusive with proxyPass)`. variable-valued stream return is not supported (no stream variable engine) and fails closed; literal values are 1..4096 bytes |
 
 #### `ngx_stream_set_module` (1 directives)
 

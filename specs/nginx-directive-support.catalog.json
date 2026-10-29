@@ -94,10 +94,6 @@
         "consequence": "upstream error interception is not materialized from this key; the upstream status is relayed"
       },
       {
-        "key": "proxyMethod",
-        "consequence": "the upstream method follows the client method, not this key"
-      },
-      {
         "key": "proxyNextUpstream",
         "consequence": "retry eligibility follows the runtime bounded retry policy, not this key"
       },
@@ -260,11 +256,6 @@
         "key": "proxyInterceptErrors",
         "reason": "documented unenforced behavior key",
         "consequence": "upstream error interception is not materialized from this key; the upstream status is relayed"
-      },
-      {
-        "key": "proxyMethod",
-        "reason": "documented unenforced behavior key",
-        "consequence": "the upstream method follows the client method, not this key"
       },
       {
         "key": "proxyNextUpstream",
@@ -4272,10 +4263,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
+      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
+      "knownDifferences": [
+        "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
+      ]
     },
     {
       "id": "http:http2_chunk_size",
@@ -4303,10 +4302,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_max_concurrent_pushes",
@@ -4318,10 +4325,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_max_concurrent_streams",
@@ -4333,10 +4348,27 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "limits.http2MaxConcurrentStreams (advertised as h2 SETTINGS_MAX_CONCURRENT_STREAMS)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs",
+          "case": "http2_settings_publish_the_configured_stream_ceiling"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs",
+          "case": "http2_requests_succeed_and_oversized_header_lists_are_rejected"
+        }
+      ],
+      "knownDifferences": [
+        "conflicting values at http/server levels fail closed (the ingress profile owns one ceiling)",
+        "the runtime always advertises SETTINGS_MAX_HEADER_LIST_SIZE from its own ingress profile; nginx 1.29.6 advertises none because http2_max_header_size is obsolete there"
+      ]
     },
     {
       "id": "http:http2_max_field_size",
@@ -4348,10 +4380,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_max_header_size",
@@ -4363,10 +4403,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_max_requests",
@@ -4378,10 +4426,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_pool_size",
@@ -4393,10 +4449,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
+      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
+      "knownDifferences": [
+        "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
+      ]
     },
     {
       "id": "http:http2_push",
@@ -4409,10 +4473,19 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_push_preload",
@@ -4425,10 +4498,19 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_recv_buffer_size",
@@ -4439,10 +4521,17 @@
         "http"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
+      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
+      "knownDifferences": [
+        "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
+      ]
     },
     {
       "id": "http:http2_recv_timeout",
@@ -4454,10 +4543,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted no-op: obsolete in nginx 1.29.6, so it has no effect there or here",
+      "migrationAction": "Remove the directive; nginx 1.25+ folds these into SETTINGS/limits that need no config.",
+      "migrationImpact": "none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side",
+      "knownDifferences": [
+        "nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result"
+      ]
     },
     {
       "id": "http:http2_streams_index_size",
@@ -4469,10 +4566,18 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "diagnostics": "accepted for stock-config compatibility: the runtime owns its HTTP/2 buffer and table sizing",
+      "migrationAction": "No enforced typed equivalent; tune the runtime ingress profile instead. Dropping the line is safe.",
+      "migrationImpact": "ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied",
+      "knownDifferences": [
+        "runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value"
+      ]
     },
     {
       "id": "http:http3",
@@ -7028,11 +7133,16 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the proxied HTTP method override is not applied",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:proxy_method` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "low",
+      "runtimeField": "routes[].resource.proxy.proxyMethod",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "proxy.method-override-post"
+        }
+      ],
+      "knownDifferences": []
     },
     {
       "id": "http:proxy_next_upstream",
@@ -12631,10 +12741,22 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].access (ordered AccessRuleConfig; first match wins)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs",
+          "case": "stream_allow_first_match_proxies_and_deny_first_match_closes"
+        }
+      ],
+      "knownDifferences": [
+        "a denied peer is closed with no bytes, matching nginx stream access"
+      ]
     },
     {
       "id": "stream:deny",
@@ -12646,10 +12768,22 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].access (ordered AccessRuleConfig; first match wins)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs",
+          "case": "stream_allow_first_match_proxies_and_deny_first_match_closes"
+        }
+      ],
+      "knownDifferences": [
+        "a denied peer is closed with no bytes, matching nginx stream access"
+      ]
     },
     {
       "id": "stream:error_log",
@@ -13623,10 +13757,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].returnValue (literal value written then close; mutually exclusive with proxyPass)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs",
+          "case": "stream_return_writes_the_literal_value_and_closes"
+        }
+      ],
+      "knownDifferences": [
+        "variable-valued stream return is not supported (no stream variable engine) and fails closed; literal values are 1..4096 bytes"
+      ]
     },
     {
       "id": "stream:server",

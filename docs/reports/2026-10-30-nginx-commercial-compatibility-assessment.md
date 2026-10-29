@@ -4,7 +4,7 @@
 - 声明档位：`http-core-v1`（`PRD-nginx-compatibility.md` §2/§3）
 - 参考实现：nginx 1.29.6（nginx.org Linux 包，差分 oracle 固定该构建）
 - 关联需求：`REQ-2026-0073`
-- 逐指令审计台账：`docs/reports/2026-10-30-nginx-directive-by-directive-audit.md`（744 行，每行一个决策与理由）
+- 逐指令审计台账：`docs/reports/2026-10-30-nginx-directive-by-directive-audit.md`（744 行，每行一个决策与理由；最终决策分布：enforced 116 / runtime-owned 143 / security-difference 17 / behavior-gap 29 / out-of-profile 229 / fail-closed 210）
 - 指令级契约：`specs/nginx-directive-support.catalog.json`
 - 运维支持矩阵：`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md`
 
@@ -16,9 +16,9 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **111** | 可承诺 |
-| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **160** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **244** | 安全失败，不静默近似 |
+| executable（真实执行且有测试证据） | 79 | **116** | 可承诺 |
+| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **228** | 安全失败，不静默近似 |
 | excluded from profile（PRD §4 明确排除） | 229 | **229** | 不承诺；实现需独立协议/安全立项 |
 | **合计** | 744 | **744** | |
 
@@ -55,6 +55,18 @@
 | typed `[[http.maps]]` | 类型化 TOML 可声明有序 map 定义并与 nginx 平面同一套校验和运行时求值 | 往返 + 失败关闭单测 |
 | 三个 upstream 超时键 | 从静默丢弃改为带位置诊断的 accepted-unenforced | 诊断单测 |
 
+### Wave 3b：HTTP/2 调优、proxy_method、stream ACL/return、TLS 诊断真话化（5 条 + 21 条重新定性）
+
+| 指令/项 | 轮后行为 | 证据 |
+| --- | --- | --- |
+| `http2_max_concurrent_streams` | 在 http/server 可执行，映射到入口 h2 流上限；真实 TLS/ALPN 连接解析服务端 SETTINGS 帧断言值；不同层级冲突失败关闭 | `tests/http2_tuning.rs` 2/2 |
+| `proxy_method` | http/server/location 继承、方法 token 校验，上游请求方法被覆盖（静态/动态目标、重试），真实 nginx 差分 GET→POST | differential `proxy.method-override-post` |
+| stream `allow`/`deny` | 顺序首匹配 ACL，stream 上下文继承；拒绝的连接不发字节直接关闭（nginx 语义） | `tests/stream_access.rs` 2/2 + nginx probe |
+| stream `return <literal>` | 写入字面值后关闭（1..4096 字节，与 proxyPass 互斥）；变量形式无 stream 变量引擎，失败关闭 | 同上 |
+| HTTP/2 已废弃指令（8 条） | nginx 1.29.6 本身为 obsolete no-op（max_field_size/max_header_size/max_requests/idle_timeout/recv_timeout/max_concurrent_pushes/push/push_preload）→ 接受并给出"nginx 同样忽略"诊断，不再算缺口 | 矩阵/审计 |
+| HTTP/2 buffer/table（4 条） | 运行时入口内存配置自持，带诊断 | 矩阵/审计 |
+| OCSP（3 条） | 诊断改为"rustls 无 stapling/OCSP 获取面"的精确说明，不再暗示存在等价配置 | 矩阵/审计 |
+
 ### Wave 3a / 3a-2：charset、gzip 细化、autoindex、empty_gif、stub_status（14 条）
 
 | 指令 | 轮后行为 | 证据 |
@@ -88,7 +100,7 @@
 | --- | --- | --- |
 | 进程内全表面行为回归 | `python3 tests/nginx/full-surface/probe.py` | **76/76** |
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
-| 宽面 HTTP 差分（本轮从 87 增至 236 例） | `node tools/run-nginx-differential-http.mjs` | **236/236**，0 非预期（已知差异均有规范依据） |
+| 宽面 HTTP 差分（本轮从 87 增至 237 例） | `node tools/run-nginx-differential-http.mjs` | **237/237**，0 非预期（已知差异均有规范依据） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |
@@ -121,16 +133,30 @@
 | nginx 在 range 生成的 416 上跑两次 header filter | nginx 实现细节；运行时按最终状态应用一次，RFC 9110 §5.3 允许合并 |
 | 运行时 HTTP 边界始终 400 拒绝非 token 头名 | 比 nginx 的丢弃/转发更严格，安全强化 |
 
+## 4.1 剩余 29 条行为缺口（审计台账 §3.2，全部有明确架构阻塞，不是静默忽略）
+
+| 分类 | 数量 | 指令 | 阻塞与结论 |
+| --- | ---: | --- | --- |
+| HTTP/1 分帧 | 1 | `chunked_transfer_encoding` | 无长度响应是否 chunked；需在共享 framing 层增加策略开关，属可后续实现的独立小项 |
+| body addition 过滤器 | 3 | `add_before_body`/`add_after_body`/`addition_types` | 需要有界子请求引擎（路由重入 + 响应体拼接 + MIME 门控）；独立设计项 |
+| referer 模块 | 1 | `valid_referers` | `$invalid_referer` 需贯穿所有 `add_header`/`return` 展开点，且 `if` 未支持；独立设计项 |
+| HTTP/2 DATA chunking | 1 | `http2_chunk_size` | 固定版本 hyper/h2 不暴露 DATA 分块开关，**上游阻塞**，失败关闭 |
+| 静态 open-file cache | 3 | `open_file_cache`/`_min_uses`/`_valid` | 纯性能缓存，唯一可观察契约是陈旧窗口；cap-std 每请求打开，无正确性收益，保持"运行时自持 + 诊断" |
+| OCSP / 信任链 | 6 | `ssl_stapling`/`ssl_stapling_verify`/`ssl_trusted_certificate`（http+stream） | 固定 rustls 无 stapling/OCSP 获取面，**架构阻塞**；诊断已改为精确说明 |
+| stream 高级能力 | 14 | `limit_conn`/`limit_conn_zone`/`limit_conn_dry_run`/`set`/`preread_timeout`/`proxy_protocol_timeout`/`map`/`proxy_ssl*`（8 条） | 缺 stream zone 计数器、stream 变量引擎、preread 超时管线、入站 PROXY 超时、stream 上游 TLS 客户端；逐项为独立子系统设计，失败关闭 |
+
+这些缺口在支持矩阵与审计台账中逐条可见，且**没有任何一条被静默近似**：活跃配置要么被真实执行，要么产生带位置的诊断或被拒绝。
+
 ## 5. 未实现能力、商业影响与建议
 
 | 能力 | 现状 | 商业影响 | 优先级 |
 | --- | --- | --- | --- |
-| `chunked_transfer_encoding on/off` | 接受但不执行 | 低（仅影响无长度响应分帧） | P3 |
+| `chunked_transfer_encoding on/off`、`addition` 过滤、`referer`、`open_file_cache` | 接受但不执行/失败关闭，均有精确诊断；addition 需有界子请求引擎，referer 需 `$invalid_referer` 贯穿，open_file_cache 为性能缓存无正确性收益 | 低-中 | P3 |
 | charset 族 | 已实现（charset/charset_types/source_charset/override_charset）；`charset_map` 字节转码仍接受不执行 | 低（仅声明头） | P3 |
 | autoindex 族 | 已实现（含 4 种格式）；`addition` 子请求过滤器待实现 | 低 | P3 |
 | gzip 细化（comp_level/disable/proxied） | Wave 3 | 低-中 | P3 |
-| HTTP/2 调优（streams/field size/idle/requests） | Wave 3 | 中（大流量/防滥用） | P2 |
-| stream 模块 allow/deny、limit_conn、return/set、preread | Wave 3 | 中（TCP 边缘） | P2 |
+| HTTP/2 调优 | 已实现 streams 上限；obsolete 指令按 nginx 语义接受 no-op；buffer/table 运行时自持；`http2_chunk_size` 受 hyper/h2 限制失败关闭 | 低 | P3 |
+| stream 模块 | allow/deny 与 literal return 已实现；limit_conn、set/变量 return、preread 超时、proxy_protocol_timeout、stream map、上游 TLS 身份键仍缺（无 zone 状态/变量引擎/上游 TLS 客户端） | 中 | P2 |
 | `map` 的复合源、stream map、按需惰性求值 | 有界子集已实现，其余失败关闭 | 低 | P3 |
 | OCSP stapling | 未实现，声明被诊断 | 低（LE 2025 停 OCSP；默认 off；rustls 仅 TLS1.2 式装订且无刷新任务） | 产品决策 |
 | RFC 8441（H2 WebSocket） | 未实现 | 低（浏览器 WS 仍以 H1 为主） | P3 |

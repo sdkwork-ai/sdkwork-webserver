@@ -105,6 +105,18 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "ssl_dhparam",
     "ssl_ecdh_curve",
     "http2",
+    "http2_max_field_size",
+    "http2_max_header_size",
+    "http2_max_requests",
+    "http2_idle_timeout",
+    "http2_recv_timeout",
+    "http2_max_concurrent_pushes",
+    "http2_push",
+    "http2_push_preload",
+    "http2_recv_buffer_size",
+    "http2_body_preread_size",
+    "http2_pool_size",
+    "http2_streams_index_size",
     "keepalive",
     "client_body_buffer_size",
     "send_timeout",
@@ -205,18 +217,68 @@ const UNSUPPORTED_SECURITY: &[&str] = &[];
 /// directive now surfaces a diagnostic with its source location and the reason
 /// its value has no effect, so a migration review can decide whether the
 /// equivalent SDKWork setting must be configured explicitly.
+/// Directives that the pinned nginx 1.29.6 reference build itself accepts as
+/// **obsolete no-ops** (`ngx_http_v2_obsolete`). nginx logs a deprecation
+/// warning and ignores the value, so accepting them without effect is exact
+/// nginx parity, not a runtime gap.
+const NGINX_OBSOLETE_NOOP: &[&str] = &[
+    "http2_max_field_size",
+    "http2_max_header_size",
+    "http2_max_requests",
+    "http2_idle_timeout",
+    "http2_recv_timeout",
+    "http2_max_concurrent_pushes",
+    "http2_push",
+    "http2_push_preload",
+];
+
+/// TLS directives whose only effect is OCSP stapling. The pinned rustls TLS
+/// stack exposes no stapling/OCSP fetch surface, so the value is accepted but
+/// has no effect — the diagnostic states that explicitly instead of implying an
+/// equivalent runtime setting exists.
+const NGINX_OCSP_STAPLING_UNSUPPORTED: &[&str] = &[
+    "ssl_stapling",
+    "ssl_stapling_verify",
+    "ssl_trusted_certificate",
+];
+
+/// Directives that tune nginx's own buffers/index tables. The runtime owns its
+/// buffer and hash-table sizing, so the value is accepted-unenforced.
+const RUNTIME_OWNED_MEMORY_TUNING: &[&str] = &[
+    "http2_recv_buffer_size",
+    "http2_body_preread_size",
+    "http2_pool_size",
+    "http2_streams_index_size",
+];
+
 pub(crate) fn ignored_directive_diagnostics(
     directives: &[NginxDirective],
 ) -> Vec<ConfigDiagnostic> {
     fn push(out: &mut Vec<ConfigDiagnostic>, directive: &NginxDirective) {
+        let message = if NGINX_OBSOLETE_NOOP.contains(&directive.name.as_str()) {
+            format!(
+                "`{}` is obsolete in the pinned nginx 1.29.6 reference build (nginx accepts it as a deprecated no-op and ignores the value); the runtime likewise executes nothing for it",
+                directive.name
+            )
+        } else if NGINX_OCSP_STAPLING_UNSUPPORTED.contains(&directive.name.as_str()) {
+            format!(
+                "`{}` has no effect: OCSP stapling is not implemented because the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface; the runtime does not publish an OCSP response",
+                directive.name
+            )
+        } else if RUNTIME_OWNED_MEMORY_TUNING.contains(&directive.name.as_str()) {
+            format!(
+                "`{}` is accepted for nginx compatibility; the runtime owns its buffer and hash-table sizing, so the imported value has no effect",
+                directive.name
+            )
+        } else {
+            format!(
+                "`{}` is accepted for nginx compatibility but is not enforced by the SDKWork runtime; the imported value has no effect and the equivalent runtime setting must be configured explicitly",
+                directive.name
+            )
+        };
         out.push(ConfigDiagnostic::new(
             format!("{}:{}", directive.source.display(), directive.line),
-            format!(
-                "`{}` is accepted for nginx compatibility but is not enforced by the \
-                 SDKWork runtime; the imported value has no effect and the equivalent \
-                 runtime setting must be configured explicitly",
-                directive.name
-            ),
+            message,
         ));
     }
     fn walk(directives: &[NginxDirective], out: &mut Vec<ConfigDiagnostic>, in_stream: bool) {
@@ -405,6 +467,25 @@ pub fn materialize_nginx_app(
                     directive,
                     "`proxy_ssl_name` (custom upstream SNI name) is not supported; the runtime sends the upstream hostname as SNI",
                 ));
+            }
+            // nginx HTTP/2 ingress tuning. `http2_max_concurrent_streams` maps
+            // onto the runtime ingress profile (the value hyper/h2 publishes
+            // as SETTINGS_MAX_CONCURRENT_STREAMS). `http2_chunk_size` controls
+            // DATA-frame chunking, which the pinned hyper/h2 ingress does not
+            // expose to callers, so it fails closed instead of being faked.
+            "http2_max_concurrent_streams" => {
+                mapper.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
+                    directive,
+                )?);
+            }
+            "http2_chunk_size" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`http2_chunk_size` is not exposed by the pinned hyper/h2 ingress (it controls DATA-frame chunking); remove it or declare `http2_max_concurrent_streams` instead",
+                ));
+            }
+            "proxy_method" => {
+                mapper.http_proxy_method = Some(parse_proxy_method(directive)?);
             }
             "ssl_protocols" => {
                 mapper.http_ssl_protocols = Some(parse_ssl_protocols(directive)?);
@@ -972,6 +1053,19 @@ struct Mapper<'a> {
     limit_req_zone_names: Vec<String>,
     limit_conn_zones: Vec<Value>,
     limit_conn_zone_names: Vec<String>,
+    /// `http2_max_concurrent_streams` seen while materializing nginx config
+    /// (nginx http/server context; the runtime model owns one ingress value).
+    http2_max_concurrent_streams: Option<u32>,
+    /// Set when different `http2_max_concurrent_streams` values are declared at
+    /// different levels; the runtime model owns one global value.
+    http2_max_concurrent_streams_conflict: bool,
+    /// `proxy_method` inherited from the http level.
+    http_proxy_method: Option<String>,
+    /// Ordered nginx stream-context `allow`/`deny` rules inherited by every
+    /// stream server that declares none.
+    stream_access: Vec<Value>,
+    /// `proxy_method` resolved for the server currently being materialized.
+    server_proxy_method: Option<String>,
     /// Largest `client_max_body_size` seen while materializing nginx config.
     client_max_body_size: Option<u64>,
     /// Set when different `client_max_body_size` values are declared at
@@ -1041,6 +1135,11 @@ impl<'a> Mapper<'a> {
             limit_conn_zone_names: Vec::new(),
             client_max_body_size: None,
             client_max_body_size_conflict: false,
+            http2_max_concurrent_streams: None,
+            http2_max_concurrent_streams_conflict: false,
+            http_proxy_method: None,
+            server_proxy_method: None,
+            stream_access: Vec::new(),
         }
     }
 
@@ -1086,6 +1185,16 @@ impl<'a> Mapper<'a> {
             (Some(other), _) => policy.redirect = Some(other),
         }
         Ok(policy)
+    }
+
+    fn note_http2_max_concurrent_streams(&mut self, streams: u32) {
+        match self.http2_max_concurrent_streams {
+            Some(existing) if existing != streams => {
+                self.http2_max_concurrent_streams_conflict = true;
+            }
+            None => self.http2_max_concurrent_streams = Some(streams),
+            _ => {}
+        }
     }
 
     fn note_client_max_body_size(&mut self, bytes: Option<u64>) {
@@ -1492,6 +1601,7 @@ impl<'a> Mapper<'a> {
         let mut server_ignore_invalid_headers: Option<bool> = None;
         let mut server_charset = CharsetDeclarations::default();
         let mut server_autoindex = AutoindexDeclarations::default();
+        let mut server_proxy_method: Option<String> = None;
         // nginx http-level gzip state snapshot: server-level `gzip*`
         // directives overlay it (single-value on/off inherits; the type list
         // and min length replace when declared).
@@ -1680,6 +1790,20 @@ impl<'a> Mapper<'a> {
                 }
                 "autoindex_format" => {
                     server_autoindex.format = Some(parse_autoindex_format(child)?);
+                }
+                "http2_max_concurrent_streams" => {
+                    self.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
+                        child,
+                    )?);
+                }
+                "http2_chunk_size" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "`http2_chunk_size` is not exposed by the pinned hyper/h2 ingress (it controls DATA-frame chunking); remove it or declare `http2_max_concurrent_streams` instead",
+                    ));
+                }
+                "proxy_method" => {
+                    server_proxy_method = Some(parse_proxy_method(child)?);
                 }
                 "access_log"
                 | "error_log"
@@ -2037,6 +2161,9 @@ impl<'a> Mapper<'a> {
         // server and handed down to locations through `self.server_autoindex`.
         self.server_autoindex = self.http_autoindex.clone().overlay(server_autoindex);
         let effective_autoindex = self.server_autoindex.resolve();
+        // nginx `proxy_method`: http declaration inherited by the server unless
+        // it declares its own; locations overlay this through the mapper field.
+        self.server_proxy_method = server_proxy_method.or_else(|| self.http_proxy_method.clone());
         // nginx gzip refinements: http ⊕ server declarations are handed down to
         // locations through `self.server_gzip_refinements`.
         self.server_gzip_refinements = self
@@ -2667,6 +2794,7 @@ impl<'a> Mapper<'a> {
         let mut location_access = Vec::new();
         let mut location_limit_req = Vec::new();
         let mut location_proxy_set_headers: Vec<String> = Vec::new();
+        let mut location_proxy_method: Option<String> = None;
         let mut auth_realm = inherited_auth_realm.map(str::to_owned);
         let mut auth_file = inherited_auth_file.map(str::to_owned);
         let mut auth_off = inherited_auth_off;
@@ -2688,6 +2816,9 @@ impl<'a> Mapper<'a> {
                     } else {
                         proxy_pass = Some(target.clone());
                     }
+                }
+                "proxy_method" => {
+                    location_proxy_method = Some(parse_proxy_method(child)?);
                 }
                 "proxy_pass_request_headers" => {
                     let Some(value) = child.args.first() else {
@@ -3300,6 +3431,10 @@ impl<'a> Mapper<'a> {
             }
         }
 
+        // nginx `proxy_method`: a location declaration wins over the resolved
+        // http/server value.
+        let effective_proxy_method =
+            location_proxy_method.or_else(|| self.server_proxy_method.clone());
         // nginx inheritance: the resolved http ⊕ server proxy response-header
         // directives are overlaid by this location's declarations.
         let proxy_response_directives = self
@@ -3329,6 +3464,9 @@ impl<'a> Mapper<'a> {
                 "proxyPassRequestHeaders": proxy_pass_request_headers,
                 "proxyInterceptErrors": proxy_intercept_errors,
             });
+            if let Some(method) = &effective_proxy_method {
+                proxy_resource["proxyMethod"] = Value::String(method.clone());
+            }
             if !request_set_headers.is_empty() {
                 proxy_resource["requestSetHeaders"] =
                     Value::Array(request_set_headers.into_iter().map(Value::String).collect());
@@ -3373,6 +3511,9 @@ impl<'a> Mapper<'a> {
                 "proxyPassRequestHeaders": proxy_pass_request_headers,
                 "proxyInterceptErrors": proxy_intercept_errors,
             });
+            if let Some(method) = &effective_proxy_method {
+                proxy_resource["proxyMethod"] = Value::String(method.clone());
+            }
             if let Some(uri) = &target_uri {
                 proxy_resource["targetUri"] = Value::String(uri.clone());
             }
@@ -4124,6 +4265,8 @@ impl<'a> Mapper<'a> {
                 // (with the diagnostic emitted by `ignored_directive_diagnostics`)
                 // rather than failing a stock configuration closed.
                 "map" => {}
+                // nginx stream access phase: ordered peer allow/deny rules.
+                "allow" | "deny" => self.stream_access.push(parse_access_rule(directive)?),
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name => {
                     return Err(NginxConfigError::unsupported(
@@ -4150,6 +4293,8 @@ impl<'a> Mapper<'a> {
         let mut certificate_key = None;
         let mut ssl_verify_client: Option<&str> = None;
         let mut ssl_client_certificate: Option<String> = None;
+        let mut access: Vec<Value> = Vec::new();
+        let mut return_value: Option<String> = None;
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
@@ -4221,6 +4366,32 @@ impl<'a> Mapper<'a> {
                         }
                     };
                 }
+                "allow" | "deny" => access.push(parse_access_rule(child)?),
+                "return" => {
+                    // nginx stream `return <value>`: write the value to the
+                    // connection and close it. The value may not use stream
+                    // variables (no stream-variable engine in the runtime).
+                    if child.args.len() != 1 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream `return` takes exactly one value",
+                        ));
+                    }
+                    let value = &child.args[0];
+                    if value.contains('$') {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream `return` variables are not supported; the runtime has no stream-variable engine — use a literal value",
+                        ));
+                    }
+                    if value.is_empty() || value.len() > 4096 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream `return` value must be 1..4096 bytes",
+                        ));
+                    }
+                    return_value = Some(value.clone());
+                }
                 "ssl_certificate" => {
                     certificate_file = Some(self.resolve_path(child)?);
                 }
@@ -4280,30 +4451,44 @@ impl<'a> Mapper<'a> {
                 "stream server requires listen",
             ));
         }
-        let Some(target_name) = proxy_pass else {
+        if access.is_empty() {
+            access = self.stream_access.clone();
+        }
+        if proxy_pass.is_some() && return_value.is_some() {
             return Err(NginxConfigError::unsupported(
                 directive,
-                "stream server requires proxy_pass",
+                "a stream server cannot combine `return` with `proxy_pass`",
             ));
-        };
-        let target = if self.upstream_names.contains(&target_name) {
-            json!({ "type": "upstream", "name": target_name })
-        } else if let Some((host, port_text)) = target_name.rsplit_once(':') {
-            let port = port_text.parse::<u16>().map_err(|_| {
-                NginxConfigError::unsupported(
-                    directive,
-                    format!("invalid stream proxy_pass `{target_name}`"),
-                )
-            })?;
-            json!({ "type": "literal", "host": host, "port": port })
-        } else {
+        }
+        let target =
+            if let Some(target_name) = proxy_pass.as_ref().filter(|_| return_value.is_none()) {
+                Some(if self.upstream_names.contains(target_name) {
+                    json!({ "type": "upstream", "name": target_name })
+                } else if let Some((host, port_text)) = target_name.rsplit_once(':') {
+                    let port = port_text.parse::<u16>().map_err(|_| {
+                        NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid stream proxy_pass `{target_name}`"),
+                        )
+                    })?;
+                    json!({ "type": "literal", "host": host, "port": port })
+                } else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                        "stream proxy_pass `{target_name}` must reference an upstream or host:port"
+                    ),
+                    ));
+                })
+            } else {
+                None
+            };
+        if target.is_none() && return_value.is_none() {
             return Err(NginxConfigError::unsupported(
                 directive,
-                format!(
-                    "stream proxy_pass `{target_name}` must reference an upstream or host:port"
-                ),
+                "stream server requires proxy_pass or return",
             ));
-        };
+        }
         // nginx allows one `stream server` block with several `listen`
         // directives; the runtime materializes one stream server per listen.
         for (listen_index, listen) in listen_specs.iter().enumerate() {
@@ -4320,10 +4505,18 @@ impl<'a> Mapper<'a> {
                 "bind": listen.bind,
                 "port": listen.port,
                 "protocol": if udp { "udp" } else { "tcp" },
-                "target": target,
                 "proxyTimeoutMs": proxy_timeout_ms,
                 "proxyProtocol": proxy_protocol,
             });
+            if let Some(target) = &target {
+                stream["target"] = target.clone();
+            }
+            if !access.is_empty() {
+                stream["access"] = Value::Array(access.clone());
+            }
+            if let Some(value) = &return_value {
+                stream["returnValue"] = Value::String(value.clone());
+            }
             if ssl_preread {
                 stream["tls"] = json!({ "mode": "preread" });
             } else if ssl {
@@ -4375,13 +4568,15 @@ impl<'a> Mapper<'a> {
                 stream["tls"] = tls_entry;
             }
             // Type-check against the runtime model early for clearer diagnostics.
-            let _: StreamTargetConfig =
-                serde_json::from_value(target.clone()).map_err(|error| {
-                    NginxConfigError::unsupported(
-                        directive,
-                        format!("stream target materialization failed: {error}"),
-                    )
-                })?;
+            if let Some(target) = &target {
+                let _: StreamTargetConfig =
+                    serde_json::from_value(target.clone()).map_err(|error| {
+                        NginxConfigError::unsupported(
+                            directive,
+                            format!("stream target materialization failed: {error}"),
+                        )
+                    })?;
+            }
             if stream.get("tls").is_some() {
                 let _: StreamTlsMode =
                     serde_json::from_value(stream["tls"].clone()).map_err(|error| {
@@ -4451,8 +4646,27 @@ impl<'a> Mapper<'a> {
                 "conflicting `client_max_body_size` values at different levels; the runtime model supports one global request body limit — declare a single value",
             ));
         }
+        if self.http2_max_concurrent_streams_conflict {
+            return Err(NginxConfigError::unsupported(
+                &NginxDirective {
+                    name: "http2_max_concurrent_streams".to_owned(),
+                    args: Vec::new(),
+                    children: Vec::new(),
+                    line: 0,
+                    source: self.base_dir.to_path_buf(),
+                },
+                "conflicting `http2_max_concurrent_streams` values at different levels; the runtime ingress model supports one global value — declare a single value",
+            ));
+        }
+        let mut limits = serde_json::Map::new();
         if let Some(bytes) = self.client_max_body_size {
-            instance["limits"] = json!({ "maxRequestBodyBytes": bytes });
+            limits.insert("maxRequestBodyBytes".to_owned(), json!(bytes));
+        }
+        if let Some(streams) = self.http2_max_concurrent_streams {
+            limits.insert("http2MaxConcurrentStreams".to_owned(), json!(streams));
+        }
+        if !limits.is_empty() {
+            instance["limits"] = Value::Object(limits);
         }
         let config: WebServerAppConfig = serde_json::from_value(instance).map_err(|source| {
             NginxConfigError::Config(WebServerConfigError::Materialize(format!(
@@ -5668,6 +5882,72 @@ fn apply_sub_filter_types(
 }
 
 /// Shared `on|off` parser for simple switch directives.
+/// Parse `http2_max_concurrent_streams <1..10000>` (nginx http/server
+/// context; the runtime ingress model owns one value).
+fn parse_http2_max_concurrent_streams(directive: &NginxDirective) -> Result<u32, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "http2_max_concurrent_streams takes exactly one stream count",
+        ));
+    }
+    let value = &directive.args[0];
+    let Ok(streams) = value.parse::<u32>() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid http2_max_concurrent_streams `{value}`; expected 1..10000"),
+        ));
+    };
+    if !(1..=10_000).contains(&streams) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "http2_max_concurrent_streams `{value}` is outside the runtime's 1..10000 range"
+            ),
+        ));
+    }
+    Ok(streams)
+}
+
+/// Parse `proxy_method <method>` (an RFC 9110 method token).
+fn parse_proxy_method(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "proxy_method takes exactly one method",
+        ));
+    }
+    let method = &directive.args[0];
+    if method.is_empty()
+        || method.bytes().any(|byte| {
+            !(byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                ))
+        })
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("proxy_method `{method}` is not a valid HTTP method token"),
+        ));
+    }
+    Ok(method.clone())
+}
+
 /// nginx proxy response-header directives (`proxy_hide_header`,
 /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
 /// `proxy_cookie_domain`) declared at one configuration level.
@@ -9629,6 +9909,238 @@ server {
     }
 
     #[test]
+    fn materializes_http2_max_concurrent_streams_into_ingress_limits() {
+        let config = materialize(
+            r#"
+http2_max_concurrent_streams 7;
+server { listen 80; server_name h2.example.test; location / { return 200 "ok"; } }
+"#,
+        )
+        .expect("materialize");
+        assert_eq!(config.limits.http2_max_concurrent_streams, 7);
+        // A server-level declaration of the same value is accepted (one global
+        // ingress value); a conflicting value fails closed.
+        materialize(
+            r#"
+http2_max_concurrent_streams 7;
+server { listen 80; server_name h2.example.test; http2_max_concurrent_streams 7; location / { return 200 "ok"; } }
+"#,
+        )
+        .expect("same value at both levels");
+        let conflict = materialize(
+            r#"
+http2_max_concurrent_streams 7;
+server { listen 80; server_name h2.example.test; http2_max_concurrent_streams 9; location / { return 200 "ok"; } }
+"#,
+        )
+        .err()
+        .expect("conflicting values must fail closed");
+        assert!(conflict.to_string().contains("conflicting"), "{conflict}");
+        for value in ["0", "10001", "many"] {
+            let error = materialize(&format!(
+                "http2_max_concurrent_streams {value};\nserver {{ listen 80; server_name h2.example.test; location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{value}` must fail closed"));
+            assert!(
+                error.to_string().contains("http2_max_concurrent_streams"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn http2_tuning_diagnostics_are_truthful() {
+        // The four obsolete directives are accepted (nginx 1.29.6 accepts them
+        // as deprecated no-ops) and the diagnostic says so explicitly.
+        let parsed = parse_nginx_config(
+            r#"
+http {
+    http2_max_field_size 8k;
+    http2_max_header_size 16k;
+    http2_max_requests 1000;
+    http2_idle_timeout 3m;
+    open_file_cache max=1000 inactive=20s;
+    ssl_stapling on;
+    ssl_trusted_certificate /etc/ssl/chain.pem;
+    server { listen 80; server_name h2.example.test; location / { return 200 "ok"; } }
+}
+"#,
+            std::path::Path::new("site.conf"),
+        )
+        .expect("parse");
+        let diagnostics = ignored_directive_diagnostics(&parsed);
+        let message = |name: &str| {
+            diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.message.contains(name))
+                .unwrap_or_else(|| panic!("missing diagnostic for {name}: {diagnostics:?}"))
+                .message
+                .clone()
+        };
+        for name in [
+            "http2_max_field_size",
+            "http2_max_header_size",
+            "http2_max_requests",
+            "http2_idle_timeout",
+        ] {
+            let text = message(name);
+            assert!(
+                text.contains("obsolete in the pinned nginx 1.29.6"),
+                "`{name}` must state nginx obsoletes it: {text}"
+            );
+        }
+        assert!(
+            message("ssl_stapling").contains("OCSP stapling is not implemented"),
+            "ssl_stapling diagnostic must state the OCSP blocker"
+        );
+        assert!(
+            message("ssl_trusted_certificate").contains("OCSP stapling is not implemented"),
+            "ssl_trusted_certificate diagnostic must state the OCSP blocker"
+        );
+        assert!(
+            message("open_file_cache").contains("not enforced"),
+            "open_file_cache stays truthfully accepted-unenforced"
+        );
+        // `http2_chunk_size` is active in nginx but not exposed by hyper/h2:
+        // fail closed with a precise diagnostic instead of faking it.
+        let error = materialize(
+            r#"
+http2_chunk_size 4k;
+server { listen 80; server_name h2.example.test; location / { return 200 "ok"; } }
+"#,
+        )
+        .err()
+        .expect("http2_chunk_size must fail closed");
+        assert!(
+            error.to_string().contains("hyper/h2 ingress"),
+            "http2_chunk_size diagnostic must name the runtime blocker: {error}"
+        );
+    }
+
+    #[test]
+    fn materializes_proxy_method_inheritance() {
+        let config = materialize(
+            r#"
+proxy_method POST;
+server {
+    listen 80;
+    server_name method.example.test;
+    location /inherit/ { proxy_pass http://127.0.0.1:8080; }
+    location /server/ { proxy_method PUT; proxy_pass http://127.0.0.1:8080; }
+    location /location/ { proxy_method PATCH; proxy_pass http://127.0.0.1:8080; }
+}
+"#,
+        )
+        .expect("materialize");
+        let proxy_methods = config
+            .resources
+            .iter()
+            .filter_map(|resource| match resource {
+                ResourceConfig::Proxy { proxy_method, .. } => Some(proxy_method.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            proxy_methods,
+            vec![
+                Some("POST".to_owned()),
+                Some("PUT".to_owned()),
+                Some("PATCH".to_owned())
+            ],
+            "http → server → location proxy_method inheritance"
+        );
+        // An invalid method token fails closed.
+        let error = materialize(
+            "server { listen 80; server_name method.example.test; location / { proxy_method \"GET /x\"; proxy_pass http://127.0.0.1:8080; } }",
+        )
+        .err()
+        .expect("invalid method token must fail closed");
+        assert!(error.to_string().contains("proxy_method"), "{error}");
+    }
+
+    #[test]
+    fn materializes_stream_access_and_return() {
+        let config = materialize(
+            r#"
+stream {
+    allow 10.0.0.0/8;
+    deny all;
+
+    server {
+        listen 127.0.0.1:9101;
+        proxy_pass 127.0.0.1:9201;
+    }
+
+    server {
+        listen 127.0.0.1:9102;
+        allow 127.0.0.1;
+        proxy_pass 127.0.0.1:9201;
+    }
+
+    server {
+        listen 127.0.0.1:9103;
+        return 403;
+    }
+}
+"#,
+        )
+        .expect("materialize stream");
+        let streams = config.streams;
+        // The server with no rules inherits the stream-context rules.
+        let inherited = streams
+            .iter()
+            .find(|stream| stream.id.contains("9101"))
+            .expect("inheriting stream");
+        assert_eq!(inherited.access.len(), 2);
+        assert_eq!(inherited.access[0].network, "10.0.0.0/8");
+        assert_eq!(inherited.access[1].network, "all");
+        // A server declaration replaces the inherited list.
+        let own = streams
+            .iter()
+            .find(|stream| stream.id.contains("9102"))
+            .expect("own-access stream");
+        assert_eq!(own.access.len(), 1);
+        assert_eq!(own.access[0].network, "127.0.0.1");
+        assert!(own.target.is_some());
+        // `return` streams answer without a target.
+        let returned = streams
+            .iter()
+            .find(|stream| stream.id.contains("9103"))
+            .expect("return stream");
+        assert_eq!(returned.return_value.as_deref(), Some("403"));
+        assert!(returned.target.is_none());
+        // Fail-closed forms.
+        for (label, body, needle) in [
+            (
+                "return with variables",
+                "listen 127.0.0.1:9104; return \"$ssl_preread_server_name\";",
+                "stream `return` variables",
+            ),
+            (
+                "return with proxy_pass",
+                "listen 127.0.0.1:9105; return 403; proxy_pass 127.0.0.1:9201;",
+                "cannot combine `return` with `proxy_pass`",
+            ),
+            (
+                "neither target nor return",
+                "listen 127.0.0.1:9106;",
+                "requires proxy_pass or return",
+            ),
+            (
+                "invalid access network",
+                "listen 127.0.0.1:9107; allow not-a-network; proxy_pass 127.0.0.1:9201;",
+                "invalid access network",
+            ),
+        ] {
+            let error = materialize(&format!("stream {{ server {{ {body} }} }}"))
+                .err()
+                .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
     fn every_accepted_ignored_directive_materializes() {
         // Block-syntax directives get a minimal body; everything else takes
         // a representative argument list. Each entry is placed at the http
@@ -9685,6 +10197,18 @@ server {
             ("ssl_dhparam", "/etc/ssl/dhparam.pem"),
             ("ssl_ecdh_curve", "auto"),
             ("http2", "on"),
+            ("http2_max_field_size", "8k"),
+            ("http2_max_header_size", "16k"),
+            ("http2_max_requests", "1000"),
+            ("http2_idle_timeout", "3m"),
+            ("http2_recv_timeout", "3m"),
+            ("http2_max_concurrent_pushes", "10"),
+            ("http2_push", "/pushed.css"),
+            ("http2_push_preload", "on"),
+            ("http2_recv_buffer_size", "256k"),
+            ("http2_body_preread_size", "64k"),
+            ("http2_pool_size", "4k"),
+            ("http2_streams_index_size", "32"),
             ("keepalive", "16"),
             ("client_body_buffer_size", "16k"),
             ("send_timeout", "60s"),

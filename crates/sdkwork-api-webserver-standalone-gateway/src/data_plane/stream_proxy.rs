@@ -17,7 +17,10 @@ use std::{
     time::Duration,
 };
 
-use sdkwork_webserver_core::{StreamServerConfig, StreamTargetConfig, StreamTlsMode, TlsVersion};
+use sdkwork_webserver_core::{
+    evaluate_access_first_match_allow, AccessDecision, AccessRuleConfig, StreamServerConfig,
+    StreamTargetConfig, StreamTlsMode, TlsVersion,
+};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -47,6 +50,12 @@ pub(crate) struct PreparedStreamListener {
     /// re-reading the certificate files for every accepted connection put
     /// filesystem I/O on the connection path and scaled with connection rate.
     tls_acceptor: Option<TlsAcceptor>,
+    /// Ordered nginx stream `allow`/`deny` rules (first match wins; an
+    /// unmatched peer is allowed).
+    access: Vec<AccessRuleConfig>,
+    /// nginx stream `return <value>`: the literal bytes written to the
+    /// connection before it is closed.
+    return_value: Option<String>,
 }
 
 pub(crate) async fn prepare_stream_listener(
@@ -100,6 +109,8 @@ pub(crate) async fn prepare_stream_listener(
         round_robin: Arc::new(AtomicUsize::new(0)),
         tls: config.tls.clone(),
         tls_acceptor,
+        access: config.access.clone(),
+        return_value: config.return_value.clone(),
     })
 }
 
@@ -183,6 +194,39 @@ pub(crate) async fn serve_stream_listener(
                         });
                     }
                 };
+                // nginx stream access phase and `return` handler run before
+                // any upstream connection is considered.
+                if evaluate_access_first_match_allow(peer.ip(), &listener.access)
+                    == AccessDecision::Deny
+                {
+                    tracing::debug!(
+                        stream_id = %listener.id,
+                        peer = %peer,
+                        "stream connection denied by allow/deny rules"
+                    );
+                    drop(downstream);
+                    continue;
+                }
+                if let Some(value) = &listener.return_value {
+                    // nginx stream `return`: write the literal value, then
+                    // close (differential-probed against nginx 1.29.6).
+                    let mut downstream = downstream;
+                    let write = timeout(
+                        Duration::from_secs(5),
+                        downstream.write_all(value.as_bytes()),
+                    )
+                    .await;
+                    if let Err(error) = write {
+                        tracing::debug!(
+                            stream_id = %listener.id,
+                            peer = %peer,
+                            error = %error,
+                            "stream return response write failed"
+                        );
+                    }
+                    let _ = downstream.shutdown().await;
+                    continue;
+                }
                 let permit = match Arc::clone(&runtime.connection_permits).try_acquire_owned() {
                     Ok(permit) => permit,
                     Err(_) => {
@@ -278,7 +322,10 @@ async fn serve_stream_connection(
         tracing::warn!(stream_id, peer = %peer, "stream target is no longer configured");
         return Err(());
     };
-    let target = &stream_config.target;
+    let Some(target) = stream_config.target.as_ref() else {
+        tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
+        return Err(());
+    };
 
     match tls {
         None => {

@@ -19,8 +19,8 @@ pub mod website_runtime;
 
 pub use config::{
     apply_rewrites, apply_rewrites_with, apply_sub_filters, apr1_hash, evaluate_access,
-    evaluate_auth_basic, evaluate_map, expand_map_template, expand_proxy_pass_template,
-    gzip_disabled_for_user_agent, hostname_upstream_allowed_cidrs,
+    evaluate_access_first_match_allow, evaluate_auth_basic, evaluate_map, expand_map_template,
+    expand_proxy_pass_template, gzip_disabled_for_user_agent, hostname_upstream_allowed_cidrs,
     inspect_webserver_config_revision, load_and_compile_webserver_config,
     load_and_compile_webserver_config_json, load_and_compile_webserver_config_revision, md5_hex,
     normalize_authority_host, normalize_server_name, normalize_tls_server_name, normalize_uri_path,

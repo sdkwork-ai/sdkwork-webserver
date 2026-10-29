@@ -1296,6 +1296,11 @@ pub enum ResourceConfig {
         /// request headers to the upstream (fixed safe defaults still apply).
         #[serde(default = "default_proxy_pass_request_headers")]
         proxy_pass_request_headers: bool,
+        /// nginx `proxy_method <method>`: forward the request with this method
+        /// instead of the client's (for example a `GET` sent upstream as
+        /// `POST`). Inherited http → server → location when undeclared.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        proxy_method: Option<String>,
         /// nginx `proxy_intercept_errors on`: proxied responses whose status
         /// has an `error_page` mapping are replaced by the mapped page.
         #[serde(default)]
@@ -1539,7 +1544,19 @@ pub struct StreamServerConfig {
     /// `tcp` (default) or `udp` (nginx `listen … udp`).
     #[serde(default)]
     pub protocol: StreamProtocol,
-    pub target: StreamTargetConfig,
+    /// Destination for proxied connections. `None` only for nginx stream
+    /// `return` servers, which answer without an upstream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<StreamTargetConfig>,
+    /// Ordered nginx stream `allow`/`deny` rules. nginx's stream access phase
+    /// uses first-match-wins and allows a peer that matches no rule; an empty
+    /// list allows every peer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access: Vec<AccessRuleConfig>,
+    /// nginx stream `return <value>`: write the literal value to the
+    /// connection and close it instead of proxying.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub return_value: Option<String>,
     /// Idle timeout on both directions of the proxied connection
     /// (`proxyTimeout`; nginx `proxy_timeout`).
     #[serde(default = "default_stream_proxy_timeout_ms")]

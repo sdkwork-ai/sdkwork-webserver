@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '8f96a59e';
+const AUDIT_HEAD = '2676eb83';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a and 3a-2 (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2 and 3b (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'wave 3 backlog';
 
@@ -159,13 +159,25 @@ const COMPLETED_WAVES = [
       'http:stub_status',
     ],
   },
+  {
+    key: 'wave 3b',
+    summary:
+      'HTTP/2 stream ceiling, proxy_method, stream allow/deny and literal stream return',
+    ids: [
+      'http:http2_max_concurrent_streams',
+      'http:proxy_method',
+      'stream:allow',
+      'stream:deny',
+      'stream:return',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
 
 /**
- * Remaining behavior-gap backlog after waves 1/2/2b/3a/3a-2 (the categories
- * named by specs/nginx-gap.catalog.json as still open after wave 3a-2).
+ * Remaining behavior-gap backlog after waves 1/2/2b/3a/3a-2/3b (the categories
+ * named by specs/nginx-gap.catalog.json as remaining after wave 3b).
  *
  * Each id is either accepted-unenforced today (silently ignored) or
  * unsupported-fail-closed (rejected). Rejected entries are planned work here:
@@ -210,31 +222,16 @@ const REMAINING_GAP_CATEGORIES = [
     tests: 'referer allow-list matrix plus differential valid_referers cases',
   },
   {
-    key: 'http2-tuning',
-    label: 'HTTP/2 tuning',
-    priority: 'medium',
-    ids: [
-      'http:http2_body_preread_size',
-      'http:http2_chunk_size',
-      'http:http2_idle_timeout',
-      'http:http2_max_concurrent_pushes',
-      'http:http2_max_concurrent_streams',
-      'http:http2_max_field_size',
-      'http:http2_max_header_size',
-      'http:http2_max_requests',
-      'http:http2_pool_size',
-      'http:http2_push',
-      'http:http2_push_preload',
-      'http:http2_recv_buffer_size',
-      'http:http2_recv_timeout',
-      'http:http2_streams_index_size',
-    ],
+    key: 'http2-chunking',
+    label: 'HTTP/2 DATA chunking',
+    priority: 'medium (blocked upstream)',
+    ids: ['http:http2_chunk_size'],
     rejectedLoss:
-      'a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate.',
-    why: 'http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits.',
+      'a stock nginx.conf that tunes the HTTP/2 DATA-frame chunk size fails to activate.',
+    why: 'the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob, so there is no runtime field to map it onto; every other HTTP/2 tuning directive is now executable, a nginx-obsolete accepted no-op, or runtime-owned ingress buffer sizing.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count)',
+    tests: 'h2 DATA-chunking differential once the pinned hyper/h2 exposes the knob; blocked upstream until then',
   },
   {
     key: 'static-open-file-cache',
@@ -253,60 +250,36 @@ const REMAINING_GAP_CATEGORIES = [
     tests: 'cache invalidation/TTL/threshold unit tests',
   },
   {
-    key: 'proxy-method',
-    label: 'proxied method override',
-    priority: 'high',
-    ids: ['http:proxy_method'],
-    rejectedLoss:
-      'the directive is accepted-but-ignored; the client method is forwarded instead of the configured override.',
-    why: 'the upstream request method is protocol-visible and changes upstream semantics.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_client.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'method-override unit test plus a differential upstream-method case',
-  },
-  {
-    key: 'ocsp-http',
-    label: 'OCSP stapling / trust chain (HTTP)',
-    priority: 'medium (commercial impact bounded)',
+    key: 'ocsp',
+    label: 'OCSP stapling / trust chain',
+    priority: 'medium (architecture blocker, commercial impact bounded)',
     ids: [
       'http:ssl_stapling',
       'http:ssl_stapling_verify',
       'http:ssl_trusted_certificate',
-    ],
-    rejectedLoss:
-      'the directive is accepted-but-ignored; no OCSP response is stapled to the handshake.',
-    why: 'stapling is a client-visible TLS handshake property and the gap catalog records `tls.ocsp-stapling` as missing.',
-    surface:
-      'crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution',
-    tests: 'stapling unit test plus a TLS handshake differential with a stapled response',
-  },
-  {
-    key: 'stream',
-    label: 'stream module gaps',
-    priority: 'high',
-    ids: [
-      'stream:map',
       'stream:ssl_stapling',
       'stream:ssl_stapling_verify',
       'stream:ssl_trusted_certificate',
-      'stream:allow',
-      'stream:deny',
+    ],
+    rejectedLoss:
+      'the directive is accepted-but-ignored; no OCSP response is stapled to the handshake.',
+    why: 'the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists.',
+    surface:
+      'crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution',
+    tests: 'none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic',
+  },
+  {
+    key: 'stream',
+    label: 'stream advanced gaps',
+    priority: 'high',
+    ids: [
       'stream:limit_conn',
       'stream:limit_conn_zone',
       'stream:limit_conn_dry_run',
-      'stream:set_real_ip_from',
-      'stream:pass',
-      'stream:return',
       'stream:set',
-      'stream:split_clients',
-      'stream:proxy_bind',
-      'stream:proxy_half_close',
-      'stream:proxy_next_upstream_timeout',
-      'stream:proxy_next_upstream_tries',
-      'stream:proxy_requests',
-      'stream:proxy_responses',
-      'stream:proxy_download_rate',
-      'stream:proxy_upload_rate',
+      'stream:preread_timeout',
+      'stream:proxy_protocol_timeout',
+      'stream:map',
       'stream:proxy_ssl',
       'stream:proxy_ssl_certificate',
       'stream:proxy_ssl_certificate_key',
@@ -317,10 +290,10 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock stream sidecar that uses this stream-plane feature fails to activate.',
-    why: 'generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes.',
+    why: 'stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables)',
-    tests: 'stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6',
+    tests: 'stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6',
   },
 ];
 
@@ -470,7 +443,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_stream_proxy_module$/,
-    'stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile.',
+    'stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog.',
   ],
   [
     /^ngx_http_grpc_module$/,
@@ -478,7 +451,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_v2_module$/,
-    'HTTP/2 tuning is tracked as wave-3 backlog (see the behavior-gap register), so a remaining http2_* directive outside that set is not planned.',
+    'http2_chunk_size is tracked as wave-3 backlog (the pinned hyper/h2 ingress has no DATA-chunk knob); the module\'s other directives are executable, nginx-obsolete accepted no-ops, or runtime-owned ingress buffer sizing.',
   ],
   [
     /^ngx_http_ssl_module$/,
@@ -526,7 +499,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_stream_core_module$/,
-    'stream preread buffer/timeout and stream server_name tuning is owned by the runtime stream plane; rejected.',
+    'preread_timeout and proxy_protocol_timeout are in the wave-3 backlog; preread_buffer_size and stream server_name are not planned.',
   ],
   [
     /^ngx_http_addition_filter_module$/,
@@ -546,7 +519,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_stream_limit_conn_module$/,
-    'the remaining stream limit_conn directives are tracked as wave-3 stream backlog; dry-run mode outside that list is not planned.',
+    'the stream limit_conn family is tracked as wave-3 stream backlog.',
   ],
   [
     /^ngx_http_auth_request_module$/,
@@ -606,7 +579,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_stream_split_clients_module$/,
-    'stream split_clients is tracked as wave-3 stream backlog; any remaining form outside that list is not planned.',
+    'stream split_clients is a map-style variable feature that is not implemented; the planned stream variable work is the stream map.',
   ],
   [
     /^ngx_http_upstream_sticky_module$/,
@@ -626,7 +599,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_stream_pass_module$/,
-    'stream `pass` is tracked as wave-3 stream backlog; other forms are not planned.',
+    'stream `pass` to a named target is not implemented and is not part of the wave-3 backlog.',
   ],
   [
     /^ngx_stream_return_module$/,
@@ -638,7 +611,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_stream_realip_module$/,
-    'stream PROXY-protocol realip rewriting is tracked as wave-3 stream backlog; other forms are not planned.',
+    'stream PROXY-protocol realip rewriting is not implemented and is not part of the wave-3 backlog.',
   ],
   [
     /^ngx_core_module$/,
@@ -669,6 +642,37 @@ const FAIL_CLOSED_REASONS = [
     'the FLV pseudo-streaming filter is outside the profile.',
   ],
 ];
+
+/**
+ * Extra sentence appended to the ledger rationale for gaps whose blocker is an
+ * architecture limit rather than missing implementation effort.
+ */
+const GAP_RATIONALE_SUFFIX = new Map([
+  [
+    'http:ssl_stapling',
+    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+  [
+    'http:ssl_stapling_verify',
+    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+  [
+    'http:ssl_trusted_certificate',
+    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+  [
+    'stream:ssl_stapling',
+    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+  [
+    'stream:ssl_stapling_verify',
+    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+  [
+    'stream:ssl_trusted_certificate',
+    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+]);
 
 /** Per-directive overrides for the fail-closed rationale where the module group is too broad. */
 const FAIL_CLOSED_BY_ID = new Map([
@@ -1140,6 +1144,45 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'differential: field shape and plain-text headers match nginx (counters canonicalised as process-local); HEAD and 405 behaviour match; location-only and loopback-gated',
   },
+  {
+    id: 'http:http2_max_concurrent_streams',
+    evidence:
+      'crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs::http2_settings_publish_the_configured_stream_ceiling',
+    claim: 'http2_max_concurrent_streams reaches the advertised h2 SETTINGS ceiling',
+    proves:
+      'performs a real TLS/ALPN h2 handshake and parses the server SETTINGS frame, asserting SETTINGS_MAX_CONCURRENT_STREAMS equals the configured value (and that an oversized header list is rejected)',
+  },
+  {
+    id: 'http:proxy_method',
+    evidence: 'tests/nginx/differential-http/battery.py::proxy.method-override-post',
+    claim: 'proxy_method overrides the upstream request method',
+    proves:
+      'real-nginx differential: the client GET is forwarded upstream as POST against nginx 1.29.6',
+  },
+  {
+    id: 'stream:allow',
+    evidence:
+      'crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes',
+    claim: 'stream allow is an ordered first-match peer ACL',
+    proves:
+      'an allow-first rule proxies the loopback connection while a deny-first rule on the same peer closes it with no bytes',
+  },
+  {
+    id: 'stream:deny',
+    evidence:
+      'crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes',
+    claim: 'stream deny closes the denied peer',
+    proves:
+      'the deny-first stream listener accepts and closes the connection without proxying, matching nginx stream access semantics',
+  },
+  {
+    id: 'stream:return',
+    evidence:
+      'crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_return_writes_the_literal_value_and_closes',
+    claim: 'stream return writes the literal value and closes',
+    proves:
+      'a configured literal `return` value is written to the client and the connection closes (1..4096 bytes; variable values fail closed)',
+  },
 ];
 
 /**
@@ -1308,7 +1351,8 @@ function rationaleFor(entry, decision) {
     case 'runtime-owned': {
       const note = RUNTIME_OWNED_NOTES.get(entry.id);
       if (note) return note;
-      return `runtime-owned: ${impact || 'the Rust runtime owns this subsystem by design'}.`;
+      const normalized = impact.replace(/^none:\s*/, '').replace(/\.$/, '');
+      return `runtime-owned: ${normalized || 'the Rust runtime owns this subsystem by design'}.`;
     }
     case 'security-difference':
       return SECURITY_DIFFERENCES.get(entry.id) ?? fail(`missing security-difference rationale for ${entry.id}`);
@@ -1320,7 +1364,8 @@ function rationaleFor(entry, decision) {
           ? 'currently rejected at load; '
           : '';
       const loss = gapLoss(entry).replace(/\.$/, '');
-      return `behavior-gap (${REMAINING_WAVE}, ${category.label}): ${state}${loss}. Not runtime-owned: no runtime policy substitutes the client-visible effect.`;
+      const suffix = GAP_RATIONALE_SUFFIX.get(entry.id) ?? '';
+      return `behavior-gap (${REMAINING_WAVE}, ${category.label}): ${state}${loss}. Not runtime-owned: no runtime policy substitutes the client-visible effect.${suffix}`;
     }
     case 'out-of-profile':
       return `out-of-profile: ${outOfProfileReason(entry)}`;
@@ -1427,8 +1472,8 @@ function renderHeader(inventory, catalog) {
   implemented unless the catalog says \`executable\` and the evidence reference was
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
-- **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a and
-  3a-2.** The code, tests, generated operator matrix and the re-synced directive
+- **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
+  3a-2 and 3b.** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -1436,8 +1481,10 @@ function renderHeader(inventory, catalog) {
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
   policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
-  (autoindex family, empty_gif, stub_status) are recorded as completed in section 3,
-  and every one of them is asserted executable by \`--verify-evidence\`.
+  (autoindex family, empty_gif, stub_status) and Wave 3b (h2 stream ceiling,
+  proxy_method, stream allow/deny and literal return) are recorded as completed in
+  section 3, and every one of them is asserted executable by
+  \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -1542,7 +1589,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a and 3a-2 landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2 and 3b landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -1577,7 +1624,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-Wave-2b worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-Wave-3b worktree, not a hand-maintained table; section 6 states
    the exact commands and the wave-3 landing procedure.
 `;
 }
@@ -1659,7 +1706,8 @@ construction, limit status codes, range ceilings and typed-TOML map/chain materi
 Wave 2b closed the proxy response-header policy, internal locations, slash merging and
 request-header acceptance; Wave 3a added the header-level charset family and the gzip
 user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plus the
-empty_gif and stub_status location handlers.
+empty_gif and stub_status location handlers; Wave 3b added the advertised HTTP/2
+stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return.
 
 ${completedTable}
 ${completedRows}
@@ -1674,24 +1722,24 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
     'behavior-gap',
   )} directives)
 
-These are the categories \`specs/nginx-gap.catalog.json\` lists as still open after
-Wave 3a-2 (plus the addition filter and referer module the same wave note names as
-remaining in this area). An accepted-unenforced row is silently ignored today; a
-rejected row fails the configuration load. Both are real migration gaps, so every row carries the
+These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
+Wave 3b. An accepted-unenforced row is silently ignored today; a rejected row fails
+the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
 
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest operator payoff is the stream module gaps (a whole
-transport plane), followed by the HTTP/2 tuning set (configurations that declare HTTP/2
-limits are rejected today even though HTTP/2 itself executes). The body addition filter
-and the referer module are medium-sized features that pull in a bounded subrequest engine
-and \`$invalid_referer\` variable threading respectively. \`proxy_method\`,
-\`chunked_transfer_encoding\` and the static open-file cache are smaller, bounded
-changes. The OCSP/trust-chain rows are limited by the rustls capability gap recorded as
-\`tls.ocsp-stapling: missing\` in the gap catalog.
+Within the backlog, the stream advanced gaps are the largest remaining operator
+surface (connection limits, variable assignment, preread/proxy-protocol timeouts,
+variable maps and upstream TLS identity). The body addition filter and the referer
+module are medium-sized features that pull in a bounded subrequest engine and
+\`$invalid_referer\` variable threading respectively. \`chunked_transfer_encoding\` and the
+static open-file cache are smaller, bounded changes. Two rows are architecture-blocked
+rather than effort-blocked: \`http2_chunk_size\` (the pinned hyper/h2 ingress exposes no
+DATA-chunk knob) and the OCSP/trust-chain rows (the pinned rustls stack exposes no
+stapling/OCSP-fetch surface, so no bounded static form exists).
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -1739,7 +1787,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1870,7 +1918,6 @@ Representative implementation cost:
 | gRPC upstream (\`ngx_http_grpc_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_grpc_module').length} | an HTTP/2 gRPC transport with trailers, status mapping, :authority handling, upstream TLS/SNI policy, retry policy - a second proxy protocol family. |
 | Rejected proxy knobs (\`ngx_http_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_proxy_module').length} | cache locking/background update/bypass/method sets, body substitution, upstream-trust knobs: each is a bounded policy feature with its own security review. |
 | Rejected stream plumbing (\`ngx_stream_proxy_module\`) | ${failClosed.filter((row) => row.module === 'ngx_stream_proxy_module').length} | buffer sizing, TLS library caches/commands/CRL/password-file knobs; the routing/identity subset is instead in the wave-3 backlog. |
-| HTTP/2 tuning (\`ngx_http_v2_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_v2_module').length} | the http2_* set is tracked as wave-3 backlog, so this module is expected to move rather than stay fail-closed. |
 | TLS extras (CRL/OCSP-response/ECH/ticket files) | ${failClosed.filter((row) => row.module === 'ngx_http_ssl_module' || row.module === 'ngx_stream_ssl_module').length} | rustls feature gaps (OCSP response handling, raw public keys, certificate compression, session ticket key files) plus a certificate-material pipeline. |
 | HTTP/3 + QUIC (\`ngx_http_v3_module\`, \`ngx_quic_bpf_module\`) | ${failClosed.filter((row) => row.module === 'ngx_http_v3_module' || row.module === 'ngx_quic_bpf_module').length} | a QUIC transport (UDP, TLS 1.3 QUIC keys, connection migration, congestion control) - a separate transport product, explicitly excluded by PRD section 4. |
 | Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | ${failClosed.filter((row) => ['ngx_http_ssi_filter_module', 'ngx_http_xslt_filter_module', 'ngx_http_image_filter_module', 'ngx_http_mp4_module', 'ngx_http_flv_module', 'ngx_http_empty_gif_module'].includes(row.module)).length} | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
@@ -1927,8 +1974,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after Waves 3a/3a-2 landed and the Lead re-synced the
-catalog. The table lists the cumulative completed-wave rows and their current state:
+This refresh was regenerated after Wave 3b landed and the Lead re-synced the catalog.
+The table lists the cumulative completed-wave rows and their current state:
 
 | Directive | Wave | Current state |
 | --- | --- | --- |

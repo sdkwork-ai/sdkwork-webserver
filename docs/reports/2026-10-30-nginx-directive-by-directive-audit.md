@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `8f96a59e` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a and 3a-2 (code plus the re-synced directive catalog), on top of HEAD 8f96a59e |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `2676eb83` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2 and 3b (code plus the re-synced directive catalog), on top of HEAD 2676eb83 |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `4f47ce6a0541f8aa529a1820c886d83535dc4e67250bba9bad583e078290f8c3` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `cf0c452289907606d4c15c334f0e0086cc9ef1ffcdbe92f5b3aafa239a90d607` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -24,17 +24,19 @@
   implemented unless the catalog says `executable` and the evidence reference was
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
-- **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a and
-  3a-2.** The code, tests, generated operator matrix and the re-synced directive
+- **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
+  3a-2 and 3b.** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `8f96a59e`; the audit is regenerated against that post-wave catalog (evidence
+  `2676eb83`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
   policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
-  (autoindex family, empty_gif, stub_status) are recorded as completed in section 3,
-  and every one of them is asserted executable by `--verify-evidence`.
+  (autoindex family, empty_gif, stub_status) and Wave 3b (h2 stream ceiling,
+  proxy_method, stream allow/deny and literal return) are recorded as completed in
+  section 3, and every one of them is asserted executable by
+  `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` are generated/checked by
@@ -63,15 +65,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 111 | 14.9% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
-| `runtime-owned` | 131 | 17.6% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
+| `enforced` | 116 | 15.6% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `runtime-owned` | 143 | 19.2% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 55 | 7.4% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `behavior-gap` | 29 | 3.9% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 229 | 30.8% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
-| `fail-closed` | 201 | 27.0% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
+| `fail-closed` | 210 | 28.2% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 111 + 131 + 17 + 55 + 229 + 201 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 116 + 143 + 17 + 29 + 229 + 210 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -83,11 +85,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 111 | 111 | 0 | 0 | 0 | 0 | 0 |
-| `accepted-unenforced` | 160 | 0 | 131 | 17 | 12 | 0 | 0 |
-| `unsupported-fail-closed` | 244 | 0 | 0 | 0 | 43 | 0 | 201 |
+| `executable` | 116 | 116 | 0 | 0 | 0 | 0 | 0 |
+| `accepted-unenforced` | 171 | 0 | 143 | 17 | 11 | 0 | 0 |
+| `unsupported-fail-closed` | 228 | 0 | 0 | 0 | 18 | 0 | 210 |
 | `excluded` | 229 | 0 | 0 | 0 | 0 | 229 | 0 |
-| **total** | **744** | 111 | 131 | 17 | 55 | 229 | 201 |
+| **total** | **744** | 116 | 143 | 17 | 29 | 229 | 210 |
 
 ### 1.3 Wave Completion Status
 
@@ -98,8 +100,9 @@ wave-3 backlog entries that are currently rejected.
 | `wave 2b` | 9 | done - proxy response-header/cookie policy, internal locations, merge_slashes, request-header acceptance (catalog: executable) |
 | `wave 3a` | 6 | done - charset family (header-level behaviour) and gzip refinements (gzip_disable, gzip_proxied) (catalog: executable) |
 | `wave 3a-2` | 6 | done - autoindex family (on/exact_size/localtime/format), empty_gif and stub_status location handlers (catalog: executable) |
-| wave 3 backlog | 55 | open - 8 categories, see section 3.2 |
-| **total planned work** | **87** | 32 completed, 55 remaining |
+| `wave 3b` | 5 | done - HTTP/2 stream ceiling, proxy_method, stream allow/deny and literal stream return (catalog: executable) |
+| wave 3 backlog | 29 | open - 7 categories, see section 3.2 |
+| **total planned work** | **66** | 37 completed, 29 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -111,24 +114,24 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 95 | 74 | 9 | 26 | 174 | 169 |
+| `http` | 547 | 97 | 86 | 9 | 12 | 174 | 169 |
 | `mail` | 51 | 0 | 0 | 0 | 0 | 51 | 0 |
-| `stream` | 105 | 15 | 23 | 8 | 29 | 3 | 27 |
-| **total** | **744** | 111 | 131 | 17 | 55 | 229 | 201 |
+| `stream` | 105 | 18 | 23 | 8 | 17 | 3 | 36 |
+| **total** | **744** | 116 | 143 | 17 | 29 | 229 | 210 |
 
 ### 1.5 Headline Findings
 
-1. **111 of 744 directives (14.9%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a and 3a-2 landed 32 directives. 131 more are deliberately runtime-owned (17.6%) and 17 are intentional, spec-justified security differences.
-2. **55 behavior-gap directives remain in the wave-3 backlog** (7.4% of the surface): HTTP/1 framing policy (1), body addition filter (3), referer module (1), HTTP/2 tuning (14), static open-file cache (3), proxied method override (1), OCSP stapling / trust chain (HTTP) (3), stream module gaps (29).
-3. **430 of 744 directives (57.8%) are excluded or rejected, not silently emulated.** 229 are explicit PRD section 4 profile exclusions and 201 are fail-closed rejections outside the planned backlog.
+1. **116 of 744 directives (15.6%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2 and 3b landed 37 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
+2. **29 behavior-gap directives remain in the wave-3 backlog** (3.9% of the surface): HTTP/1 framing policy (1), body addition filter (3), referer module (1), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP stapling / trust chain (6), stream advanced gaps (14).
+3. **439 of 744 directives (59.0%) are excluded or rejected, not silently emulated.** 229 are explicit PRD section 4 profile exclusions and 210 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
    all 11 "enforced typed key" migration actions now
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-Wave-2b worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-Wave-3b worktree, not a hand-maintained table; section 6 states
    the exact commands and the wave-3 landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -729,7 +732,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `proxy_intercept_errors` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].errorPages / routes[].errorPages`; evidence tests/nginx/full-surface/probe.py::case_proxy_intercept_errors. |
 | `proxy_limit_rate` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
 | `proxy_max_temp_file_size` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx proxy tuning value is ignored; the runtime proxy policy applies. |
-| `proxy_method` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, proxied method override): the proxied HTTP method override is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_method` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `routes[].resource.proxy.proxyMethod`; evidence tests/nginx/differential-http/battery.py::proxy.method-override-post. |
 | `proxy_next_upstream` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the upstream retry condition list is not applied; the runtime uses its own retry policy. |
 | `proxy_next_upstream_timeout` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
 | `proxy_next_upstream_tries` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
@@ -909,11 +912,11 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `ssl_session_ticket_key` | http, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: TLS library feature not implemented behind rustls (ECH, certificate compression, CRL/password-file, session-ticket-file, reject-handshake, cache); rejected at materialization. |
 | `ssl_session_tickets` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: TLS session ticket policy is not applied. |
 | `ssl_session_timeout` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured timeout is ignored; the runtime enforces its own bounded timeout. |
-| `ssl_stapling` | http, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain (HTTP)): OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing). Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_stapling` | http, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain): OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing). Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface. |
 | `ssl_stapling_file` | http, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: TLS library feature not implemented behind rustls (ECH, certificate compression, CRL/password-file, session-ticket-file, reject-handshake, cache); rejected at materialization. |
 | `ssl_stapling_responder` | http, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: TLS library feature not implemented behind rustls (ECH, certificate compression, CRL/password-file, session-ticket-file, reject-handshake, cache); rejected at materialization. |
-| `ssl_stapling_verify` | http, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain (HTTP)): OCSP stapling verification does not run. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ssl_trusted_certificate` | http, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain (HTTP)): the OCSP/verification trust chain is not used. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_stapling_verify` | http, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain): OCSP stapling verification does not run. Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface. |
+| `ssl_trusted_certificate` | http, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain): the OCSP/verification trust chain is not used. Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface. |
 | `ssl_verify_client` | http, http-server | executable | **enforced** | enforced: the value reaches `listeners[].tls.clientAuth`; evidence crates/sdkwork-webserver-core/tests/nginx_config_surface.rs::every_supported_directive_family_materializes. |
 | `ssl_verify_depth` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx TLS policy input is ignored; the runtime TLS stack owns this setting. |
 
@@ -1071,20 +1074,20 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
 | `http2` | http, http-server | executable | **enforced** | enforced: the value reaches `listeners[].protocols (h2)`; evidence tests/nginx/full-surface/probe.py::case_http2_alpn_settings. |
-| `http2_body_preread_size` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_chunk_size` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_idle_timeout` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_max_concurrent_pushes` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_max_concurrent_streams` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_max_field_size` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_max_header_size` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_max_requests` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_pool_size` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_push` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_push_preload` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_recv_buffer_size` | http | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_recv_timeout` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `http2_streams_index_size` | http, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 tuning): currently rejected at load; a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `http2_body_preread_size` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. |
+| `http2_chunk_size` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/2 DATA chunking): currently rejected at load; a stock nginx.conf that tunes the HTTP/2 DATA-frame chunk size fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `http2_idle_timeout` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_max_concurrent_pushes` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_max_concurrent_streams` | http, http-server | executable | **enforced** | enforced: the value reaches `limits.http2MaxConcurrentStreams (advertised as h2 SETTINGS_MAX_CONCURRENT_STREAMS)`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs::http2_settings_publish_the_configured_stream_ceiling. Known difference: conflicting values at http/server levels fail closed (the ingress profile owns one ceiling); the runtime always advertises SETTINGS_MAX_HEADER_LIST_SIZE from its own ingress profile; nginx 1.29.6 advertises none because http2_max_header_size is obsolete there. |
+| `http2_max_field_size` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_max_header_size` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_max_requests` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_pool_size` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. |
+| `http2_push` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_push_preload` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_recv_buffer_size` | http | accepted-unenforced | **runtime-owned** | runtime-owned: ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. |
+| `http2_recv_timeout` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. |
+| `http2_streams_index_size` | http, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. |
 
 #### `ngx_http_v3_module` (8 directives)
 
@@ -1214,8 +1217,8 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `allow` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `deny` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `allow` | stream, stream-server | executable | **enforced** | enforced: the value reaches `streamServers[].access (ordered AccessRuleConfig; first match wins)`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes. Known difference: a denied peer is closed with no bytes, matching nginx stream access. |
+| `deny` | stream, stream-server | executable | **enforced** | enforced: the value reaches `streamServers[].access (ordered AccessRuleConfig; first match wins)`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes. Known difference: a denied peer is closed with no bytes, matching nginx stream access. |
 
 #### `ngx_stream_core_module` (14 directives)
 
@@ -1223,13 +1226,13 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | --- | --- | --- | --- | --- |
 | `error_log` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx log target/format is ignored; use SDKWork observability. |
 | `listen` | stream-server | executable | **enforced** | enforced: the value reaches `streams[].bind/port/protocol`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/stream_proxy.rs::forwards_bytes_to_a_literal_tcp_target. |
-| `preread_buffer_size` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream preread buffer/timeout and stream server_name tuning is owned by the runtime stream plane; rejected. |
-| `preread_timeout` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream preread buffer/timeout and stream server_name tuning is owned by the runtime stream plane; rejected. |
-| `proxy_protocol_timeout` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream preread buffer/timeout and stream server_name tuning is owned by the runtime stream plane; rejected. |
+| `preread_buffer_size` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: preread_timeout and proxy_protocol_timeout are in the wave-3 backlog; preread_buffer_size and stream server_name are not planned. |
+| `preread_timeout` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_protocol_timeout` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `resolver` | stream, stream-server, stream-upstream | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx resolver configuration is not used; the runtime resolves hostnames itself. |
 | `resolver_timeout` | stream, stream-server, stream-upstream | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx resolver timeout is not applied. |
 | `server` | stream, stream-upstream | executable | **enforced** | enforced: the value reaches `streams[]`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/stream_proxy.rs::forwards_bytes_to_a_literal_tcp_target. |
-| `server_name` | stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream preread buffer/timeout and stream server_name tuning is owned by the runtime stream plane; rejected. |
+| `server_name` | stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: preread_timeout and proxy_protocol_timeout are in the wave-3 backlog; preread_buffer_size and stream server_name are not planned. |
 | `server_names_hash_bucket_size` | stream | accepted-unenforced | **runtime-owned** | runtime-owned: hash-table sizing is ignored (runtime-owned data structures). |
 | `server_names_hash_max_size` | stream | accepted-unenforced | **runtime-owned** | runtime-owned: hash-table sizing is ignored (runtime-owned data structures). |
 | `tcp_nodelay` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly. |
@@ -1254,10 +1257,10 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `limit_conn` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `limit_conn_dry_run` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `limit_conn` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `limit_conn_dry_run` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `limit_conn_log_level` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the connection-limit log level is not configurable from nginx.conf. |
-| `limit_conn_zone` | stream | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `limit_conn_zone` | stream | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_stream_log_module` (3 directives)
 
@@ -1271,7 +1274,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `map` | stream | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): variable maps are not evaluated; every mapped variable resolves as missing. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `map` | stream | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): variable maps are not evaluated; every mapped variable resolves as missing. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `map_hash_bucket_size` | stream | accepted-unenforced | **runtime-owned** | runtime-owned: hash-table sizing is ignored (runtime-owned data structures). |
 | `map_hash_max_size` | stream | accepted-unenforced | **runtime-owned** | runtime-owned: hash-table sizing is ignored (runtime-owned data structures). |
 
@@ -1285,68 +1288,68 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `pass` | stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `pass` | stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream `pass` to a named target is not implemented and is not part of the wave-3 backlog. |
 
 #### `ngx_stream_proxy_module` (32 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `proxy_bind` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_bind` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
 | `proxy_buffer_size` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured buffer sizing is ignored; the runtime owns bounded buffering. |
 | `proxy_connect_timeout` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured timeout is ignored; the runtime enforces its own bounded timeout. |
-| `proxy_download_rate` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_downstream_buffer` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile. |
-| `proxy_half_close` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_download_rate` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_downstream_buffer` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_half_close` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
 | `proxy_next_upstream` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the upstream retry condition list is not applied; the runtime uses its own retry policy. |
-| `proxy_next_upstream_timeout` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_next_upstream_tries` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_next_upstream_timeout` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_next_upstream_tries` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
 | `proxy_pass` | stream-server | executable | **enforced** | enforced: the value reaches `streams[].target`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/stream_proxy.rs::forwards_bytes_to_a_literal_tcp_target. |
 | `proxy_protocol` | stream, stream-server | executable | **enforced** | enforced: the value reaches `streams[].proxyProtocol`; evidence crates/sdkwork-webserver-core/tests/nginx_config_surface.rs::every_supported_directive_family_materializes. |
-| `proxy_requests` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_responses` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_requests` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_responses` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
 | `proxy_socket_keepalive` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx proxy tuning value is ignored; the runtime proxy policy applies. |
-| `proxy_ssl` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_ssl_certificate` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_ssl_certificate_cache` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile. |
-| `proxy_ssl_certificate_key` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl_certificate` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl_certificate_cache` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_ssl_certificate_key` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `proxy_ssl_ciphers` | stream, stream-server | accepted-unenforced | **security-difference** | intentional: upstream TLS cipher policy is owned by the typed TOML/rustls configuration (stream namespace). |
-| `proxy_ssl_conf_command` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile. |
-| `proxy_ssl_crl` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile. |
-| `proxy_ssl_name` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_ssl_password_file` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile. |
+| `proxy_ssl_conf_command` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_ssl_crl` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_ssl_name` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl_password_file` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
 | `proxy_ssl_protocols` | stream, stream-server | accepted-unenforced | **security-difference** | intentional: upstream TLS protocol window is owned by the typed TOML/rustls configuration (stream namespace). |
-| `proxy_ssl_server_name` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl_server_name` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `proxy_ssl_session_reuse` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: upstream TLS session reuse policy is not applied. |
-| `proxy_ssl_trusted_certificate` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_ssl_verify` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl_trusted_certificate` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `proxy_ssl_verify` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `proxy_ssl_verify_depth` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the upstream certificate chain depth is not applied. |
 | `proxy_timeout` | stream, stream-server | executable | **enforced** | enforced: the value reaches `streams[].proxyTimeoutMs`; evidence crates/sdkwork-webserver-core/tests/nginx_config_surface.rs::every_supported_directive_family_materializes. |
-| `proxy_upload_rate` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `proxy_upstream_buffer` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy plumbing that is not part of the wave-3 stream backlog (buffer sizing, TLS library caches/commands/CRL/password files); rejected under the PRD section 4 stream profile. |
+| `proxy_upload_rate` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
+| `proxy_upstream_buffer` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream proxy buffer sizing, TLS library caches/commands/CRL/password files and pacing/counting knobs are not planned; upstream TLS identity is in the wave-3 backlog. |
 
 #### `ngx_stream_realip_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `set_real_ip_from` | stream, stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `set_real_ip_from` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream PROXY-protocol realip rewriting is not implemented and is not part of the wave-3 backlog. |
 
 #### `ngx_stream_return_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `return` | stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `return` | stream-server | executable | **enforced** | enforced: the value reaches `streamServers[].returnValue (literal value written then close; mutually exclusive with proxyPass)`; evidence crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_return_writes_the_literal_value_and_closes. Known difference: variable-valued stream return is not supported (no stream variable engine) and fails closed; literal values are 1..4096 bytes. |
 
 #### `ngx_stream_set_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `set` | stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `set` | stream-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream advanced gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_stream_split_clients_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `split_clients` | stream | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): currently rejected at load; a stock stream sidecar that uses this stream-plane feature fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `split_clients` | stream | unsupported-fail-closed | **fail-closed** | fail-closed: stream split_clients is a map-style variable feature that is not implemented; the planned stream variable work is the stream map. |
 
 #### `ngx_stream_ssl_module` (31 directives)
 
@@ -1376,11 +1379,11 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `ssl_session_ticket_key` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream TLS library feature not implemented behind rustls (ECH, ALPN override, CRL/OCSP responder, password-file, session-ticket-file, reject-handshake, cache); rejected at materialization. |
 | `ssl_session_tickets` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: TLS session ticket policy is not applied. |
 | `ssl_session_timeout` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured timeout is ignored; the runtime enforces its own bounded timeout. |
-| `ssl_stapling` | stream, stream-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing). Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_stapling` | stream, stream-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain): OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing). Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface. |
 | `ssl_stapling_file` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream TLS library feature not implemented behind rustls (ECH, ALPN override, CRL/OCSP responder, password-file, session-ticket-file, reject-handshake, cache); rejected at materialization. |
 | `ssl_stapling_responder` | stream, stream-server | unsupported-fail-closed | **fail-closed** | fail-closed: stream TLS library feature not implemented behind rustls (ECH, ALPN override, CRL/OCSP responder, password-file, session-ticket-file, reject-handshake, cache); rejected at materialization. |
-| `ssl_stapling_verify` | stream, stream-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): OCSP stapling verification does not run. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ssl_trusted_certificate` | stream, stream-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, stream module gaps): the OCSP/verification trust chain is not used. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_stapling_verify` | stream, stream-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain): OCSP stapling verification does not run. Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface. |
+| `ssl_trusted_certificate` | stream, stream-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, OCSP stapling / trust chain): the OCSP/verification trust chain is not used. Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface. |
 | `ssl_verify_client` | stream, stream-server | executable | **enforced** | enforced: the value reaches `streams[].tls.clientAuth`; evidence crates/sdkwork-webserver-core/tests/nginx_config_surface.rs::every_supported_directive_family_materializes. |
 | `ssl_verify_depth` | stream, stream-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx TLS policy input is ignored; the runtime TLS stack owns this setting. |
 
@@ -1430,7 +1433,8 @@ construction, limit status codes, range ceilings and typed-TOML map/chain materi
 Wave 2b closed the proxy response-header policy, internal locations, slash merging and
 request-header acceptance; Wave 3a added the header-level charset family and the gzip
 user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plus the
-empty_gif and stub_status location handlers.
+empty_gif and stub_status location handlers; Wave 3b added the advertised HTTP/2
+stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return.
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1466,18 +1470,22 @@ empty_gif and stub_status location handlers.
 | `wave 3a-2` | `autoindex_format` (`http:autoindex_format`) | `...autoindex.format (html\|json\|jsonp\|xml)` | `tests/nginx/differential-http/battery.py::autoindex.json` |
 | `wave 3a-2` | `empty_gif` (`http:empty_gif`) | `resource kind EmptyGif (location handler: canonical 43-byte GIF, image/gif, nginx fixed Last-Modified)` | `tests/nginx/differential-http/battery.py::empty-gif.get` |
 | `wave 3a-2` | `stub_status` (`http:stub_status`) | `resource kind StubStatus (location handler backed by data-plane metrics, loopback-gated)` | `tests/nginx/differential-http/battery.py::stub-status.get` |
+| `wave 3b` | `http2_max_concurrent_streams` (`http:http2_max_concurrent_streams`) | `limits.http2MaxConcurrentStreams (advertised as h2 SETTINGS_MAX_CONCURRENT_STREAMS)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs::http2_settings_publish_the_configured_stream_ceiling` |
+| `wave 3b` | `proxy_method` (`http:proxy_method`) | `routes[].resource.proxy.proxyMethod` | `tests/nginx/differential-http/battery.py::proxy.method-override-post` |
+| `wave 3b` | `allow` (`stream:allow`) | `streamServers[].access (ordered AccessRuleConfig; first match wins)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` |
+| `wave 3b` | `deny` (`stream:deny`) | `streamServers[].access (ordered AccessRuleConfig; first match wins)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` |
+| `wave 3b` | `return` (`stream:return`) | `streamServers[].returnValue (literal value written then close; mutually exclusive with proxyPass)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_return_writes_the_literal_value_and_closes` |
 
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (wave 3 backlog, 55 directives)
+### 3.2 Remaining Behavior-Gap Backlog (wave 3 backlog, 29 directives)
 
-These are the categories `specs/nginx-gap.catalog.json` lists as still open after
-Wave 3a-2 (plus the addition filter and referer module the same wave note names as
-remaining in this area). An accepted-unenforced row is silently ignored today; a
-rejected row fails the configuration load. Both are real migration gaps, so every row carries the
+These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
+Wave 3b. An accepted-unenforced row is silently ignored today; a rejected row fails
+the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
 
@@ -1501,24 +1509,11 @@ have to change, and the tests to add.
 | --- | --- | --- | --- | --- | --- | --- |
 | `valid_referers` | medium | unsupported-fail-closed | a stock nginx.conf that allow-lists Referer values fails to activate. | the request allow-list decision and the `$invalid_referer` variable are request-visible; nginx normally consumes them through `if`, so this also depends on threading the variable through the supported variable surface. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/request_gate.rs + data_plane/handler.rs ($invalid_referer variable), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | referer allow-list matrix plus differential valid_referers cases |
 
-### 3.2.4 HTTP/2 tuning - 14 directive(s)
+### 3.2.4 HTTP/2 DATA chunking - 1 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `http2_body_preread_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_chunk_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_idle_timeout` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_max_concurrent_pushes` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_max_concurrent_streams` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_max_field_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_max_header_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_max_requests` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_pool_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_push` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_push_preload` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_recv_buffer_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_recv_timeout` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
-| `http2_streams_index_size` | medium | unsupported-fail-closed | a stock HTTP/2 edge that tunes flow control, header size, or request limits fails to activate. | http-core-v1 already terminates HTTP/2 (the `http2` directive is executable); the nginx tuning knobs of the same protocol are in-profile settings, and today they reject the configuration rather than map onto the runtime H2 limits. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | limit mapping unit tests plus an HTTP/2 SETTINGS/size differential (header list, concurrent streams, request count) |
+| `http2_chunk_size` | medium (blocked upstream) | unsupported-fail-closed | a stock nginx.conf that tunes the HTTP/2 DATA-frame chunk size fails to activate. | the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob, so there is no runtime field to map it onto; every other HTTP/2 tuning directive is now executable, a nginx-obsolete accepted no-op, or runtime-owned ingress buffer sizing. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | h2 DATA-chunking differential once the pinned hyper/h2 exposes the knob; blocked upstream until then |
 
 ### 3.2.5 static open-file cache - 3 directive(s)
 
@@ -1528,64 +1523,47 @@ have to change, and the tests to add.
 | `open_file_cache_min_uses` | medium | accepted-unenforced | the static-file descriptor cache usage threshold is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
 | `open_file_cache_valid` | medium | accepted-unenforced | the static-file descriptor cache TTL is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
 
-### 3.2.6 proxied method override - 1 directive(s)
+### 3.2.6 OCSP stapling / trust chain - 6 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `proxy_method` | high | accepted-unenforced | the proxied HTTP method override is not applied | the upstream request method is protocol-visible and changes upstream semantics. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_client.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | method-override unit test plus a differential upstream-method case |
+| `ssl_stapling` | medium (architecture blocker, commercial impact bounded) | accepted-unenforced | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic |
+| `ssl_stapling_verify` | medium (architecture blocker, commercial impact bounded) | accepted-unenforced | OCSP stapling verification does not run | the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic |
+| `ssl_trusted_certificate` | medium (architecture blocker, commercial impact bounded) | accepted-unenforced | the OCSP/verification trust chain is not used | the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic |
+| `ssl_stapling` | medium (architecture blocker, commercial impact bounded) | accepted-unenforced | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic |
+| `ssl_stapling_verify` | medium (architecture blocker, commercial impact bounded) | accepted-unenforced | OCSP stapling verification does not run | the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic |
+| `ssl_trusted_certificate` | medium (architecture blocker, commercial impact bounded) | accepted-unenforced | the OCSP/verification trust chain is not used | the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic |
 
-### 3.2.7 OCSP stapling / trust chain (HTTP) - 3 directive(s)
-
-| Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
-| --- | --- | --- | --- | --- | --- | --- |
-| `ssl_stapling` | medium (commercial impact bounded) | accepted-unenforced | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | stapling is a client-visible TLS handshake property and the gap catalog records `tls.ocsp-stapling` as missing. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | stapling unit test plus a TLS handshake differential with a stapled response |
-| `ssl_stapling_verify` | medium (commercial impact bounded) | accepted-unenforced | OCSP stapling verification does not run | stapling is a client-visible TLS handshake property and the gap catalog records `tls.ocsp-stapling` as missing. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | stapling unit test plus a TLS handshake differential with a stapled response |
-| `ssl_trusted_certificate` | medium (commercial impact bounded) | accepted-unenforced | the OCSP/verification trust chain is not used | stapling is a client-visible TLS handshake property and the gap catalog records `tls.ocsp-stapling` as missing. | crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution | stapling unit test plus a TLS handshake differential with a stapled response |
-
-### 3.2.8 stream module gaps - 29 directive(s)
+### 3.2.7 stream advanced gaps - 14 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `map` | high | accepted-unenforced | variable maps are not evaluated; every mapped variable resolves as missing | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `ssl_stapling` | high | accepted-unenforced | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `ssl_stapling_verify` | high | accepted-unenforced | OCSP stapling verification does not run | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `ssl_trusted_certificate` | high | accepted-unenforced | the OCSP/verification trust chain is not used | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `allow` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `deny` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `limit_conn` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `limit_conn_zone` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `limit_conn_dry_run` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `set_real_ip_from` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `pass` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `return` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `set` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `split_clients` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_bind` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_half_close` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_next_upstream_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_next_upstream_tries` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_requests` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_responses` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_download_rate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_upload_rate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_certificate_key` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_server_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_verify` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_trusted_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | generic stream proxying is in profile and the HTTP plane already executes the analogous feature (access ACL, connection limits, realip, routing primitives, upstream TLS identity); the stream plane does not, and variable maps/OCSP affect stream routing and handshakes. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for each feature plus a stream differential slice against nginx 1.29.6 |
+| `limit_conn` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `limit_conn_zone` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `limit_conn_dry_run` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `set` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `preread_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_protocol_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `map` | high | accepted-unenforced | variable maps are not evaluated; every mapped variable resolves as missing | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_certificate_key` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_server_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_verify` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_trusted_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
 
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest operator payoff is the stream module gaps (a whole
-transport plane), followed by the HTTP/2 tuning set (configurations that declare HTTP/2
-limits are rejected today even though HTTP/2 itself executes). The body addition filter
-and the referer module are medium-sized features that pull in a bounded subrequest engine
-and `$invalid_referer` variable threading respectively. `proxy_method`,
-`chunked_transfer_encoding` and the static open-file cache are smaller, bounded
-changes. The OCSP/trust-chain rows are limited by the rustls capability gap recorded as
-`tls.ocsp-stapling: missing` in the gap catalog.
+Within the backlog, the stream advanced gaps are the largest remaining operator
+surface (connection limits, variable assignment, preread/proxy-protocol timeouts,
+variable maps and upstream TLS identity). The body addition filter and the referer
+module are medium-sized features that pull in a bounded subrequest engine and
+`$invalid_referer` variable threading respectively. `chunked_transfer_encoding` and the
+static open-file cache are smaller, bounded changes. Two rows are architecture-blocked
+rather than effort-blocked: `http2_chunk_size` (the pinned hyper/h2 ingress exposes no
+DATA-chunk knob) and the OCSP/trust-chain rows (the pinned rustls stack exposes no
+stapling/OCSP-fetch surface, so no bounded static form exists).
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
@@ -1596,9 +1574,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 64 `executable` directive rows was drawn,
+- A sample of 69 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1607,7 +1585,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (64 directive rows)
+### 4.2 Verified Sample (69 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -1675,6 +1653,11 @@ compression layer owns the level).
 | `http:autoindex_format` | `autoindex_format renders html, json, jsonp and xml listings` | `tests/nginx/differential-http/battery.py::autoindex.json` | differential: the JSON shape matches; jsonp validates the callback and downgrades to JSON without one; an invalid callback is 400; XML matches | verified |
 | `http:empty_gif` | `empty_gif serves the canonical 1x1 transparent GIF` | `tests/nginx/differential-http/battery.py::empty-gif.get` | differential: the exact 43-byte image/gif body and fixed Last-Modified; HEAD keeps headers without a body and POST is 405 | verified |
 | `http:stub_status` | `stub_status serves the nginx status page from runtime metrics` | `tests/nginx/differential-http/battery.py::stub-status.get` | differential: field shape and plain-text headers match nginx (counters canonicalised as process-local); HEAD and 405 behaviour match; location-only and loopback-gated | verified |
+| `http:http2_max_concurrent_streams` | `http2_max_concurrent_streams reaches the advertised h2 SETTINGS ceiling` | `crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs::http2_settings_publish_the_configured_stream_ceiling` | performs a real TLS/ALPN h2 handshake and parses the server SETTINGS frame, asserting SETTINGS_MAX_CONCURRENT_STREAMS equals the configured value (and that an oversized header list is rejected) | verified |
+| `http:proxy_method` | `proxy_method overrides the upstream request method` | `tests/nginx/differential-http/battery.py::proxy.method-override-post` | real-nginx differential: the client GET is forwarded upstream as POST against nginx 1.29.6 | verified |
+| `stream:allow` | `stream allow is an ordered first-match peer ACL` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` | an allow-first rule proxies the loopback connection while a deny-first rule on the same peer closes it with no bytes | verified |
+| `stream:deny` | `stream deny closes the denied peer` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` | the deny-first stream listener accepts and closes the connection without proxying, matching nginx stream access semantics | verified |
+| `stream:return` | `stream return writes the literal value and closes` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_return_writes_the_literal_value_and_closes` | a configured literal `return` value is written to the client and the connection closes (1..4096 bytes; variable values fail closed) | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -1720,7 +1703,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-111 executable rows cite only the generic
+116 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -1731,7 +1714,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (111 <=> 111). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (116 <=> 116). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -1739,17 +1722,17 @@ Consistent: `executable` <=> `enforced` in both directions (111 <=> 111). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 111 | 14.9% |
+| `enforced` (actually nginx-compatible behavior) | 116 | 15.6% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 55 | 7.4% |
-| `runtime-owned` (deliberately not nginx value) | 131 | 17.6% |
+| `behavior-gap` (planned toward compatibility) | 29 | 3.9% |
+| `runtime-owned` (deliberately not nginx value) | 143 | 19.2% |
 | `out-of-profile` (PRD section 4 exclusion) | 229 | 30.8% |
-| `fail-closed` (rejected, not planned) | 201 | 27.0% |
+| `fail-closed` (rejected, not planned) | 210 | 28.2% |
 
-561 of 744 directives (75.4%) are
+582 of 744 directives (78.2%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 111 executed directives plus the 55 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 116 executed directives plus the 29 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (229 directives)
@@ -1785,11 +1768,12 @@ What implementing each group would actually require:
 | GeoIP | 8 | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | 1 | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
-### 5.3 Fail-Closed Groups (201 directives, top modules)
+### 5.3 Fail-Closed Groups (210 directives, top modules)
 
 - `ngx_http_proxy_module` - 31 directive(s)
 - `ngx_http_grpc_module` - 29 directive(s)
 - `ngx_http_core_module` - 16 directive(s)
+- `ngx_stream_proxy_module` - 14 directive(s)
 - `ngx_stream_ssl_module` - 14 directive(s)
 - `ngx_http_ssl_module` - 13 directive(s)
 - `ngx_http_userid_filter_module` - 9 directive(s)
@@ -1797,14 +1781,13 @@ What implementing each group would actually require:
 - `ngx_http_image_filter_module` - 7 directive(s)
 - `ngx_http_ssi_filter_module` - 7 directive(s)
 - `ngx_http_xslt_filter_module` - 6 directive(s)
-- `ngx_stream_proxy_module` - 6 directive(s)
 - `ngx_http_rewrite_module` - 5 directive(s)
 - `ngx_http_browser_module` - 4 directive(s)
 - `ngx_http_dav_module` - 4 directive(s)
 - `ngx_http_mp4_module` - 4 directive(s)
-- `ngx_stream_core_module` - 4 directive(s)
 - `ngx_http_headers_filter_module` - 3 directive(s)
 - `ngx_http_gzip_filter_module` - 3 directive(s)
+- `ngx_http_auth_request_module` - 2 directive(s)
 
 Representative implementation cost:
 
@@ -1812,8 +1795,7 @@ Representative implementation cost:
 | --- | ---: | --- |
 | gRPC upstream (`ngx_http_grpc_module`) | 29 | an HTTP/2 gRPC transport with trailers, status mapping, :authority handling, upstream TLS/SNI policy, retry policy - a second proxy protocol family. |
 | Rejected proxy knobs (`ngx_http_proxy_module`) | 31 | cache locking/background update/bypass/method sets, body substitution, upstream-trust knobs: each is a bounded policy feature with its own security review. |
-| Rejected stream plumbing (`ngx_stream_proxy_module`) | 6 | buffer sizing, TLS library caches/commands/CRL/password-file knobs; the routing/identity subset is instead in the wave-3 backlog. |
-| HTTP/2 tuning (`ngx_http_v2_module`) | 0 | the http2_* set is tracked as wave-3 backlog, so this module is expected to move rather than stay fail-closed. |
+| Rejected stream plumbing (`ngx_stream_proxy_module`) | 14 | buffer sizing, TLS library caches/commands/CRL/password-file knobs; the routing/identity subset is instead in the wave-3 backlog. |
 | TLS extras (CRL/OCSP-response/ECH/ticket files) | 27 | rustls feature gaps (OCSP response handling, raw public keys, certificate compression, session ticket key files) plus a certificate-material pipeline. |
 | HTTP/3 + QUIC (`ngx_http_v3_module`, `ngx_quic_bpf_module`) | 9 | a QUIC transport (UDP, TLS 1.3 QUIC keys, connection migration, congestion control) - a separate transport product, explicitly excluded by PRD section 4. |
 | Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | 25 | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
@@ -1861,8 +1843,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after Waves 3a/3a-2 landed and the Lead re-synced the
-catalog. The table lists the cumulative completed-wave rows and their current state:
+This refresh was regenerated after Wave 3b landed and the Lead re-synced the catalog.
+The table lists the cumulative completed-wave rows and their current state:
 
 | Directive | Wave | Current state |
 | --- | --- | --- |
@@ -1898,13 +1880,18 @@ catalog. The table lists the cumulative completed-wave rows and their current st
 | `autoindex_format` (`http:autoindex_format`) | `wave 3a-2` | completed - `enforced` |
 | `empty_gif` (`http:empty_gif`) | `wave 3a-2` | completed - `enforced` |
 | `stub_status` (`http:stub_status`) | `wave 3a-2` | completed - `enforced` |
+| `http2_max_concurrent_streams` (`http:http2_max_concurrent_streams`) | `wave 3b` | completed - `enforced` |
+| `proxy_method` (`http:proxy_method`) | `wave 3b` | completed - `enforced` |
+| `allow` (`stream:allow`) | `wave 3b` | completed - `enforced` |
+| `deny` (`stream:deny`) | `wave 3b` | completed - `enforced` |
+| `return` (`stream:return`) | `wave 3b` | completed - `enforced` |
 
-All 32 rows above were re-spot-checked (section 4.2) and are
+All 37 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 55 wave-3 backlog rows are the only behavior-gap
+The 29 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 

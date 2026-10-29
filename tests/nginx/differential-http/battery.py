@@ -388,6 +388,21 @@ class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
                 ],
             )
             return
+        if path.endswith("/echo/method"):
+            length = int(self.headers.get("Content-Length") or 0)
+            payload = self.rfile.read(length) if length else b""
+            body = (
+                json.dumps(
+                    {
+                        "method": self.command,
+                        "body": payload.decode("utf-8", "replace"),
+                    },
+                    sort_keys=True,
+                ).encode()
+                + b"\n"
+            )
+            self._write(200, "application/json", body, extra=[("X-Upstream", "yes")])
+            return
         if path.endswith("/hop-response"):
             self._write(
                 200,
@@ -1417,6 +1432,10 @@ def main() -> int:
         case("autoindex.dir-redirect", "/list", host=AUTOINDEX_HOST)
         # HEAD keeps the generated headers and drops the body.
         case("autoindex.head", "/list/", host=AUTOINDEX_HOST, method="HEAD")
+
+        # ---- proxy_method ----------------------------------------------
+        # The client's GET is forwarded upstream as POST (`proxy_method POST`).
+        case("proxy.method-override-post", "/proxy-method/echo/method")
 
         # ---- charset family -------------------------------------------
         # The server-level `charset utf-8` is appended for the built-in

@@ -1791,19 +1791,63 @@ impl SemanticValidator {
             }) {
                 self.push(&path, "an http listener already owns this bind and port");
             }
-            match &stream.target {
-                StreamTargetConfig::Upstream { name } => {
-                    if !upstreams.contains_key(name.as_str()) {
-                        self.push(format!("{path}/target"), format!("unknown upstream {name}"));
-                    }
-                }
-                StreamTargetConfig::Literal { host, port } => {
-                    if host.is_empty() || *port == 0 {
+            // nginx stream `return` servers answer without an upstream; every
+            // other stream server needs exactly one target.
+            match (stream.return_value.as_deref(), &stream.target) {
+                (Some(value), Some(_)) => {
+                    self.push(
+                        &path,
+                        "a stream server cannot combine `return` with a proxy target",
+                    );
+                    if value.is_empty() {
                         self.push(
-                            format!("{path}/target"),
-                            "literal target must be a non-empty host and port",
+                            format!("{path}/returnValue"),
+                            "return value must not be empty",
                         );
                     }
+                }
+                (Some(value), None) => {
+                    if value.is_empty() {
+                        self.push(
+                            format!("{path}/returnValue"),
+                            "return value must not be empty",
+                        );
+                    }
+                    if value.len() > 4096 {
+                        self.push(
+                            format!("{path}/returnValue"),
+                            "return value must not exceed 4 KiB",
+                        );
+                    }
+                }
+                (None, None) => self.push(
+                    &path,
+                    "stream server requires a `target` or a `returnValue`",
+                ),
+                (None, Some(target)) => match target {
+                    StreamTargetConfig::Upstream { name } => {
+                        if !upstreams.contains_key(name.as_str()) {
+                            self.push(format!("{path}/target"), format!("unknown upstream {name}"));
+                        }
+                    }
+                    StreamTargetConfig::Literal { host, port } => {
+                        if host.is_empty() || *port == 0 {
+                            self.push(
+                                format!("{path}/target"),
+                                "literal target must be a non-empty host and port",
+                            );
+                        }
+                    }
+                },
+            }
+            for (rule_index, rule) in stream.access.iter().enumerate() {
+                let rule_path = format!("{path}/access/{rule_index}/network");
+                let trimmed = rule.network.trim();
+                if !(trimmed.eq_ignore_ascii_case("all")
+                    || trimmed.parse::<std::net::IpAddr>().is_ok()
+                    || trimmed.parse::<ipnet::IpNet>().is_ok())
+                {
+                    self.push(rule_path, "access network must be `all`, an IP, or a CIDR");
                 }
             }
             match &stream.tls {

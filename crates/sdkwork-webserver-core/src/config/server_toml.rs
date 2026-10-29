@@ -295,7 +295,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxyNextUpstream",
     "proxyHideHeader",
     "proxyRequestBuffering",
-    "proxyMethod",
     // upstream server flags the runtime owns via its own failure/ejection
     // policy (nginx `max_fails=` / `fail_timeout=` are accepted no-ops)
     "maxFails",
@@ -404,10 +403,6 @@ const UNENFORCED_BEHAVIOR_TOML_KEYS: &[(&str, &str)] = &[
     (
         "proxyNextUpstream",
         "retry eligibility follows the runtime bounded retry policy, not this key",
-    ),
-    (
-        "proxyMethod",
-        "the upstream method follows the client method, not this key",
     ),
     (
         "proxyHideHeader",
@@ -1901,6 +1896,7 @@ impl<'a> Materializer<'a> {
                 "proxyHttpVersion",
                 "proxyBuffering",
                 "proxyPassRequestHeaders",
+                "proxyMethod",
                 "allow",
                 "deny",
                 "limitReq",
@@ -1964,6 +1960,46 @@ impl<'a> Materializer<'a> {
             ));
         }
 
+        // nginx `proxy_method`: forwarded method replaces the client method.
+        let proxy_method = match location.get("proxyMethod") {
+            None => None,
+            Some(value) => {
+                let Some(method) = value.as_str() else {
+                    return Err(materialize_error(
+                        &format!("{path}.proxyMethod"),
+                        "`proxyMethod` must be a string HTTP method",
+                    ));
+                };
+                if method.is_empty()
+                    || !method.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric()
+                            || matches!(
+                                byte,
+                                b'!' | b'#'
+                                    | b'$'
+                                    | b'%'
+                                    | b'&'
+                                    | b'\''
+                                    | b'*'
+                                    | b'+'
+                                    | b'-'
+                                    | b'.'
+                                    | b'^'
+                                    | b'_'
+                                    | b'`'
+                                    | b'|'
+                                    | b'~'
+                            )
+                    })
+                {
+                    return Err(materialize_error(
+                        &format!("{path}.proxyMethod"),
+                        format!("`proxyMethod` value `{method}` is not a valid HTTP method token"),
+                    ));
+                }
+                Some(method.to_owned())
+            }
+        };
         if let Some(proxy_pass) = location.get("proxyPass").and_then(Value::as_str) {
             let proxy_pass_request_headers = location
                 .get("proxyPassRequestHeaders")
@@ -1993,7 +2029,7 @@ impl<'a> Materializer<'a> {
                 }
                 let merged_headers =
                     merge_proxy_set_headers(inherited_proxy_set_headers, &request_set_headers);
-                self.resources.push(json!({
+                let mut proxy_resource = json!({
                     "id": resource_id,
                     "type": "proxy",
                     "stripPrefix": false,
@@ -2001,7 +2037,11 @@ impl<'a> Materializer<'a> {
                     "upstreamRef": "",
                     "dynamicTarget": proxy_pass,
                     "proxyPassRequestHeaders": proxy_pass_request_headers,
-                }));
+                });
+                if let Some(method) = &proxy_method {
+                    proxy_resource["proxyMethod"] = Value::String(method.clone());
+                }
+                self.resources.push(proxy_resource);
             } else {
                 // Split the proxyPass URI part (nginx `proxy_pass` replacement
                 // semantics): a URI part replaces the matched location prefix.
@@ -2098,6 +2138,9 @@ impl<'a> Materializer<'a> {
                     "requestSetHeaders": merged_headers,
                     "proxyPassRequestHeaders": proxy_pass_request_headers,
                 });
+                if let Some(method) = &proxy_method {
+                    proxy_resource["proxyMethod"] = Value::String(method.clone());
+                }
                 if let Some(uri) = target_uri {
                     proxy_resource["targetUri"] = Value::String(uri);
                 }
@@ -2654,6 +2697,9 @@ impl<'a> Materializer<'a> {
                     "protocol",
                     "clientCertificate",
                     "clientCertificateCA",
+                    // nginx stream access phase and `return` handler.
+                    "access",
+                    "return",
                 ],
             )?;
             let listen = as_array(server, &path, "listen")?;
@@ -2731,8 +2777,83 @@ impl<'a> Materializer<'a> {
                     "stream listeners must bind a loopback or private address unless approved (SDKWORK_WEBSERVER_SPEC section 12)",
                 ));
             }
-            let proxy_pass = as_str(server, &path, "proxyPass")?;
-            let target = if let Some((host, _)) = proxy_pass.rsplit_once(':') {
+            // nginx stream `return <value>`: write the literal value and close,
+            // mutually exclusive with a proxy target.
+            let return_value = match server.get("return") {
+                None => None,
+                Some(value) => {
+                    let Some(value) = value.as_str() else {
+                        return Err(materialize_error(
+                            &format!("{path}.return"),
+                            "`return` must be a string value",
+                        ));
+                    };
+                    if value.is_empty() || value.len() > 4096 {
+                        return Err(materialize_error(
+                            &format!("{path}.return"),
+                            "`return` value must be 1..4096 bytes",
+                        ));
+                    }
+                    if value.contains('$') {
+                        return Err(materialize_error(
+                            &format!("{path}.return"),
+                            "`return` variables are not supported; use a literal value",
+                        ));
+                    }
+                    Some(value.to_owned())
+                }
+            };
+            // Ordered nginx stream allow/deny rules.
+            let access = match server.get("access") {
+                None => Vec::new(),
+                Some(value) => {
+                    let Some(rules) = value.as_array() else {
+                        return Err(materialize_error(
+                            &format!("{path}.access"),
+                            "`access` must be an array of { action, network } tables",
+                        ));
+                    };
+                    let mut parsed = Vec::with_capacity(rules.len());
+                    for (rule_index, rule) in rules.iter().enumerate() {
+                        let rule_path = format!("{path}.access[{rule_index}]");
+                        let rule: crate::config::model::AccessRuleConfig =
+                            serde_json::from_value(rule.clone())
+                                .map_err(|source| materialize_error(&rule_path, source))?;
+                        let network = rule.network.trim();
+                        if !(network.eq_ignore_ascii_case("all")
+                            || network.parse::<std::net::IpAddr>().is_ok()
+                            || network.parse::<ipnet::IpNet>().is_ok())
+                        {
+                            return Err(materialize_error(
+                                &format!("{rule_path}.network"),
+                                "access network must be `all`, an IP, or a CIDR",
+                            ));
+                        }
+                        parsed.push(rule);
+                    }
+                    parsed
+                }
+            };
+            if return_value.is_some() && server.get("proxyPass").is_some() {
+                return Err(materialize_error(
+                    &path,
+                    "a stream server cannot combine `return` with `proxyPass`",
+                ));
+            }
+            let proxy_pass = match (server.get("proxyPass"), return_value.is_some()) {
+                (Some(_), true) => unreachable!("combination rejected above"),
+                (Some(_), false) => as_str(server, &path, "proxyPass")?,
+                (None, true) => "",
+                (None, false) => {
+                    return Err(materialize_error(
+                        &path,
+                        "stream server requires `proxyPass` or `return`",
+                    ))
+                }
+            };
+            let target = if return_value.is_some() {
+                None
+            } else if let Some((host, _)) = proxy_pass.rsplit_once(':') {
                 // The host/port validation is shared with every other listener
                 // in the workspace; a local copy is what lets one grammar
                 // accept a value another rejects.
@@ -2744,14 +2865,14 @@ impl<'a> Materializer<'a> {
                             format!("proxyPass `{proxy_pass}` must be host:port or a declared upstream name"),
                         )
                     })?;
-                crate::config::model::StreamTargetConfig::Literal {
+                Some(crate::config::model::StreamTargetConfig::Literal {
                     host: host.to_owned(),
                     port,
-                }
+                })
             } else if self.upstream_names.contains(&proxy_pass.to_owned()) {
-                crate::config::model::StreamTargetConfig::Upstream {
+                Some(crate::config::model::StreamTargetConfig::Upstream {
                     name: proxy_pass.to_owned(),
-                }
+                })
             } else {
                 return Err(materialize_error(
                     &path,
@@ -2778,6 +2899,8 @@ impl<'a> Materializer<'a> {
                     crate::config::model::StreamProtocol::Tcp
                 },
                 target,
+                access,
+                return_value,
                 proxy_timeout_ms,
                 proxy_protocol,
                 tls,
@@ -6282,10 +6405,10 @@ returnStatus = 404
         assert_eq!(literal.port, 3306);
         assert_eq!(
             literal.target,
-            super::super::model::StreamTargetConfig::Literal {
+            Some(super::super::model::StreamTargetConfig::Literal {
                 host: "127.0.0.1".to_owned(),
                 port: 3306,
-            }
+            })
         );
         assert_eq!(literal.proxy_timeout_ms, 30_000);
         assert!(!literal.proxy_protocol);
@@ -6294,14 +6417,144 @@ returnStatus = 404
         assert_eq!(upstream.port, 5433);
         assert_eq!(
             upstream.target,
-            super::super::model::StreamTargetConfig::Upstream {
+            Some(super::super::model::StreamTargetConfig::Upstream {
                 name: "db".to_owned(),
-            }
+            })
         );
         assert_eq!(upstream.proxy_timeout_ms, 60_000);
         assert!(upstream.proxy_protocol);
         assert!(upstream.tls.is_none());
         assert!(literal.tls.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn typed_proxy_method_reaches_the_proxy_resource() {
+        let materialize = |method_line: &str| {
+            let toml_text = format!(
+                r#"
+[[http.server]]
+listen = ["8080"]
+serverName = ["method.example.test"]
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+{method_line}
+"#
+            );
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            let effective = serde_json::to_value(&value).expect("converts");
+            materialize_app(&effective, "test")
+        };
+        let config = materialize("proxyMethod = \"POST\"").expect("materialize");
+        let proxy_method = config
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                crate::config::ResourceConfig::Proxy { proxy_method, .. } => {
+                    Some(proxy_method.clone())
+                }
+                _ => None,
+            })
+            .expect("proxy resource");
+        assert_eq!(proxy_method.as_deref(), Some("POST"));
+        let error = materialize("proxyMethod = \"GET /x\"")
+            .err()
+            .expect("invalid method token must fail closed");
+        assert!(
+            error.to_string().contains("not a valid HTTP method token"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn materializes_stream_return_and_access_in_typed_config() {
+        let dir = std::env::temp_dir().join(format!(
+            "sdkwork-stream-access-materialize-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        write_layout_v3_dir(
+            &dir,
+            r#"
+specVersion = 1
+kind = "sdkwork.webserver.server"
+id = "stream-access-test"
+
+[stream]
+[[stream.server]]
+listen = ["127.0.0.1:3500"]
+access = [
+  { action = "allow", network = "127.0.0.1" },
+  { action = "deny", network = "all" },
+]
+proxyPass = "127.0.0.1:3501"
+
+[[stream.server]]
+listen = ["127.0.0.1:3502"]
+return = "403"
+"#,
+            r#"
+[[http.server]]
+listen = ["80"]
+serverName = ["stream-access-test.local"]
+[[http.server.location]]
+match = "/"
+returnStatus = 404
+"#,
+            "",
+        );
+        let config = load_server_toml_app(&dir, "standalone", "production", "stream-access-test")
+            .expect("layout must load");
+        assert_eq!(config.streams.len(), 2);
+        let proxied = &config.streams[0];
+        assert_eq!(proxied.access.len(), 2);
+        assert_eq!(proxied.access[0].network, "127.0.0.1");
+        assert_eq!(proxied.access[1].network, "all");
+        assert!(proxied.target.is_some());
+        let returned = &config.streams[1];
+        assert_eq!(returned.return_value.as_deref(), Some("403"));
+        assert!(returned.target.is_none());
+        std::fs::remove_dir_all(&dir).ok();
+
+        // `return` and `proxyPass` are mutually exclusive in the typed plane.
+        let dir = std::env::temp_dir().join(format!(
+            "sdkwork-stream-access-conflict-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        write_layout_v3_dir(
+            &dir,
+            r#"
+specVersion = 1
+kind = "sdkwork.webserver.server"
+id = "stream-access-test"
+
+[stream]
+[[stream.server]]
+listen = ["127.0.0.1:3503"]
+return = "403"
+proxyPass = "127.0.0.1:3504"
+"#,
+            r#"
+[[http.server]]
+listen = ["80"]
+serverName = ["stream-access-test.local"]
+[[http.server.location]]
+match = "/"
+returnStatus = 404
+"#,
+            "",
+        );
+        let error = load_server_toml_app(&dir, "standalone", "production", "stream-access-test")
+            .err()
+            .expect("return + proxyPass must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot combine `return` with `proxyPass`"),
+            "{error}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -23,7 +23,7 @@ mod sub_filter;
 mod uri;
 mod validate;
 
-pub use access::{evaluate_access, AccessDecision};
+pub use access::{evaluate_access, evaluate_access_first_match_allow, AccessDecision};
 pub use acme_webroot::{AcmeWebrootReport, AcmeWebrootVerdict};
 pub use auth_basic::{
     apr1_hash, evaluate_auth_basic, parse_htpasswd, AuthBasicDecision, HtpasswdParseError,
