@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `2676eb83` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2 and 3b (code plus the re-synced directive catalog), on top of HEAD 2676eb83 |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `65b1dd40` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b and 4a (code plus the re-synced directive catalog), on top of HEAD 65b1dd40 |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `cf0c452289907606d4c15c334f0e0086cc9ef1ffcdbe92f5b3aafa239a90d607` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `9150f7c5d8bc46fd605883c95223e89b1f4f1500dbb21c3c87f59f4181a4b590` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -25,16 +25,17 @@
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
-  3a-2 and 3b.** The code, tests, generated operator matrix and the re-synced directive
+  3a-2, 3b and 4a.** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `2676eb83`; the audit is regenerated against that post-wave catalog (evidence
+  `65b1dd40`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
   policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
-  (autoindex family, empty_gif, stub_status) and Wave 3b (h2 stream ceiling,
-  proxy_method, stream allow/deny and literal return) are recorded as completed in
+  (autoindex family, empty_gif, stub_status), Wave 3b (h2 stream ceiling,
+  proxy_method, stream allow/deny and literal return) and Wave 4a (geo and
+  split_clients variable blocks plus valid_referers) are recorded as completed in
   section 3, and every one of them is asserted executable by
   `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
@@ -65,15 +66,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 116 | 15.6% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `enforced` | 119 | 16.0% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
 | `runtime-owned` | 143 | 19.2% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 29 | 3.9% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `behavior-gap` | 49 | 6.6% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 229 | 30.8% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
-| `fail-closed` | 210 | 28.2% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
+| `fail-closed` | 187 | 25.1% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 116 + 143 + 17 + 29 + 229 + 210 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 119 + 143 + 17 + 49 + 229 + 187 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -85,11 +86,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 116 | 116 | 0 | 0 | 0 | 0 | 0 |
+| `executable` | 119 | 119 | 0 | 0 | 0 | 0 | 0 |
 | `accepted-unenforced` | 171 | 0 | 143 | 17 | 11 | 0 | 0 |
-| `unsupported-fail-closed` | 228 | 0 | 0 | 0 | 18 | 0 | 210 |
+| `unsupported-fail-closed` | 225 | 0 | 0 | 0 | 38 | 0 | 187 |
 | `excluded` | 229 | 0 | 0 | 0 | 0 | 229 | 0 |
-| **total** | **744** | 116 | 143 | 17 | 29 | 229 | 210 |
+| **total** | **744** | 119 | 143 | 17 | 49 | 229 | 187 |
 
 ### 1.3 Wave Completion Status
 
@@ -101,8 +102,9 @@ wave-3 backlog entries that are currently rejected.
 | `wave 3a` | 6 | done - charset family (header-level behaviour) and gzip refinements (gzip_disable, gzip_proxied) (catalog: executable) |
 | `wave 3a-2` | 6 | done - autoindex family (on/exact_size/localtime/format), empty_gif and stub_status location handlers (catalog: executable) |
 | `wave 3b` | 5 | done - HTTP/2 stream ceiling, proxy_method, stream allow/deny and literal stream return (catalog: executable) |
-| wave 3 backlog | 29 | open - 7 categories, see section 3.2 |
-| **total planned work** | **66** | 37 completed, 29 remaining |
+| `wave 4a` | 3 | done - geo and split_clients variable blocks plus the referer module (valid_referers / $invalid_referer) (catalog: executable) |
+| wave 3 backlog | 49 | open - 7 categories, see section 3.2 |
+| **total planned work** | **89** | 40 completed, 49 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -114,24 +116,24 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 97 | 86 | 9 | 12 | 174 | 169 |
+| `http` | 547 | 100 | 86 | 9 | 32 | 174 | 146 |
 | `mail` | 51 | 0 | 0 | 0 | 0 | 51 | 0 |
 | `stream` | 105 | 18 | 23 | 8 | 17 | 3 | 36 |
-| **total** | **744** | 116 | 143 | 17 | 29 | 229 | 210 |
+| **total** | **744** | 119 | 143 | 17 | 49 | 229 | 187 |
 
 ### 1.5 Headline Findings
 
-1. **116 of 744 directives (15.6%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2 and 3b landed 37 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
-2. **29 behavior-gap directives remain in the wave-3 backlog** (3.9% of the surface): HTTP/1 framing policy (1), body addition filter (3), referer module (1), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP stapling / trust chain (6), stream advanced gaps (14).
-3. **439 of 744 directives (59.0%) are excluded or rejected, not silently emulated.** 229 are explicit PRD section 4 profile exclusions and 210 are fail-closed rejections outside the planned backlog.
+1. **119 of 744 directives (16.0%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b and 4a landed 40 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
+2. **49 behavior-gap directives remain in the wave-3 backlog** (6.6% of the surface): HTTP/1 framing policy (1), re-entrant subrequest engine (7), module-sized functional modules (17), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP stapling / trust chain (6), stream advanced gaps (14).
+3. **416 of 744 directives (55.9%) are excluded or rejected, not silently emulated.** 229 are explicit PRD section 4 profile exclusions and 187 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
    all 11 "enforced typed key" migration actions now
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-Wave-3b worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-Wave-4a worktree, not a hand-maintained table; section 6 states
    the exact commands and the wave-3 landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -282,9 +284,9 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `add_after_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, body addition filter): currently rejected at load; a stock nginx.conf that injects additional bodies around a response fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `add_before_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, body addition filter): currently rejected at load; a stock nginx.conf that injects additional bodies around a response fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `addition_types` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, body addition filter): currently rejected at load; a stock nginx.conf that injects additional bodies around a response fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `add_after_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `add_before_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `addition_types` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_auth_basic_module` (2 directives)
 
@@ -297,8 +299,8 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `auth_request` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: subrequest-based external auth is not implemented and is outside the covered access-control surface (allow/deny + auth_basic execute). |
-| `auth_request_set` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: subrequest-based external auth is not implemented and is outside the covered access-control surface (allow/deny + auth_basic execute). |
+| `auth_request` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `auth_request_set` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_autoindex_module` (4 directives)
 
@@ -313,10 +315,10 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `ancient_browser` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the browser/UA classification module is outside the profile. |
-| `ancient_browser_value` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the browser/UA classification module is outside the profile. |
-| `modern_browser` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the browser/UA classification module is outside the profile. |
-| `modern_browser_value` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the browser/UA classification module is outside the profile. |
+| `ancient_browser` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ancient_browser_value` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `modern_browser` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `modern_browser_value` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_charset_filter_module` (5 directives)
 
@@ -343,7 +345,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `aio_write` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: OS asynchronous file I/O is not exposed by the runtime static path; rejected. |
 | `alias` | http-location | executable | **enforced** | enforced: the value reaches `virtualHosts[].routes[].resource.root (prefix replacement)`; evidence tests/nginx/full-surface/probe.py::case_alias_substitution. Known difference: path substitution executes; forbidden when staging a tenant fragment on a shared edge. |
 | `auth_delay` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: auth_delay timing hardening is not implemented; rejected rather than silently ignored. |
-| `chunked_transfer_encoding` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/1 framing policy): chunked response encoding policy is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `chunked_transfer_encoding` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, HTTP/1 framing policy): chunked response encoding policy is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. Architecture blocker: the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited 1.1 response (nginx probe recorded). |
 | `client_body_buffer_size` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured buffer sizing is ignored; the runtime owns bounded buffering. |
 | `client_body_in_file_only` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: request bodies are streamed; temp-file-only body handling is rejected. |
 | `client_body_in_single_buffer` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: request bodies are streamed with bounded buffering; single-buffer mode is rejected. |
@@ -388,11 +390,11 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `merge_slashes` | http, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].mergeSlashes`; evidence tests/nginx/differential-http/battery.py::merge.exact. Known difference: nginx parses the URI before virtual-host selection, so its effective value is the listener default server; the runtime resolves the directive per host (the differential fixture declares it at http level so both sides agree). |
 | `msie_padding` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly. |
 | `msie_refresh` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly. |
-| `open_file_cache` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, static open-file cache): the static-file descriptor cache policy is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `open_file_cache` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, static open-file cache): the static-file descriptor cache policy is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. Contract note: this is a performance cache whose only semantic contract is staleness bounds; response correctness is unaffected. |
 | `open_file_cache_errors` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the runtime owns static-file cache/open policy; rejected. |
 | `open_file_cache_events` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the runtime owns static-file cache/open policy; rejected. |
-| `open_file_cache_min_uses` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, static open-file cache): the static-file descriptor cache usage threshold is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `open_file_cache_valid` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, static open-file cache): the static-file descriptor cache TTL is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `open_file_cache_min_uses` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, static open-file cache): the static-file descriptor cache usage threshold is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. Contract note: this is a performance cache whose only semantic contract is staleness bounds; response correctness is unaffected. |
+| `open_file_cache_valid` | http, http-location, http-server | accepted-unenforced | **behavior-gap** | behavior-gap (wave 3 backlog, static open-file cache): the static-file descriptor cache TTL is not applied. Not runtime-owned: no runtime policy substitutes the client-visible effect. Contract note: this is a performance cache whose only semantic contract is staleness bounds; response correctness is unaffected. |
 | `port_in_redirect` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].redirectPolicy.port / routes[].redirectPolicy.port`; evidence tests/nginx/differential-http/battery.py::redirect.noport.dir. |
 | `post_action` | http, http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: post-request subrequest hooks are outside the bounded rewrite/route state machine. |
 | `postpone_output` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly. |
@@ -437,8 +439,8 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `degradation` | http | unsupported-fail-closed | **fail-closed** | fail-closed: the degradation module is outside the profile. |
-| `degrade` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the degradation module is outside the profile. |
+| `degradation` | http | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `degrade` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_empty_gif_module` (1 directive)
 
@@ -510,7 +512,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `geo` | http | unsupported-fail-closed | **fail-closed** | fail-closed: the geo variable table is a map-style feature; the remaining backlog covers stream maps, not this cluster. |
+| `geo` | http | executable | **enforced** | enforced: the value reaches `http.geo[] (GeoConfig: source/entries range+CIDR/default; evaluated into the shared result-variable table)`; evidence tests/nginx/differential-http/battery.py::geo.loopback. Known difference: IPv4 `ranges;` only (nginx range tables are IPv4-only; an IPv6 range entry is a located config error); variable-valued geo entries fail closed (values are bounded literals). |
 
 #### `ngx_http_geoip_module` (5 directives)
 
@@ -667,8 +669,8 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `mirror` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: request mirroring is outside the profile. |
-| `mirror_request_body` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: request mirroring is outside the profile. |
+| `mirror` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `mirror_request_body` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, re-entrant subrequest engine): currently rejected at load; a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_module` (1 directive)
 
@@ -773,7 +775,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `random_index` | http-location | unsupported-fail-closed | **fail-closed** | fail-closed: random index selection is not implemented. |
+| `random_index` | http-location | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_realip_module` (3 directives)
 
@@ -787,9 +789,9 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `referer_hash_bucket_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is tracked as wave-3 backlog; the referer hash-table sizing directives are not planned. |
-| `referer_hash_max_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers is tracked as wave-3 backlog; the referer hash-table sizing directives are not planned. |
-| `valid_referers` | http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, referer module): currently rejected at load; a stock nginx.conf that allow-lists Referer values fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `referer_hash_bucket_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers now executes; the referer hash-table sizing directives are not planned. |
+| `referer_hash_max_size` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: valid_referers now executes; the referer hash-table sizing directives are not planned. |
+| `valid_referers` | http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].referer / routes[].referer (RefererConfig) + $invalid_referer in header/return expansion`; evidence tests/nginx/differential-http/battery.py::referer.missing. Known difference: regex entries are compiled case-insensitively and the bounded pattern set fails closed on PCRE-only constructs. |
 
 #### `ngx_http_rewrite_module` (7 directives)
 
@@ -864,13 +866,13 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `slice` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: slice range caching is not implemented. |
+| `slice` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_split_clients_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `split_clients` | http | unsupported-fail-closed | **fail-closed** | fail-closed: split_clients is a map-style variable table; the remaining backlog covers stream maps, not this cluster. |
+| `split_clients` | http | executable | **enforced** | enforced: the value reaches `http.splitClients[] (SplitClientsConfig: source template/percentage buckets; ngx_murmur_hash2 + fixed-point percentages)`; evidence tests/nginx/differential-http/battery.py::split.{key}. Known difference: the bucket hash is pinned to nginx ngx_murmur_hash2 and verified against real nginx for the fixture keys. |
 
 #### `ngx_http_ssi_filter_module` (7 directives)
 
@@ -993,15 +995,15 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `userid` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_domain` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_expires` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_flags` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_mark` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_name` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_p3p` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_path` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
-| `userid_service` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: the userid cookie filter is outside the http-core-v1 response surface. |
+| `userid` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_domain` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_expires` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_flags` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_mark` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_name` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_p3p` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_path` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid_service` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (wave 3 backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_http_uwsgi_module` (61 directives)
 
@@ -1434,7 +1436,9 @@ Wave 2b closed the proxy response-header policy, internal locations, slash mergi
 request-header acceptance; Wave 3a added the header-level charset family and the gzip
 user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plus the
 empty_gif and stub_status location handlers; Wave 3b added the advertised HTTP/2
-stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return.
+stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return;
+Wave 4a added the geo and split_clients variable blocks and the referer module
+(valid_referers / $invalid_referer).
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1475,16 +1479,19 @@ stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream retu
 | `wave 3b` | `allow` (`stream:allow`) | `streamServers[].access (ordered AccessRuleConfig; first match wins)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` |
 | `wave 3b` | `deny` (`stream:deny`) | `streamServers[].access (ordered AccessRuleConfig; first match wins)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` |
 | `wave 3b` | `return` (`stream:return`) | `streamServers[].returnValue (literal value written then close; mutually exclusive with proxyPass)` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_return_writes_the_literal_value_and_closes` |
+| `wave 4a` | `geo` (`http:geo`) | `http.geo[] (GeoConfig: source/entries range+CIDR/default; evaluated into the shared result-variable table)` | `tests/nginx/differential-http/battery.py::geo.loopback` |
+| `wave 4a` | `split_clients` (`http:split_clients`) | `http.splitClients[] (SplitClientsConfig: source template/percentage buckets; ngx_murmur_hash2 + fixed-point percentages)` | `tests/nginx/differential-http/battery.py::split.{key}` |
+| `wave 4a` | `valid_referers` (`http:valid_referers`) | `virtualHosts[].referer / routes[].referer (RefererConfig) + $invalid_referer in header/return expansion` | `tests/nginx/differential-http/battery.py::referer.missing` |
 
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (wave 3 backlog, 29 directives)
+### 3.2 Remaining Behavior-Gap Backlog (wave 3 backlog, 49 directives)
 
 These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
-Wave 3b. An accepted-unenforced row is silently ignored today; a rejected row fails
+Wave 4a. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1493,21 +1500,41 @@ have to change, and the tests to add.
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `chunked_transfer_encoding` | medium | accepted-unenforced | chunked response encoding policy is not applied | response framing (chunked vs content-length) is directly client-visible and can change caching and proxy behavior. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/http1_wire.rs (response framing), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | response-framing unit tests plus a framed differential case (chunked/identity and HEAD) |
+| `chunked_transfer_encoding` | medium (encoder blocker) | accepted-unenforced | chunked response encoding policy is not applied | the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited HTTP/1.1 response (nginx probe recorded), so `chunked_transfer_encoding off` has no implementation path in the current encoder; the truthful diagnostic says so. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/http1_wire.rs (response framing), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | framing differential (chunked/identity/HEAD) once the encoder exposes close-delimited 1.1 responses; blocked until then |
 
-### 3.2.2 body addition filter - 3 directive(s)
-
-| Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
-| --- | --- | --- | --- | --- | --- | --- |
-| `add_before_body` | medium | unsupported-fail-closed | a stock nginx.conf that injects additional bodies around a response fails to activate. | the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases |
-| `add_after_body` | medium | unsupported-fail-closed | a stock nginx.conf that injects additional bodies around a response fails to activate. | the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases |
-| `addition_types` | medium | unsupported-fail-closed | a stock nginx.conf that injects additional bodies around a response fails to activate. | the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases |
-
-### 3.2.3 referer module - 1 directive(s)
+### 3.2.2 re-entrant subrequest engine - 7 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `valid_referers` | medium | unsupported-fail-closed | a stock nginx.conf that allow-lists Referer values fails to activate. | the request allow-list decision and the `$invalid_referer` variable are request-visible; nginx normally consumes them through `if`, so this also depends on threading the variable through the supported variable surface. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/request_gate.rs + data_plane/handler.rs ($invalid_referer variable), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | referer allow-list matrix plus differential valid_referers cases |
+| `add_before_body` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+| `add_after_body` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+| `addition_types` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+| `auth_request` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+| `auth_request_set` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+| `mirror` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+| `mirror_request_body` | high (largest remaining item) | unsupported-fail-closed | a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate. | these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases |
+
+### 3.2.3 module-sized functional modules - 17 directive(s)
+
+| Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
+| --- | --- | --- | --- | --- | --- | --- |
+| `userid` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_domain` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_expires` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_flags` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_mark` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_name` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_p3p` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_path` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `userid_service` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `ancient_browser` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `ancient_browser_value` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `modern_browser` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `modern_browser_value` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `random_index` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `degradation` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `degrade` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `slice` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
 
 ### 3.2.4 HTTP/2 DATA chunking - 1 directive(s)
 
@@ -1519,9 +1546,9 @@ have to change, and the tests to add.
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `open_file_cache` | medium | accepted-unenforced | the static-file descriptor cache policy is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
-| `open_file_cache_min_uses` | medium | accepted-unenforced | the static-file descriptor cache usage threshold is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
-| `open_file_cache_valid` | medium | accepted-unenforced | the static-file descriptor cache TTL is not applied | the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
+| `open_file_cache` | medium (performance-only) | accepted-unenforced | the static-file descriptor cache policy is not applied | the family is a performance cache whose only semantic contract is staleness bounds (serving stale data is allowed), so response correctness is unaffected and the gap is tuning parity rather than behaviour; the truthful catalog diagnostic says so. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
+| `open_file_cache_min_uses` | medium (performance-only) | accepted-unenforced | the static-file descriptor cache usage threshold is not applied | the family is a performance cache whose only semantic contract is staleness bounds (serving stale data is allowed), so response correctness is unaffected and the gap is tuning parity rather than behaviour; the truthful catalog diagnostic says so. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
+| `open_file_cache_valid` | medium (performance-only) | accepted-unenforced | the static-file descriptor cache TTL is not applied | the family is a performance cache whose only semantic contract is staleness bounds (serving stale data is allowed), so response correctness is unaffected and the gap is tuning parity rather than behaviour; the truthful catalog diagnostic says so. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | cache invalidation/TTL/threshold unit tests |
 
 ### 3.2.6 OCSP stapling / trust chain - 6 directive(s)
 
@@ -1538,32 +1565,35 @@ have to change, and the tests to add.
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `limit_conn` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `limit_conn_zone` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `limit_conn_dry_run` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `set` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `preread_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_protocol_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `map` | high | accepted-unenforced | variable maps are not evaluated; every mapped variable resolves as missing | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_certificate_key` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_server_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_verify` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
-| `proxy_ssl_trusted_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `limit_conn` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `limit_conn_zone` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `limit_conn_dry_run` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `set` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `preread_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_protocol_timeout` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `map` | high | accepted-unenforced | variable maps are not evaluated; every mapped variable resolves as missing | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_certificate_key` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_server_name` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_verify` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
+| `proxy_ssl_trusted_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
 
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the stream advanced gaps are the largest remaining operator
-surface (connection limits, variable assignment, preread/proxy-protocol timeouts,
-variable maps and upstream TLS identity). The body addition filter and the referer
-module are medium-sized features that pull in a bounded subrequest engine and
-`$invalid_referer` variable threading respectively. `chunked_transfer_encoding` and the
-static open-file cache are smaller, bounded changes. Two rows are architecture-blocked
-rather than effort-blocked: `http2_chunk_size` (the pinned hyper/h2 ingress exposes no
-DATA-chunk knob) and the OCSP/trust-chain rows (the pinned rustls stack exposes no
-stapling/OCSP-fetch surface, so no bounded static form exists).
+Within the backlog, the largest remaining item is a bounded **re-entrant subrequest
+engine**: the addition filter, `auth_request` and mirror all need nested subrequests
+that themselves proxy or serve, which the current internal-redirect/error-page engine
+cannot bound under PRD section 6. The stream advanced gaps are the next-largest surface
+(shared zone state for limit_conn, a stream variable engine for set/map, and an upstream
+TLS client for proxy_ssl identity). The userid, browser, random_index, degradation and
+slice modules are self-contained module-sized work. `chunked_transfer_encoding` and the
+static open-file cache are now precisely bounded: the pinned hyper HTTP/1.1 encoder
+cannot emit a close-delimited 1.1 response, and the open-file cache is a performance
+cache whose only semantic contract is staleness bounds. Two rows are architecture-blocked
+rather than effort-blocked: `http2_chunk_size` (hyper/h2 exposes no DATA-chunk knob) and
+the OCSP/trust-chain rows (rustls exposes no stapling/OCSP-fetch surface).
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
@@ -1574,9 +1604,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 69 `executable` directive rows was drawn,
+- A sample of 72 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1585,7 +1615,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (69 directive rows)
+### 4.2 Verified Sample (72 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -1658,6 +1688,9 @@ compression layer owns the level).
 | `stream:allow` | `stream allow is an ordered first-match peer ACL` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` | an allow-first rule proxies the loopback connection while a deny-first rule on the same peer closes it with no bytes | verified |
 | `stream:deny` | `stream deny closes the denied peer` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_allow_first_match_proxies_and_deny_first_match_closes` | the deny-first stream listener accepts and closes the connection without proxying, matching nginx stream access semantics | verified |
 | `stream:return` | `stream return writes the literal value and closes` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs::stream_return_writes_the_literal_value_and_closes` | a configured literal `return` value is written to the client and the connection closes (1..4096 bytes; variable values fail closed) | verified |
+| `http:geo` | `geo resolves the longest matching CIDR/range entry and the default` | `crates/sdkwork-webserver-core/src/config/geo.rs::geo_matches_longest_prefix_and_default` | unit test asserts longest-prefix selection, inclusive range bounds and the default fallback; differential cases cover loopback and X-Forwarded-For sources | verified |
+| `http:split_clients` | `split_clients selects the nginx murmur-hash bucket` | `crates/sdkwork-webserver-core/src/config/geo.rs::split_clients_uses_nginx_murmur_hash_and_buckets` | unit test pins ngx_murmur_hash2 bucket selection and fixed-point percentages against nginx 1.29.6 fixture keys | verified |
+| `http:valid_referers` | `valid_referers evaluates server names, wildcards, path prefixes and regexes for $invalid_referer` | `crates/sdkwork-webserver-core/src/config/referer.rs::wildcards_paths_and_regexes` | unit test asserts wildcard/path/regex matching and missing-header validity; differential cases compare the resolved $invalid_referer against nginx | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -1703,7 +1736,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-116 executable rows cite only the generic
+119 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -1714,7 +1747,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (116 <=> 116). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (119 <=> 119). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -1722,17 +1755,17 @@ Consistent: `executable` <=> `enforced` in both directions (116 <=> 116). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 116 | 15.6% |
+| `enforced` (actually nginx-compatible behavior) | 119 | 16.0% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 29 | 3.9% |
+| `behavior-gap` (planned toward compatibility) | 49 | 6.6% |
 | `runtime-owned` (deliberately not nginx value) | 143 | 19.2% |
 | `out-of-profile` (PRD section 4 exclusion) | 229 | 30.8% |
-| `fail-closed` (rejected, not planned) | 210 | 28.2% |
+| `fail-closed` (rejected, not planned) | 187 | 25.1% |
 
-582 of 744 directives (78.2%) are
+559 of 744 directives (75.1%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 116 executed directives plus the 29 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 119 executed directives plus the 49 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (229 directives)
@@ -1768,7 +1801,14 @@ What implementing each group would actually require:
 | GeoIP | 8 | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | 1 | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
-### 5.3 Fail-Closed Groups (210 directives, top modules)
+Substrate note: a new crate, `crates/sdkwork-webserver-upstream-protocol`, has landed
+with FastCGI/uWSGI/SCGI/memcached/gRPC codecs and 89 tests. It is **not wired into the
+data plane yet**, so the corresponding nginx modules remain out-of-profile / fail-closed
+in this ledger. Wiring it would satisfy the protocol-codec half of the work above but
+still leaves the CGI-variable/security model, cache/status mapping, conformance corpus
+and the deployment-profile decision to be made separately.
+
+### 5.3 Fail-Closed Groups (187 directives, top modules)
 
 - `ngx_http_proxy_module` - 31 directive(s)
 - `ngx_http_grpc_module` - 29 directive(s)
@@ -1776,18 +1816,18 @@ What implementing each group would actually require:
 - `ngx_stream_proxy_module` - 14 directive(s)
 - `ngx_stream_ssl_module` - 14 directive(s)
 - `ngx_http_ssl_module` - 13 directive(s)
-- `ngx_http_userid_filter_module` - 9 directive(s)
 - `ngx_http_v3_module` - 8 directive(s)
 - `ngx_http_image_filter_module` - 7 directive(s)
 - `ngx_http_ssi_filter_module` - 7 directive(s)
 - `ngx_http_xslt_filter_module` - 6 directive(s)
 - `ngx_http_rewrite_module` - 5 directive(s)
-- `ngx_http_browser_module` - 4 directive(s)
 - `ngx_http_dav_module` - 4 directive(s)
 - `ngx_http_mp4_module` - 4 directive(s)
 - `ngx_http_headers_filter_module` - 3 directive(s)
 - `ngx_http_gzip_filter_module` - 3 directive(s)
-- `ngx_http_auth_request_module` - 2 directive(s)
+- `ngx_http_gunzip_filter_module` - 2 directive(s)
+- `ngx_http_referer_module` - 2 directive(s)
+- `ngx_stream_core_module` - 2 directive(s)
 
 Representative implementation cost:
 
@@ -1843,7 +1883,7 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after Wave 3b landed and the Lead re-synced the catalog.
+This refresh was regenerated after Wave 4a landed and the Lead re-synced the catalog.
 The table lists the cumulative completed-wave rows and their current state:
 
 | Directive | Wave | Current state |
@@ -1885,13 +1925,16 @@ The table lists the cumulative completed-wave rows and their current state:
 | `allow` (`stream:allow`) | `wave 3b` | completed - `enforced` |
 | `deny` (`stream:deny`) | `wave 3b` | completed - `enforced` |
 | `return` (`stream:return`) | `wave 3b` | completed - `enforced` |
+| `geo` (`http:geo`) | `wave 4a` | completed - `enforced` |
+| `split_clients` (`http:split_clients`) | `wave 4a` | completed - `enforced` |
+| `valid_referers` (`http:valid_referers`) | `wave 4a` | completed - `enforced` |
 
-All 37 rows above were re-spot-checked (section 4.2) and are
+All 40 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 29 wave-3 backlog rows are the only behavior-gap
+The 49 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 

@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '2676eb83';
+const AUDIT_HEAD = '65b1dd40';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2 and 3b (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b and 4a (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'wave 3 backlog';
 
@@ -171,13 +171,19 @@ const COMPLETED_WAVES = [
       'stream:return',
     ],
   },
+  {
+    key: 'wave 4a',
+    summary:
+      'geo and split_clients variable blocks plus the referer module (valid_referers / $invalid_referer)',
+    ids: ['http:geo', 'http:split_clients', 'http:valid_referers'],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
 
 /**
  * Remaining behavior-gap backlog after waves 1/2/2b/3a/3a-2/3b (the categories
- * named by specs/nginx-gap.catalog.json as remaining after wave 3b).
+ * named by specs/nginx-gap.catalog.json as remaining after wave 4a).
  *
  * Each id is either accepted-unenforced today (silently ignored) or
  * unsupported-fail-closed (rejected). Rejected entries are planned work here:
@@ -188,38 +194,64 @@ const REMAINING_GAP_CATEGORIES = [
   {
     key: 'chunked-framing',
     label: 'HTTP/1 framing policy',
-    priority: 'medium',
+    priority: 'medium (encoder blocker)',
     ids: ['http:chunked_transfer_encoding'],
     rejectedLoss:
-      'a stock nginx.conf that tunes response framing fails to activate.',
-    why: 'response framing (chunked vs content-length) is directly client-visible and can change caching and proxy behavior.',
+      'the directive is accepted-but-ignored; the response keeps the runtime encoder framing.',
+    why: 'the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited HTTP/1.1 response (nginx probe recorded), so `chunked_transfer_encoding off` has no implementation path in the current encoder; the truthful diagnostic says so.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/http1_wire.rs (response framing), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'response-framing unit tests plus a framed differential case (chunked/identity and HEAD)',
+    tests: 'framing differential (chunked/identity/HEAD) once the encoder exposes close-delimited 1.1 responses; blocked until then',
   },
   {
-    key: 'addition-filter',
-    label: 'body addition filter',
-    priority: 'medium',
-    ids: ['http:add_before_body', 'http:add_after_body', 'http:addition_types'],
+    key: 'subrequest-engine',
+    label: 're-entrant subrequest engine',
+    priority: 'high (largest remaining item)',
+    ids: [
+      'http:add_before_body',
+      'http:add_after_body',
+      'http:addition_types',
+      'http:auth_request',
+      'http:auth_request_set',
+      'http:mirror',
+      'http:mirror_request_body',
+    ],
     rejectedLoss:
-      'a stock nginx.conf that injects additional bodies around a response fails to activate.',
-    why: 'the injected body is part of the client-visible response and needs the bounded subrequest engine the gap catalog records as the missing piece.',
+      'a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate.',
+    why: 'these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (response body pipeline + bounded subrequests), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'addition unit tests (before/after ordering, eligible MIME types, missing target) plus differential addition cases',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases',
   },
   {
-    key: 'referer-module',
-    label: 'referer module',
+    key: 'module-sized',
+    label: 'module-sized functional modules',
     priority: 'medium',
-    ids: ['http:valid_referers'],
+    ids: [
+      'http:userid',
+      'http:userid_domain',
+      'http:userid_expires',
+      'http:userid_flags',
+      'http:userid_mark',
+      'http:userid_name',
+      'http:userid_p3p',
+      'http:userid_path',
+      'http:userid_service',
+      'http:ancient_browser',
+      'http:ancient_browser_value',
+      'http:modern_browser',
+      'http:modern_browser_value',
+      'http:random_index',
+      'http:degradation',
+      'http:degrade',
+      'http:slice',
+    ],
     rejectedLoss:
-      'a stock nginx.conf that allow-lists Referer values fails to activate.',
-    why: 'the request allow-list decision and the `$invalid_referer` variable are request-visible; nginx normally consumes them through `if`, so this also depends on threading the variable through the supported variable surface.',
+      'a stock nginx.conf that uses this module fails to activate.',
+    why: 'each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/request_gate.rs + data_plane/handler.rs ($invalid_referer variable), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'referer allow-list matrix plus differential valid_referers cases',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice',
   },
   {
     key: 'http2-chunking',
@@ -236,15 +268,15 @@ const REMAINING_GAP_CATEGORIES = [
   {
     key: 'static-open-file-cache',
     label: 'static open-file cache',
-    priority: 'medium',
+    priority: 'medium (performance-only)',
     ids: [
       'http:open_file_cache',
       'http:open_file_cache_min_uses',
       'http:open_file_cache_valid',
     ],
     rejectedLoss:
-      'a stock nginx.conf that tunes the static-file cache fails to activate.',
-    why: 'the runtime has its own open policy and exposes no parity knob; the response bytes are unchanged, but the operator-declared cache contract is not honored.',
+      'the static-file descriptor cache policy is not applied; the runtime uses its own open policy.',
+    why: 'the family is a performance cache whose only semantic contract is staleness bounds (serving stale data is allowed), so response correctness is unaffected and the gap is tuning parity rather than behaviour; the truthful catalog diagnostic says so.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'cache invalidation/TTL/threshold unit tests',
@@ -290,11 +322,12 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock stream sidecar that uses this stream-plane feature fails to activate.',
-    why: 'stream limit_conn, variable assignment (and variable-valued stream return), the preread/proxy-protocol timeouts, variable maps and upstream TLS identity are in-profile stream features the runtime does not execute yet; the HTTP plane already executes the analogous access/limit/routing policies.',
+    why: 'the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables)',
-    tests: 'stream_proxy.rs unit/integration tests for limit_conn, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6',
+    tests: 'stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6',
   },
+
 ];
 
 const REMAINING_GAP_BY_ID = new Map();
@@ -467,7 +500,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_userid_filter_module$/,
-    'the userid cookie filter is outside the http-core-v1 response surface.',
+    'the userid cookie filter is tracked as wave-4 backlog (module-sized work).',
   ],
   [
     /^ngx_http_image_filter_module$/,
@@ -487,7 +520,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_browser_module$/,
-    'the browser/UA classification module is outside the profile.',
+    'the browser/UA classification module is tracked as wave-4 backlog (module-sized work).',
   ],
   [
     /^ngx_http_dav_module$/,
@@ -503,7 +536,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_addition_filter_module$/,
-    'the body addition filter is tracked as wave-3 backlog (it needs a bounded subrequest engine); any remaining form is not planned.',
+    'the body addition filter is tracked as wave-4 backlog (it needs a bounded re-entrant subrequest engine); any remaining form is not planned.',
   ],
   [
     /^ngx_http_headers_filter_module$/,
@@ -515,7 +548,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_referer_module$/,
-    'valid_referers is tracked as wave-3 backlog; the referer hash-table sizing directives are not planned.',
+    'valid_referers now executes; the referer hash-table sizing directives are not planned.',
   ],
   [
     /^ngx_stream_limit_conn_module$/,
@@ -523,11 +556,11 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_auth_request_module$/,
-    'subrequest-based external auth is not implemented and is outside the covered access-control surface (allow/deny + auth_basic execute).',
+    'subrequest-based external auth is tracked as wave-4 backlog (bounded re-entrant subrequest engine).',
   ],
   [
     /^ngx_http_degradation_module$/,
-    'the degradation module is outside the profile.',
+    'the degradation module is tracked as wave-4 backlog (module-sized work).',
   ],
   [
     /^ngx_http_gunzip_filter_module$/,
@@ -535,7 +568,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_mirror_module$/,
-    'request mirroring is outside the profile.',
+    'request mirroring is tracked as wave-4 backlog (bounded re-entrant subrequest engine).',
   ],
   [
     /^ngx_stream_access_module$/,
@@ -567,11 +600,11 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_random_index_module$/,
-    'random index selection is not implemented.',
+    'random index selection is tracked as wave-4 backlog (module-sized work).',
   ],
   [
     /^ngx_http_slice_filter_module$/,
-    'slice range caching is not implemented.',
+    'slice range caching is tracked as wave-4 backlog (module-sized work).',
   ],
   [
     /^ngx_http_split_clients_module$/,
@@ -671,6 +704,22 @@ const GAP_RATIONALE_SUFFIX = new Map([
   [
     'stream:ssl_trusted_certificate',
     ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+  ],
+  [
+    'http:chunked_transfer_encoding',
+    ' Architecture blocker: the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited 1.1 response (nginx probe recorded).',
+  ],
+  [
+    'http:open_file_cache',
+    ' Contract note: this is a performance cache whose only semantic contract is staleness bounds; response correctness is unaffected.',
+  ],
+  [
+    'http:open_file_cache_min_uses',
+    ' Contract note: this is a performance cache whose only semantic contract is staleness bounds; response correctness is unaffected.',
+  ],
+  [
+    'http:open_file_cache_valid',
+    ' Contract note: this is a performance cache whose only semantic contract is staleness bounds; response correctness is unaffected.',
   ],
 ]);
 
@@ -1183,6 +1232,30 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'a configured literal `return` value is written to the client and the connection closes (1..4096 bytes; variable values fail closed)',
   },
+  {
+    id: 'http:geo',
+    evidence:
+      'crates/sdkwork-webserver-core/src/config/geo.rs::geo_matches_longest_prefix_and_default',
+    claim: 'geo resolves the longest matching CIDR/range entry and the default',
+    proves:
+      'unit test asserts longest-prefix selection, inclusive range bounds and the default fallback; differential cases cover loopback and X-Forwarded-For sources',
+  },
+  {
+    id: 'http:split_clients',
+    evidence:
+      'crates/sdkwork-webserver-core/src/config/geo.rs::split_clients_uses_nginx_murmur_hash_and_buckets',
+    claim: 'split_clients selects the nginx murmur-hash bucket',
+    proves:
+      'unit test pins ngx_murmur_hash2 bucket selection and fixed-point percentages against nginx 1.29.6 fixture keys',
+  },
+  {
+    id: 'http:valid_referers',
+    evidence:
+      'crates/sdkwork-webserver-core/src/config/referer.rs::wildcards_paths_and_regexes',
+    claim: 'valid_referers evaluates server names, wildcards, path prefixes and regexes for $invalid_referer',
+    proves:
+      'unit test asserts wildcard/path/regex matching and missing-header validity; differential cases compare the resolved $invalid_referer against nginx',
+  },
 ];
 
 /**
@@ -1473,7 +1546,7 @@ function renderHeader(inventory, catalog) {
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
-  3a-2 and 3b.** The code, tests, generated operator matrix and the re-synced directive
+  3a-2, 3b and 4a.** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -1481,8 +1554,9 @@ function renderHeader(inventory, catalog) {
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
   policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
-  (autoindex family, empty_gif, stub_status) and Wave 3b (h2 stream ceiling,
-  proxy_method, stream allow/deny and literal return) are recorded as completed in
+  (autoindex family, empty_gif, stub_status), Wave 3b (h2 stream ceiling,
+  proxy_method, stream allow/deny and literal return) and Wave 4a (geo and
+  split_clients variable blocks plus valid_referers) are recorded as completed in
   section 3, and every one of them is asserted executable by
   \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
@@ -1589,7 +1663,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2 and 3b landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b and 4a landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -1624,7 +1698,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-Wave-3b worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-Wave-4a worktree, not a hand-maintained table; section 6 states
    the exact commands and the wave-3 landing procedure.
 `;
 }
@@ -1707,7 +1781,9 @@ Wave 2b closed the proxy response-header policy, internal locations, slash mergi
 request-header acceptance; Wave 3a added the header-level charset family and the gzip
 user-agent/proxied refinements; Wave 3a-2 added the autoindex listing family plus the
 empty_gif and stub_status location handlers; Wave 3b added the advertised HTTP/2
-stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return.
+stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream return;
+Wave 4a added the geo and split_clients variable blocks and the referer module
+(valid_referers / $invalid_referer).
 
 ${completedTable}
 ${completedRows}
@@ -1723,7 +1799,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-Wave 3b. An accepted-unenforced row is silently ignored today; a rejected row fails
+Wave 4a. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1731,15 +1807,18 @@ have to change, and the tests to add.
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the stream advanced gaps are the largest remaining operator
-surface (connection limits, variable assignment, preread/proxy-protocol timeouts,
-variable maps and upstream TLS identity). The body addition filter and the referer
-module are medium-sized features that pull in a bounded subrequest engine and
-\`$invalid_referer\` variable threading respectively. \`chunked_transfer_encoding\` and the
-static open-file cache are smaller, bounded changes. Two rows are architecture-blocked
-rather than effort-blocked: \`http2_chunk_size\` (the pinned hyper/h2 ingress exposes no
-DATA-chunk knob) and the OCSP/trust-chain rows (the pinned rustls stack exposes no
-stapling/OCSP-fetch surface, so no bounded static form exists).
+Within the backlog, the largest remaining item is a bounded **re-entrant subrequest
+engine**: the addition filter, \`auth_request\` and mirror all need nested subrequests
+that themselves proxy or serve, which the current internal-redirect/error-page engine
+cannot bound under PRD section 6. The stream advanced gaps are the next-largest surface
+(shared zone state for limit_conn, a stream variable engine for set/map, and an upstream
+TLS client for proxy_ssl identity). The userid, browser, random_index, degradation and
+slice modules are self-contained module-sized work. \`chunked_transfer_encoding\` and the
+static open-file cache are now precisely bounded: the pinned hyper HTTP/1.1 encoder
+cannot emit a close-delimited 1.1 response, and the open-file cache is a performance
+cache whose only semantic contract is staleness bounds. Two rows are architecture-blocked
+rather than effort-blocked: \`http2_chunk_size\` (hyper/h2 exposes no DATA-chunk knob) and
+the OCSP/trust-chain rows (rustls exposes no stapling/OCSP-fetch surface).
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -1787,7 +1866,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1907,6 +1986,13 @@ What implementing each group would actually require:
 | GeoIP | ${outOfProfile.filter((row) => row.module.includes('geoip')).length} | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | ${outOfProfile.filter((row) => row.module === 'ngx_core_module').length} | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
+Substrate note: a new crate, \`crates/sdkwork-webserver-upstream-protocol\`, has landed
+with FastCGI/uWSGI/SCGI/memcached/gRPC codecs and 89 tests. It is **not wired into the
+data plane yet**, so the corresponding nginx modules remain out-of-profile / fail-closed
+in this ledger. Wiring it would satisfy the protocol-codec half of the work above but
+still leaves the CGI-variable/security model, cache/status mapping, conformance corpus
+and the deployment-profile decision to be made separately.
+
 ### 5.3 Fail-Closed Groups (${failClosed.length} directives, top modules)
 
 ${failClosedByModule.map(([module, count]) => `- \`${module}\` - ${count} directive(s)`).join('\n')}
@@ -1974,7 +2060,7 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after Wave 3b landed and the Lead re-synced the catalog.
+This refresh was regenerated after Wave 4a landed and the Lead re-synced the catalog.
 The table lists the cumulative completed-wave rows and their current state:
 
 | Directive | Wave | Current state |
