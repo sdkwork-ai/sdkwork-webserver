@@ -380,6 +380,9 @@ pub(super) struct ProxyRequestContext<'a> {
     pub response_policy: Option<&'a ProxyResponsePolicyConfig>,
     /// nginx `proxy_method`: override the method sent upstream.
     pub proxy_method: Option<&'a str>,
+    /// Rewrite-phase variables for request-time `proxy_pass` templates
+    /// (arbitrary request variables, `${name}` braces, `$1..$9` captures).
+    pub variables: Option<&'a super::request_variables::RequestVariables>,
 }
 
 mod hash_lb;
@@ -857,25 +860,34 @@ async fn proxy_request_dynamic(
     // first; a `$` surviving from the value is escaped so the nginx-variable
     // pass below cannot re-expand it.
     let template_with_maps = context.map_results.expand_tokens_escaped(template);
-    let evaluated = match sdkwork_webserver_core::expand_proxy_pass_template(
-        &template_with_maps,
-        &host,
-        server_port,
-        request_path,
-        &request_uri,
-        &headers,
-    ) {
-        Ok(url) => url,
-        Err(()) => {
-            return upgrade_failure_response(
-                upgrade,
-                text_response(
-                    StatusCode::BAD_GATEWAY,
-                    "invalid proxy_pass target
+    // Rewrite-phase variables (request facts, `map` results, `set` values,
+    // regex captures) take precedence when the request carries them; the
+    // legacy expander remains for contexts without rewrite-phase state.
+    let evaluated = match context
+        .variables
+        .filter(|variables| variables.uses_rewrite_variables())
+    {
+        Some(variables) => variables.expand(&template_with_maps),
+        None => match sdkwork_webserver_core::expand_proxy_pass_template(
+            &template_with_maps,
+            &host,
+            server_port,
+            request_path,
+            &request_uri,
+            &headers,
+        ) {
+            Ok(url) => url,
+            Err(()) => {
+                return upgrade_failure_response(
+                    upgrade,
+                    text_response(
+                        StatusCode::BAD_GATEWAY,
+                        "invalid proxy_pass target
 ",
-                ),
-            );
-        }
+                    ),
+                );
+            }
+        },
     };
     // A template without `$uri`/`$request_uri` forwards the full request URI
     // (nginx `proxy_pass http://host;` semantics).
@@ -885,6 +897,15 @@ async fn proxy_request_dynamic(
     } else {
         format!("{evaluated}{request_uri}")
     };
+    // A variable `proxy_pass` whose evaluated authority names a *declared*
+    // upstream routes through that upstream (real load balancing, health
+    // checks, and TLS policy) instead of the synthetic single-target upstream.
+    // Anything else keeps the bounded SSRF-policy path below.
+    let evaluated_url = target_url.parse::<Url>().ok();
+    let declared_upstream = evaluated_url
+        .as_ref()
+        .and_then(Url::host_str)
+        .and_then(|host| context.generation.upstreams.get(host).cloned());
     let authority = match target_url.parse::<Url>() {
         Ok(url) => match url.host_str() {
             Some(host) => format!("{host}:{}", url.port_or_known_default().unwrap_or(80)),
@@ -918,7 +939,9 @@ async fn proxy_request_dynamic(
     // lock so one slow build never serializes every dynamic-proxy request.
     // The shared upstream TLS policy cache (`data_plane::upstream_tls`)
     // keeps each cached entry's TLS footprint at one `ClientConfig` clone.
-    let upstream = {
+    let upstream = if let Some(declared) = declared_upstream.clone() {
+        declared
+    } else {
         let cached = {
             let mut cache = context
                 .generation
@@ -995,18 +1018,34 @@ async fn proxy_request_dynamic(
         );
     };
     let target_activity = upstream.claim_target_activity(selected.index);
-    let target_url = match Url::parse(&target_url) {
-        Ok(url) => url,
-        Err(_) => {
+    let target_url = if declared_upstream.is_some() {
+        // Declared upstream: the selected target supplies scheme/authority/TLS;
+        // the evaluated template supplies the path and query.
+        let Some(evaluated) = evaluated_url.as_ref() else {
             upstream.abandon_probe(selected);
             return upgrade_failure_response(
                 upgrade,
-                text_response(
-                    StatusCode::BAD_GATEWAY,
-                    "invalid upstream target
-",
-                ),
+                text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target\n"),
             );
+        };
+        let mut target = selected.url.clone();
+        target.set_path(evaluated.path());
+        target.set_query(evaluated.query());
+        target
+    } else {
+        match Url::parse(&target_url) {
+            Ok(url) => url,
+            Err(_) => {
+                upstream.abandon_probe(selected);
+                return upgrade_failure_response(
+                    upgrade,
+                    text_response(
+                        StatusCode::BAD_GATEWAY,
+                        "invalid upstream target
+",
+                    ),
+                );
+            }
         }
     };
     if upgrade == UpgradeDisposition::WebSocket {
@@ -1991,6 +2030,14 @@ fn expand_proxy_header_value(
                             _ => "80",
                         });
                     out.push_str(port);
+                }
+            }
+            _ if var.starts_with("http_") => {
+                // nginx `$http_<name>`: the inbound request field, `_` standing
+                // for `-`; absent is the empty string.
+                let header = var.trim_start_matches("http_").replace('_', "-");
+                if let Some(value) = source.get(&header).and_then(|value| value.to_str().ok()) {
+                    out.push_str(value.trim());
                 }
             }
             _ => {

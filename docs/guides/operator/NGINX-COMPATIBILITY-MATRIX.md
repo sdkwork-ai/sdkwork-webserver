@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 211 |
+| executable | 212 |
 | accepted, NOT enforced | 170 |
-| rejected (fail closed) | 299 |
+| rejected (fail closed) | 298 |
 | excluded from profile | 64 |
 | **total** | **744** |
 
@@ -102,7 +102,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
 - `ngx_http_random_index_module` (1) — `random_index`
 - `ngx_http_referer_module` (2) — `referer_hash_bucket_size`, `referer_hash_max_size`
-- `ngx_http_rewrite_module` (4) — `break`, `if`, `rewrite_log`, `uninitialized_variable_warn`
+- `ngx_http_rewrite_module` (3) — `break`, `rewrite_log`, `uninitialized_variable_warn`
 - `ngx_http_scgi_module` (28) — `scgi_buffer_size`, `scgi_buffers`, `scgi_busy_buffers_size`, `scgi_cache`, `scgi_cache_background_update`, `scgi_cache_bypass`, `scgi_cache_key`, `scgi_cache_lock`, `scgi_cache_lock_age`, `scgi_cache_lock_timeout`, `scgi_cache_max_range_offset`, `scgi_cache_methods`, `scgi_cache_min_uses`, `scgi_cache_path`, `scgi_cache_revalidate`, `scgi_cache_use_stale`, `scgi_cache_valid`, `scgi_force_ranges`, `scgi_ignore_client_abort`, `scgi_ignore_headers`, `scgi_limit_rate`, `scgi_max_temp_file_size`, `scgi_no_cache`, `scgi_pass_request_body`, `scgi_store`, `scgi_store_access`, `scgi_temp_file_write_size`, `scgi_temp_path`
 - `ngx_http_slice_filter_module` (1) — `slice`
 - `ngx_http_ssi_filter_module` (7) — `ssi`, `ssi_ignore_recycled_buffers`, `ssi_last_modified`, `ssi_min_file_chunk`, `ssi_silent_errors`, `ssi_types`, `ssi_value_length`
@@ -863,7 +863,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
 | `break` | no-args | http-if, http-location, http-server | rejected (fail closed) |  |
-| `if` | 1+ | http-location, http-server | rejected (fail closed) |  |
+| `if` | 1+ | http-location, http-server | executable | runtime: `server/location rewrite phase `if` conditions (truthy, =, !=, ~, !~, ~*, !~*) feeding the bounded variable engine; true bodies execute set/add_header/return/rewrite`. if-body proxy_pass/root/error_page remain fail-closed; multiple matched if blocks with add_header are approximated by the last applied set |
 | `return` | 1\|2 | http-if, http-location, http-server | executable | runtime: `virtualHosts[].routes[].resource (respond\|redirect)`. 444 and variable-bearing bodies are rejected |
 | `rewrite` | 2\|3 | http-if, http-location, http-server | executable | runtime: `routes[].rewrite`. only last\|break\|redirect\|permanent flags; bounded internal redirects |
 | `rewrite_log` | flag | http, http-if, http-location, http-server | rejected (fail closed) |  |

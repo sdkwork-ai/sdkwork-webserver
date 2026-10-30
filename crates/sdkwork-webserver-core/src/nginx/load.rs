@@ -6,9 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::{
-    expand_includes, materialize_nginx_app, merge_nginx_apps, parse_nginx_config, NginxConfigError,
-};
+use super::{expand_includes, merge_nginx_apps, parse_nginx_config, NginxConfigError};
 use crate::config::ConfigDiagnostic;
 
 /// Result of loading one nginx config path. `skipped` lists site files that
@@ -26,17 +24,31 @@ pub struct NginxLoadReport {
 /// directories walking up from the path are also loaded so TCP/UDP `stream`
 /// servers start alongside HTTP virtual hosts.
 pub fn load_nginx_compat(path: &Path, app_key: &str) -> Result<NginxLoadReport, NginxConfigError> {
+    load_nginx_compat_with_options(
+        path,
+        app_key,
+        &super::mapping::NginxCompatOptions::default(),
+    )
+}
+
+/// [`load_nginx_compat`] with the operator compatibility settings the nginx
+/// grammar cannot express (variable document-root allowlist).
+pub fn load_nginx_compat_with_options(
+    path: &Path,
+    app_key: &str,
+    options: &super::mapping::NginxCompatOptions,
+) -> Result<NginxLoadReport, NginxConfigError> {
     let mut skipped = Vec::new();
     let mut ignored = Vec::new();
     let materialized = if path.is_file() {
-        let (app, diagnostics) = load_one_file(path, app_key)?;
+        let (app, diagnostics) = load_one_file(path, app_key, options)?;
         ignored.extend(diagnostics);
         Some(app)
     } else if path.is_dir() {
-        let mut materialized = load_directory(path, app_key, &mut skipped, &mut ignored)?;
+        let mut materialized = load_directory(path, app_key, options, &mut skipped, &mut ignored)?;
         for stream_dir in companion_stream_directories(path) {
             if let Some(stream_app) =
-                load_directory(&stream_dir, app_key, &mut skipped, &mut ignored)?
+                load_directory(&stream_dir, app_key, options, &mut skipped, &mut ignored)?
             {
                 materialized = Some(match materialized {
                     Some(existing) => {
@@ -73,6 +85,7 @@ pub fn load_nginx_compat(path: &Path, app_key: &str) -> Result<NginxLoadReport, 
 fn load_directory(
     path: &Path,
     app_key: &str,
+    options: &super::mapping::NginxCompatOptions,
     skipped: &mut Vec<(PathBuf, String)>,
     ignored: &mut Vec<ConfigDiagnostic>,
 ) -> Result<Option<crate::config::WebServerAppConfig>, NginxConfigError> {
@@ -87,7 +100,7 @@ fn load_directory(
         if file.extension().and_then(|value| value.to_str()) != Some("conf") {
             continue;
         }
-        match load_one_file(&file, app_key) {
+        match load_one_file(&file, app_key, options) {
             Ok((app, diagnostics)) => {
                 ignored.extend(diagnostics);
                 materialized = Some(match materialized {
@@ -106,6 +119,7 @@ fn load_directory(
 fn load_one_file(
     path: &Path,
     app_key: &str,
+    options: &super::mapping::NginxCompatOptions,
 ) -> Result<(crate::config::WebServerAppConfig, Vec<ConfigDiagnostic>), NginxConfigError> {
     let text = crate::fs_bounds::read_text_capped(path, crate::fs_bounds::MAX_IMPORT_SOURCE_BYTES)
         .map_err(|source| io_error(path, source))?;
@@ -124,7 +138,7 @@ fn load_one_file(
             "nginx compatibility directive is accepted but not enforced"
         );
     }
-    let app = materialize_nginx_app(&expanded, base_dir, app_key)?;
+    let app = super::mapping::materialize_nginx_app(&expanded, base_dir, app_key, options)?;
     Ok((app, ignored))
 }
 

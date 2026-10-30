@@ -8,13 +8,14 @@ use ipnet::IpNet;
 use url::Url;
 
 use super::{
-    is_supported_upstream_allowed_cidr, parse_server_name, server_name_is_regex,
-    upstream_ip_is_allowed, AppDomainFallbackLookup, CachePolicyConfig, CertificateSource,
-    ConfigDiagnostic, ErrorPageConfig, ExpiresMode, ListenerProtocol, ResourceConfig, RouteConfig,
-    RoutePathType, SecurityHeadersConfig, ServerNameForm, StreamTargetConfig,
+    is_capture_variable, is_supported_upstream_allowed_cidr, parse_server_name,
+    server_name_is_regex, template_variables, upstream_ip_is_allowed, AppDomainFallbackLookup,
+    CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig, ExpiresMode,
+    IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig, RewritePhaseOpConfig,
+    RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm, StreamTargetConfig,
     TlsCertificateResolution, TlsVersion, UpstreamConfig, UpstreamLoadBalancingStrategy,
     UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig, WebServerConfigError,
-    WebServerLimits,
+    WebServerLimits, MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -92,6 +93,14 @@ impl SemanticValidator {
                 self.push(
                     "/nginx/unixSocketRoot",
                     "unixSocketRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
+                );
+            }
+        }
+        for (index, prefix) in config.nginx.document_root_allowlist.iter().enumerate() {
+            if !valid_document_root_allowlist_entry(prefix) {
+                self.push(
+                    format!("/nginx/documentRootAllowlist/{index}"),
+                    "documentRootAllowlist entries must be absolute directory prefixes without `..`, a trailing slash, backslashes, NUL, or control characters",
                 );
             }
         }
@@ -457,6 +466,18 @@ impl SemanticValidator {
                     );
                 }
             }
+            for (regex_index, pattern) in certificate.server_name_regexes.iter().enumerate() {
+                let compiled = if pattern.bytes().any(|byte| byte.is_ascii_uppercase()) {
+                    format!("(?i){pattern}")
+                } else {
+                    pattern.clone()
+                };
+                validate_regex_pattern(
+                    self,
+                    format!("{path}/serverNameRegexes/{regex_index}"),
+                    &compiled,
+                );
+            }
             let CertificateSource::ProtectedFile {
                 certificate_file,
                 private_key_file,
@@ -613,12 +634,20 @@ impl SemanticValidator {
                     index_files,
                     spa_fallback,
                     follow_symlinks,
+                    dynamic_root,
                     ..
                 } => {
                     // Absolute roots (nginx `root` compatibility) are used
-                    // directly; relative roots stay chrooted.
-                    if !root.starts_with('/') {
+                    // directly; relative roots stay chrooted. A request-time
+                    // `root $variable` placeholder is validated per referencing
+                    // route, where the rewrite-phase variable scope is known.
+                    if dynamic_root.is_none() && !root.starts_with('/') {
                         validate_relative_path(self, &format!("{path}/root"), root, true);
+                    }
+                    if let Some(template) = dynamic_root {
+                        if let Err(message) = template_variables(template) {
+                            self.push(format!("{path}/dynamicRoot"), message);
+                        }
                     }
                     for (file_index, file) in index_files.iter().enumerate() {
                         validate_relative_path(
@@ -628,10 +657,10 @@ impl SemanticValidator {
                             false,
                         );
                     }
-                    if index_files.as_slice() != ["index.html"] {
+                    if index_files.is_empty() {
                         self.push(
                             format!("{path}/indexFiles"),
-                            "REQ-2026-0003 currently supports indexFiles=[\"index.html\"] only",
+                            "indexFiles must declare at least one file name",
                         );
                     }
                     if let Some(file) = spa_fallback {
@@ -1206,10 +1235,11 @@ impl SemanticValidator {
                             && url.fragment().is_none() =>
                     {
                         has_plaintext_target |= url.scheme() == "http";
+                        // nginx allows the same server address to appear more
+                        // than once (it weights the peer); each entry keeps its
+                        // own target index, so duplicates are not an error.
                         let normalized = url.as_str().trim_end_matches('/').to_ascii_lowercase();
-                        if !target_urls.insert(normalized) {
-                            self.push(&target_path, "duplicate upstream target URL");
-                        }
+                        target_urls.insert(normalized);
                         if has_target_connection_limits {
                             let authority = (
                                 url.scheme().to_owned(),
@@ -1375,6 +1405,18 @@ impl SemanticValidator {
         for (index, virtual_host) in config.virtual_hosts.iter().enumerate() {
             let path = format!("/virtualHosts/{index}");
             let named_targets = named_location_targets(self, &path, virtual_host);
+            let map_variable_names: Vec<String> = config
+                .maps
+                .iter()
+                .filter_map(|map| map.result.strip_prefix('$').map(str::to_owned))
+                .collect();
+            let mut server_variables = map_variable_names.clone();
+            validate_rewrite_phase(
+                self,
+                &format!("{path}/rewritePhase"),
+                &virtual_host.rewrite_phase,
+                &mut server_variables,
+            );
             for (listener_index, listener_ref) in virtual_host.listener_refs.iter().enumerate() {
                 if !listeners.contains_key(listener_ref.as_str()) {
                     self.push(
@@ -1437,6 +1479,8 @@ impl SemanticValidator {
                 &named_targets,
                 &virtual_host.error_pages,
                 virtual_host.recursive_error_pages,
+                &server_variables,
+                !config.nginx.document_root_allowlist.is_empty(),
             );
             for (page_index, page) in virtual_host.error_pages.iter().enumerate() {
                 validate_error_page_target(
@@ -1511,19 +1555,24 @@ impl SemanticValidator {
                     .any(|listener_ref| listener_ref == &listener.id)
             }) {
                 for server_name in &virtual_host.server_names {
-                    // SNI certificate selection is index-based in this
-                    // runtime: exact names and one-level leading wildcards.
-                    // Regex names are evaluated by the HTTP host selector only
-                    // and a trailing wildcard has no index representation, so
-                    // both fail closed on a TLS listener instead of silently
-                    // serving the wrong certificate.
+                    // SNI selection supports exact names, one-level leading
+                    // wildcards, and authored-order regex names (evaluated
+                    // after the exact/wildcard tables, exactly like nginx). A
+                    // trailing wildcard still has no certificate-index
+                    // representation and fails closed.
                     if server_name_is_regex(server_name) {
-                        self.push(
-                            format!("/listeners/{listener_index}/tlsPolicyRef"),
-                            format!(
-                                "regex server name {server_name} is not supported on a TLS listener: SNI certificate selection is an exact/wildcard index and nginx-compatible regex SNI matching is not implemented"
-                            ),
-                        );
+                        if !assignments_cover_unlisted_names
+                            && !policy_certificates
+                                .iter()
+                                .any(|certificate| !certificate.server_name_regexes.is_empty())
+                        {
+                            self.push(
+                                format!("/listeners/{listener_index}/tlsPolicyRef"),
+                                format!(
+                                    "TLS policy {policy_ref} has no certificate declaring regex server name {server_name}"
+                                ),
+                            );
+                        }
                         continue;
                     }
                     let Some(form) = parse_server_name(server_name) else {
@@ -2854,10 +2903,16 @@ fn validate_error_page_target(
     from_named_location: bool,
 ) {
     if !page.uri.starts_with('@') {
+        if page.uri.starts_with('$') {
+            return;
+        }
         if !page.uri.starts_with('/') {
             validator.push(
                 format!("{path}/uri"),
-                "error_page target must be an absolute `/path` or an `@named` location",
+                format!(
+                    "error_page target `{}` must be an absolute `/path`, an `@named` location, or a variable template",
+                    page.uri
+                ),
             );
         }
         return;
@@ -2925,6 +2980,247 @@ pub fn unix_target_path(value: &str) -> Option<String> {
     Some(path.to_owned())
 }
 
+/// The request-variable vocabulary the bounded rewrite engine resolves.
+const REWRITE_REQUEST_VARIABLES: &[&str] = &[
+    "host",
+    "scheme",
+    "remote_addr",
+    "server_port",
+    "request_method",
+    "server_name",
+    "server_protocol",
+    "request_uri",
+    "uri",
+    "document_uri",
+    "args",
+    "query_string",
+    "is_args",
+    "content_type",
+    "content_length",
+    "document_root",
+    "request_filename",
+    "fastcgi_script_name",
+    "fastcgi_path_info",
+    "https",
+];
+
+fn rewrite_variable_known(name: &str, known: &[String]) -> bool {
+    is_capture_variable(name)
+        || REWRITE_REQUEST_VARIABLES.contains(&name)
+        || known.iter().any(|variable| variable == name)
+        || name
+            .strip_prefix("http_")
+            .is_some_and(|suffix| !suffix.is_empty())
+        || name
+            .strip_prefix("arg_")
+            .is_some_and(|suffix| !suffix.is_empty())
+        || name
+            .strip_prefix("cookie_")
+            .is_some_and(|suffix| !suffix.is_empty())
+}
+
+fn valid_rewrite_variable_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && !name
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_digit())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+fn validate_rewrite_template_reference(
+    validator: &mut SemanticValidator,
+    path: String,
+    template: &str,
+    known: &[String],
+) {
+    let variables = match template_variables(template) {
+        Ok(variables) => variables,
+        Err(message) => {
+            validator.push(path, message);
+            return;
+        }
+    };
+    for variable in variables {
+        if !rewrite_variable_known(&variable.name, known) {
+            validator.push(
+                path.clone(),
+                format!(
+                    "rewrite-phase variable `${}` is not resolvable here; it must be a request variable, a declared `map` result, a regex capture, or an earlier `set`",
+                    variable.name
+                ),
+            );
+        }
+    }
+}
+
+fn validate_rewrite_phase(
+    validator: &mut SemanticValidator,
+    path: &str,
+    operations: &[RewritePhaseOpConfig],
+    known: &mut Vec<String>,
+) {
+    if operations.len() > MAX_REWRITE_PHASE_OPS {
+        validator.push(
+            path,
+            format!(
+                "rewrite phase has {} instructions; maximum is {MAX_REWRITE_PHASE_OPS}",
+                operations.len()
+            ),
+        );
+        return;
+    }
+    for (index, operation) in operations.iter().enumerate() {
+        let operation_path = format!("{path}/{index}");
+        match operation {
+            RewritePhaseOpConfig::Set { variable, value } => {
+                let variable_path = format!("{operation_path}/variable");
+                if !valid_rewrite_variable_name(variable) {
+                    validator.push(
+                        &variable_path,
+                        "rewrite variable name must be letters, digits, or `_` and must not start with a digit",
+                    );
+                    continue;
+                }
+                validate_rewrite_template_reference(
+                    validator,
+                    format!("{operation_path}/value"),
+                    value,
+                    known,
+                );
+                if !known.iter().any(|existing| existing == variable) {
+                    if known.len() >= MAX_REWRITE_PHASE_VARIABLES {
+                        validator.push(
+                            &variable_path,
+                            format!("rewrite phase assigns more than {MAX_REWRITE_PHASE_VARIABLES} variables"),
+                        );
+                        continue;
+                    }
+                    known.push(variable.clone());
+                }
+            }
+            RewritePhaseOpConfig::If { condition, body } => {
+                validate_if_condition(validator, &operation_path, condition, known);
+                validate_rewrite_phase(validator, &format!("{operation_path}/body"), body, known);
+            }
+            RewritePhaseOpConfig::Return {
+                status,
+                body,
+                location,
+            } => {
+                if *status == 444 || !(200..=599).contains(status) {
+                    validator.push(
+                        format!("{operation_path}/status"),
+                        "rewrite-phase return status must be 200..=599 and not 444",
+                    );
+                }
+                if let Some(location) = location {
+                    validate_redirect_location(
+                        validator,
+                        &format!("{operation_path}/location"),
+                        location,
+                    );
+                }
+                if let Some(body) = body {
+                    if body.contains('$')
+                        || !body
+                            .bytes()
+                            .all(|byte| byte == b'\t' || (0x20..=0x7e).contains(&byte))
+                    {
+                        validator.push(
+                            format!("{operation_path}/body"),
+                            "rewrite-phase return bodies must be printable literal text without variables",
+                        );
+                    }
+                }
+            }
+            RewritePhaseOpConfig::Rewrite {
+                pattern,
+                replacement: _,
+                flag: _,
+            } => validate_regex_pattern(validator, format!("{operation_path}/pattern"), pattern),
+            RewritePhaseOpConfig::AddHeader { name, value, .. } => {
+                if let Err(message) =
+                    super::model::CustomHeaderConfig::validate_declaration(name, value)
+                {
+                    validator.push(&operation_path, message);
+                }
+            }
+        }
+    }
+}
+
+fn validate_if_condition(
+    validator: &mut SemanticValidator,
+    path: &str,
+    condition: &IfConditionConfig,
+    known: &[String],
+) {
+    let variable = &condition.variable;
+    if !valid_rewrite_variable_name(variable) || is_capture_variable(variable) {
+        validator.push(
+            format!("{path}/condition/variable"),
+            "`if` left-hand side must be a named `$variable`",
+        );
+    } else if !rewrite_variable_known(variable, known) {
+        validator.push(
+            format!("{path}/condition/variable"),
+            format!("`if` variable `${variable}` is not resolvable here"),
+        );
+    }
+    let requires_value = !matches!(
+        condition.operator,
+        IfOperatorConfig::Truthy | IfOperatorConfig::NegatedTruthy
+    );
+    match (&condition.value, requires_value) {
+        (None, true) => validator.push(
+            format!("{path}/condition/value"),
+            "this `if` operator requires a right-hand operand",
+        ),
+        (Some(_), false) => validator.push(
+            format!("{path}/condition/value"),
+            "truthiness `if` conditions take no right-hand operand",
+        ),
+        (Some(value), true) => match condition.operator {
+            IfOperatorConfig::Regex
+            | IfOperatorConfig::NotRegex
+            | IfOperatorConfig::RegexIgnoreCase
+            | IfOperatorConfig::NotRegexIgnoreCase => {
+                let pattern = match condition.operator {
+                    IfOperatorConfig::RegexIgnoreCase | IfOperatorConfig::NotRegexIgnoreCase => {
+                        format!("(?i){value}")
+                    }
+                    _ => value.clone(),
+                };
+                validate_regex_pattern(validator, format!("{path}/condition/value"), &pattern);
+            }
+            _ => validate_rewrite_template_reference(
+                validator,
+                format!("{path}/condition/value"),
+                value,
+                known,
+            ),
+        },
+        (None, false) => {}
+    }
+}
+
+fn valid_document_root_allowlist_entry(prefix: &str) -> bool {
+    !prefix.is_empty()
+        && prefix.starts_with('/')
+        && prefix != "/"
+        && !prefix.ends_with('/')
+        && !prefix.contains('\\')
+        && !prefix.contains('\0')
+        && !prefix.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+        && !Path::new(prefix)
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+}
+
 /// Whether `root` is a usable `nginx.unixSocketRoot` value.
 fn valid_unix_socket_root(root: &str) -> bool {
     !root.is_empty()
@@ -2990,6 +3286,8 @@ fn validate_routes(
     named_targets: &HashMap<&str, &RouteConfig>,
     host_error_pages: &[ErrorPageConfig],
     recursive_error_pages: bool,
+    server_variables: &[String],
+    document_root_allowlist_configured: bool,
 ) {
     let zone_names = limit_req_zones
         .iter()
@@ -3002,6 +3300,19 @@ fn validate_routes(
     let mut routes_by_matcher: HashMap<(RoutePathType, &str), Vec<usize>> = HashMap::new();
     for (index, route) in routes.iter().enumerate() {
         let path = format!("{host_path}/routes/{index}");
+        if route.max_request_body_bytes == Some(0) {
+            validator.push(
+                format!("{path}/maxRequestBodyBytes"),
+                "maxRequestBodyBytes must be greater than zero",
+            );
+        }
+        let mut route_variables = server_variables.to_vec();
+        validate_rewrite_phase(
+            validator,
+            &format!("{path}/rewritePhase"),
+            &route.rewrite_phase,
+            &mut route_variables,
+        );
         let configured_path = &route.route_match.path;
         let is_regex = matches!(
             route.route_match.path_type,
@@ -3036,10 +3347,10 @@ fn validate_routes(
                     format!("{path}/match/path"),
                     match error {
                         super::uri::UriPathNormalizationError::Invalid => {
-                            "route path is not a valid canonical Path"
+                            format!("route path {configured_path:?} is not a valid canonical Path")
                         }
                         super::uri::UriPathNormalizationError::TooLong => {
-                            "route path exceeds canonical Path budgets"
+                            "route path exceeds canonical Path budgets".to_owned()
                         }
                     },
                 ),
@@ -3065,6 +3376,25 @@ fn validate_routes(
                 format!("{path}/resourceRef"),
                 format!("unknown resource {}", route.resource_ref),
             );
+        }
+        if let Some(ResourceConfig::Static {
+            dynamic_root: Some(template),
+            ..
+        }) = resource
+        {
+            if !document_root_allowlist_configured {
+                validator.push(
+                    format!("{path}/resourceRef"),
+                    "a request-time `root`/`alias $variable` requires `nginx.documentRootAllowlist` in the typed configuration; without it the evaluated path cannot be confined",
+                );
+            } else {
+                validate_rewrite_template_reference(
+                    validator,
+                    format!("{path}/resourceRef"),
+                    template,
+                    &route_variables,
+                );
+            }
         }
         // `try_files $uri @fallback;` materializes on a static resource as a
         // named fallback target. It must resolve inside this virtual host and

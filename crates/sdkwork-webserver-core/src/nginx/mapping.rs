@@ -48,14 +48,14 @@ use crate::config::{
     format_proxy_set_header_entry_with_maps, hostname_upstream_allowed_cidrs,
     map_variables::{map_result_name, validate_map_definitions, validate_map_source},
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
-    validate_proxy_pass_template_with_maps, AutoindexConfig, AutoindexFormat, CachePolicyConfig,
-    CharsetConfig, ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode,
-    GeoConfig, GeoEntryConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
-    MapEntryConfig, MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
-    ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry,
-    SplitClientsConfig, SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig,
-    StreamTlsMode, TlsVersion, UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig,
-    WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX,
+    AutoindexConfig, AutoindexFormat, CachePolicyConfig, CharsetConfig, ConfigDiagnostic,
+    CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig, GeoEntryConfig,
+    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig, MapEntryConfig,
+    MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
+    RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
+    SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
+    UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig, WebServerConfigError,
+    ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
 use super::parser::NginxDirective;
@@ -385,15 +385,47 @@ impl From<NginxConfigError> for WebServerConfigError {
 /// Materialize parsed nginx directives (either an `http` block's children or
 /// a directory of `sites-enabled`-style `*.conf` files) into the runtime
 /// model. `base_dir` anchors relative certificate and root paths.
+/// Operator-provided compatibility settings for the nginx plane.
+///
+/// These are typed-plane settings that a stock nginx file cannot express (the
+/// nginx grammar has no equivalent directive), so the operator supplies them
+/// out of band. The same values exist in the typed configuration model
+/// (`nginx.documentRootAllowlist`); the nginx plane must receive them from the
+/// process environment.
+#[derive(Debug, Clone, Default)]
+pub struct NginxCompatOptions {
+    /// Absolute directory prefixes a request-time `root $variable;` /
+    /// `alias $variable;` may resolve to. Empty means variable document roots
+    /// fail closed at materialization.
+    pub document_root_allowlist: Vec<String>,
+}
+
+/// Materialize with default (empty) operator compatibility settings.
+pub fn materialize_nginx_app_default(
+    directives: &[NginxDirective],
+    base_dir: &Path,
+    app_key: &str,
+) -> Result<WebServerAppConfig, NginxConfigError> {
+    materialize_nginx_app(
+        directives,
+        base_dir,
+        app_key,
+        &NginxCompatOptions::default(),
+    )
+}
+
+/// Materialize with explicit operator compatibility settings.
 pub fn materialize_nginx_app(
     directives: &[NginxDirective],
     base_dir: &Path,
     app_key: &str,
+    options: &NginxCompatOptions,
 ) -> Result<WebServerAppConfig, NginxConfigError> {
     let http_directives = extract_http_context(directives)?;
     let stream_directives = extract_stream_context(directives)?;
     let mail_directives = extract_mail_context(directives)?;
     let mut mapper = Mapper::new(app_key, base_dir);
+    mapper.document_root_allowlist = options.document_root_allowlist.clone();
     // nginx `map` declarations register their result variables at
     // configuration init, so a value template may reference one declared later
     // in `http {}` (differential-confirmed against nginx 1.29.6). Collect them
@@ -402,7 +434,16 @@ pub fn materialize_nginx_app(
         if directive.name == "map" {
             let map = parse_map(directive)?;
             if let Some(result) = map_result_name(&map) {
-                mapper.map_results.push(result.to_owned());
+                // nginx map variables are changeable: a later declaration of
+                // the same result variable replaces the earlier one instead of
+                // failing the whole configuration.
+                if mapper.map_results.iter().any(|existing| existing == result) {
+                    mapper
+                        .maps
+                        .retain(|existing| map_result_name(existing) != Some(result));
+                } else {
+                    mapper.map_results.push(result.to_owned());
+                }
             }
             mapper.maps.push(map);
         }
@@ -890,6 +931,10 @@ struct LocationExtras {
     stub_status: bool,
     /// Location-level nginx `valid_referers` policy (replaces the server one).
     referer: Option<RefererConfig>,
+    /// Ordered location-level `set` / `if` rewrite-phase instructions.
+    rewrite_phase: Vec<Value>,
+    /// Effective location `client_max_body_size` (inherited when undeclared).
+    max_request_body_bytes: Option<u64>,
 }
 
 /// Resolved nginx `ssl_protocols` policy as an inclusive version window.
@@ -1137,6 +1182,8 @@ struct Mapper<'a> {
     split_clients: Vec<SplitClientsConfig>,
     /// Result variable names (without `$`) declared by `self.maps`.
     map_results: Vec<String>,
+    /// Operator-provided `documentRootAllowlist` for variable document roots.
+    document_root_allowlist: Vec<String>,
     /// http-level `types` table; `None` keeps the runtime's built-in table.
     mime_types: Option<Vec<MimeTypeConfig>>,
     /// http-level `default_type`.
@@ -1260,9 +1307,6 @@ struct Mapper<'a> {
     server_proxy_method: Option<String>,
     /// Largest `client_max_body_size` seen while materializing nginx config.
     client_max_body_size: Option<u64>,
-    /// Set when different `client_max_body_size` values are declared at
-    /// different levels; the runtime model owns one global body limit.
-    client_max_body_size_conflict: bool,
 }
 
 impl<'a> Mapper<'a> {
@@ -1295,6 +1339,7 @@ impl<'a> Mapper<'a> {
             geo: Vec::new(),
             split_clients: Vec::new(),
             map_results: Vec::new(),
+            document_root_allowlist: Vec::new(),
             mime_types: None,
             default_type: None,
             http_proxy_set_headers: Vec::new(),
@@ -1339,7 +1384,6 @@ impl<'a> Mapper<'a> {
             limit_conn_zones: Vec::new(),
             limit_conn_zone_names: Vec::new(),
             client_max_body_size: None,
-            client_max_body_size_conflict: false,
             http2_max_concurrent_streams: None,
             http2_max_concurrent_streams_conflict: false,
             http_proxy_method: None,
@@ -1412,11 +1456,14 @@ impl<'a> Mapper<'a> {
 
     fn note_client_max_body_size(&mut self, bytes: Option<u64>) {
         if let Some(bytes) = bytes {
-            match self.client_max_body_size {
-                Some(existing) if existing != bytes => self.client_max_body_size_conflict = true,
-                None => self.client_max_body_size = Some(bytes),
-                _ => {}
-            }
+            // The app-level limit is the largest declared value; each
+            // location's own effective limit is stored on its route and
+            // enforced there (the pre-routing check can only use the global
+            // bound).
+            self.client_max_body_size = Some(
+                self.client_max_body_size
+                    .map_or(bytes, |existing| existing.max(bytes)),
+            );
         }
     }
 
@@ -1784,6 +1831,9 @@ impl<'a> Mapper<'a> {
         let mut named_locations = Vec::new();
         let mut client_max_body_size: Option<u64> = None;
         let mut server_root: Option<String> = None;
+        let mut server_root_dynamic: Option<String> = None;
+        let mut server_rewrite_phase: Vec<Value> = Vec::new();
+        let mut server_rewrite_variables: Vec<String> = self.map_results.clone();
         let mut server_try_files: Vec<String> = Vec::new();
         let mut server_index_files: Vec<String> = Vec::new();
         let mut add_headers: Vec<Value> = Vec::new();
@@ -1927,13 +1977,25 @@ impl<'a> Mapper<'a> {
                 // Server-level `root`/`try_files` are the defaults for every
                 // location that does not declare its own (nginx semantics).
                 "root" => {
-                    let Some(_root_path) = child.args.first() else {
+                    let Some(root_path) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
                             child,
                             "root requires a directory",
                         ));
                     };
-                    server_root = Some(self.resolve_path(child)?);
+                    if root_path.contains('$') {
+                        if self.document_root_allowlist.is_empty() {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                "`root $variable` requires the operator documentRootAllowlist (typed `[http] documentRootAllowlist` / SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST); without it the runtime cannot confine the evaluated path",
+                            ));
+                        }
+                        validate_rewrite_template(child, root_path, &server_rewrite_variables)?;
+                        server_root_dynamic = Some(root_path.clone());
+                        server_root = None;
+                    } else {
+                        server_root = Some(self.resolve_path(child)?);
+                    }
                 }
                 "try_files" => {
                     validate_try_files(child)?;
@@ -2278,6 +2340,38 @@ impl<'a> Mapper<'a> {
                         format!("`{name}` cannot be enforced by the SDKWork runtime"),
                     ));
                 }
+                "set" => {
+                    let operation = parse_set_operation(child, &mut server_rewrite_variables)?;
+                    if server_rewrite_phase.len() >= crate::config::MAX_REWRITE_PHASE_OPS {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!(
+                                "server declares more than {} rewrite-phase instructions",
+                                crate::config::MAX_REWRITE_PHASE_OPS
+                            ),
+                        ));
+                    }
+                    server_rewrite_phase.push(operation);
+                }
+                "if" => {
+                    let map_variables = self.map_variable_refs();
+                    let operation = parse_if_operation(
+                        child,
+                        &mut server_rewrite_variables,
+                        &map_variables,
+                        false,
+                    )?;
+                    if server_rewrite_phase.len() >= crate::config::MAX_REWRITE_PHASE_OPS {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!(
+                                "server declares more than {} rewrite-phase instructions",
+                                crate::config::MAX_REWRITE_PHASE_OPS
+                            ),
+                        ));
+                    }
+                    server_rewrite_phase.push(operation);
+                }
                 name => {
                     return Err(NginxConfigError::unsupported(
                         child,
@@ -2343,10 +2437,11 @@ impl<'a> Mapper<'a> {
                 .unwrap_or_else(|| format!("nginx-{}", certificate_name_counter()));
             let any_http2 = listen_specs.iter().any(|spec| spec.ssl && spec.http2)
                 || (http2_on && listen_specs.iter().any(|spec| spec.ssl));
-            // The SNI certificate index selects exact and one-level leading
-            // wildcard names only; `.suffix` expands, regex/trailing wildcard
-            // fail closed here rather than serving the wrong certificate.
-            let certificate_names = certificate_server_names(directive, &server_names)?;
+            // The SNI certificate index carries exact names, one-level leading
+            // wildcards, and authored-order regex patterns; `.suffix` expands
+            // to exact+wildcard, a trailing wildcard fails closed.
+            let (certificate_names, certificate_regexes) =
+                certificate_server_names(directive, &server_names)?;
             let mut certificate_source = json!({
                 "type": "protected-file",
                 "certificateFile": certificate_file,
@@ -2357,11 +2452,16 @@ impl<'a> Mapper<'a> {
             if let Some(ocsp_file) = &ocsp_stapling_file {
                 certificate_source["ocspStaplingFile"] = Value::String(ocsp_file.clone());
             }
-            self.certificates.push(json!({
+            let mut certificate = json!({
                 "id": certificate_name,
                 "serverNames": certificate_names,
                 "source": certificate_source,
-            }));
+            });
+            if !certificate_regexes.is_empty() {
+                certificate["serverNameRegexes"] =
+                    Value::Array(certificate_regexes.into_iter().map(Value::String).collect());
+            }
+            self.certificates.push(certificate);
             // nginx inheritance: an explicit server-level `ssl_protocols`
             // replaces the http-level window; the runtime default applies when
             // neither level declares one.
@@ -2586,6 +2686,9 @@ impl<'a> Mapper<'a> {
                 server_index,
                 index,
                 server_root.as_deref(),
+                server_root_dynamic.as_deref(),
+                client_max_body_size,
+                &server_rewrite_variables,
                 &server_try_files,
                 &server_index_files,
                 &inherited_access,
@@ -2605,9 +2708,19 @@ impl<'a> Mapper<'a> {
         }
 
         if locations.is_empty() && catch_all_return.is_none() {
+            // A server whose only behavior is a server-level `rewrite` (nginx's
+            // HTTP→HTTPS redirect pattern) has no locations; execute the
+            // authored rules in the server rewrite phase.
+            for rule in &server_rewrite_rules {
+                let mut operation = rule.clone();
+                operation["action"] = Value::String("rewrite".to_owned());
+                server_rewrite_phase.push(operation);
+            }
+        }
+        if locations.is_empty() && catch_all_return.is_none() && server_rewrite_phase.is_empty() {
             return Err(NginxConfigError::unsupported(
                 directive,
-                "server requires at least one location",
+                "server requires at least one location (or a server-level return/rewrite)",
             ));
         }
 
@@ -2617,6 +2730,9 @@ impl<'a> Mapper<'a> {
             "serverNames": server_names,
             "routes": [],
         });
+        if !server_rewrite_phase.is_empty() {
+            virtual_host["rewritePhase"] = Value::Array(server_rewrite_phase);
+        }
         // nginx response headers: a level that declares any `add_header`
         // replaces the inherited array, so the server-level list (or the
         // http-level list when the server declares none) becomes the host
@@ -2762,6 +2878,9 @@ impl<'a> Mapper<'a> {
                     server_index,
                     index,
                     server_root.as_deref(),
+                    server_root_dynamic.as_deref(),
+                    client_max_body_size,
+                    &server_rewrite_variables,
                     &server_try_files,
                     &server_index_files,
                     &inherited_access,
@@ -2864,6 +2983,12 @@ impl<'a> Mapper<'a> {
             // nginx: a location that declares error_page replaces the
             // inherited set for that location.
             route["errorPages"] = Value::Array(extras.error_pages.clone());
+        }
+        if !extras.rewrite_phase.is_empty() {
+            route["rewritePhase"] = Value::Array(extras.rewrite_phase.clone());
+        }
+        if let Some(limit) = extras.max_request_body_bytes {
+            route["maxRequestBodyBytes"] = Value::from(limit);
         }
         if !extras.response_headers.is_empty() {
             // nginx: a location that declares any add_header replaces the
@@ -3064,6 +3189,9 @@ impl<'a> Mapper<'a> {
         server_index: usize,
         index: usize,
         inherited_root: Option<&str>,
+        inherited_dynamic_root: Option<&str>,
+        inherited_client_max_body_size: Option<u64>,
+        server_rewrite_variables: &[String],
         inherited_try_files: &[String],
         inherited_index_files: &[String],
         inherited_access: &[Value],
@@ -3089,6 +3217,9 @@ impl<'a> Mapper<'a> {
         let mut return_directive = None;
         let mut root = None;
         let mut alias = None;
+        let mut dynamic_root: Option<String> = None;
+        let mut location_rewrite_phase: Vec<Value> = Vec::new();
+        let mut location_rewrite_variables: Vec<String> = server_rewrite_variables.to_vec();
         let mut try_files = Vec::new();
         let mut index_files = Vec::new();
         let mut extras = LocationExtras::default();
@@ -3183,19 +3314,48 @@ impl<'a> Mapper<'a> {
                             ))
                         }
                     };
-                    if name != "$memcached_key" {
+                    if name == "$memcached_key" {
+                        // `set $memcached_key` is the memcached module's request
+                        // key, not a general rewrite variable.
+                        let map_results = self.map_results.clone();
+                        let map_variables: Vec<&str> =
+                            map_results.iter().map(String::as_str).collect();
+                        crate::config::validate_param_value(value, &map_variables)
+                            .map_err(|message| NginxConfigError::unsupported(child, message))?;
+                        memcached_key_template = Some(value.clone());
+                    } else {
+                        let operation =
+                            parse_set_operation(child, &mut location_rewrite_variables)?;
+                        if location_rewrite_phase.len() >= crate::config::MAX_REWRITE_PHASE_OPS {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!(
+                                    "location declares more than {} rewrite-phase instructions",
+                                    crate::config::MAX_REWRITE_PHASE_OPS
+                                ),
+                            ));
+                        }
+                        location_rewrite_phase.push(operation);
+                    }
+                }
+                "if" => {
+                    let map_variables = self.map_variable_refs();
+                    let operation = parse_if_operation(
+                        child,
+                        &mut location_rewrite_variables,
+                        &map_variables,
+                        false,
+                    )?;
+                    if location_rewrite_phase.len() >= crate::config::MAX_REWRITE_PHASE_OPS {
                         return Err(NginxConfigError::unsupported(
                             child,
                             format!(
-                                "`set {name}` is not executable by the bounded adapter; only `set $memcached_key <value>` next to `memcached_pass` is supported"
+                                "location declares more than {} rewrite-phase instructions",
+                                crate::config::MAX_REWRITE_PHASE_OPS
                             ),
                         ));
                     }
-                    let map_results = self.map_results.clone();
-                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
-                    crate::config::validate_param_value(value, &map_variables)
-                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
-                    memcached_key_template = Some(value.clone());
+                    location_rewrite_phase.push(operation);
                 }
                 name if name.starts_with("memcached_") => {
                     location_memcached.apply(child)?;
@@ -3208,9 +3368,7 @@ impl<'a> Mapper<'a> {
                         ));
                     };
                     if target.contains('$') {
-                        let map_variables = self.map_variable_refs();
-                        validate_proxy_pass_template_with_maps(target, &map_variables)
-                            .map_err(|message| NginxConfigError::unsupported(child, message))?;
+                        validate_dynamic_proxy_target(child, target, &location_rewrite_variables)?;
                         dynamic_target = Some(target.clone());
                     } else {
                         proxy_pass = Some(target.clone());
@@ -3242,23 +3400,35 @@ impl<'a> Mapper<'a> {
                 "return" => {
                     return_directive = Some(child.args.clone());
                 }
-                "root" => {
-                    let Some(_root_path) = child.args.first() else {
+                "root" | "alias" => {
+                    let Some(argument) = child.args.first() else {
                         return Err(NginxConfigError::unsupported(
                             child,
-                            "root requires a directory",
+                            format!("{} requires a directory", child.name),
                         ));
                     };
-                    root = Some(self.resolve_path(child)?);
-                }
-                "alias" => {
-                    let Some(_alias_path) = child.args.first() else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "alias requires a directory",
-                        ));
-                    };
-                    alias = Some(self.resolve_path(child)?);
+                    if argument.contains('$') {
+                        if self.document_root_allowlist.is_empty() {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!(
+                                    "`{} $variable` requires the operator documentRootAllowlist (typed `[http] documentRootAllowlist` / SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST); without it the runtime cannot confine the evaluated path",
+                                    child.name
+                                ),
+                            ));
+                        }
+                        validate_rewrite_template(child, argument, &location_rewrite_variables)?;
+                        if child.name == "root" {
+                            root = Some(String::new());
+                        } else {
+                            alias = Some(String::new());
+                        }
+                        dynamic_root = Some(argument.clone());
+                    } else if child.name == "root" {
+                        root = Some(self.resolve_path(child)?);
+                    } else {
+                        alias = Some(self.resolve_path(child)?);
+                    }
                 }
                 "try_files" => {
                     validate_try_files(child)?;
@@ -3774,11 +3944,27 @@ impl<'a> Mapper<'a> {
             && inherited_root.is_none()
             && named_fallback.is_some()
             && (named_pc_root.is_some() || named_h5_root.is_some());
-        if serving > 1
-            || (serving == 0
-                && !inherits_static
-                && !adaptive_named_dispatch
-                && named_fallback.is_none())
+        if serving > 1 {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "a location must declare exactly one of proxy_pass | fastcgi_pass | uwsgi_pass | scgi_pass | memcached_pass | grpc_pass | return | root | alias",
+            ));
+        }
+        // A location with no serving behavior, no inherited root, and no
+        // `try_files` has nothing to execute: nginx would serve it from its
+        // compile-time default document root, which the runtime does not own.
+        // Materialize the only safe, deterministic outcome (404) instead of
+        // rejecting an otherwise-valid production configuration.
+        let default_root_missing = serving == 0
+            && !inherits_static
+            && !adaptive_named_dispatch
+            && named_fallback.is_none()
+            && effective_try_files_for_check.is_empty();
+        if serving == 0
+            && !inherits_static
+            && !adaptive_named_dispatch
+            && named_fallback.is_none()
+            && !default_root_missing
         {
             return Err(NginxConfigError::unsupported(
                 location,
@@ -3800,6 +3986,22 @@ impl<'a> Mapper<'a> {
         } else {
             root.or_else(|| inherited_root.map(str::to_owned))
         };
+        let effective_dynamic_root: Option<String> = dynamic_root
+            .clone()
+            .or_else(|| inherited_dynamic_root.map(str::to_owned));
+        if effective_dynamic_root.is_some()
+            && (proxy_pass.is_some()
+                || dynamic_target.is_some()
+                || fastcgi_pass.is_some()
+                || cgi_pass.iter().any(Option::is_some)
+                || grpc_pass.is_some()
+                || return_directive.is_some())
+        {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "a request-time `root`/`alias $variable` is only executable for static content in the bounded runtime; it cannot be combined with proxy_pass/fastcgi_pass/uwsgi_pass/scgi_pass/grpc_pass/return",
+            ));
+        }
 
         // Validate the named internal redirect now that the effective
         // static root is known.
@@ -4646,6 +4848,16 @@ impl<'a> Mapper<'a> {
                 "id": resource_id,
                 "type": "stub-status",
             }));
+        } else if default_root_missing {
+            // No document root exists for this location; answer 404 like nginx
+            // does for a file missing from its default document root.
+            self.resources.push(json!({
+                "id": resource_id,
+                "type": "respond",
+                "status": 404,
+                "contentType": "text/plain; charset=utf-8",
+                "body": "not found\n",
+            }));
         } else if extras.empty_gif {
             // nginx `empty_gif`: a location handler with no body input that
             // serves the canonical 1x1 GIF (GET/HEAD only).
@@ -4653,11 +4865,15 @@ impl<'a> Mapper<'a> {
                 "id": resource_id,
                 "type": "empty-gif",
             }));
-        } else if let Some(root) = effective_root {
+        } else if alias.is_none() && (effective_root.is_some() || effective_dynamic_root.is_some())
+        {
             // nginx `root` uses POSIX path semantics: a leading `/` is
             // absolute regardless of the host platform, and the full request
-            // path is appended to the root (no prefix stripping).
-            if !root.starts_with('/') {
+            // path is appended to the root (no prefix stripping). A
+            // `root $variable` template is resolved per request against the
+            // operator allowlist instead.
+            let root = effective_root.clone().unwrap_or_default();
+            if effective_dynamic_root.is_none() && !root.starts_with('/') {
                 return Err(NginxConfigError::unsupported(
                     location,
                     "root must be an absolute directory for nginx compatibility",
@@ -4691,13 +4907,17 @@ impl<'a> Mapper<'a> {
             } else {
                 effective_index_files.to_vec()
             };
-            self.resources.push(json!({
+            let mut resource = json!({
                 "id": resource_id,
                 "type": "static",
-                "root": root,
+                "root": if effective_dynamic_root.is_some() { String::new() } else { root },
                 "indexFiles": index_files,
                 "spaFallback": spa_fallback,
-            }));
+            });
+            if let Some(dynamic) = &effective_dynamic_root {
+                resource["dynamicRoot"] = Value::String(dynamic.clone());
+            }
+            self.resources.push(resource);
         } else if adaptive_named_dispatch {
             // `location / { try_files … @$sdkwork_webserver_surface_final; }`
             // plus Adaptive Web `location @pc` / `location @h5` document roots.
@@ -4716,7 +4936,7 @@ impl<'a> Mapper<'a> {
             }
             self.resources.push(resource);
         } else if let Some(alias) = alias {
-            if !alias.starts_with('/') {
+            if effective_dynamic_root.is_none() && !alias.starts_with('/') {
                 return Err(NginxConfigError::unsupported(
                     location,
                     "alias must be an absolute directory for nginx compatibility",
@@ -4733,7 +4953,10 @@ impl<'a> Mapper<'a> {
             // trailing slash but the location prefix does, nginx glues the
             // remainder onto the alias (`/data/w3/imagetop.gif`); the runtime
             // joins by directory traversal, so that footgun fails closed.
-            if !alias.ends_with('/') && location_path.ends_with('/') {
+            if effective_dynamic_root.is_none()
+                && !alias.ends_with('/')
+                && location_path.ends_with('/')
+            {
                 return Err(NginxConfigError::unsupported(
                     location,
                     format!(
@@ -4767,10 +4990,13 @@ impl<'a> Mapper<'a> {
             let mut alias_resource = json!({
                 "id": resource_id,
                 "type": "static",
-                "root": alias,
+                "root": if effective_dynamic_root.is_some() { String::new() } else { alias },
                 "indexFiles": alias_index_files,
                 "stripPrefix": true,
             });
+            if let Some(dynamic) = &effective_dynamic_root {
+                alias_resource["dynamicRoot"] = Value::String(dynamic.clone());
+            }
             if let Some(fallback) = alias_spa_fallback {
                 alias_resource["spaFallback"] = Value::String(fallback);
             }
@@ -4781,6 +5007,11 @@ impl<'a> Mapper<'a> {
         if extras.sub_filter.is_none() {
             extras.sub_filter = inherited_sub_filter.cloned();
         }
+        let effective_client_max_body_size =
+            client_max_body_size.or(inherited_client_max_body_size);
+        self.note_client_max_body_size(effective_client_max_body_size);
+        extras.max_request_body_bytes = effective_client_max_body_size;
+        extras.rewrite_phase = location_rewrite_phase;
         let _ = (server_name, client_max_body_size);
         Ok(extras)
     }
@@ -6067,15 +6298,26 @@ impl<'a> Mapper<'a> {
         if let Some(disk_path) = self.proxy_cache_disk_path {
             proxy_cache["diskPath"] = Value::String(disk_path);
         }
+        let mut nginx_section = json!({
+            "enabled": true,
+            "profile": "http-core-v1",
+            "unknownDirectivePolicy": "error",
+            "nativeCompatibility": true,
+        });
+        if !self.document_root_allowlist.is_empty() {
+            nginx_section["documentRootAllowlist"] = Value::Array(
+                self.document_root_allowlist
+                    .iter()
+                    .cloned()
+                    .map(Value::String)
+                    .collect(),
+            );
+        }
         let instance = json!({
             "schemaVersion": 1,
             "kind": "sdkwork.webserver.app",
             "appKey": self.app_key,
-            "nginx": {
-                "enabled": true,
-                "profile": "http-core-v1",
-                "unknownDirectivePolicy": "error",
-            },
+            "nginx": nginx_section,
             "maps": self.maps,
             "geo": self.geo,
             "splitClients": self.split_clients,
@@ -6104,18 +6346,6 @@ impl<'a> Mapper<'a> {
             "metadata": { "source": "nginx configuration" },
         });
         let mut instance = instance;
-        if self.client_max_body_size_conflict {
-            return Err(NginxConfigError::unsupported(
-                &NginxDirective {
-                    name: "client_max_body_size".to_owned(),
-                    args: Vec::new(),
-                    children: Vec::new(),
-                    line: 0,
-                    source: self.base_dir.to_path_buf(),
-                },
-                "conflicting `client_max_body_size` values at different levels; the runtime model supports one global request body limit — declare a single value",
-            ));
-        }
         if self.http2_max_concurrent_streams_conflict {
             return Err(NginxConfigError::unsupported(
                 &NginxDirective {
@@ -6939,8 +7169,9 @@ fn validate_server_names(
 fn certificate_server_names(
     directive: &NginxDirective,
     server_names: &[String],
-) -> Result<Vec<String>, NginxConfigError> {
+) -> Result<(Vec<String>, Vec<String>), NginxConfigError> {
     let mut names = Vec::new();
+    let mut regexes = Vec::new();
     for name in server_names {
         let trimmed = name.trim();
         match crate::config::parse_server_name(trimmed) {
@@ -6960,13 +7191,11 @@ fn certificate_server_names(
                     ),
                 ));
             }
-            Some(crate::config::ServerNameForm::Regex(_)) => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "regex server name `{trimmed}` cannot be represented by the SNI certificate index; use exact or leading-wildcard names on an ssl server"
-                    ),
-                ));
+            Some(crate::config::ServerNameForm::Regex(regex)) => {
+                // nginx SNI selection evaluates regex server names in authored
+                // order after the exact/wildcard tables; the certificate index
+                // carries the same patterns for this certificate.
+                regexes.push(regex.pattern);
             }
             None => {
                 return Err(NginxConfigError::unsupported(
@@ -6976,7 +7205,7 @@ fn certificate_server_names(
             }
         }
     }
-    Ok(names)
+    Ok((names, regexes))
 }
 
 /// Validate `try_files` arguments against what the runtime can execute.
@@ -7575,7 +7804,34 @@ fn parse_location_match(
         ("^~", Some(path)) => Ok(("prefix-exclusive", path.clone())),
         ("~", Some(pattern)) => Ok(("regex", pattern.clone())),
         ("~*", Some(pattern)) => Ok(("regex-ignore-case", pattern.clone())),
-        (path, _) => Ok(("prefix", path.to_owned())),
+        (path, _) => {
+            // nginx also accepts the modifier glued to the URI
+            // (`location ^~/api/`, `location ~*\.(png|jpg)$`, `location =/x`)
+            // because its parser strips the modifier characters before
+            // reading the URI. Mirror that here instead of treating the
+            // modifier as part of a prefix path.
+            if let Some(rest) = path.strip_prefix("^~") {
+                if !rest.is_empty() {
+                    return Ok(("prefix-exclusive", rest.to_owned()));
+                }
+            }
+            if let Some(rest) = path.strip_prefix("~*") {
+                if !rest.is_empty() {
+                    return Ok(("regex-ignore-case", rest.to_owned()));
+                }
+            }
+            if let Some(rest) = path.strip_prefix('~') {
+                if !rest.is_empty() {
+                    return Ok(("regex", rest.to_owned()));
+                }
+            }
+            if let Some(rest) = path.strip_prefix('=') {
+                if !rest.is_empty() {
+                    return Ok(("exact", rest.to_owned()));
+                }
+            }
+            Ok(("prefix", path.to_owned()))
+        }
     }
 }
 
@@ -8212,6 +8468,386 @@ fn parse_add_header(
     CustomHeaderConfig::validate_declaration_with_variables(name, value, map_variables)
         .map_err(|message| NginxConfigError::unsupported(directive, message))?;
     Ok(json!({ "name": name, "value": value, "always": always }))
+}
+
+/// Built-in request variables the bounded rewrite-phase engine resolves at
+/// request time (the same vocabulary the CGI adapters already evaluate).
+const REWRITE_REQUEST_VARIABLES: &[&str] = &[
+    "host",
+    "scheme",
+    "remote_addr",
+    "server_port",
+    "request_method",
+    "server_name",
+    "server_protocol",
+    "request_uri",
+    "uri",
+    "document_uri",
+    "args",
+    "query_string",
+    "is_args",
+    "content_type",
+    "content_length",
+    "document_root",
+    "request_filename",
+    "fastcgi_script_name",
+    "fastcgi_path_info",
+    "https",
+];
+
+fn rewrite_variable_is_known(name: &str, extra: &[String]) -> bool {
+    crate::config::is_capture_variable(name)
+        || REWRITE_REQUEST_VARIABLES.contains(&name)
+        || extra.iter().any(|variable| variable == name)
+        || name
+            .strip_prefix("http_")
+            .is_some_and(|suffix| !suffix.is_empty())
+        || name
+            .strip_prefix("arg_")
+            .is_some_and(|suffix| !suffix.is_empty())
+        || name
+            .strip_prefix("cookie_")
+            .is_some_and(|suffix| !suffix.is_empty())
+}
+
+fn validate_rewrite_variable_name(
+    directive: &NginxDirective,
+    name: &str,
+) -> Result<(), NginxConfigError> {
+    if name.is_empty()
+        || name.len() > 128
+        || name
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_digit())
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{name}` is not a supported rewrite variable name; use letters, digits, or `_` and do not start with a digit"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn paren_balance(value: &str) -> i64 {
+    value.bytes().fold(0_i64, |balance, byte| match byte {
+        b'(' => balance + 1,
+        b')' => balance - 1,
+        _ => balance,
+    })
+}
+
+fn strip_condition_quotes(value: &str) -> &str {
+    let bytes = value.as_bytes();
+    if bytes.len() >= 2
+        && ((bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\''))
+    {
+        &value[1..value.len() - 1]
+    } else {
+        value
+    }
+}
+
+fn validate_rewrite_template(
+    directive: &NginxDirective,
+    template: &str,
+    known: &[String],
+) -> Result<(), NginxConfigError> {
+    let variables = crate::config::template_variables(template)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    for variable in variables {
+        if !rewrite_variable_is_known(&variable.name, known) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "rewrite-phase variable `${{{}}}` is not resolvable here; it must be a request variable, a declared `map` result, a regex capture, or an earlier `set`",
+                    variable.name
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_set_operation(
+    directive: &NginxDirective,
+    known: &mut Vec<String>,
+) -> Result<Value, NginxConfigError> {
+    let [name, value] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "`set` requires `$variable value`",
+        ));
+    };
+    let Some(variable) = name.strip_prefix('$') else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("`set` target `{name}` must be a `$variable`"),
+        ));
+    };
+    validate_rewrite_variable_name(directive, variable)?;
+    validate_rewrite_template(directive, value, known)?;
+    if !known.iter().any(|existing| existing == variable) {
+        if known.len() >= crate::config::MAX_REWRITE_PHASE_VARIABLES {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "rewrite phase assigns more than {} variables",
+                    crate::config::MAX_REWRITE_PHASE_VARIABLES
+                ),
+            ));
+        }
+        known.push(variable.to_owned());
+    }
+    Ok(json!({ "action": "set", "variable": variable, "value": value }))
+}
+
+/// Parse one `if (<condition>) { … }` directive into an executable rewrite
+/// instruction, registering variables its body assigns so later instructions
+/// may reference them.
+fn parse_if_operation(
+    directive: &NginxDirective,
+    known: &mut Vec<String>,
+    map_variables: &[&str],
+    nested: bool,
+) -> Result<Value, NginxConfigError> {
+    if nested {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "nested `if` blocks are not executable by the bounded rewrite engine",
+        ));
+    }
+    // The tokenizer keeps an unquoted closing `)` inside the last token but
+    // consumes a `)` that follows a quoted token as the nginx `need_space`
+    // delimiter, so the assembled condition may lack its closing parenthesis.
+    let joined = directive.args.join(" ");
+    let trimmed = joined.trim();
+    let Some(inner) = trimmed.strip_prefix('(') else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("`if` condition must be parenthesized, found `{trimmed}`"),
+        ));
+    };
+    let inner = inner.trim_end();
+    // Drop the condition's own closing parenthesis only when the assembled
+    // text is unbalanced. A quoted/unquoted regex may legitimately end with a
+    // group `)`; a naive suffix strip would truncate it.
+    let mut inner = inner;
+    while inner.ends_with(')') && paren_balance(inner) < 0 {
+        inner = inner[..inner.len() - 1].trim_end();
+    }
+    let inner = inner;
+    let mut tokens = inner.split_whitespace();
+    let Some(left) = tokens.next() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "`if` condition is empty",
+        ));
+    };
+    let negated_variable = left.starts_with('!');
+    let left = left.strip_prefix('!').unwrap_or(left);
+    let Some(variable) = left.strip_prefix('$') else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("`if` left-hand side `{left}` must be a `$variable`"),
+        ));
+    };
+    validate_rewrite_variable_name(directive, variable)?;
+    let rest: Vec<&str> = tokens.collect();
+    let (operator, value) = if rest.is_empty() {
+        (
+            if negated_variable {
+                "negated-truthy"
+            } else {
+                "truthy"
+            },
+            None,
+        )
+    } else {
+        if negated_variable {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "`!$variable` is only valid as a bare truthiness test",
+            ));
+        }
+        let operator = match rest[0] {
+            "=" => "equals",
+            "!=" => "not-equals",
+            "~" => "regex",
+            "!~" => "not-regex",
+            "~*" => "regex-ignore-case",
+            "!~*" => "not-regex-ignore-case",
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`if` operator `{other}` is not executable; supported: `=`, `!=`, `~`, `~*`, `!~`, `!~*`, and bare truthiness"
+                    ),
+                ))
+            }
+        };
+        let raw = rest[1..].join(" ");
+        if raw.is_empty() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("`if` operator `{}` requires a right-hand operand", rest[0]),
+            ));
+        }
+        let raw = strip_condition_quotes(&raw).to_owned();
+        (operator, Some(raw))
+    };
+    let mut condition = json!({ "variable": variable, "operator": operator });
+    if let Some(raw) = value {
+        if operator.contains("regex") {
+            if raw.len() > 1_024 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`if` regex exceeds the 1024-byte bound",
+                ));
+            }
+            let pattern = if operator.ends_with("ignore-case") {
+                format!("(?i){raw}")
+            } else {
+                raw.clone()
+            };
+            regex::Regex::new(&pattern).map_err(|error| {
+                NginxConfigError::unsupported(
+                    directive,
+                    format!("`if` regex `{raw}` is invalid: {error}"),
+                )
+            })?;
+        } else if raw.contains('$') {
+            validate_rewrite_template(directive, &raw, known)?;
+        }
+        condition["value"] = Value::String(raw);
+    }
+    let mut body = Vec::new();
+    for child in &directive.children {
+        match child.name.as_str() {
+            "set" => body.push(parse_set_operation(child, known)?),
+            "add_header" => {
+                let mut header = parse_add_header(child, map_variables)?;
+                header["action"] = Value::String("add-header".to_owned());
+                body.push(header);
+            }
+            "return" => body.push(parse_rewrite_phase_return(child)?),
+            "rewrite" => {
+                let mut rule = parse_rewrite_rule(child)?;
+                rule["action"] = Value::String("rewrite".to_owned());
+                body.push(rule);
+            }
+            "if" => {
+                return Err(NginxConfigError::unsupported(
+                    child,
+                    "nested `if` blocks are not executable by the bounded rewrite engine",
+                ))
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    child,
+                    format!(
+                        "`if` body directive `{other}` is not executable by the bounded rewrite engine; supported: set, add_header, return, rewrite"
+                    ),
+                ))
+            }
+        }
+    }
+    Ok(json!({ "action": "if", "condition": condition, "body": body }))
+}
+
+/// Validate a request-time `proxy_pass` template against the variables the
+/// bounded rewrite engine can resolve in this context.
+fn validate_dynamic_proxy_target(
+    directive: &NginxDirective,
+    target: &str,
+    known: &[String],
+) -> Result<(), NginxConfigError> {
+    let variables = crate::config::template_variables(target)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    for variable in variables {
+        if !rewrite_variable_is_known(&variable.name, known) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "variable `proxy_pass` target `{target}` uses `${{{}}}`, which is not resolvable here; use a request variable, a declared `map` result, a regex capture, or an earlier `set`",
+                    variable.name
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Parse a rewrite-phase `return <code> [body|url]` / `return <url>`.
+fn parse_rewrite_phase_return(directive: &NginxDirective) -> Result<Value, NginxConfigError> {
+    let Some(first) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "`return` requires a status or URL",
+        ));
+    };
+    let Ok(status) = first.parse::<u16>() else {
+        if directive.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "the `return URL` form takes exactly one argument",
+            ));
+        }
+        if first.contains('$') && !redirect_variables_ok(first) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("return URL `{first}` uses unsupported variables; supported: $host $request_uri $scheme"),
+            ));
+        }
+        return Ok(json!({ "action": "return", "status": 302, "location": first }));
+    };
+    if status == 444 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "`return 444` is not supported by the runtime model",
+        ));
+    }
+    if !(200..=599).contains(&status) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("`return {status}` is outside 200..=599"),
+        ));
+    }
+    match (status, directive.args.get(1), directive.args.len()) {
+        (301 | 302 | 303 | 307 | 308, Some(url), 2) => {
+            if url.contains('$') && !redirect_variables_ok(url) {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("return URL `{url}` uses unsupported variables; supported: $host $request_uri $scheme"),
+                ));
+            }
+            Ok(json!({ "action": "return", "status": status, "location": url }))
+        }
+        (301 | 302 | 303 | 307 | 308, _, _) => Err(NginxConfigError::unsupported(
+            directive,
+            "a redirect `return` requires exactly one URL argument",
+        )),
+        (_, None, _) => Ok(json!({ "action": "return", "status": status })),
+        (_, Some(body), 2) => {
+            if body.contains('$') {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`return` bodies in a rewrite phase must be literal text (variables are not expanded)",
+                ));
+            }
+            Ok(json!({ "action": "return", "status": status, "body": body }))
+        }
+        _ => Err(NginxConfigError::unsupported(
+            directive,
+            "`return` takes a status and at most one body/URL argument",
+        )),
+    }
 }
 
 /// Parse `rewrite <pattern> <replacement> <flag>` into a runtime rule.
@@ -9368,6 +10004,55 @@ fn apply_cookie_rewrite_directive(
             *slot = Some(CookieRewritePolicyConfig::Off);
             Ok(())
         }
+        [from, to] if from.starts_with('~') => {
+            // `proxy_cookie_path ~[*]<pattern> <replacement>`: regex attribute
+            // rewriting, evaluated with the same regex engine/limits as the
+            // rest of the configuration.
+            let (pattern, case_insensitive) = match from.strip_prefix("~*") {
+                Some(pattern) => (pattern, true),
+                None => (
+                    from.strip_prefix('~').expect("guarded by starts_with('~')"),
+                    false,
+                ),
+            };
+            if pattern.is_empty() || pattern.len() > 1_024 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_cookie_path` regex must be 1..=1024 bytes",
+                ));
+            }
+            if domain {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_cookie_domain` accepts only the literal `<from> <to>` form",
+                ));
+            }
+            let compiled = if case_insensitive {
+                format!("(?i){pattern}")
+            } else {
+                pattern.to_owned()
+            };
+            regex::Regex::new(&compiled).map_err(|error| {
+                NginxConfigError::unsupported(
+                    directive,
+                    format!("`proxy_cookie_path` regex `{from}` is invalid: {error}"),
+                )
+            })?;
+            let rule = crate::config::ProxyRewriteRegexRuleConfig {
+                pattern: pattern.to_owned(),
+                replacement: to.clone(),
+                case_insensitive,
+            };
+            match slot {
+                Some(CookieRewritePolicyConfig::RegexRules(rules)) => rules.push(rule),
+                Some(_) => return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_cookie_path` literal and regex rules cannot be mixed at the same level",
+                )),
+                None => *slot = Some(CookieRewritePolicyConfig::RegexRules(vec![rule])),
+            }
+            Ok(())
+        }
         [from, to] => {
             validate_proxy_rewrite_rule(directive, from, to)?;
             let rule = if domain {
@@ -9863,12 +10548,34 @@ fn parse_error_page(directive: &NginxDirective) -> Result<Value, NginxConfigErro
                 ));
             }
             response_code = Some(parsed);
-        } else if argument.starts_with('/') || argument.starts_with('@') {
+        } else if argument.starts_with('/')
+            || argument.starts_with('@')
+            || argument.starts_with('$')
+        {
             if uri.is_some() {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     "error_page accepts exactly one target URI",
                 ));
+            }
+            if argument.starts_with('$') {
+                // nginx allows a variable error_page target
+                // (`error_page 405 =200 $uri;`). The runtime resolves the
+                // template with the request/rewrite variables before selecting
+                // the target.
+                let variables = crate::config::template_variables(argument)
+                    .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+                for variable in variables {
+                    if !rewrite_variable_is_known(&variable.name, &[]) {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!(
+                                "error_page target `{argument}` uses `${{{}}}`, which the runtime cannot resolve",
+                                variable.name
+                            ),
+                        ));
+                    }
+                }
             }
             uri = Some(argument.clone());
         } else if let Ok(code) = argument.parse::<u16>() {
@@ -10083,12 +10790,12 @@ fn certificate_name_counter() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ResourceConfig;
+    use crate::config::{ResourceConfig, RewritePhaseOpConfig};
     use crate::nginx::parser::parse_nginx_config;
 
     fn materialize(text: &str) -> Result<WebServerAppConfig, NginxConfigError> {
         let parsed = parse_nginx_config(text, std::path::Path::new("site.conf")).expect("parse");
-        materialize_nginx_app(
+        materialize_nginx_app_default(
             &parsed,
             std::path::Path::new("/etc/nginx/sites-enabled"),
             "test",
@@ -10311,7 +11018,8 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         // `listen 443 ssl http2` + `listen [::]:443 ssl http2` materialize as
         // two listeners (one per address family) sharing the TLS policy.
         assert_eq!(config.listeners.len(), 2);
@@ -10362,7 +11070,7 @@ server {{
                 std::path::Path::new("site.conf"),
             )
             .expect("parse");
-            materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize")
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize")
         };
         // TLS 1.3 only is a genuine hardening declaration; it must reach the
         // TLS policy instead of being dropped and silently re-opening 1.2.
@@ -10419,7 +11127,8 @@ http {
             std::path::Path::new("nginx.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         assert_eq!(config.tls_policies.len(), 2);
         let mut windows: Vec<(TlsVersion, TlsVersion)> = config
             .tls_policies
@@ -10456,7 +11165,7 @@ server {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let error = materialize_nginx_app(&parsed, directory.path(), "test")
+        let error = materialize_nginx_app_default(&parsed, directory.path(), "test")
             .expect_err("TLS 1.0/1.1 only must be refused, not silently defaulted");
         assert!(
             format!("{error}").contains("TLS 1.0/1.1"),
@@ -10483,7 +11192,7 @@ server {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let error = materialize_nginx_app(&parsed, directory.path(), "test")
+        let error = materialize_nginx_app_default(&parsed, directory.path(), "test")
             .expect_err("an unknown protocol token must be refused");
         assert!(
             format!("{error}").contains("TLSv1.4"),
@@ -10504,7 +11213,7 @@ server {
         )
         .expect("parse");
         let config =
-            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+            materialize_nginx_app_default(&parsed, directory.path(), "cache").expect("materialize");
         let policy = config.virtual_hosts[0]
             .cache_policy
             .as_ref()
@@ -10530,7 +11239,7 @@ server {
         )
         .expect("parse");
         let config =
-            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+            materialize_nginx_app_default(&parsed, directory.path(), "cache").expect("materialize");
         let routes = &config.virtual_hosts[0].routes;
         let policy = |index: usize| {
             routes[index]
@@ -10576,7 +11285,7 @@ http {
         )
         .expect("parse");
         let config =
-            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+            materialize_nginx_app_default(&parsed, directory.path(), "cache").expect("materialize");
         let host = config.virtual_hosts[0]
             .cache_policy
             .as_ref()
@@ -10615,7 +11324,7 @@ http {
         )
         .expect("parse");
         let config =
-            materialize_nginx_app(&parsed, directory.path(), "cache").expect("materialize");
+            materialize_nginx_app_default(&parsed, directory.path(), "cache").expect("materialize");
         let host = config.virtual_hosts[0]
             .cache_policy
             .as_ref()
@@ -10658,7 +11367,7 @@ http {
             );
             let parsed = parse_nginx_config(&text, std::path::Path::new("site.conf"))
                 .unwrap_or_else(|error| panic!("`{directive}` must parse: {error}"));
-            let error = materialize_nginx_app(&parsed, directory.path(), "cache")
+            let error = materialize_nginx_app_default(&parsed, directory.path(), "cache")
                 .err()
                 .unwrap_or_else(|| panic!("`{directive}` must be refused"));
             let message = format!("{error}");
@@ -10699,7 +11408,8 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         assert_eq!(config.virtual_hosts.len(), 2);
         let redirect = config
             .resources
@@ -10754,7 +11464,7 @@ server {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(
+        let config = materialize_nginx_app_default(
             &parsed,
             std::path::Path::new("/etc/nginx/sites-enabled"),
             "test",
@@ -10801,7 +11511,7 @@ server {
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(
+        let config = materialize_nginx_app_default(
             &parsed,
             std::path::Path::new("/etc/nginx/sites-enabled"),
             "test",
@@ -11001,7 +11711,8 @@ stream {{
             htpasswd.display().to_string().replace('\\', "/"),
         );
         let parsed = parse_nginx_config(&text, std::path::Path::new("nginx.conf")).expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         assert!(config.gzip.enabled);
         assert!(config.gzip.types.contains(&"application/json".to_owned()));
         assert_eq!(config.gzip.min_length, 1024);
@@ -11181,7 +11892,8 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         let listener = config
             .listeners
             .iter()
@@ -11814,8 +12526,8 @@ stream {
     }
 
     #[test]
-    fn conflicting_client_max_body_size_values_fail_closed() {
-        let error = materialize(
+    fn per_location_client_max_body_size_records_the_effective_route_limit() {
+        let config = materialize(
             r#"
 server {
     listen 80;
@@ -11829,13 +12541,18 @@ server {
 }
 "#,
         )
-        .expect_err("conflicting body limits must fail closed");
-        assert!(
-            error
-                .to_string()
-                .contains("conflicting `client_max_body_size`"),
-            "{error}"
+        .expect("per-location body limits materialize");
+        assert_eq!(
+            config.virtual_hosts[0].routes[0].max_request_body_bytes,
+            Some(10 * 1024 * 1024)
         );
+        assert_eq!(
+            config.virtual_hosts[0].routes[1].max_request_body_bytes,
+            Some(1024 * 1024)
+        );
+        // The app-level bound is the largest declared value so a request is
+        // never rejected before the location limit can be applied.
+        assert_eq!(config.limits.max_request_body_bytes, 10 * 1024 * 1024);
     }
 
     #[test]
@@ -12015,26 +12732,40 @@ server {
     }
 
     #[test]
-    fn ssl_servers_reject_server_name_forms_the_certificate_index_cannot_select() {
-        for name in ["www.example.*", "~^www\\.example\\.com$"] {
-            let error = materialize(&format!(
-                r#"
-server {{
+    fn ssl_servers_reject_trailing_wildcards_and_carry_regex_names() {
+        let error = materialize(
+            r#"
+server {
     listen 443 ssl;
-    server_name {name};
+    server_name www.example.*;
     ssl_certificate /etc/ssl/cert.pem;
     ssl_certificate_key /etc/ssl/key.pem;
-    location / {{ return 200 "ok"; }}
-}}
-"#
-            ))
-            .err()
-            .unwrap_or_else(|| panic!("{name:?} must fail closed on a TLS listener"));
-            assert!(
-                error.to_string().contains("SNI certificate index"),
-                "{name:?}: {error}"
-            );
-        }
+    location / { return 200 "ok"; }
+}
+"#,
+        )
+        .expect_err("trailing wildcard has no certificate-index representation");
+        assert!(
+            error.to_string().contains("SNI certificate index"),
+            "{error}"
+        );
+
+        let config = materialize(
+            r#"
+server {
+    listen 443 ssl;
+    server_name ~^(admin[a-zA-Z0-9_-]+)\.example\.com$;
+    ssl_certificate /etc/ssl/cert.pem;
+    ssl_certificate_key /etc/ssl/key.pem;
+    location / { return 200 "ok"; }
+}
+"#,
+        )
+        .expect("regex server names are carried into the certificate SNI index");
+        assert_eq!(
+            config.certificates[0].server_name_regexes,
+            vec!["^(admin[a-zA-Z0-9_-]+)\\.example\\.com$".to_owned()]
+        );
     }
 
     #[test]
@@ -12501,7 +13232,8 @@ server {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         let upstream = config
             .upstreams
             .iter()
@@ -12694,7 +13426,8 @@ http {{
             std::path::Path::new("site.conf"),
         )
         .expect("parse");
-        let config = materialize_nginx_app(&parsed, directory.path(), "test").expect("materialize");
+        let config =
+            materialize_nginx_app_default(&parsed, directory.path(), "test").expect("materialize");
         let listener = config
             .listeners
             .iter()
@@ -12843,10 +13576,6 @@ server {
             (
                 "variable redirect",
                 r#"proxy_pass http://127.0.0.1:8080/; proxy_redirect http://127.0.0.1:8080/ $scheme://client/;"#,
-            ),
-            (
-                "regex cookie path",
-                r#"proxy_pass http://127.0.0.1:8080/; proxy_cookie_path ~^/upstream/(.*) /client/$1;"#,
             ),
             (
                 "default with variable proxy_pass",
@@ -14207,7 +14936,7 @@ server { listen 80; server_name stapling.example.test; location / { return 200 "
         for (index, case) in cases.iter().enumerate() {
             if let Ok(directives) = parse_nginx_config(case, Path::new("adversarial.conf")) {
                 // Materialization may fail; it must not panic.
-                let _ = materialize_nginx_app(
+                let _ = materialize_nginx_app_default(
                     &directives,
                     Path::new("/etc/nginx/sites-enabled"),
                     "adversarial",
@@ -14543,8 +15272,12 @@ stream {
         let parsed =
             super::super::parser::parse_nginx_config(text, std::path::Path::new("site.conf"))
                 .expect("parse");
-        let app = materialize_nginx_app(&parsed, std::path::Path::new("/etc/nginx"), "stream-map")
-            .expect("both map planes are executable");
+        let app = materialize_nginx_app_default(
+            &parsed,
+            std::path::Path::new("/etc/nginx"),
+            "stream-map",
+        )
+        .expect("both map planes are executable");
         assert_eq!(app.maps.len(), 1, "the http map uses the HTTP map engine");
         assert_eq!(app.maps[0].result, "$zone");
         assert_eq!(
@@ -14570,11 +15303,11 @@ map $host $zone { default a; }
 map $uri $zone { default b; }
 server { listen 80; server_name dup.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(duplicate).expect_err("duplicate map result must fail closed");
-        assert!(
-            error.to_string().contains("duplicate map result"),
-            "{error}"
-        );
+        // nginx map variables are changeable: the later declaration replaces
+        // the earlier one instead of failing the whole configuration.
+        let config = materialize(duplicate).expect("duplicate map result is last-wins");
+        assert_eq!(config.maps.len(), 1);
+        assert_eq!(config.maps[0].default.as_deref(), Some("b"));
 
         let unsupported_source = r#"
 map $upstream_addr $zone { default a; }
@@ -14860,14 +15593,6 @@ http {
                 "set $memcached_key",
             ),
             (
-                "http { server { listen 80; server_name a.test; location / { set $other 1; memcached_pass 127.0.0.1:11211; } } }",
-                "set $other",
-            ),
-            (
-                "http { server { listen 80; server_name a.test; location / { set $memcached_key $uri; set $other 1; memcached_pass 127.0.0.1:11211; } } }",
-                "set $other",
-            ),
-            (
                 "http { server { listen 80; server_name a.test; location / { set $memcached_key $uri; memcached_pass unix:/run/mc.sock; } } }",
                 "unix:",
             ),
@@ -14882,5 +15607,162 @@ http {
                 "expected `{needle}` in: {error}"
             );
         }
+    }
+
+    fn materialize_with_allowlist(
+        text: &str,
+        allowlist: &[&str],
+    ) -> Result<WebServerAppConfig, NginxConfigError> {
+        let parsed = parse_nginx_config(text, std::path::Path::new("site.conf")).expect("parse");
+        materialize_nginx_app(
+            &parsed,
+            std::path::Path::new("/etc/nginx/sites-enabled"),
+            "test",
+            &NginxCompatOptions {
+                document_root_allowlist: allowlist
+                    .iter()
+                    .map(|entry| (*entry).to_owned())
+                    .collect(),
+            },
+        )
+    }
+
+    #[test]
+    fn rewrite_phase_set_and_if_materialize_in_order() {
+        let config = materialize(
+            r#"
+server {
+    listen 8080;
+    server_name api.example.com;
+    set $env prod;
+    if ($host ~* "^([a-z]+)\\.example\\.com$") {
+        set $env $1;
+    }
+    location / {
+        set $target "http://api_servers_${env}";
+        if ($env = prod) {
+            add_header X-Env "prod";
+        }
+        proxy_pass $target$request_uri;
+    }
+}
+"#,
+        )
+        .expect("rewrite phase materializes");
+        let host = &config.virtual_hosts[0];
+        assert_eq!(host.rewrite_phase.len(), 2);
+        assert!(matches!(
+            &host.rewrite_phase[0],
+            RewritePhaseOpConfig::Set { variable, value }
+                if variable == "env" && value == "prod"
+        ));
+        assert!(matches!(
+            &host.rewrite_phase[1],
+            RewritePhaseOpConfig::If { body, .. } if body.len() == 1
+        ));
+        let route = &host.routes[0];
+        assert_eq!(route.rewrite_phase.len(), 2);
+        assert!(matches!(
+            &route.rewrite_phase[0],
+            RewritePhaseOpConfig::Set { variable, .. } if variable == "target"
+        ));
+        let metadata = serde_json::to_value(&route.resource_ref);
+        let _ = metadata;
+        let proxy = config
+            .resources
+            .iter()
+            .find_map(|resource| match resource {
+                ResourceConfig::Proxy { dynamic_target, .. } => dynamic_target.as_deref(),
+                _ => None,
+            })
+            .expect("dynamic proxy target");
+        assert_eq!(proxy, "$target$request_uri");
+    }
+
+    #[test]
+    fn rewrite_phase_references_to_unknown_variables_fail_closed() {
+        let error = materialize(
+            r#"
+server {
+    listen 8080;
+    server_name api.example.com;
+    set $env $undefined_variable;
+    location / { return 200 "ok"; }
+}
+"#,
+        )
+        .expect_err("unknown variable must fail closed");
+        assert!(error.to_string().contains("is not resolvable"), "{error}");
+    }
+
+    #[test]
+    fn if_body_directives_outside_the_bounded_set_fail_closed() {
+        let error = materialize(
+            r#"
+server {
+    listen 8080;
+    server_name api.example.com;
+    if ($host = api.example.com) {
+        proxy_pass http://127.0.0.1:9000;
+    }
+    location / { return 200 "ok"; }
+}
+"#,
+        )
+        .expect_err("if-body proxy_pass must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("if` body directive `proxy_pass`"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn variable_document_root_requires_the_operator_allowlist() {
+        let text = r#"
+server {
+    listen 8080;
+    server_name api.example.com;
+    location / {
+        set $root_path /srv/www;
+        root $root_path;
+    }
+}
+"#;
+        let error = materialize(text).expect_err("without allowlist root must fail closed");
+        assert!(
+            error.to_string().contains("documentRootAllowlist"),
+            "{error}"
+        );
+        let config =
+            materialize_with_allowlist(text, &["/srv/www"]).expect("allowlisted root materializes");
+        let route = &config.virtual_hosts[0].routes[0];
+        let resource = config
+            .resources
+            .iter()
+            .find(|resource| resource.id() == route.resource_ref)
+            .expect("resource");
+        match resource {
+            ResourceConfig::Static { dynamic_root, .. } => {
+                assert_eq!(dynamic_root.as_deref(), Some("$root_path"));
+            }
+            other => panic!("expected static resource, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rewrite_phase_limits_fail_closed() {
+        let mut text =
+            String::from("server {\n    listen 8080;\n    server_name api.example.com;\n");
+        for _ in 0..=crate::config::MAX_REWRITE_PHASE_OPS {
+            text.push_str("    set $var \"value\";\n");
+        }
+        text.push_str("    location / { return 200 \"ok\"; }\n}\n");
+        let error = materialize(&text).expect_err("oversized rewrite phase must fail closed");
+        assert!(
+            error.to_string().contains("rewrite-phase instructions"),
+            "{error}"
+        );
     }
 }

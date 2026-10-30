@@ -223,7 +223,7 @@ async fn route_admitted_request(
         .path_and_query()
         .map(|target| target.as_str().to_owned())
         .unwrap_or_else(|| request.uri().path().to_owned());
-    let request_query = request.uri().query().map(str::to_owned);
+    let mut request_query = request.uri().query().map(str::to_owned);
     // A request that arrives carrying the east-west hop marker was already
     // relayed once by a sibling, so this process is the last hop and serves it
     // locally (see `should_relay_to_sibling`). One listener accepts both
@@ -615,6 +615,77 @@ async fn route_admitted_request(
     // (`rewrite … last`, `try_files` named target, `error_page`). Only then may
     // an `internal` location serve it.
     let mut internal_request = false;
+    // Request variables for the bounded rewrite/variable engine. Server-level
+    // `set`/`if`/`rewrite` instructions run before location selection, exactly
+    // like nginx's server rewrite phase.
+    let phase_server_name = generation
+        .app
+        .select_virtual_host(&state.listener_id, &authority)
+        .and_then(|host| host.server_names.first().cloned())
+        .unwrap_or_default();
+    let server_protocol = match request.version() {
+        Version::HTTP_10 => "HTTP/1.0",
+        Version::HTTP_2 => "HTTP/2.0",
+        Version::HTTP_3 => "HTTP/3.0",
+        _ => "HTTP/1.1",
+    };
+    let mut request_variables = super::request_variables::RequestVariables::new(
+        request.headers(),
+        request.method(),
+        scheme.as_str(),
+        &authority,
+        client_ip,
+        listener_port,
+        &path,
+        &raw_request_uri,
+        request_query.as_deref(),
+        &phase_server_name,
+        server_protocol,
+    );
+    // Declared `map` results are variables too: seed them so `set`/`if`/
+    // dynamic targets can reference them through the same lookup.
+    for (name, value) in map_results.pairs() {
+        request_variables.seed(name, value.clone());
+    }
+    let mut phase_headers: Vec<CustomHeaderConfig> = Vec::new();
+    if let Some(host_config) = generation
+        .app
+        .select_virtual_host(&state.listener_id, &authority)
+    {
+        if !host_config.rewrite_phase.is_empty() {
+            match super::rewrite_phase::execute(
+                &host_config.rewrite_phase,
+                &mut request_variables,
+                &mut phase_headers,
+                request.version(),
+            ) {
+                super::rewrite_phase::PhaseControl::Continue => {}
+                super::rewrite_phase::PhaseControl::Respond(response) => {
+                    return super::rewrite_phase::apply_headers(response, &phase_headers);
+                }
+                super::rewrite_phase::PhaseControl::Rewrite {
+                    path: next_path,
+                    query: next_query,
+                    reselect,
+                } => {
+                    path_rewritten = true;
+                    path = next_path;
+                    request_query = next_query;
+                    request_variables.apply_rewrite(&path, request_query.as_deref());
+                    if reselect {
+                        rewrite_redirects = rewrite_redirects.saturating_add(1);
+                        internal_request = true;
+                        if rewrite_redirects > MAX_REWRITE_INTERNAL_REDIRECTS {
+                            return text_response(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "rewrite redirect limit exceeded\n",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
     let mut selected = loop {
         let Some(candidate) =
             generation
@@ -676,6 +747,14 @@ async fn route_admitted_request(
             }
             return text_response(StatusCode::NOT_FOUND, "route was not found\n");
         };
+        // nginx location `client_max_body_size`: the effective per-location
+        // limit is enforced once the location is known (the pre-routing check
+        // can only use the app-level maximum declared across locations).
+        if let Some(limit) = candidate.route.max_request_body_bytes {
+            if content_length_exceeds(request.headers(), limit) {
+                return text_response(StatusCode::PAYLOAD_TOO_LARGE, "request body is too large\n");
+            }
+        }
         // nginx `internal`: an external request that matches the location is
         // answered with the generated 404 before the rewrite phase runs. The
         // internal location still owns the response policy: its `add_header`
@@ -733,6 +812,71 @@ async fn route_admitted_request(
                 &path,
                 request_query.as_deref(),
             );
+        }
+        // nginx location rewrite phase: the location regex captures are
+        // available to `set`/`if`/`rewrite` and to the dynamic target/root.
+        let location_captures = super::rewrite_phase::location_captures(candidate.route, &path);
+        request_variables.set_captures(location_captures);
+        if !candidate.route.rewrite_phase.is_empty() {
+            match super::rewrite_phase::execute(
+                &candidate.route.rewrite_phase,
+                &mut request_variables,
+                &mut phase_headers,
+                request.version(),
+            ) {
+                super::rewrite_phase::PhaseControl::Continue => {}
+                super::rewrite_phase::PhaseControl::Respond(response) => {
+                    let error_page_saved = if candidate.route.error_pages.is_empty()
+                        && candidate.virtual_host.error_pages.is_empty()
+                    {
+                        None
+                    } else {
+                        Some((
+                            request.method().clone(),
+                            request.headers().clone(),
+                            request_query.clone(),
+                        ))
+                    };
+                    let response = apply_error_pages(
+                        &state,
+                        &generation,
+                        &candidate,
+                        &authority,
+                        response,
+                        error_page_saved.as_ref(),
+                        &path,
+                        request_query.as_deref(),
+                        scheme.as_str(),
+                        &map_results,
+                    )
+                    .await;
+                    return super::rewrite_phase::apply_headers(response, &phase_headers);
+                }
+                super::rewrite_phase::PhaseControl::Rewrite {
+                    path: next_path,
+                    query: next_query,
+                    reselect,
+                } => {
+                    path_rewritten = true;
+                    path = next_path;
+                    request_query = next_query;
+                    request_variables.apply_rewrite(&path, request_query.as_deref());
+                    if reselect {
+                        rewrite_redirects = rewrite_redirects.saturating_add(1);
+                        internal_request = true;
+                        if rewrite_redirects > MAX_REWRITE_INTERNAL_REDIRECTS {
+                            return text_response(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "rewrite redirect limit exceeded\n",
+                            );
+                        }
+                        continue;
+                    }
+                    // `rewrite … break` stops the rewrite module and keeps this
+                    // location; the content handler sees the rewritten path.
+                    break candidate;
+                }
+            }
         }
         if candidate.route.rewrite.is_empty() {
             break candidate;
@@ -1185,6 +1329,7 @@ async fn route_admitted_request(
             id,
             strip_prefix,
             spa_fallback,
+            dynamic_root,
             ..
         } => {
             // `@name` is a named-location internal redirect handled before
@@ -1202,18 +1347,48 @@ async fn route_admitted_request(
                     .get("sec-ch-ua-mobile")
                     .and_then(|value| value.to_str().ok()),
             );
-            let Some(root) = (if prefer_h5 {
+            // nginx `root $variable` / `alias $variable`: resolve the template
+            // with this request's rewrite-phase variables and confine the
+            // evaluated path to the operator `documentRootAllowlist`.
+            let dynamic_root_override: Option<std::path::PathBuf> = match dynamic_root.as_deref() {
+                Some(template) => match request_variables.resolve_document_root(
+                    template,
+                    &generation.app.config().nginx.document_root_allowlist,
+                ) {
+                    Ok(root) => Some(std::path::PathBuf::from(root)),
+                    Err(error) => {
+                        tracing::warn!(
+                            error = %error,
+                            template = template,
+                            "request-time document root rejected"
+                        );
+                        return text_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "document root is not available\n",
+                        );
+                    }
+                },
+                None => None,
+            };
+            let default_root = if prefer_h5 {
                 generation
                     .app
                     .static_h5_root(id)
                     .or_else(|| generation.app.static_root(id))
             } else {
                 generation.app.static_root(id)
-            }) else {
-                return text_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "static resource is unavailable\n",
-                );
+            };
+            let root: &std::path::Path = match dynamic_root_override.as_deref() {
+                Some(root) => root,
+                None => match default_root {
+                    Some(root) => root,
+                    None => {
+                        return text_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "static resource is unavailable\n",
+                        )
+                    }
+                },
             };
             let static_response = match drain_bounded_request_body(
                 request,
@@ -1285,6 +1460,7 @@ async fn route_admitted_request(
                         .unwrap_or(0),
                     normalized_path: &path,
                     path_rewritten,
+                    variables: Some(&request_variables),
                     request_failure,
                     tunnel_supervisor: &state.runtime.tunnel_supervisor,
                     metrics: &state.runtime.metrics,
@@ -1877,6 +2053,14 @@ async fn route_admitted_request(
     // selected location's array when it declares one, otherwise the inherited
     // host array; an `error_page` internal redirect may have attached the
     // target location's policy instead.
+    // nginx `add_header` executed inside a matched `if` block replaces the
+    // inherited array for the rest of the request (the `if` block is its own
+    // configuration context); values were expanded during the rewrite phase.
+    if !phase_headers.is_empty() {
+        response
+            .extensions_mut()
+            .insert(ResponseHeaderPolicyOverride(Some(phase_headers.clone())));
+    }
     let mut response = finalize_response_headers(
         response,
         &selected,
@@ -1969,6 +2153,10 @@ fn static_delivery_policy<'a>(
             .autoindex
             .as_ref()
             .or(selected.virtual_host.autoindex.as_ref()),
+        index_files: match selected.resource {
+            ResourceConfig::Static { index_files, .. } => index_files,
+            _ => &[],
+        },
     }
 }
 
@@ -2185,8 +2373,15 @@ async fn named_fallback_selection<'a>(
     let root = generation.app.static_root(id)?;
     let relative = super::static_files::relative_request_path(selected.route, *strip_prefix, path);
     let miss = matches!(
-        super::static_path::open_static_path(root, relative, path.ends_with('/'), None, false)
-            .await,
+        super::static_path::open_static_path(
+            root,
+            relative,
+            path.ends_with('/'),
+            None,
+            false,
+            None
+        )
+        .await,
         Err(super::static_path::StaticPathError::NotFound)
     );
     if !miss {
@@ -2222,24 +2417,39 @@ async fn run_error_page_hop<'a>(
         .rev()
         .find(|page| page.codes.contains(&status.as_u16()))?;
     // A named target keeps the current request URI (nginx
-    // `ngx_http_named_location`); an absolute path becomes the new URI.
-    let named_target = entry.uri.starts_with('@');
+    // `ngx_http_named_location`); an absolute path becomes the new URI. A
+    // variable target (`error_page 405 =200 $uri;`) is resolved against the
+    // request URI before selection.
+    let resolved_uri = if entry.uri.contains('$') {
+        entry
+            .uri
+            .replace("${request_uri}", requested_path)
+            .replace("${uri}", requested_path)
+            .replace("$request_uri", requested_path)
+            .replace("$uri", requested_path)
+    } else {
+        entry.uri.clone()
+    };
+    let named_target = resolved_uri.starts_with('@');
     let target_path = if named_target {
         requested_path
     } else {
-        entry.uri.as_str()
+        resolved_uri.as_str()
     };
     let candidate = if named_target {
         generation.app.select_named_route(
             &state.listener_id,
             authority,
-            &entry.uri,
+            &resolved_uri,
             method.as_str(),
         )?
     } else {
-        generation
-            .app
-            .select_route(&state.listener_id, authority, &entry.uri, method.as_str())?
+        generation.app.select_route(
+            &state.listener_id,
+            authority,
+            &resolved_uri,
+            method.as_str(),
+        )?
     };
     let mut response = match candidate.resource {
         ResourceConfig::Static {
@@ -3708,6 +3918,7 @@ mod tests {
             listener_refs: Vec::new(),
             server_names: vec!["example.test".to_owned()],
             routes: Vec::new(),
+            rewrite_phase: Vec::new(),
             security_headers: None,
             compression: None,
             mime_types: None,
@@ -3747,6 +3958,8 @@ mod tests {
             error_pages: Vec::new(),
             response_headers: Vec::new(),
             cache_policy: None,
+            rewrite_phase: Vec::new(),
+            max_request_body_bytes: None,
             redirect_policy: None,
             limit_req_status: None,
             limit_conn_status: Some(503),

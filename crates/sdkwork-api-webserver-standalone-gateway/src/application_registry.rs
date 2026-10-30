@@ -672,6 +672,7 @@ mod tests {
             spa_fallback: spa_fallback.map(str::to_owned),
             follow_symlinks: false,
             strip_prefix: false,
+            dynamic_root: None,
         }
     }
 
@@ -681,6 +682,7 @@ mod tests {
             listener_refs: Vec::new(),
             server_names: server_names.iter().map(|name| name.to_string()).collect(),
             routes: Vec::new(),
+            rewrite_phase: Vec::new(),
             security_headers: None,
             compression: None,
             mime_types: None,

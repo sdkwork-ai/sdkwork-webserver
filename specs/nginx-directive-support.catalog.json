@@ -6718,10 +6718,30 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "server/location rewrite phase `if` conditions (truthy, =, !=, ~, !~, ~*, !~*) feeding the bounded variable engine; true bodies execute set/add_header/return/rewrite",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "rewrite.if-truthy-header"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "rewrite.if-false-header"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "rewrite.if-regex-header"
+        }
+      ],
+      "knownDifferences": [
+        "if-body proxy_pass/root/error_page remain fail-closed; multiple matched if blocks with add_header are approximated by the last applied set"
+      ]
     },
     {
       "id": "http:if_modified_since",

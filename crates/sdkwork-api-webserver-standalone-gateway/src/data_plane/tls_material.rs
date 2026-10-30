@@ -49,7 +49,7 @@ impl LoadedCertifiedKey {
 /// configured policy with assigned certificates go through
 /// [`build_layered_server_config`].
 pub(crate) fn build_sni_server_config(
-    certificates: Vec<(Vec<String>, LoadedCertifiedKey)>,
+    certificates: Vec<(Vec<String>, Vec<String>, LoadedCertifiedKey)>,
     minimum_version: TlsVersion,
     maximum_version: TlsVersion,
     alpn: &[String],
@@ -95,11 +95,15 @@ pub(crate) fn build_layered_server_config(
 
 /// Indexes loaded material by server name, rejecting ambiguous claims.
 pub(crate) fn build_source_index(
-    certificates: Vec<(Vec<String>, LoadedCertifiedKey)>,
+    certificates: Vec<(Vec<String>, Vec<String>, LoadedCertifiedKey)>,
 ) -> Result<CertificateSourceIndex, String> {
     let mut index = CertificateSourceIndex::default();
-    for (server_names, loaded) in certificates {
-        index.insert(&server_names, loaded.into_resolvable())?;
+    for (server_names, server_name_regexes, loaded) in certificates {
+        index.insert_with_regexes(
+            &server_names,
+            &server_name_regexes,
+            loaded.into_resolvable(),
+        )?;
     }
     Ok(index)
 }

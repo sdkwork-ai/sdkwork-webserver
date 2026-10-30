@@ -216,9 +216,31 @@ fn config_loader() -> WebServerConfigLoader {
     WebServerConfigLoader::new()
 }
 
+/// Operator settings the nginx grammar cannot express.
+///
+/// `SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST` is a comma-separated list of
+/// absolute directory prefixes for request-time `root $variable` /
+/// `alias $variable` values (the typed plane carries the same setting as
+/// `[http] documentRootAllowlist`). Without it, a variable document root fails
+/// closed at materialization.
+fn document_root_allowlist_from_env() -> Vec<String> {
+    std::env::var("SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn load_options(format: Option<ConfigFormat>) -> ConfigLoadOptions {
     ConfigLoadOptions {
         format,
+        document_root_allowlist: document_root_allowlist_from_env(),
         ..ConfigLoadOptions::default()
     }
 }

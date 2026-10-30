@@ -652,6 +652,21 @@ pub struct NginxConfig {
     /// validation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unix_socket_root: Option<String>,
+    /// Typed `[http] documentRootAllowlist`: absolute directory prefixes a
+    /// request-time `root $variable;` / `alias $variable;` may resolve to.
+    ///
+    /// A configuration that declares a variable document root fails closed at
+    /// materialization unless this allowlist is configured and every evaluated
+    /// path stays inside one of its prefixes. Empty means "no variable
+    /// document roots are executable".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub document_root_allowlist: Vec<String>,
+    /// Set by the nginx-configuration materializer only. Stock nginx does not
+    /// stat document roots or certificate material at configuration load, so
+    /// a file relocated without its file tree still validates; typed
+    /// configurations keep the strict existence checks.
+    #[serde(default)]
+    pub native_compatibility: bool,
 }
 
 /// nginx `map` variable (`map $source $result { … }`), executed in the
@@ -887,6 +902,8 @@ impl Default for NginxConfig {
             profile: default_profile(),
             unknown_directive_policy: default_unknown_directive_policy(),
             unix_socket_root: None,
+            document_root_allowlist: Vec::new(),
+            native_compatibility: false,
         }
     }
 }
@@ -1208,6 +1225,11 @@ pub enum ProxyProtocolCrc32cPolicy {
 pub struct CertificateConfig {
     pub id: String,
     pub server_names: Vec<String>,
+    /// nginx `server_name ~pattern` values attached to this certificate.
+    /// Patterns are stored without the `~` marker; SNI regex selection
+    /// evaluates them in authored order after exact and wildcard names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub server_name_regexes: Vec<String>,
     pub source: CertificateSource,
 }
 
@@ -1410,6 +1432,13 @@ pub enum ResourceConfig {
         /// `false` (nginx `root`) appends the full request path to `root`.
         #[serde(default)]
         strip_prefix: bool,
+        /// nginx `root $variable;` / `alias $variable;`: a per-request document
+        /// root template. When present, `root` is the empty placeholder and the
+        /// data plane resolves the template with the rewrite-phase variables;
+        /// the resolved path must be absolute, free of `..`, and inside
+        /// `nginx.documentRootAllowlist` (fail closed otherwise).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dynamic_root: Option<String>,
     },
     Proxy {
         id: String,
@@ -2355,6 +2384,90 @@ pub struct UpstreamTargetConfig {
     pub max_connections: Option<usize>,
 }
 
+/// nginx `if` condition operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IfOperatorConfig {
+    /// `$var`: non-empty.
+    Truthy,
+    /// `!$var`: empty.
+    NegatedTruthy,
+    Equals,
+    NotEquals,
+    Regex,
+    NotRegex,
+    RegexIgnoreCase,
+    NotRegexIgnoreCase,
+}
+
+/// One nginx `if (<condition>)` test.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IfConditionConfig {
+    /// Left-hand variable without its `$` (`host`, `http_user_agent`,
+    /// `is_mobile`, …).
+    pub variable: String,
+    pub operator: IfOperatorConfig,
+    /// Right-hand operand: literal or variable template (expanded before the
+    /// comparison). `None` for the truthiness operators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+/// One ordered nginx rewrite-phase instruction (`set` / `if` / the body of an
+/// `if`).
+///
+/// Server-level instructions execute before location selection; location-level
+/// instructions execute after it. `if` bodies are limited to the instruction
+/// kinds the runtime executes inside the rewrite phase (`set`, `add_header`,
+/// `return`, `rewrite`); anything else fails closed at materialization.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "action",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RewritePhaseOpConfig {
+    Set {
+        /// Target variable without its `$`.
+        variable: String,
+        /// Value template (`$var` / `${var}` / `$1..$9` / literal text).
+        value: String,
+    },
+    If {
+        condition: IfConditionConfig,
+        body: Vec<RewritePhaseOpConfig>,
+    },
+    /// nginx `return <code> [body|url]` in a rewrite phase.
+    Return {
+        status: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        body: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        location: Option<String>,
+    },
+    /// nginx `rewrite <pattern> <replacement> <flag>` in an `if` body.
+    Rewrite {
+        pattern: String,
+        replacement: String,
+        flag: RewriteFlag,
+    },
+    /// nginx `add_header` in an `if` body (expanded in the rewrite phase and
+    /// emitted with the final response).
+    AddHeader {
+        name: String,
+        value: String,
+        #[serde(default)]
+        always: bool,
+    },
+}
+
+/// Maximum rewrite-phase instructions in one context (server or location).
+pub const MAX_REWRITE_PHASE_OPS: usize = 256;
+/// Maximum variables a rewrite phase may assign.
+pub const MAX_REWRITE_PHASE_VARIABLES: usize = 128;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct VirtualHostConfig {
@@ -2380,6 +2493,10 @@ pub struct VirtualHostConfig {
     /// redirect depth is one and reference/cycle validation rejects anything
     /// longer; see `config::validate`.
     pub routes: Vec<RouteConfig>,
+    /// Ordered rewrite-phase instructions (`set` / `if`) for this virtual
+    /// host, executed before location selection.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rewrite_phase: Vec<RewritePhaseOpConfig>,
     #[serde(default)]
     pub security_headers: Option<SecurityHeadersConfig>,
     /// Server-level nginx `gzip` policy resolved for this host; `None`
@@ -2551,11 +2668,25 @@ pub struct ProxyRewriteRuleConfig {
 pub enum CookieRewritePolicyConfig {
     /// The directive form `off`: attribute rewriting is disabled.
     Off,
-    /// Ordered `<from> <to>` rules. A path rule replaces the attribute-value
-    /// prefix literally (case-sensitive, like nginx); a domain rule compares
-    /// the value case-insensitively after ignoring one leading dot and
-    /// re-applies the matched value's leading dot.
+    /// Ordered literal `<from> <to>` rules. A path rule replaces the
+    /// attribute-value prefix literally (case-sensitive, like nginx); a domain
+    /// rule compares the value case-insensitively after ignoring one leading
+    /// dot and re-applies the matched value's leading dot.
     Rules(Vec<ProxyRewriteRuleConfig>),
+    /// Ordered `proxy_cookie_path ~[~*]<pattern> <replacement>` rules.
+    RegexRules(Vec<ProxyRewriteRegexRuleConfig>),
+}
+
+/// One regex `proxy_cookie_path` / `proxy_cookie_domain` pair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProxyRewriteRegexRuleConfig {
+    /// Pattern without the `~` marker.
+    pub pattern: String,
+    /// Replacement template (`$1..$9` capture references are expanded).
+    pub replacement: String,
+    #[serde(default)]
+    pub case_insensitive: bool,
 }
 
 /// nginx `autoindex` file-listing policy (`autoindex`,
@@ -3036,6 +3167,14 @@ pub struct RouteConfig {
     /// resolved for this route; `None` inherits the host/app policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_policy: Option<CachePolicyConfig>,
+    /// Ordered rewrite-phase instructions (`set` / `if`) for this location,
+    /// executed after location selection and before the content handler.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rewrite_phase: Vec<RewritePhaseOpConfig>,
+    /// Effective nginx `client_max_body_size` for this location (inherited from
+    /// the server when undeclared); `None` means the app-level limit applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_request_body_bytes: Option<u64>,
     /// Location-level redirect construction policy; `None` inherits the
     /// virtual host's value. See [`RedirectPolicyConfig`].
     #[serde(default, skip_serializing_if = "Option::is_none")]

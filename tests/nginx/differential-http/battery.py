@@ -1573,6 +1573,14 @@ def main() -> int:
             headers=[("X_Underscore", "v")],
         )
         # ---- upstream proxying -----------------------------------------
+        # ---- bounded rewrite/variable engine -----------------------------
+        case("rewrite.set-dynamic-proxy", "/rw/set/echo?x=1")
+        case("rewrite.if-truthy-header", "/rw/if/true")
+        case("rewrite.if-false-header", "/rw/if/false")
+        case("rewrite.if-regex-header", "/rw/if/regex")
+        case("rewrite.capture-dynamic-proxy", "/rw/capture/abc")
+        case("rewrite.variable-root", "/rw/root/hello.txt")
+
         case("proxy.pass-path", "/proxy/echo/path?x=1")
         case("proxy.pass-uri-replace", "/proxy-uri/echo/path?a=1")
         case("proxy.pass-uri-args", "/proxy-uri/a/b?q=2")

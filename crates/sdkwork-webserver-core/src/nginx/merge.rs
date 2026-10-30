@@ -237,11 +237,11 @@ fn extend_certificate_refs(policy: &mut TlsPolicyConfig, refs: Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nginx::{materialize_nginx_app, parse_nginx_config};
+    use crate::nginx::{materialize_nginx_app_default, parse_nginx_config};
 
     fn app(text: &str) -> WebServerAppConfig {
         let parsed = parse_nginx_config(text, std::path::Path::new("site.conf")).expect("parse");
-        materialize_nginx_app(
+        materialize_nginx_app_default(
             &parsed,
             std::path::Path::new("/etc/nginx/sites-enabled"),
             "test",

@@ -98,6 +98,15 @@ if (!requireFile('tools/run-nginx-behavioral-corpus.mjs', 'behavioural runner'))
   failures.push('behavioural corpus');
 }
 
+// 2b. Real-world acceptance gate: the committed production nginx snapshot
+// (api.birdcoder.com, 33 files) must materialize with an operator document-root
+// allowlist and no skipped files or fail-closed markers.
+if (!requireFile('tools/check-nginx-real-world.mjs', 'real-world gate')) {
+  failures.push('real-world gate');
+} else if (!run('real-world config', 'node', ['tools/check-nginx-real-world.mjs'])) {
+  failures.push('real-world config');
+}
+
 // 3. Differential slices are discovered from the manifest, not hard-coded.
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const orchestrators = [];

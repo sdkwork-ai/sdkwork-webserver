@@ -35,8 +35,10 @@ mod merge;
 mod parser;
 
 pub use adaptive_web::prefer_h5_surface;
-pub use load::{load_nginx_compat, NginxLoadReport};
-pub use mapping::{materialize_nginx_app, NginxConfigError};
+pub use load::{load_nginx_compat, load_nginx_compat_with_options, NginxLoadReport};
+pub use mapping::{
+    materialize_nginx_app, materialize_nginx_app_default, NginxCompatOptions, NginxConfigError,
+};
 pub use merge::merge_nginx_apps;
 pub use parser::{expand_includes, parse_nginx_config, NginxDirective, NginxParseError};
 

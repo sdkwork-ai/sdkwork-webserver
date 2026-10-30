@@ -122,6 +122,11 @@ impl CompiledWebServerApp {
         let certificates = index_by_id(config.certificates.iter().map(|item| item.id.as_str()));
         let tls_policies = index_by_id(config.tls_policies.iter().map(|item| item.id.as_str()));
 
+        // Stock nginx does not stat `root` at configuration load: a missing
+        // document root is simply a 404 at request time. The nginx plane keeps
+        // that behavior; typed configurations still require their roots to
+        // exist.
+        let tolerate_missing_roots = config.nginx.native_compatibility;
         let mut static_roots = HashMap::new();
         let mut static_h5_roots = HashMap::new();
         for (index, resource) in config.resources.iter().enumerate() {
@@ -136,6 +141,7 @@ impl CompiledWebServerApp {
                     Path::new(root),
                     &base_directory,
                     &format!("/resources/{index}/root"),
+                    tolerate_missing_roots,
                 )?;
                 static_roots.insert(id.clone(), resolved);
                 if let Some(h5_root) = h5_root {
@@ -143,6 +149,7 @@ impl CompiledWebServerApp {
                         Path::new(h5_root),
                         &base_directory,
                         &format!("/resources/{index}/h5Root"),
+                        tolerate_missing_roots,
                     )?;
                     static_h5_roots.insert(id.clone(), resolved_h5);
                 }
@@ -160,30 +167,34 @@ impl CompiledWebServerApp {
                 ocsp_stapling_file,
             } = &certificate.source;
             if let Some(chain_file) = chain_file {
-                let chain_path = resolve_required_file(
+                let chain_path = resolve_material_file(
                     &base_directory,
                     chain_file,
                     &format!("/certificates/{index}/source/chainFile"),
+                    tolerate_missing_roots,
                 )?;
                 certificate_chain_paths.insert(certificate.id.clone(), chain_path);
             }
             if let Some(ocsp_file) = ocsp_stapling_file {
-                let ocsp_path = resolve_required_file(
+                let ocsp_path = resolve_material_file(
                     &base_directory,
                     ocsp_file,
                     &format!("/certificates/{index}/source/ocspStaplingFile"),
+                    tolerate_missing_roots,
                 )?;
                 certificate_ocsp_paths.insert(certificate.id.clone(), ocsp_path);
             }
-            let certificate_path = resolve_required_file(
+            let certificate_path = resolve_material_file(
                 &base_directory,
                 certificate_file,
                 &format!("/certificates/{index}/source/certificateFile"),
+                tolerate_missing_roots,
             )?;
-            let private_key_path = resolve_required_file(
+            let private_key_path = resolve_material_file(
                 &base_directory,
                 private_key_file,
                 &format!("/certificates/{index}/source/privateKeyFile"),
+                tolerate_missing_roots,
             )?;
             certificate_paths.insert(certificate.id.clone(), (certificate_path, private_key_path));
         }
@@ -284,6 +295,7 @@ impl CompiledWebServerApp {
                 &base_directory,
                 &acme.webroot,
                 &format!("/listeners/{index}/acmeHttp01/webroot"),
+                tolerate_missing_roots,
             )?;
             acme_webroots.insert(listener.id.clone(), resolved);
         }
@@ -919,12 +931,35 @@ fn canonical_directory(
     Ok(canonical)
 }
 
+/// Resolve a required material file, tolerating an absent absolute path for
+/// the nginx plane (nginx reads certificate material at startup; the runtime
+/// reports an unavailable certificate at handshake instead of refusing to
+/// validate the whole configuration file, which is what makes a relocated
+/// production configuration validatable).
+fn resolve_material_file(
+    base_directory: &Path,
+    configured: &str,
+    diagnostic_path: &str,
+    tolerate_missing: bool,
+) -> Result<PathBuf, WebServerConfigError> {
+    let configured_path = Path::new(configured);
+    if tolerate_missing && configured_path.is_absolute() && !configured_path.exists() {
+        Ok(configured_path.to_path_buf())
+    } else {
+        resolve_required_file(base_directory, configured, diagnostic_path)
+    }
+}
+
 fn resolve_static_root(
     root: &Path,
     base_directory: &Path,
     diagnostic_path: &str,
+    tolerate_missing: bool,
 ) -> Result<PathBuf, WebServerConfigError> {
     if root.is_absolute() {
+        if tolerate_missing && !root.exists() {
+            return Ok(root.to_path_buf());
+        }
         return canonical_directory(root, diagnostic_path);
     }
     let resolved = canonical_directory(&base_directory.join(root), diagnostic_path)?;
@@ -958,9 +993,13 @@ fn resolve_acme_webroot(
     base_directory: &Path,
     configured: &str,
     diagnostic_path: &str,
+    tolerate_missing: bool,
 ) -> Result<PathBuf, WebServerConfigError> {
     let configured = Path::new(configured);
     if configured.is_absolute() {
+        if tolerate_missing && !configured.exists() {
+            return Ok(configured.to_path_buf());
+        }
         return canonical_directory(configured, diagnostic_path);
     }
     let resolved = canonical_directory(&base_directory.join(configured), diagnostic_path)?;

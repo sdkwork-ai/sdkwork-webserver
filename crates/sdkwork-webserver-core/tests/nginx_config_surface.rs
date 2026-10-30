@@ -19,7 +19,7 @@ use sdkwork_webserver_core::config::{
     WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
-    expand_includes, load_nginx_compat, materialize_nginx_app, merge_nginx_apps,
+    expand_includes, load_nginx_compat, materialize_nginx_app_default, merge_nginx_apps,
     parse_nginx_config, NginxConfigError,
 };
 use tempfile::TempDir;
@@ -34,7 +34,7 @@ fn nginx_path(path: &Path) -> String {
 /// Parse + materialize + validate one configuration text.
 fn materialize(text: &str) -> Result<WebServerAppConfig, NginxConfigError> {
     let parsed = parse_nginx_config(text, Path::new("site.conf")).expect("parse");
-    materialize_nginx_app(&parsed, Path::new("/etc/nginx/sites-enabled"), "surface")
+    materialize_nginx_app_default(&parsed, Path::new("/etc/nginx/sites-enabled"), "surface")
 }
 
 fn materialize_ok(text: &str) -> WebServerAppConfig {
@@ -1175,7 +1175,6 @@ const FAIL_CLOSED: &[(&str, &str, &str)] = &[
     ("proxy_ssl on http target", "location / { proxy_ssl_verify on; proxy_pass http://127.0.0.1:9001; }", "require an `https://`"),
     ("real_ip unsupported header", "real_ip_header X-Real-IP;", "X-Forwarded-For"),
     ("invalid client_max_body_size", "client_max_body_size huge;", "invalid client_max_body_size"),
-    ("conflicting client_max_body_size", "client_max_body_size 1m; location /a/ { client_max_body_size 10m; return 200 \"a\"; }", "conflicting `client_max_body_size`"),
     ("proxy_cache undefined zone", "proxy_cache nope;", "undefined cache zone"),
     ("limit_req undefined zone", "location / { limit_req zone=nope; proxy_pass http://127.0.0.1:9001; }", "undefined zone"),
     ("limit_conn undefined zone", "location / { limit_conn nope 10; proxy_pass http://127.0.0.1:9001; }", "undefined zone"),
@@ -1237,7 +1236,8 @@ server {{
         Path::new("site.conf"),
     )
     .expect("parse");
-    let config = materialize_nginx_app(&parsed, directory.path(), "auth").expect("materialize");
+    let config =
+        materialize_nginx_app_default(&parsed, directory.path(), "auth").expect("materialize");
     let routes = &config.virtual_hosts[0].routes;
     assert!(
         routes[0].auth_basic.is_none(),
@@ -1600,7 +1600,8 @@ stream {{
     let mut stack = vec![directory.path().join("nginx.conf")];
     let expanded =
         expand_includes(parsed, directory.path(), &mut budget, &mut stack).expect("expand");
-    let config = materialize_nginx_app(&expanded, directory.path(), "full").expect("materialize");
+    let config =
+        materialize_nginx_app_default(&expanded, directory.path(), "full").expect("materialize");
     assert_eq!(config.virtual_hosts.len(), 1);
     assert_eq!(config.listeners.len(), 2, "80 + [::]:80");
     assert_eq!(config.upstreams.len(), 2, "api + tcp_backend");
@@ -2084,7 +2085,8 @@ server {
 }
 "#;
     let parsed = parse_nginx_config(text, Path::new("site.conf")).expect("parse");
-    let config = materialize_nginx_app(&parsed, directory.path(), "surface").expect("materialize");
+    let config =
+        materialize_nginx_app_default(&parsed, directory.path(), "surface").expect("materialize");
     let tls_policies: Vec<_> = config
         .upstreams
         .iter()

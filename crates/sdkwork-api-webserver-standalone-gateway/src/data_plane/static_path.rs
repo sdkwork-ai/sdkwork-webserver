@@ -62,10 +62,12 @@ pub(crate) async fn open_static_path(
     request_path_has_trailing_slash: bool,
     spa_fallback: Option<&str>,
     autoindex: bool,
+    index_files: Option<&[String]>,
 ) -> Result<StaticPathTarget, StaticPathError> {
     let root = root.to_owned();
     let relative = relative.to_owned();
     let spa_fallback = spa_fallback.map(str::to_owned);
+    let index_files = index_files.map(<[String]>::to_vec);
     tokio::task::spawn_blocking(move || {
         open_static_path_sync(
             &root,
@@ -73,6 +75,7 @@ pub(crate) async fn open_static_path(
             request_path_has_trailing_slash,
             spa_fallback.as_deref(),
             autoindex,
+            index_files.as_deref(),
         )
     })
     .await
@@ -85,6 +88,7 @@ fn open_static_path_sync(
     request_path_has_trailing_slash: bool,
     spa_fallback: Option<&str>,
     autoindex: bool,
+    index_files: Option<&[String]>,
 ) -> Result<StaticPathTarget, StaticPathError> {
     let components = validated_components(relative)?;
     let root_dir = Dir::open_ambient_dir(root, ambient_authority()).map_err(map_root_error)?;
@@ -94,27 +98,29 @@ fn open_static_path_sync(
         Ok(OpenedEntry::Directory(_directory)) if !request_path_has_trailing_slash => {
             Ok(StaticPathTarget::RedirectToDirectory)
         }
-        Ok(OpenedEntry::Directory(directory)) => match open_index(&directory, relative) {
-            Ok(file) => Ok(StaticPathTarget::File(file)),
-            // nginx `autoindex off` + an `index` that names no existing file
-            // answers 403 Forbidden for a directory request, not 404: the
-            // directory exists, so the representation is present but not
-            // served/listed (probed against nginx 1.29.6: `/dir/` with a
-            // missing `index.html` is 403, with no `ETag`).
-            //
-            // This also pre-empts an SPA fallback: nginx's `try_files $uri/`
-            // matches the existing directory, the index module then refuses
-            // it, and the fallback target is never reached.
-            //
-            // nginx `autoindex on` replaces that 403 with a generated listing:
-            // the index module hands the request to the autoindex module when
-            // no index file exists.
-            Err(StaticPathError::NotFound) if autoindex => Ok(StaticPathTarget::Autoindex {
-                entries: read_autoindex_entries(directory)?,
-            }),
-            Err(StaticPathError::NotFound) => Err(StaticPathError::Forbidden),
-            Err(error) => Err(error),
-        },
+        Ok(OpenedEntry::Directory(directory)) => {
+            match open_index(&directory, relative, index_files) {
+                Ok(file) => Ok(StaticPathTarget::File(file)),
+                // nginx `autoindex off` + an `index` that names no existing file
+                // answers 403 Forbidden for a directory request, not 404: the
+                // directory exists, so the representation is present but not
+                // served/listed (probed against nginx 1.29.6: `/dir/` with a
+                // missing `index.html` is 403, with no `ETag`).
+                //
+                // This also pre-empts an SPA fallback: nginx's `try_files $uri/`
+                // matches the existing directory, the index module then refuses
+                // it, and the fallback target is never reached.
+                //
+                // nginx `autoindex on` replaces that 403 with a generated listing:
+                // the index module hands the request to the autoindex module when
+                // no index file exists.
+                Err(StaticPathError::NotFound) if autoindex => Ok(StaticPathTarget::Autoindex {
+                    entries: read_autoindex_entries(directory)?,
+                }),
+                Err(StaticPathError::NotFound) => Err(StaticPathError::Forbidden),
+                Err(error) => Err(error),
+            }
+        }
         Err(StaticPathError::NotFound) => open_fallback(root, spa_fallback),
         Err(error) => Err(error),
     }
@@ -230,12 +236,22 @@ fn open_entry(
     }))
 }
 
-fn open_index(directory: &Dir, parent_hint: &str) -> Result<OpenedStaticFile, StaticPathError> {
-    let path_hint = Path::new(parent_hint).join("index.html");
-    match open_entry(directory, Path::new("index.html"), &path_hint)? {
-        OpenedEntry::File(file) => Ok(file),
-        OpenedEntry::Directory(_) => Err(StaticPathError::NotFound),
+fn open_index(
+    directory: &Dir,
+    parent_hint: &str,
+    index_files: Option<&[String]>,
+) -> Result<OpenedStaticFile, StaticPathError> {
+    // nginx `index` tries its declared names in order; when the directive is
+    // undeclared the default is `index.html`.
+    let default = ["index.html".to_owned()];
+    for name in index_files.unwrap_or(&default) {
+        let path_hint = Path::new(parent_hint).join(name);
+        match open_entry(directory, Path::new(name), &path_hint)? {
+            OpenedEntry::File(file) => return Ok(file),
+            OpenedEntry::Directory(_) => continue,
+        }
     }
+    Err(StaticPathError::NotFound)
 }
 
 /// Read nginx `autoindex` entries from an opened directory.
@@ -346,7 +362,7 @@ mod tests {
         let public = temp.path().join("public");
         std::fs::create_dir(&public).unwrap();
         std::fs::write(public.join("asset.txt"), "original").unwrap();
-        let target = open_static_path_sync(&public, "asset.txt", false, None, false).unwrap();
+        let target = open_static_path_sync(&public, "asset.txt", false, None, false, None).unwrap();
         let StaticPathTarget::File(mut opened) = target else {
             panic!("expected opened file");
         };
@@ -375,7 +391,7 @@ mod tests {
         // module refuses it.
         for spa_fallback in [None, Some("index.html")] {
             assert!(matches!(
-                open_static_path_sync(&public, "nodx/", true, spa_fallback, false),
+                open_static_path_sync(&public, "nodx/", true, spa_fallback, false, None),
                 Err(StaticPathError::Forbidden)
             ));
         }
@@ -383,13 +399,13 @@ mod tests {
         // Without the trailing slash nginx first redirects to the canonical
         // directory URI; that branch is unchanged by the 403 rule.
         assert!(matches!(
-            open_static_path_sync(&public, "nodx", false, None, false),
+            open_static_path_sync(&public, "nodx", false, None, false, None),
             Ok(StaticPathTarget::RedirectToDirectory)
         ));
 
         // A real file inside the directory is still served.
         assert!(matches!(
-            open_static_path_sync(&public, "nodx/keep.txt", false, None, false),
+            open_static_path_sync(&public, "nodx/keep.txt", false, None, false, None),
             Ok(StaticPathTarget::File(_))
         ));
     }
@@ -409,11 +425,11 @@ mod tests {
         symlink(&outside, public.join("nested")).unwrap();
 
         assert!(matches!(
-            open_static_path_sync(&public, "final.txt", false, None, false),
+            open_static_path_sync(&public, "final.txt", false, None, false, None),
             Err(StaticPathError::Forbidden)
         ));
         assert!(matches!(
-            open_static_path_sync(&public, "nested/secret.txt", false, None, false),
+            open_static_path_sync(&public, "nested/secret.txt", false, None, false, None),
             Err(StaticPathError::Forbidden)
         ));
     }

@@ -1823,6 +1823,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         crate::config::CertificateConfig {
             id: id.to_owned(),
             server_names,
+            server_name_regexes: Vec::new(),
             source: crate::config::CertificateSource::ProtectedFile {
                 certificate_file: format!("certs/{id}/fullchain.pem"),
                 private_key_file: format!("certs/{id}/privkey.pem"),

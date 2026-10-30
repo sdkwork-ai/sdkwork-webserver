@@ -364,6 +364,24 @@ fn rewrite_set_cookie(value: &str, policy: &ProxyResponsePolicyConfig) -> Option
 }
 
 fn rewrite_cookie_path(value: &str, policy: &CookieRewritePolicyConfig) -> Option<String> {
+    if let CookieRewritePolicyConfig::RegexRules(rules) = policy {
+        for rule in rules {
+            let pattern = if rule.case_insensitive {
+                format!("(?i){}", rule.pattern)
+            } else {
+                rule.pattern.clone()
+            };
+            let Ok(regex) = regex::Regex::new(&pattern) else {
+                continue;
+            };
+            if regex.is_match(value) {
+                // nginx replaces the matching portion with the configured
+                // replacement (capture references `$1..$9` expand).
+                return Some(regex.replace(value, rule.replacement.as_str()).into_owned());
+            }
+        }
+        return None;
+    }
     let CookieRewritePolicyConfig::Rules(rules) = policy else {
         return None;
     };

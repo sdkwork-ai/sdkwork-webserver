@@ -16,9 +16,9 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **211** | 可承诺 |
+| executable（真实执行且有测试证据） | 79 | **212** | 可承诺 |
 | accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **170** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **299** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
+| rejected (fail closed)（活跃出现即报错） | 253 | **298** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
 | excluded from profile（明确排除） | 229 | **64** | 仅 mail proxy 51 / GeoIP 8 / Perl 4 / 动态模块 1 |
 | **合计** | 744 | **744** | |
 
@@ -77,6 +77,15 @@
 | `empty_gif` | 规范 43 字节 1x1 GIF、image/gif、nginx 固定 Last-Modified、仅 GET/HEAD | 3 个 differential `empty-gif.*` |
 | `stub_status` | nginx 字段形状状态页（Active/accepts/handled/requests/Reading/Writing/Waiting），仅 location 上下文、loopback 门禁；计数为进程本地，差分对字段形状规范化比较 | 3 个 differential `stub-status.*` |
 
+### Wave 10：rewrite/变量引擎（真实生产配置验收）
+
+| 项 | 轮后行为 | 证据 |
+| --- | --- | --- |
+| `set` / `if` / 正则捕获 | server/location `set`（nginx 阶段顺序）；`if` 条件（truthy、=、!=、~、!~、~*、!~*）与可执行 body；location/if 正则捕获 `$1..$9` | differential-http 6 例（set→变量 proxy_pass、if truthy/false、if regex 捕获、location 捕获、变量 alias/root） |
+| 变量 `proxy_pass` | 请求时展开 URL，authority 解析到已声明 upstream（真实 LB/健康/TLS）或经 SSRF 策略的字面地址；支持 `${var}` | differential 265/265 |
+| 变量 `root`/`alias` | 请求时求值，限定在 typed `[http] documentRootAllowlist` 内，路径穿越拒绝 | 真实配置验收 + 单元测试 |
+| 真实生产配置 | 用户生产 nginx（api.birdcoder.com，33 文件）Materialize 成功：41 vhost / 4 listener / 150 resource / 88 upstream / 0 skipped | `check-nginx-real-world.mjs`（聚合门禁步骤） |
+
 ### Wave 4b / 6-pre / 9-pre：stream 高级能力、OCSP 静态装订、邮件协议基底
 
 | 项 | 轮后行为 | 证据 |
@@ -112,6 +121,7 @@
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
 | 宽面 HTTP 差分（87→259 例） | `node tools/run-nginx-differential-http.mjs` | **259/259**，0 非预期 |
 | 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **46/46** 逐字节一致（含 bind/keep-conn/unix 传输用例） |
+| 真实生产配置验收（api.birdcoder.com 快照） | `node tools/check-nginx-real-world.mjs` | virtualHosts=41 / listeners=4 / resources=150 / upstreams=88 / skipped=0，纳入聚合门禁 |
 | stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **9/9**（limit_conn/dry-run/ACL/return/set/map/SNI） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |

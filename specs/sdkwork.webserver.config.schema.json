@@ -264,6 +264,93 @@
     }
   },
   "$defs": {
+    "ifCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variable", "operator"],
+      "properties": {
+        "variable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "operator": {
+          "enum": ["truthy", "negated-truthy", "equals", "not-equals", "regex", "not-regex", "regex-ignore-case", "not-regex-ignore-case"]
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "rewritePhaseOp": {
+      "description": "One ordered nginx rewrite-phase instruction (set / if / return / rewrite / add_header).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "variable", "value"],
+          "properties": {
+            "action": { "const": "set" },
+            "variable": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "value": { "type": "string", "minLength": 1, "maxLength": 8192 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "condition", "body"],
+          "properties": {
+            "action": { "const": "if" },
+            "condition": { "$ref": "#/$defs/ifCondition" },
+            "body": {
+              "type": "array",
+              "maxItems": 256,
+              "items": { "$ref": "#/$defs/rewritePhaseOp" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "status"],
+          "properties": {
+            "action": { "const": "return" },
+            "status": { "type": "integer", "minimum": 200, "maximum": 599 },
+            "body": { "type": "string", "maxLength": 8192 },
+            "location": { "type": "string", "maxLength": 8192 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "pattern", "replacement", "flag"],
+          "properties": {
+            "action": { "const": "rewrite" },
+            "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "replacement": { "type": "string", "maxLength": 8192 },
+            "flag": { "enum": ["last", "break", "redirect", "permanent"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "name", "value"],
+          "properties": {
+            "action": { "const": "add-header" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "value": { "type": "string", "maxLength": 8192 },
+            "always": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
     "id": {
       "type": "string",
       "minLength": 1,
@@ -1094,6 +1181,16 @@
             "$ref": "#/$defs/serverName"
           }
         },
+        "serverNameRegexes": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "nginx `server_name ~pattern` values attached to this certificate (values without the `~` marker); SNI regex selection evaluates them in authored order after exact and wildcard names.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
         "source": {
           "$ref": "#/$defs/protectedFileCertificateSource"
         }
@@ -1291,6 +1388,12 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 255
+        },
+        "dynamicRoot": {
+          "description": "Request-time `root $variable` / `alias $variable` template; evaluated per request and confined to nginx.documentRootAllowlist.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
         },
         "stripPrefix": {
           "type": "boolean",
@@ -2327,6 +2430,17 @@
           "type": "integer",
           "minimum": 0
         },
+        "rewritePhase": {
+          "description": "Ordered nginx rewrite-phase instructions executed before (server) or after (location) selection.",
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/rewritePhaseOp" }
+        },
+        "maxRequestBodyBytes": {
+          "description": "Effective nginx client_max_body_size for this route; absent means the app-level limit.",
+          "type": "integer",
+          "minimum": 1
+        },
         "id": {
           "$ref": "#/$defs/id"
         },
@@ -2527,6 +2641,17 @@
           "type": "integer",
           "minimum": 0
         },
+        "rewritePhase": {
+          "description": "Ordered nginx rewrite-phase instructions executed before (server) or after (location) selection.",
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/rewritePhaseOp" }
+        },
+        "maxRequestBodyBytes": {
+          "description": "Effective nginx client_max_body_size for this route; absent means the app-level limit.",
+          "type": "integer",
+          "minimum": 1
+        },
         "id": {
           "$ref": "#/$defs/id"
         },
@@ -2714,6 +2839,18 @@
             "off"
           ],
           "default": "exact"
+        },
+        "nativeCompatibility": {
+          "description": "Set by the nginx-configuration materializer only: stock nginx does not stat document roots or certificate files at load, so a relocated configuration tree still validates; typed configurations keep strict existence checks.",
+          "type": "boolean",
+          "default": false
+        },
+        "documentRootAllowlist": {
+          "description": "Absolute directory prefixes a request-time `root $variable` / `alias $variable` may resolve to; empty means variable document roots fail closed.",
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 2, "maxLength": 4096 }
         }
       },
       "required": [

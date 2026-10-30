@@ -64,7 +64,7 @@ const ORACLE_UPSTREAM_PORT = ORACLE_PORT + 2;
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_UPSTREAM_PORT = GATEWAY_PORT + 2;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
-const CASE_FLOOR = 259;
+const CASE_FLOOR = 265;
 /**
  * The exact nginx build the committed oracle was captured from. Bump it only
  * together with a fresh `--refresh-oracle` capture and the per-slice note in
@@ -374,7 +374,13 @@ async function main() {
   const gateway = spawn(binary, ['serve-nginx', GATEWAY_CONF], {
     cwd: root,
     stdio: ['ignore', logHandle, logHandle],
-    env: { ...process.env, TZ: 'UTC' },
+    env: {
+      ...process.env,
+      TZ: 'UTC',
+      // Request-time `alias $variable` (the rewrite/variable cases) resolves
+      // under this operator allowlist; the fixture renders the same directory.
+      SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST: path.join(differentialDir, 'public'),
+    },
   });
 
   let exitCode = 1;

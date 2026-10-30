@@ -117,7 +117,11 @@ pub(crate) fn compile_policy_tls_material(
             }
             Err(error) => return Err(error),
         };
-        certificates.push((certificate.server_names.clone(), loaded));
+        certificates.push((
+            certificate.server_names.clone(),
+            certificate.server_name_regexes.clone(),
+            loaded,
+        ));
     }
     // Relative `clientAuth.caCertificateFiles` are chrooted to the config
     // directory by the compiler; substitute the resolved paths.

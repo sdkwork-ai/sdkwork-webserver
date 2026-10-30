@@ -611,11 +611,11 @@ async fn serve_adaptive_request(
     let relative = path.trim_start_matches('/');
     let html_navigation = is_html_navigation(request.headers(), &path);
     let fallback = (spa_fallback && html_navigation).then_some(INDEX_FILE);
-    let target = match open_static_path(root, relative, path.ends_with('/'), fallback, false).await
-    {
-        Ok(target) => target,
-        Err(error) => return path_error_response(error),
-    };
+    let target =
+        match open_static_path(root, relative, path.ends_with('/'), fallback, false, None).await {
+            Ok(target) => target,
+            Err(error) => return path_error_response(error),
+        };
 
     match target {
         StaticPathTarget::File(file) => {

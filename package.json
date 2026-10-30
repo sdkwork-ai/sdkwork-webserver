@@ -99,6 +99,7 @@
     "check:nginx-differential": "node tools/run-nginx-differential.mjs",
     "check:nginx-behavior": "node tools/run-nginx-behavioral-corpus.mjs",
     "check:nginx-compat": "node tools/run-nginx-compat-gate.mjs",
+    "check:nginx-real-world": "node tools/check-nginx-real-world.mjs",
     "nginx:import:classify": "node tools/import-nginx-conf.mjs",
     "nginx:import:draft": "node tools/import-nginx-conf.mjs --write-draft .sdkwork/runtime/nginx-import.draft.json",
     "nginx:import:toml": "node tools/import-nginx-conf.mjs --write-draft .sdkwork/runtime/nginx-import.draft.json --write-toml .sdkwork/runtime/nginx-import.server.toml",

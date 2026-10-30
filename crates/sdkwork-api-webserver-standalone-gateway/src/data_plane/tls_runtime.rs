@@ -788,7 +788,7 @@ fn compile_candidate(
                 assignment_uuid: assignment.assignment_uuid.clone(),
             });
         }
-        certificates.push((assignment.server_names.clone(), loaded));
+        certificates.push((assignment.server_names.clone(), Vec::new(), loaded));
         assigned.push(AssignedCertificate {
             certificate_id: assignment.certificate_uuid.clone(),
             server_names: assignment.server_names.clone(),

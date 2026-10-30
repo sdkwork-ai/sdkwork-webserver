@@ -642,8 +642,9 @@ fn build_stream_tls_acceptor(
         ));
     }
     let server_names = certificate.server_names.clone();
+    let server_name_regexes = certificate.server_name_regexes.clone();
     let server_config = build_sni_server_config(
-        vec![(server_names, loaded)],
+        vec![(server_names, server_name_regexes, loaded)],
         TlsVersion::Tls12,
         TlsVersion::Tls13,
         &[],

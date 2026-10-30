@@ -429,6 +429,8 @@ mod tests {
             error_pages: Vec::new(),
             response_headers: Vec::new(),
             cache_policy: None,
+            rewrite_phase: Vec::new(),
+            max_request_body_bytes: None,
             redirect_policy: None,
             limit_req_status: None,
             limit_conn_status: None,

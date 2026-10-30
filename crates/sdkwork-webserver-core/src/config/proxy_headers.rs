@@ -54,9 +54,15 @@ pub fn validate_proxy_set_header_entry_with_maps(
         if var.is_empty() {
             return Err("proxy_set_header contains a bare `$`".to_owned());
         }
-        if !SUPPORTED_PROXY_HEADER_VARS.contains(&var) && !map_variables.contains(&var) {
+        let generic_request_header = var
+            .strip_prefix("http_")
+            .is_some_and(|name| !name.is_empty());
+        if !SUPPORTED_PROXY_HEADER_VARS.contains(&var)
+            && !map_variables.contains(&var)
+            && !generic_request_header
+        {
             return Err(format!(
-                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_upgrade/$server_port or a literal"
+                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_<request-header>/$server_port or a literal"
             ));
         }
         rest = &after[end..];

@@ -26,6 +26,7 @@ mod sub_filter;
 mod upstream_params;
 mod uri;
 mod validate;
+mod variables;
 
 pub use access::{evaluate_access, evaluate_access_first_match_allow, AccessDecision};
 pub use acme_webroot::{AcmeWebrootReport, AcmeWebrootVerdict};
@@ -64,15 +65,16 @@ pub use model::{
     AutoindexFormat, CachePolicyConfig, CertificateConfig, CertificateSource, CgiUpstreamProtocol,
     CharsetConfig, ClientAuthConfig, ClientAuthMode, ConfigProviderType, CookieRewritePolicyConfig,
     CustomHeaderConfig, DeploymentConfig, ErrorPageConfig, ExpiresMode, GeoConfig, GeoEntryConfig,
-    GzipConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, LimitConnConfig,
-    LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol,
-    ListenerTlsRuntime, MailAuthMechanism, MailConfig, MailServerConfig, MailServerProtocol,
-    MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig, ObservabilityConfig,
-    ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
-    ProxyProtocolVersion, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
-    ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry, ReloadConfig,
-    ReloadMode, ResolverConfig, ResourceConfig, ResourcePressureConfig,
-    ResourceSampleFailurePolicy, RewriteFlag, RewriteRuleConfig, RouteConfig, RouteMatchConfig,
+    GzipConfig, GzipProxiedConfig, GzipStaticMode, IfConditionConfig, IfModifiedSinceMode,
+    IfOperatorConfig, LimitConnConfig, LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig,
+    ListenerConfig, ListenerProtocol, ListenerTlsRuntime, MailAuthMechanism, MailConfig,
+    MailServerConfig, MailServerProtocol, MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig,
+    ObservabilityConfig, ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig,
+    ProxyProtocolCrc32cPolicy, ProxyProtocolVersion, ProxyRedirectPolicyConfig,
+    ProxyResponsePolicyConfig, ProxyRewriteRegexRuleConfig, ProxyRewriteRuleConfig,
+    RedirectPolicyConfig, RefererConfig, RefererHostEntry, ReloadConfig, ReloadMode,
+    ResolverConfig, ResourceConfig, ResourcePressureConfig, ResourceSampleFailurePolicy,
+    RewriteFlag, RewritePhaseOpConfig, RewriteRuleConfig, RouteConfig, RouteMatchConfig,
     RoutePathType, SecureLinkMode, SecurityHeadersConfig, SplitClientsConfig,
     SplitClientsPartConfig, StreamProtocol, StreamServerConfig, StreamSetVariableConfig,
     StreamTargetConfig, StreamTlsMode, StrictTransportSecurityConfig, SubFilterConfig,
@@ -83,7 +85,7 @@ pub use model::{
     UpstreamRetryCondition, UpstreamRetryConfig, UpstreamTargetConfig, UpstreamTlsConfig,
     UpstreamTlsTrustMode, UsageMeteringChannel, UsageMeteringConfig, VirtualHostConfig,
     WebServerAppConfig, WebServerLimits, XFrameOptions, ACME_HTTP_01_CHALLENGE_PREFIX,
-    DEFAULT_MAX_RANGES,
+    DEFAULT_MAX_RANGES, MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
@@ -137,6 +139,9 @@ pub use uri::{normalize_uri_path, normalize_uri_path_with_options, UriPathNormal
 pub use validate::{
     normalize_server_name, normalize_tls_server_name, server_name_covers, unix_path_is_confined,
     unix_target_path, wildcard_server_name_covers,
+};
+pub use variables::{
+    expand_template, is_capture_variable, template_variables, TemplateVariable, MAX_TEMPLATE_BYTES,
 };
 
 pub(crate) use validate::validate_webserver_config;

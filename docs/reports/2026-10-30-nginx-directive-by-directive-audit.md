@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `01797aff` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave and the CGI-transport wave (wave 7A) (code plus the re-synced directive catalog), on top of HEAD 01797aff |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `390afdbb` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A) and the rewrite/variable-engine wave (wave 10) (code plus the re-synced directive catalog), on top of HEAD 390afdbb |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `02cc083aef4cf8b635466fc41bcb6e2975206b833e87ddc13687745163038edd` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `cf134254597fed609184145f01fe6110f13dc17f11b0f1e2374d3a64d07a9c9b` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -26,9 +26,10 @@
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
-  stream/OCSP wave and the CGI-transport wave (wave 7A).** The code, tests, generated operator matrix and the re-synced directive
+  stream/OCSP wave, the CGI-transport wave (wave 7A) and the rewrite/variable-engine
+  wave (wave 10).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `01797aff`; the audit is regenerated against that post-wave catalog (evidence
+  `390afdbb`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
@@ -40,9 +41,10 @@
   (FastCGI/uWSGI/SCGI/memcached implemented forms plus the bounded memcached-backed
   `set` form), the gRPC wave (grpc_pass/h2 client with headers, timeouts, buffer,
   retry, intercept and always-verified grpc_ssl_* forms), the stream/OCSP wave
-  (stream limit_conn/map/set/preread tuning plus static ssl_stapling_file) and the
-  CGI-transport wave (IP-literal *_bind and *_socket_keepalive) are recorded as
-  completed in section 3, and every one of them is asserted executable by
+  (stream limit_conn/map/set/preread tuning plus static ssl_stapling_file), the
+  CGI-transport wave (IP-literal *_bind and *_socket_keepalive) and the
+  rewrite/variable-engine wave (`if` conditions over the bounded variable engine) are
+  recorded as completed in section 3, and every one of them is asserted executable by
   `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
@@ -72,15 +74,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 211 | 28.4% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `enforced` | 212 | 28.5% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
 | `runtime-owned` | 143 | 19.2% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
 | `behavior-gap` | 164 | 22.0% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 64 | 8.6% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
-| `fail-closed` | 145 | 19.5% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
+| `fail-closed` | 144 | 19.4% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 211 + 143 + 17 + 164 + 64 + 145 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 212 + 143 + 17 + 164 + 64 + 144 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -92,11 +94,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 211 | 211 | 0 | 0 | 0 | 0 | 0 |
+| `executable` | 212 | 212 | 0 | 0 | 0 | 0 | 0 |
 | `accepted-unenforced` | 170 | 0 | 143 | 17 | 10 | 0 | 0 |
-| `unsupported-fail-closed` | 299 | 0 | 0 | 0 | 154 | 0 | 145 |
+| `unsupported-fail-closed` | 298 | 0 | 0 | 0 | 154 | 0 | 144 |
 | `excluded` | 64 | 0 | 0 | 0 | 0 | 64 | 0 |
-| **total** | **744** | 211 | 143 | 17 | 164 | 64 | 145 |
+| **total** | **744** | 212 | 143 | 17 | 164 | 64 | 144 |
 
 ### 1.3 Wave Completion Status
 
@@ -113,8 +115,9 @@ wave-3 backlog entries that are currently rejected.
 | `wave 6 (gRPC)` | 20 | done - gRPC upstream execution: grpc_pass/h2 client, headers, timeouts, buffer, next-upstream, intercept and always-verified grpc_ssl_* forms (catalog: executable) |
 | `stream/OCSP wave` | 8 | done - stream limit_conn/zone/dry_run, bounded stream map/set, preread timeout and buffer sizing, and static OCSP stapling (ssl_stapling_file) (catalog: executable) |
 | `wave 7A (CGI transport)` | 8 | done - IP-literal *_bind and *_socket_keepalive for the FastCGI/uWSGI/SCGI/memcached transports (http/server/location inheritance) (catalog: executable) |
+| `wave 10 (rewrite/variable engine)` | 1 | done - server/location `if` conditions (truthy, =, !=, ~, !~, ~*, !~*) over the bounded variable engine, with true bodies executing set/add_header/return/rewrite (catalog: executable) |
 | remaining backlog | 164 | open - 12 categories, see section 3.2 |
-| **total planned work** | **296** | 132 completed, 164 remaining |
+| **total planned work** | **297** | 133 completed, 164 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -126,24 +129,24 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 185 | 86 | 9 | 143 | 9 | 115 |
+| `http` | 547 | 186 | 86 | 9 | 143 | 9 | 114 |
 | `mail` | 51 | 0 | 0 | 0 | 0 | 51 | 0 |
 | `stream` | 105 | 25 | 23 | 8 | 21 | 3 | 25 |
-| **total** | **744** | 211 | 143 | 17 | 164 | 64 | 145 |
+| **total** | **744** | 212 | 143 | 17 | 164 | 64 | 144 |
 
 ### 1.5 Headline Findings
 
-1. **211 of 744 directives (28.4%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave and the CGI-transport wave landed 132 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
+1. **212 of 744 directives (28.5%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave and the rewrite/variable-engine wave landed 133 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
 2. **164 behavior-gap directives remain in the remaining backlog** (22.0% of the surface): HTTP/1 framing policy (1), re-entrant subrequest engine (7), module-sized functional modules (17), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP dynamic fetch / refresh / verification (6), stream advanced gaps (18), gRPC residual forms (9), FastCGI residual forms (30), uWSGI residual forms (42), SCGI residual forms (28), memcached residual forms (2).
-3. **209 of 744 directives (28.1%) are excluded or rejected, not silently emulated.** 64 are explicit PRD section 4 profile exclusions and 145 are fail-closed rejections outside the planned backlog.
+3. **208 of 744 directives (28.0%) are excluded or rejected, not silently emulated.** 64 are explicit PRD section 4 profile exclusions and 144 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
    all 11 "enforced typed key" migration actions now
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-CGI-transport-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-rewrite/variable-engine-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -807,13 +810,13 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `break` | http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `if`/`break`/`rewrite_log` are outside the bounded rewrite state machine; `set`, `return`, `rewrite` and `try_files` execute. |
-| `if` | http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `if`/`break`/`rewrite_log` are outside the bounded rewrite state machine; `set`, `return`, `rewrite` and `try_files` execute. |
+| `break` | http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `break`/`rewrite_log`/`uninitialized_variable_warn` are outside the bounded rewrite state machine; `if`, `set`, `return`, `rewrite` and `try_files` execute. |
+| `if` | http-location, http-server | executable | **enforced** | enforced: the value reaches `server/location rewrite phase 'if' conditions (truthy, =, !=, ~, !~, ~*, !~*) feeding the bounded variable engine; true bodies execute set/add_header/return/rewrite`; evidence tests/nginx/differential-http/battery.py::rewrite.if-truthy-header. Known difference: if-body proxy_pass/root/error_page remain fail-closed; multiple matched if blocks with add_header are approximated by the last applied set. |
 | `return` | http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `virtualHosts[].routes[].resource (respond\|redirect)`; evidence crates/sdkwork-webserver-core/tests/nginx_config_surface.rs::every_supported_directive_family_materializes. Known difference: 444 and variable-bearing bodies are rejected. |
 | `rewrite` | http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `routes[].rewrite`; evidence tests/nginx/full-surface/probe.py::case_rewrite_last_with_captures. Known difference: only last\|break\|redirect\|permanent flags; bounded internal redirects. |
-| `rewrite_log` | http, http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `if`/`break`/`rewrite_log` are outside the bounded rewrite state machine; `set`, `return`, `rewrite` and `try_files` execute. |
+| `rewrite_log` | http, http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `break`/`rewrite_log`/`uninitialized_variable_warn` are outside the bounded rewrite state machine; `if`, `set`, `return`, `rewrite` and `try_files` execute. |
 | `set` | http-if, http-location, http-server | executable | **enforced** | enforced: the value reaches `location-scoped variable table consumed by the memcached adapter ($memcached_key)`; evidence tests/nginx/differential-protocols/battery.py::memcached-hit. Known difference: only the bounded `set $memcached_key <literal-or-template>` form executes (location context, supported variable vocabulary); other set variables/sources fail closed. |
-| `uninitialized_variable_warn` | http, http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `if`/`break`/`rewrite_log` are outside the bounded rewrite state machine; `set`, `return`, `rewrite` and `try_files` execute. |
+| `uninitialized_variable_warn` | http, http-if, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: `break`/`rewrite_log`/`uninitialized_variable_warn` are outside the bounded rewrite state machine; `if`, `set`, `return`, `rewrite` and `try_files` execute. |
 
 #### `ngx_http_scgi_module` (44 directives)
 
@@ -1437,7 +1440,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 ## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine)
 
 The catalog now classifies every directive below as `executable` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -1457,7 +1460,8 @@ following nginx rather than mapping to 502); the stream/OCSP wave added stream
 limit_conn/zone/dry_run, the bounded stream map/set variable engine, preread timeout and
 buffer sizing, and static OCSP stapling via ssl_stapling_file (rustls CertifiedKey.ocsp,
 wire-proven); the CGI-transport wave added IP-literal *_bind and *_socket_keepalive for
-the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance).
+the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance); and the
+rewrite/variable-engine wave made server/location `if` conditions executable.
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1593,6 +1597,19 @@ the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance).
 | `wave 7A (CGI transport)` | `scgi_socket_keepalive` (`http:scgi_socket_keepalive`) | `resources[].bindAddress / socketKeepalive (scgi_socket_keepalive on the CGI-family transport)` | `tests/nginx/differential-protocols/battery.py::scgi-bind` |
 | `wave 7A (CGI transport)` | `memcached_bind` (`http:memcached_bind`) | `resources[].bindAddress / socketKeepalive (memcached_bind on the CGI-family transport)` | `tests/nginx/differential-protocols/battery.py::bind` |
 | `wave 7A (CGI transport)` | `memcached_socket_keepalive` (`http:memcached_socket_keepalive`) | `resources[].bindAddress / socketKeepalive (memcached_socket_keepalive on the CGI-family transport)` | `tests/nginx/differential-protocols/battery.py::bind` |
+| `wave 10 (rewrite/variable engine)` | `if` (`http:if`) | `server/location rewrite phase 'if' conditions (truthy, =, !=, ~, !~, ~*, !~*) feeding the bounded variable engine; true bodies execute set/add_header/return/rewrite` | `tests/nginx/differential-http/battery.py::rewrite.if-truthy-header` |
+
+Wave 10 also landed engine capabilities that are not directive rows but are part of the
+claim: a bounded template grammar (`$name`, `${name}`, `$1..$9`), server/location `set`
+with nginx phase ordering, regex captures from location/if matches, request-time
+variable `proxy_pass` resolving to declared upstreams, and variable `root`/`alias`
+confined by the typed `[http] documentRootAllowlist`. Acceptance evidence: the real
+production nginx snapshot committed at
+`tests/nginx/real-world/production-api-birdcoder` (api.birdcoder.com, nginx/1.28.0,
+33 files) now materializes cleanly (virtualHosts=41, listeners=4, resources=150,
+upstreams=88, skipped=0), enforced by the aggregate-gate step
+`tools/check-nginx-real-world.mjs`; the synthetic differential-http slice grew to
+265/265 against nginx 1.29.6 (6 rewrite-engine cases).
 
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
@@ -1602,7 +1619,7 @@ pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog
 ### 3.2 Remaining Behavior-Gap Backlog (164 directives)
 
 These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
-the CGI-transport wave. An accepted-unenforced row is silently ignored today; a rejected row fails
+the rewrite/variable-engine wave. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1855,6 +1872,14 @@ deadline, dead-socket probe) with a framing fix that keeps pooled sockets aligne
 Remaining 7A blockers: gRPC bind/keepalive, hostname/transparent binds, uWSGI/SCGI/
 memcached connection reuse, TLS-over-unix (wave 7B) and nginx-plane unix targets.
 
+Wave 10 bounded gaps (documented known differences, not backlog rows): if-body
+`proxy_pass`/`root`/`error_page` fail closed; multiple matched if blocks that set
+`add_header` are approximated by the last applied set; dynamic-proxy retries rebuild a
+static target (the expanded path is not preserved); per-route `client_max_body_size` is
+enforced on `Content-Length` only (chunked bodies are bounded by the app max); regex SNI
+selection still needs its own differential slice; and regexes are compiled per request
+(bounded compile budget).
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and `gzip_comp_level` (the
@@ -1864,9 +1889,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 85 `executable` directive rows was drawn,
+- A sample of 87 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave and the CGI-transport wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave and the rewrite/variable-engine wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1875,7 +1900,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (85 directive rows)
+### 4.2 Verified Sample (87 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -1964,6 +1989,8 @@ compression layer owns the level).
 | `http:fastcgi_bind` | `fastcgi_bind pins the outbound transport to the configured IP literal` | `tests/nginx/differential-protocols/battery.py::fastcgi-bind` | the differential-protocols binder case compares the peer address echoed by the mock responder against nginx 1.29.6; hostname and transparent binds fail closed with a located diagnostic | verified |
 | `http:scgi_bind` | `scgi_bind pins the outbound SCGI transport to the configured IP literal` | `tests/nginx/differential-protocols/battery.py::scgi-bind` | the SCGI binder differential case compares the peer address echoed by the mock responder against nginx 1.29.6 | verified |
 | `http:memcached_bind` | `memcached_bind pins the outbound memcached transport to the configured IP literal` | `tests/nginx/differential-protocols/battery.py::bind` | the memcached binder differential case compares the peer address observed by the mock responder against nginx 1.29.6 | verified |
+| `http:if` | `'if' executes a truthy-header condition and runs the true-body directives` | `tests/nginx/differential-http/battery.py::rewrite.if-truthy-header` | real-nginx differential cases compare the truthy, false and regex header conditions; a true body executes set/add_header/return/rewrite while a false body does not run | verified |
+| `http:if` | `'if' supports regex conditions and captures over the bounded variable engine` | `tests/nginx/differential-http/battery.py::rewrite.if-regex-header` | the regex-header differential case asserts the same response/header outcome as nginx 1.29.6 for a `~` condition (with the known if-body proxy_pass/root/error_page bounded differences documented) | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -2009,7 +2036,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-211 executable rows cite only the generic
+212 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -2020,7 +2047,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (211 <=> 211). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (212 <=> 212). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -2028,17 +2055,17 @@ Consistent: `executable` <=> `enforced` in both directions (211 <=> 211). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 211 | 28.4% |
+| `enforced` (actually nginx-compatible behavior) | 212 | 28.5% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
 | `behavior-gap` (planned toward compatibility) | 164 | 22.0% |
 | `runtime-owned` (deliberately not nginx value) | 143 | 19.2% |
 | `out-of-profile` (PRD section 4 exclusion) | 64 | 8.6% |
-| `fail-closed` (rejected, not planned) | 145 | 19.5% |
+| `fail-closed` (rejected, not planned) | 144 | 19.4% |
 
-352 of 744 directives (47.3%) are
+351 of 744 directives (47.2%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 211 executed directives plus the 164 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 212 executed directives plus the 164 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (64 directives)
@@ -2083,12 +2110,13 @@ unix/variable-target, hostname/transparent-bind, reuse and gRPC bind/socket/TLS-
 knobs are backlog rows, not profile exclusions.
 
 Mail-substrate note: a separate crate, `crates/sdkwork-webserver-mail-protocol`, has
-landed with POP3/IMAP/SMTP state machines and 45 tests. It is **not wired into the data
-plane yet**, so the nginx mail modules remain out-of-profile / planned in this ledger;
-wiring it would still need the mail auth-backend, certificate and security review work
-listed above.
+landed with POP3/IMAP/SMTP state machines and 45 tests, and the mail listener plane
+(wave 9A: config plane, nginx mail{} materialization, plaintext POP3/IMAP/SMTP dialog and
+PROXY v1) is behind it. The nginx mail **module** still stays out-of-profile / planned in
+this ledger: it needs auth_http, frontend/backend TLS, XCLIENT, relay and a real-nginx
+differential (wave 9B) before the mail module can be audited as executable.
 
-### 5.3 Fail-Closed Groups (145 directives, top modules)
+### 5.3 Fail-Closed Groups (144 directives, top modules)
 
 - `ngx_http_proxy_module` - 31 directive(s)
 - `ngx_http_core_module` - 16 directive(s)
@@ -2099,10 +2127,10 @@ listed above.
 - `ngx_http_ssi_filter_module` - 7 directive(s)
 - `ngx_http_xslt_filter_module` - 6 directive(s)
 - `ngx_stream_proxy_module` - 6 directive(s)
-- `ngx_http_rewrite_module` - 4 directive(s)
 - `ngx_http_dav_module` - 4 directive(s)
 - `ngx_http_mp4_module` - 4 directive(s)
 - `ngx_http_headers_filter_module` - 3 directive(s)
+- `ngx_http_rewrite_module` - 3 directive(s)
 - `ngx_http_gzip_filter_module` - 3 directive(s)
 - `ngx_http_gunzip_filter_module` - 2 directive(s)
 - `ngx_http_referer_module` - 2 directive(s)
@@ -2118,7 +2146,7 @@ Representative implementation cost:
 | TLS extras (CRL/OCSP-response/ECH/ticket files) | 26 | rustls feature gaps (OCSP response handling, raw public keys, certificate compression, session ticket key files) plus a certificate-material pipeline. |
 | HTTP/3 + QUIC (`ngx_http_v3_module`, `ngx_quic_bpf_module`) | 9 | a QUIC transport (UDP, TLS 1.3 QUIC keys, connection migration, congestion control) - a separate transport product, explicitly excluded by PRD section 4. |
 | Embedded filters (SSI/XSLT/image/mp4/FLV/empty-gif) | 25 | embedded template/language/codec dependencies (libxslt, libgd, mp4/FLV parsers) that the standalone data plane does not ship. |
-| `if`/`break` rewrite control (`ngx_http_rewrite_module`) | 4 | a general conditional rewrite interpreter - contradicts the bounded rewrite state machine PRD section 6 requires. |
+| `break`/`rewrite_log` rewrite control (`ngx_http_rewrite_module`) | 3 | unconditional control directives outside the bounded state machine; `if`/`set`/`return`/`rewrite`/`try_files` now execute. |
 
 ### 5.4 Lua, njs, And Third-Party Modules
 
@@ -2156,6 +2184,9 @@ node tools/gen-nginx-directive-audit.mjs --check
 
 # 3. Re-verify the audited claims against the repository sources (offline, read-only).
 node tools/gen-nginx-directive-audit.mjs --verify-evidence
+
+# 4. Real-world acceptance evidence for the rewrite/variable engine (aggregate-gate step).
+node tools/check-nginx-real-world.mjs
 ```
 
 The generator reads `specs/nginx-directive-inventory.json` and
@@ -2165,8 +2196,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the CGI-transport wave (wave 7A) landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the rewrite/variable-engine wave (wave 10) landed and
+the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |
@@ -2303,8 +2334,9 @@ current state:
 | `scgi_socket_keepalive` (`http:scgi_socket_keepalive`) | `wave 7A (CGI transport)` | completed - `enforced` |
 | `memcached_bind` (`http:memcached_bind`) | `wave 7A (CGI transport)` | completed - `enforced` |
 | `memcached_socket_keepalive` (`http:memcached_socket_keepalive`) | `wave 7A (CGI transport)` | completed - `enforced` |
+| `if` (`http:if`) | `wave 10 (rewrite/variable engine)` | completed - `enforced` |
 
-All 132 rows above were re-spot-checked (section 4.2) and are
+All 133 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands

@@ -172,6 +172,11 @@ impl MapResults {
         }
     }
 
+    /// The resolved `(name, value)` pairs, in declaration order.
+    pub(crate) fn pairs(&self) -> &[(String, String)] {
+        &self.values
+    }
+
     /// Resolve one map result by name (without `$`).
     pub(crate) fn lookup(&self, name: &str) -> Option<&str> {
         self.values

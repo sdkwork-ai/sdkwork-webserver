@@ -16,6 +16,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use regex::Regex;
 use rustls::{
     server::{ClientHello, ResolvesServerCert},
     sign::CertifiedKey,
@@ -78,6 +79,9 @@ impl ResolvableCertificate {
 pub(crate) struct CertificateSourceIndex {
     exact: HashMap<String, Arc<ResolvableCertificate>>,
     wildcards: Vec<(String, Arc<ResolvableCertificate>)>,
+    /// `server_name ~pattern` entries in authored order; nginx evaluates SNI
+    /// regexes after the exact and wildcard tables.
+    regexes: Vec<(Regex, Arc<ResolvableCertificate>)>,
 }
 
 impl CertificateSourceIndex {
@@ -87,9 +91,22 @@ impl CertificateSourceIndex {
     /// duplicate claim inside this source, or a name that is not a valid TLS
     /// server name. Ambiguity within one source is an operator mistake, so it
     /// is rejected rather than resolved by insertion order.
+    /// Test-only convenience: exact/wildcard names without regex names.
+    #[cfg(test)]
     pub(crate) fn insert(
         &mut self,
         server_names: &[String],
+        certificate: Arc<ResolvableCertificate>,
+    ) -> Result<(), String> {
+        self.insert_with_regexes(server_names, &[], certificate)
+    }
+
+    /// Adds one certificate under its exact/wildcard names and its authored
+    /// `server_name ~pattern` regexes.
+    pub(crate) fn insert_with_regexes(
+        &mut self,
+        server_names: &[String],
+        server_name_regexes: &[String],
         certificate: Arc<ResolvableCertificate>,
     ) -> Result<(), String> {
         for server_name in server_names {
@@ -113,12 +130,25 @@ impl CertificateSourceIndex {
                 return Err(normalized);
             }
         }
+        for pattern in server_name_regexes {
+            // nginx compiles a server-name regex case-insensitively when the
+            // pattern contains an ASCII uppercase letter (the SNI name is
+            // lower-cased before matching).
+            let compiled = if pattern.bytes().any(|byte| byte.is_ascii_uppercase()) {
+                format!("(?i){pattern}")
+            } else {
+                pattern.clone()
+            };
+            let regex = Regex::new(&compiled)
+                .map_err(|_| format!("invalid TLS server-name regex `{pattern}`"))?;
+            self.regexes.push((regex, Arc::clone(&certificate)));
+        }
         Ok(())
     }
 
     #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
-        self.exact.is_empty() && self.wildcards.is_empty()
+        self.exact.is_empty() && self.wildcards.is_empty() && self.regexes.is_empty()
     }
 
     /// The usable certificate covering `server_name`, an exact name first.
@@ -135,7 +165,10 @@ impl CertificateSourceIndex {
                 return Some(certificate);
             }
         }
-        self.wildcard_covering(server_name, Some(now_unix_seconds))
+        if let Some(certificate) = self.wildcard_covering(server_name, Some(now_unix_seconds)) {
+            return Some(certificate);
+        }
+        self.regex_covering(server_name, Some(now_unix_seconds))
     }
 
     /// The certificate covering `server_name`, ignoring validity.
@@ -143,7 +176,27 @@ impl CertificateSourceIndex {
         if let Some(certificate) = self.exact.get(server_name) {
             return Some(certificate);
         }
-        self.wildcard_covering(server_name, None)
+        if let Some(certificate) = self.wildcard_covering(server_name, None) {
+            return Some(certificate);
+        }
+        self.regex_covering(server_name, None)
+    }
+
+    /// The first authored regex matching `server_name` (nginx server-name
+    /// regex order), optionally restricted to certificates inside their
+    /// validity window.
+    fn regex_covering(
+        &self,
+        server_name: &str,
+        usable_at: Option<i64>,
+    ) -> Option<&Arc<ResolvableCertificate>> {
+        self.regexes
+            .iter()
+            .find(|(regex, certificate)| {
+                regex.is_match(server_name)
+                    && usable_at.is_none_or(|now| certificate.is_usable_at(now))
+            })
+            .map(|(_, certificate)| certificate)
     }
 
     /// The wildcard covering `server_name`, optionally restricted to those

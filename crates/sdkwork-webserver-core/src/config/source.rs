@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::nginx::{load_nginx_compat, NginxLoadReport};
+use crate::nginx::{load_nginx_compat_with_options, NginxLoadReport};
 
 use super::{
     error::{ConfigDiagnostic, WebServerConfigError},
@@ -232,6 +232,11 @@ pub struct ConfigLoadOptions {
     /// Layout v3 lifecycle environment (`development` / `test` / `staging` /
     /// `production`); defaults to `production`.
     pub environment: Option<String>,
+    /// Absolute document-root prefixes the bounded rewrite engine may resolve
+    /// a request-time `root $variable` / `alias $variable` to. This is an
+    /// operator setting only the typed plane can express; the nginx plane
+    /// receives it out of band.
+    pub document_root_allowlist: Vec<String>,
 }
 
 impl ConfigLoadOptions {
@@ -391,7 +396,13 @@ impl ConfigSource for NginxConfConfigSource {
         options: &ConfigLoadOptions,
     ) -> Result<LoadedWebServerConfig, WebServerConfigError> {
         let app_key = options.app_key.as_deref().unwrap_or(DEFAULT_APP_KEY);
-        let report: NginxLoadReport = load_nginx_compat(path, app_key)?;
+        let report: NginxLoadReport = load_nginx_compat_with_options(
+            path,
+            app_key,
+            &crate::nginx::NginxCompatOptions {
+                document_root_allowlist: options.document_root_allowlist.clone(),
+            },
+        )?;
         Ok(LoadedWebServerConfig {
             app: report.app,
             format: ConfigFormat::NginxConf,
