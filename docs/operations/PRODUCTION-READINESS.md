@@ -139,7 +139,7 @@ is `specs/nginx-directive-support.catalog.json` rendered as
 
 The differential oracles are committed and pinned to nginx 1.29.6, so CI compares without a real
 nginx binary; `SDKWORK_REQUIRE_NGINX_EVIDENCE=1` (set by the aggregate gate) turns any "this machine
-cannot execute the evidence" skip into a failure. The directive catalog now classifies 321 directives
+cannot execute the evidence" skip into a failure. The directive catalog now classifies 328 directives
 executable, 170 accepted-but-unenforced (each with a located diagnostic and a migration action), 334
 fail-closed and 64 excluded out of the 744 nginx 1.29.6 directives; a generated 744-row audit ledger
 records one decision and rationale per directive (116 enforced / 143 runtime-owned / 17 security-difference / 29 behavior-gap / 229 out-of-profile / 210 fail-closed). Remaining catalogued gaps (`tls.ocsp-stapling`,

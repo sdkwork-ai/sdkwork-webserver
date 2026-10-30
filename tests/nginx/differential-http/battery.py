@@ -130,6 +130,9 @@ STATUS_HOST = "status.example.com"
 REFERER_HOST = "referer.example.com"
 # Twenty-first host: `geo` / `split_clients` variable blocks.
 GEOSPLIT_HOST = "geosplit.example.com"
+# Twenty-second host: the Wave 8 bounded subrequest engine (`addition`,
+# `auth_request`, `mirror`).
+SUB_HOST = "sub.example.com"
 # 2020-01-01T00:00:00Z. Both endpoints serve these exact files, so pinning the
 # mtime makes `ETag` and `Last-Modified` stable across checkouts (git does not
 # preserve mtimes). The battery pins it on both runs before any request.
@@ -164,6 +167,9 @@ def pin_fixture_mtimes() -> None:
 # The mock upstream's own port, used to build absolute `Location` / `Refresh`
 # values that only a proxy response-header policy can rewrite.
 UPSTREAM_PLACEHOLDER = 0
+# Mock-side hit counter for the `mirror` fire-and-forget subrequest cases.
+_MIRROR_HITS = 0
+_MIRROR_HITS_LOCK = threading.Lock()
 
 
 class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
@@ -205,6 +211,31 @@ class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
 
     def _handle(self) -> None:
         path, _, query = self.path.partition("?")
+        if path == "/sub-main":
+            self._write(200, "text/plain", b"main-body\n", extra=[("X-Upstream", "yes")])
+            return
+        if path == "/sub-mirror":
+            self._write(200, "text/plain", b"mirror-main\n", extra=[("X-Upstream", "yes")])
+            return
+        if path == "/auth-ok":
+            self._write(
+                200,
+                "text/plain",
+                b"auth-ok\n",
+                extra=[("X-Upstream", "yes"), ("X-User", "alice")],
+            )
+            return
+        if path == "/mirror-target":
+            global _MIRROR_HITS
+            with _MIRROR_HITS_LOCK:
+                _MIRROR_HITS += 1
+            self._write(200, "text/plain", b"mirrored\n", extra=[("X-Upstream", "yes")])
+            return
+        if path == "/mirror-count":
+            with _MIRROR_HITS_LOCK:
+                hits = _MIRROR_HITS
+            self._write(200, "text/plain", ("hits=%d\n" % hits).encode())
+            return
         if "/status/" in path:
             try:
                 code = int(path.rsplit("/", 1)[1])
@@ -1601,6 +1632,22 @@ def main() -> int:
         case("proxy.response-pass-through", "/proxy-headers/hop-response")
         case("proxy.upstream-503", "/proxy-status/503")
         case("proxy.upstream-502", "/proxy-dead/down")
+
+        # ---- Wave 8: subrequest engine ---------------------------------
+        case("sub.addition.splice", "/sub/addition", host=SUB_HOST)
+        case("sub.addition.mime-gated", "/sub/addition-gated", host=SUB_HOST)
+        case("sub.auth.allow", "/sub/allow", host=SUB_HOST)
+        case("sub.auth.deny-401", "/sub/deny401", host=SUB_HOST)
+        case("sub.auth.deny-403", "/sub/deny403", host=SUB_HOST)
+        case("sub.auth.other-4xx", "/sub/other4xx", host=SUB_HOST)
+        case("sub.auth.other-5xx", "/sub/other5xx", host=SUB_HOST)
+        case("sub.auth.set", "/sub/auth-set", host=SUB_HOST)
+        # `mirror` is fire-and-forget: send two main requests, wait for the
+        # detached subrequests, then read the mock-side hit counter.
+        for _ in range(2):
+            request(port, "/sub/mirror", host=SUB_HOST)
+        time.sleep(0.5)
+        case("sub.mirror.hits", "/sub/mirror-count", host=SUB_HOST)
 
         document = {
             "_server": identity,

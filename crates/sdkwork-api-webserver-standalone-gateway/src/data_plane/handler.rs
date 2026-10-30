@@ -187,6 +187,40 @@ fn select_policy_host<'a>(
         .find(|host| host.id == default_ref)
 }
 
+/// Bounded per-request facts for the subrequest engine. The body cap keeps an
+/// `addition` splice or `auth_request` read bounded even for large main bodies.
+fn subrequest_env<'a>(
+    state: &'a ListenerState,
+    generation: &'a std::sync::Arc<RuntimeGeneration>,
+    authority: &'a str,
+    client_ip: std::net::IpAddr,
+    scheme: &'a str,
+    listener_port: u16,
+    method: &'a Method,
+    headers: &'a HeaderMap,
+    map_results: &'a super::map_variables::MapResults,
+) -> super::subrequest::SubrequestEnv<'a> {
+    let cap = generation
+        .app
+        .config()
+        .limits
+        .max_response_body_bytes
+        .min(4 * 1024 * 1024);
+    super::subrequest::SubrequestEnv {
+        state,
+        generation,
+        listener_id: &state.listener_id,
+        authority,
+        client_ip,
+        scheme,
+        listener_port,
+        method,
+        headers,
+        map_results,
+        max_body_bytes: cap,
+    }
+}
+
 async fn route_admitted_request(
     peer: SocketAddr,
     transport_peer: SocketAddr,
@@ -1144,6 +1178,35 @@ async fn route_admitted_request(
         return response;
     }
 
+    // nginx `auth_request` runs in the access phase, after the location is
+    // selected (including a `try_files @named` internal redirect) and before
+    // the content handler consumes the request body. A deny is a final
+    // response; `auth_request_set` values are published into the request's map
+    // results so later header expansion sees them.
+    if let Some(auth_request) = selected.route.auth_request.clone() {
+        let subrequest = subrequest_env(
+            &state,
+            &generation,
+            &authority,
+            client_ip,
+            scheme.as_str(),
+            listener_port,
+            request.method(),
+            &request_headers,
+            &map_results,
+        );
+        if let super::subrequest::AuthOutcome::Reject(response) =
+            super::subrequest::authorize(&subrequest, &auth_request).await
+        {
+            return finalize_response_headers(
+                response,
+                &selected,
+                &response_variables,
+                &path,
+                request_query.as_deref(),
+            );
+        }
+    }
     // App-domain fallback parity for the app-config path (see the 404 handling
     // after the resource dispatch): a route selected locally can still end in
     // 404 because its static root or provider object is missing, and that is
@@ -2198,6 +2261,23 @@ async fn route_admitted_request(
         &path,
         request_query.as_deref(),
     );
+    // nginx `addition` (`add_before_body`/`add_after_body`): splice the
+    // configured one-level subrequest bodies around the main response body when
+    // the response content type matches `addition_types`.
+    if let Some(addition) = selected.route.addition.clone() {
+        let subrequest = subrequest_env(
+            &state,
+            &generation,
+            &authority,
+            client_ip,
+            scheme.as_str(),
+            listener_port,
+            &Method::GET,
+            &request_headers,
+            &map_results,
+        );
+        response = super::subrequest::apply_addition(response, &subrequest, &addition).await;
+    }
     response.extensions_mut().insert(gzip_facts.clone());
     // Route-level `sub_filter` rides on the response so the substitution
     // layer can apply it without re-selecting the route.
@@ -2245,6 +2325,23 @@ async fn route_admitted_request(
         response
             .extensions_mut()
             .insert(super::gzip_predicate::SuppressGzipVary);
+    }
+    // nginx `mirror`: fire the configured one-level subrequests without
+    // affecting the main response (detached, bounded timeout, failures
+    // ignored). `mirror_request_body on` is rejected at materialization.
+    if let Some(mirror) = selected.route.mirror.clone() {
+        let subrequest = subrequest_env(
+            &state,
+            &generation,
+            &authority,
+            client_ip,
+            scheme.as_str(),
+            listener_port,
+            &Method::GET,
+            &request_headers,
+            &map_results,
+        );
+        super::subrequest::fire_mirror(&subrequest, &mirror);
     }
     // Keep every limit_conn slot held for the whole response lifetime: the
     // leases drop when the response body completes or is abandoned. A bounded
@@ -2848,19 +2945,19 @@ struct ResponseHeaderPolicyOverride(Option<Vec<CustomHeaderConfig>>);
 /// an internal rewrite (`secure_link`), while `$request_uri` keeps the original
 /// request target. Only the variables validated by
 /// [`CustomHeaderConfig::validate_declaration`] are expanded.
-struct ResponseHeaderVariables<'a> {
-    scheme: &'a str,
-    authority: &'a str,
-    client_ip: IpAddr,
-    server_port: u16,
-    method: &'a str,
-    request_uri: &'a str,
-    server_name: &'a str,
+pub(crate) struct ResponseHeaderVariables<'a> {
+    pub(crate) scheme: &'a str,
+    pub(crate) authority: &'a str,
+    pub(crate) client_ip: IpAddr,
+    pub(crate) server_port: u16,
+    pub(crate) method: &'a str,
+    pub(crate) request_uri: &'a str,
+    pub(crate) server_name: &'a str,
     /// nginx `map` results for this request; a result variable is expanded
     /// exactly like a built-in request variable in an `add_header` value.
-    maps: Option<&'a super::map_variables::MapResults>,
+    pub(crate) maps: Option<&'a super::map_variables::MapResults>,
     /// nginx `$invalid_referer` for this request (`valid_referers` policy).
-    invalid_referer: bool,
+    pub(crate) invalid_referer: bool,
 }
 
 impl ResponseHeaderVariables<'_> {
@@ -3021,7 +3118,7 @@ fn apply_nginx_response_headers(
 /// Apply nginx response headers to a response produced before the main dispatch
 /// choke point — an access/auth/limit rejection, or an `error_page`-generated
 /// response — honoring an error-page target's overriding policy.
-fn finalize_response_headers(
+pub(crate) fn finalize_response_headers(
     mut response: Response<Body>,
     selected: &SelectedRoute<'_>,
     variables: &ResponseHeaderVariables<'_>,
@@ -4066,9 +4163,6 @@ mod tests {
             charset: None,
             autoindex: None,
             referer: None,
-            addition: None,
-            auth_request: None,
-            mirror: None,
         };
         let mut route = sdkwork_webserver_core::RouteConfig {
             id: "r".to_owned(),
@@ -4101,6 +4195,9 @@ mod tests {
             charset: None,
             autoindex: None,
             referer: None,
+            addition: None,
+            auth_request: None,
+            mirror: None,
         };
         assert_eq!(
             route

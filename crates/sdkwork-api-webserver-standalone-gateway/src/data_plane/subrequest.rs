@@ -25,13 +25,11 @@ use axum::{
     body::Body,
     http::{header::CONTENT_TYPE, HeaderMap, HeaderValue, Method, Request, Response, StatusCode},
 };
-use sdkwork_webserver_core::{
-    AdditionConfig, AuthRequestConfig, MirrorConfig, ResourceConfig, RouteConfig,
-};
+use sdkwork_webserver_core::{AdditionConfig, AuthRequestConfig, MirrorConfig, ResourceConfig};
 
 use super::{
     delivery_policy::MimePolicy,
-    handler::empty_gif_response,
+    handler::{empty_gif_response, finalize_response_headers, ResponseHeaderVariables},
     map_variables::MapResults,
     proxy::{proxy_request_cached, ProxyRequestContext},
     proxy_body::RequestBodyFailure,
@@ -59,7 +57,6 @@ pub(crate) struct SubrequestEnv<'a> {
 pub(crate) enum SubrequestFailure {
     NoRoute,
     UnsupportedResource,
-    TooLarge,
 }
 
 /// Serve one internal subrequest URI.
@@ -94,15 +91,38 @@ pub(crate) async fn serve(
                 )
                 .content_type_for_uri(path)
             } else {
-                HeaderValue::from_str(content_type).unwrap_or(HeaderValue::from_static("text/plain"))
+                HeaderValue::from_str(content_type)
+                    .unwrap_or(HeaderValue::from_static("text/plain"))
             };
             let mut response = Response::new(Body::from(body));
-            *response.status_mut() = StatusCode::from_u16(*status)
-                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-            response
-                .headers_mut()
-                .insert(CONTENT_TYPE, content_type);
-            Ok(response)
+            *response.status_mut() =
+                StatusCode::from_u16(*status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            response.headers_mut().insert(CONTENT_TYPE, content_type);
+            // A subrequest response carries the target location's `add_header`
+            // policy: `auth_request_set $var $upstream_http_…` observes it, as
+            // in nginx.
+            let variables = ResponseHeaderVariables {
+                scheme: env.scheme,
+                authority: env.authority,
+                client_ip: env.client_ip,
+                server_port: env.listener_port,
+                method: method.as_str(),
+                request_uri: uri,
+                server_name: selected
+                    .virtual_host
+                    .server_names
+                    .first()
+                    .map_or("", String::as_str),
+                maps: Some(env.map_results),
+                invalid_referer: false,
+            };
+            Ok(finalize_response_headers(
+                response,
+                &selected,
+                &variables,
+                path,
+                if query.is_empty() { None } else { Some(query) },
+            ))
         }
         ResourceConfig::EmptyGif { .. } => Ok(empty_gif_response(*method == Method::HEAD)),
         ResourceConfig::Proxy {
@@ -151,7 +171,29 @@ pub(crate) async fn serve(
                 .body(Body::empty())
                 .map_err(|_| SubrequestFailure::UnsupportedResource)?;
             merge_request_headers(request.headers_mut(), env);
-            Ok(proxy_request_cached(context, request).await)
+            let response = proxy_request_cached(context, request).await;
+            let variables = ResponseHeaderVariables {
+                scheme: env.scheme,
+                authority: env.authority,
+                client_ip: env.client_ip,
+                server_port: env.listener_port,
+                method: method.as_str(),
+                request_uri: uri,
+                server_name: selected
+                    .virtual_host
+                    .server_names
+                    .first()
+                    .map_or("", String::as_str),
+                maps: Some(env.map_results),
+                invalid_referer: false,
+            };
+            Ok(finalize_response_headers(
+                response,
+                &selected,
+                &variables,
+                path,
+                if query.is_empty() { None } else { Some(query) },
+            ))
         }
         _ => Err(SubrequestFailure::UnsupportedResource),
     }
@@ -169,10 +211,7 @@ fn merge_request_headers(target: &mut HeaderMap, env: &SubrequestEnv<'_>) {
 }
 
 /// Read a bounded response body; `None` when the body is larger than the cap.
-async fn read_bounded_body(
-    body: Body,
-    maximum: u64,
-) -> Option<bytes::Bytes> {
+async fn read_bounded_body(body: Body, maximum: u64) -> Option<bytes::Bytes> {
     if let Some(size) = http_body::Body::size_hint(&body).exact() {
         if size > maximum {
             return None;
@@ -202,10 +241,7 @@ pub(crate) enum AuthOutcome {
 /// subrequest's status (the `WWW-Authenticate` field is propagated); any other
 /// status is an internal error (500). `auth_request_set` values are taken from
 /// the subrequest response before the body is dropped.
-pub(crate) async fn authorize(
-    env: &SubrequestEnv<'_>,
-    config: &AuthRequestConfig,
-) -> AuthOutcome {
+pub(crate) async fn authorize(env: &SubrequestEnv<'_>, config: &AuthRequestConfig) -> AuthOutcome {
     let Ok(response) = serve(env, &config.uri, env.method).await else {
         return AuthOutcome::Reject(empty_status(StatusCode::INTERNAL_SERVER_ERROR));
     };
@@ -218,13 +254,10 @@ pub(crate) async fn authorize(
         return AuthOutcome::Allow;
     }
     if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
-        let mut rejected = empty_status(status);
-        for value in response.headers().get_all("www-authenticate") {
-            rejected
-                .headers_mut()
-                .append(axum::http::header::WWW_AUTHENTICATE, value.clone());
-        }
-        return AuthOutcome::Reject(rejected);
+        // Differential-probed against nginx 1.29.6: the denial status is
+        // passed through but the subrequest's `WWW-Authenticate` field is not
+        // (nginx renders its own generated error for the status).
+        return AuthOutcome::Reject(empty_status(status));
     }
     AuthOutcome::Reject(empty_status(StatusCode::INTERNAL_SERVER_ERROR))
 }
@@ -338,11 +371,21 @@ pub(crate) async fn apply_addition(
         }
     }
     parts.headers.remove(axum::http::header::CONTENT_LENGTH);
-    Response::from_parts(parts, Body::from(output))
+    // nginx's addition filter produces an unknown-length body, so the response
+    // leaves the server chunk-framed (`Transfer-Encoding: chunked`) with no
+    // `Content-Length`; a sized `Body::from(Vec)` would instead be emitted with
+    // an explicit length by hyper's HTTP/1 encoder.
+    let stream = futures_util::stream::once(async move {
+        Ok::<bytes::Bytes, std::io::Error>(bytes::Bytes::from(output))
+    });
+    Response::from_parts(parts, Body::from_stream(stream))
 }
 
 fn content_type_matches(headers: &HeaderMap, types: &[String]) -> bool {
-    let Some(value) = headers.get(CONTENT_TYPE).and_then(|value| value.to_str().ok()) else {
+    let Some(value) = headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+    else {
         return false;
     };
     let media_type = value
@@ -395,19 +438,8 @@ pub(crate) fn fire_mirror(env: &SubrequestEnv<'_>, config: &MirrorConfig) {
                 map_results: &map_results,
                 max_body_bytes,
             };
-            let _ = tokio::time::timeout(Duration::from_secs(5), serve(&owned, &target, &method)).await;
+            let _ =
+                tokio::time::timeout(Duration::from_secs(5), serve(&owned, &target, &method)).await;
         }
     });
-}
-
-/// Resolve the route a configured subrequest URI would select; used by the
-/// materializer-facing diagnostics and tests.
-#[cfg(test)]
-pub(crate) fn route_exists(
-    app: &sdkwork_webserver_core::CompiledWebServerApp,
-    listener_id: &str,
-    authority: &str,
-    uri: &str,
-) -> bool {
-    app.select_route(listener_id, authority, uri, "GET").is_some()
 }

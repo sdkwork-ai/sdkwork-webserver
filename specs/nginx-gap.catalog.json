@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Subrequest engine (Wave 8, 2026-10-30): addition/auth_request/auth_request_set/mirror execute with 9 real-nginx differential-http cases (274/274). Reported blockers (not faked): chunked_transfer_encoding off needs close-delimited framing hyper cannot emit; http2_chunk_size needs a body re-chunker + h2 frame-capture harness; userid/browser/random_index/degradation/slice need their own bounded waves (UA tables, RNG evidence strategy, partial-object cache indexing). Catalog: 328 executable / 171 accepted-unenforced / 232 fail-closed / 13 excluded.",
     "Protocol response policy (Wave 7D, 2026-10-30): CGI buffering/store/limit_rate/force_ranges/ignore_headers/pass_request_body plus memcached buffer/gzip-flag and grpc ignore_headers execute; differential-protocols 65->77 with 12 cases vs nginx 1.29.6 (store path+content+mode, rate window, range modes, oversized header block 502, X-Accel-Redirect ignore, body suppression, memcached gzip flag). Fail-closed residuals recorded: temp-spool family (no bounded spool), *_ignore_client_abort, fastcgi_catch_stderr, fastcgi_send_lowat, *_store on, uWSGI TLS leftovers, grpc bind/keepalive/TLS leftovers. Catalog: 321 executable / 171 accepted-unenforced / 239 fail-closed / 13 excluded.",
     "CGI cache family (Wave 7C, 2026-10-30): fastcgi/uwsgi/scgi *_cache* directives execute on the shared HTTP cache store with a CGI key/policy layer; differential-protocols grew 49->65 with 16 cache cases against nginx 1.29.6 (hit, no-default-caching, bypass, no_cache, valid-by-status, custom key, min_uses, lock coalescing, use_stale, conditional revalidate, convert_head, range/max_range_offset, uWSGI/SCGI hits). Bounded differences recorded: cache_lock_age cannot preempt an in-flight fill; background_update serves stale instead of a detached task; X-Accel-Expires not consulted; one process store backs all zones. Catalog: 291 executable / 171 accepted-unenforced / 269 fail-closed / 13 excluded.",
     "uWSGI upstream TLS (Wave 7B, 2026-10-30): uwsgi_ssl_* executes end-to-end with 3 new real-nginx differential cases (trusted CA, mTLS, untrusted CA -> 502); differential-protocols now 49/49. FastCGI and SCGI have no *_ssl_* directives in nginx 1.29.6 (verified from the committed inventory), so scgi_ssl_* names stay rejected as non-nginx extensions. Catalog: 246 executable / 171 accepted-unenforced / 314 fail-closed / 13 excluded.",
@@ -611,6 +612,12 @@
       "group": "upstreams",
       "status": "implemented",
       "summary": "CGI/protocol response policy (Wave 7D): *_buffer_size/*_buffers/*_busy_buffers_size bounds, atomic *_store/*_store_access (nginx path templates, temp-file+rename, [http] storeRoot confinement, 644 mode differential), *_limit_rate token-bucket pacing, *_force_ranges 206/416/multi-range semantics, *_ignore_headers recognised set, *_pass_request_body bodies, memcached_buffer_size, memcached_gzip_flag (bitwise Content-Encoding), grpc_ignore_headers; differential-protocols 65->77 (12 cases) (REQ-2026-0073 wave 7D)"
+    },
+    {
+      "id": "http.subrequest-engine",
+      "group": "core",
+      "status": "implemented",
+      "summary": "bounded re-entrant subrequest engine (Wave 8): internal dispatch re-enters routing on the same listener/generation, one level deep, 4 MiB body cap, no admission/metering consumption, targets limited to return/empty_gif/proxy_pass; drives addition (add_before_body/add_after_body/addition_types MIME-gated splice with nginx chunked framing), auth_request + auth_request_set (access-phase status matrix incl. nginx's no-WWW-Authenticate behavior; $upstream_status/$upstream_http_* published to downstream header layers) and mirror (detached timeout-bounded fire-and-forget, max 8; mirror_request_body default-on rejected truthfully); differential-http 265->274 (9 cases) (REQ-2026-0073 wave 8)"
     }
   ]
 }

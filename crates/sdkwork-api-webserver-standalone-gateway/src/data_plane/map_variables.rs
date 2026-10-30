@@ -372,10 +372,10 @@ mod tests {
     #[test]
     fn map_results_expand_tokens_and_escape_resolved_dollars() {
         let results = MapResults {
-            values: vec![
+            values: std::sync::Arc::new(std::sync::Mutex::new(vec![
                 ("tenant".to_owned(), "acme".to_owned()),
                 ("literal".to_owned(), "$host".to_owned()),
-            ],
+            ])),
         };
         assert_eq!(
             results.expand_tokens("zone=$tenant;other=$host"),

@@ -2954,6 +2954,15 @@
         },
         "referer": {
           "$ref": "#/$defs/referer"
+        },
+        "addition": {
+          "$ref": "#/$defs/additionConfig"
+        },
+        "authRequest": {
+          "$ref": "#/$defs/authRequestConfig"
+        },
+        "mirror": {
+          "$ref": "#/$defs/mirrorConfig"
         }
       }
     },
@@ -4796,6 +4805,115 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 4095
+        }
+      }
+    },
+    "additionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx addition filter: splice one-level subrequest bodies around the main response body",
+      "properties": {
+        "before": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 2048
+        },
+        "after": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 2048
+        },
+        "types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "default": [
+            "text/html"
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "before"
+          ]
+        },
+        {
+          "required": [
+            "after"
+          ]
+        }
+      ]
+    },
+    "authRequestSetConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variable",
+        "value"
+      ],
+      "properties": {
+        "variable": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "maxLength": 128
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "authRequestConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri"
+      ],
+      "description": "nginx auth_request access gate",
+      "properties": {
+        "uri": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 2048
+        },
+        "set": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/authRequestSetConfig"
+          },
+          "default": []
+        }
+      }
+    },
+    "mirrorConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targets"
+      ],
+      "description": "nginx mirror: fire-and-forget one-level subrequests",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "pattern": "^/",
+            "maxLength": 2048
+          }
+        },
+        "requestBody": {
+          "type": "boolean",
+          "const": false,
+          "default": false
         }
       }
     }

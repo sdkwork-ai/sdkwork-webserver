@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 321 |
+| executable | 328 |
 | accepted, NOT enforced | 171 |
-| rejected (fail closed) | 239 |
+| rejected (fail closed) | 232 |
 | excluded from profile | 13 |
 | **total** | **744** |
 
@@ -80,8 +80,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 
 - `ngx_core_module` (1) — `debug_points`
 - `ngx_google_perftools_module` (1) — `google_perftools_profiles`
-- `ngx_http_addition_filter_module` (3) — `add_after_body`, `add_before_body`, `addition_types`
-- `ngx_http_auth_request_module` (2) — `auth_request`, `auth_request_set`
 - `ngx_http_browser_module` (4) — `ancient_browser`, `ancient_browser_value`, `modern_browser`, `modern_browser_value`
 - `ngx_http_core_module` (16) — `aio`, `aio_write`, `auth_delay`, `client_body_in_file_only`, `client_body_in_single_buffer`, `client_body_temp_path`, `early_hints`, `keepalive_min_timeout`, `limit_except`, `limit_rate`, `limit_rate_after`, `open_file_cache_errors`, `open_file_cache_events`, `post_action`, `satisfy`, `subrequest_output_buffer_size`
 - `ngx_http_dav_module` (4) — `create_full_put_path`, `dav_access`, `dav_methods`, `min_delete_depth`
@@ -96,7 +94,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_limit_conn_module` (1) — `limit_conn_dry_run`
 - `ngx_http_limit_req_module` (1) — `limit_req_dry_run`
 - `ngx_http_log_module` (1) — `open_log_file_cache`
-- `ngx_http_mirror_module` (2) — `mirror`, `mirror_request_body`
 - `ngx_http_mp4_module` (4) — `mp4`, `mp4_buffer_size`, `mp4_max_buffer_size`, `mp4_start_key_frame`
 - `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
 - `ngx_http_random_index_module` (1) — `random_index`
@@ -346,9 +343,9 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `add_after_body` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `add_before_body` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `addition_types` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
+| `add_after_body` | 1 | http, http-location, http-server | executable | runtime: `routes[].addition.afterBody (spliced after the main body)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
+| `add_before_body` | 1 | http, http-location, http-server | executable | runtime: `routes[].addition.beforeBody (subrequest URI spliced before the main body when the main media type matches addition_types)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
+| `addition_types` | 1+ | http, http-location, http-server | executable | runtime: `routes[].addition.types (default text/html)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
 
 #### `ngx_http_auth_basic_module` (2 directives)
 
@@ -361,8 +358,8 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `auth_request` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `auth_request_set` | 2 | http, http-location, http-server | rejected (fail closed) |  |
+| `auth_request` | 1 | http, http-location, http-server | executable | runtime: `routes[].authRequest (access-phase bounded subrequest: 2xx allow, 401/403 deny, other -> 500)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
+| `auth_request_set` | 2 | http, http-location, http-server | executable | runtime: `routes[].authRequest.setVariables ($upstream_status/$upstream_http_<name> published to header/variable layers)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
 
 #### `ngx_http_autoindex_module` (4 directives)
 
@@ -731,8 +728,8 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `mirror` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `mirror_request_body` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `mirror` | 1 | http, http-location, http-server | executable | runtime: `routes[].mirror (detached timeout-bounded fire-and-forget subrequests, max 8)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
+| `mirror_request_body` | flag | http, http-location, http-server | executable | runtime: `routes[].mirror.requestBody (default-on body replay rejected: no request-body tee into a fire-and-forget subrequest; explicit off required)`. one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB; addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged; mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required; nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx |
 
 #### `ngx_http_module` (1 directives)
 

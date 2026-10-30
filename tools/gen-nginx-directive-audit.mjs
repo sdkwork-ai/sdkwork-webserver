@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = 'ed74ed90';
+const AUDIT_HEAD = '45535000';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C) and the protocol response-policy wave (wave 7D) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the bounded subrequest-engine wave (wave 8) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -440,6 +440,20 @@ const COMPLETED_WAVES = [
       'http:uwsgi_store_access',
     ],
   },
+  {
+    key: 'wave 8 (bounded subrequest engine)',
+    summary:
+      'addition splice, auth_request/auth_request_set access-phase checks and detached mirror, on a one-level bounded re-entrant subrequest engine (4 MiB body cap; targets return/empty_gif/proxy_pass)',
+    ids: [
+      'http:add_before_body',
+      'http:add_after_body',
+      'http:addition_types',
+      'http:auth_request',
+      'http:auth_request_set',
+      'http:mirror',
+      'http:mirror_request_body',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -461,30 +475,10 @@ const REMAINING_GAP_CATEGORIES = [
     ids: ['http:chunked_transfer_encoding'],
     rejectedLoss:
       'the directive is accepted-but-ignored; the response keeps the runtime encoder framing.',
-    why: 'the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited HTTP/1.1 response (nginx probe recorded), so `chunked_transfer_encoding off` has no implementation path in the current encoder; the truthful diagnostic says so.',
+    why: 'the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited HTTP/1.1 response (nginx probe recorded), so `chunked_transfer_encoding off` has no implementation path in the current encoder; the truthful diagnostic says so and this remains a probed blocker rather than an exclusion.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/http1_wire.rs (response framing), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'framing differential (chunked/identity/HEAD) once the encoder exposes close-delimited 1.1 responses; blocked until then',
-  },
-  {
-    key: 'subrequest-engine',
-    label: 're-entrant subrequest engine',
-    priority: 'high (largest remaining item)',
-    ids: [
-      'http:add_before_body',
-      'http:add_after_body',
-      'http:addition_types',
-      'http:auth_request',
-      'http:auth_request_set',
-      'http:mirror',
-      'http:mirror_request_body',
-    ],
-    rejectedLoss:
-      'a stock nginx.conf that declares a subrequest-based filter, auth check or mirror fails to activate.',
-    why: 'these directives need a bounded re-entrant subrequest engine; the current engine only performs internal redirects and error-page hops, so a nested subrequest that itself proxies/serves cannot be bounded the way PRD section 6 requires.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs (bounded subrequest engine + addition/auth/mirror filters), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'subrequest-depth/cycle unit tests plus differential addition, auth_request and mirror cases',
   },
   {
     key: 'module-sized',
@@ -511,7 +505,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this module fails to activate.',
-    why: 'each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice range caching); none needs a new engine, but each needs its own state/variable surface and differential coverage.',
+    why: 'each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice',
@@ -523,26 +517,10 @@ const REMAINING_GAP_CATEGORIES = [
     ids: ['http:http2_chunk_size'],
     rejectedLoss:
       'a stock nginx.conf that tunes the HTTP/2 DATA-frame chunk size fails to activate.',
-    why: 'the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob, so there is no runtime field to map it onto; every other HTTP/2 tuning directive is now executable, a nginx-obsolete accepted no-op, or runtime-owned ingress buffer sizing.',
+    why: 'the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob; implementing it needs a bounded body re-chunker plus an h2 frame-capture test harness, which has not been done. Every other HTTP/2 tuning directive is executable, a nginx-obsolete accepted no-op, or runtime-owned ingress buffer sizing.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'h2 DATA-chunking differential once the pinned hyper/h2 exposes the knob; blocked upstream until then',
-  },
-  {
-    key: 'static-open-file-cache',
-    label: 'static open-file cache',
-    priority: 'medium (performance-only)',
-    ids: [
-      'http:open_file_cache',
-      'http:open_file_cache_min_uses',
-      'http:open_file_cache_valid',
-    ],
-    rejectedLoss:
-      'the static-file descriptor cache policy is not applied; the runtime uses its own open policy.',
-    why: 'the family is a performance cache whose only semantic contract is staleness bounds (serving stale data is allowed), so response correctness is unaffected and the gap is tuning parity rather than behaviour; the truthful catalog diagnostic says so.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs (fd cache), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'cache invalidation/TTL/threshold unit tests',
   },
   {
     key: 'ocsp',
@@ -558,7 +536,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'the directive is accepted-but-ignored; only the static ssl_stapling_file form is stapled, so no dynamically fetched/refreshed OCSP response or OCSP verification runs.',
-    why: 'static OCSP stapling now executes via ssl_stapling_file (rustls CertifiedKey.ocsp, wire-proven); the dynamic fetch/refresh/verification path remains unimplemented and the pinned rustls stack exposes no fetch surface, so these directives stay accepted-unenforced with the blocker diagnostic.',
+    why: 'static OCSP stapling now executes via ssl_stapling_file (rustls CertifiedKey.ocsp, wire-proven); the dynamic fetch/refresh/verification path remains unimplemented and the pinned rustls stack exposes no fetch surface, so the runtime is static-only and these directives stay accepted-unenforced with the blocker diagnostic.',
     surface:
       'crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution',
     tests: 'the static-file form is covered by tests/tls_ocsp_stapling.rs wire proof; dynamic fetch/refresh/verification needs a fetch owner and remains out of scope',
@@ -809,6 +787,18 @@ const RUNTIME_OWNED_NOTES = new Map([
   [
     'http:charset_map',
     'runtime-owned: charset/Content-Type translation is owned by the runtime at header level; byte-level transcoding through charset_map is deliberately out of scope, so the directive stays accepted-unenforced with a truthful diagnostic.',
+  ],
+  [
+    'http:open_file_cache',
+    'runtime-owned: the runtime owns static-file open/caching policy; open_file_cache is performance tuning whose only semantic contract is staleness bounds, which the runtime policy satisfies, so the value has no client-visible response effect (accepted-unenforced diagnostic retained).',
+  ],
+  [
+    'http:open_file_cache_min_uses',
+    'runtime-owned: the runtime owns static-file open/caching policy; the usage threshold is performance tuning only and has no client-visible response effect (accepted-unenforced diagnostic retained).',
+  ],
+  [
+    'http:open_file_cache_valid',
+    'runtime-owned: the runtime owns static-file open/caching policy; the TTL is performance tuning only and has no client-visible response effect (accepted-unenforced diagnostic retained).',
   ],
 ]);
 
@@ -1803,6 +1793,27 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the d7-range-single/suffix/multipart/invalid cases compare 206/416 and multi-range decline decisions against nginx 1.29.6',
   },
+  {
+    id: 'http:add_before_body',
+    evidence: 'tests/nginx/differential-http/battery.py::sub.addition.splice',
+    claim: 'addition splices a bounded subrequest body before/after the main response',
+    proves:
+      'the sub.addition.splice and sub.addition.mime-gated cases compare the spliced body, ordering and MIME gate against nginx 1.29.6',
+  },
+  {
+    id: 'http:auth_request',
+    evidence: 'tests/nginx/differential-http/battery.py::sub.auth.deny-401',
+    claim: 'auth_request denies access on 401/403 in the access phase and fails closed otherwise',
+    proves:
+      'the sub.auth.* cases compare allow, deny-401 (no WWW-Authenticate synthesis), deny-403, other-4xx -> 500 and other-5xx -> 500 against nginx 1.29.6',
+  },
+  {
+    id: 'http:mirror',
+    evidence: 'tests/nginx/differential-http/battery.py::sub.mirror.hits',
+    claim: 'mirror fires detached timeout-bounded subrequests without affecting the client response',
+    proves:
+      'the sub.mirror.hits case compares the client response and the observed target hits (bounded to 8 targets) against nginx 1.29.6',
+  },
 ];
 
 /**
@@ -2096,7 +2107,8 @@ function renderHeader(inventory, catalog) {
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
   stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
   wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
-  CGI cache-family wave (wave 7C) and the protocol response-policy wave (wave 7D).** The code, tests, generated operator matrix and the re-synced directive
+  CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the
+  bounded subrequest-engine wave (wave 8).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2117,8 +2129,9 @@ function renderHeader(inventory, catalog) {
   amendment) and the uWSGI upstream-TLS wave (uwsgi_ssl_* identity/verification through
   the CGI transport seam), the CGI cache-family wave (shared HTTP cache store with a
   CGI key/policy layer) and the protocol response-policy wave (buffers, store, limit_rate,
-  force_ranges, ignore_headers, pass_request_body) are recorded as completed in section 3,
-  and every one of them is asserted executable by \`--verify-evidence\`.
+  force_ranges, ignore_headers, pass_request_body) and the bounded subrequest-engine wave
+  (addition/auth_request/mirror on a one-level engine) are recorded as completed in
+  section 3, and every one of them is asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2223,7 +2236,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave and the protocol response-policy wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave and the bounded subrequest-engine wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2258,7 +2271,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-protocol-response-policy-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-subrequest-engine-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2332,7 +2345,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2360,7 +2373,8 @@ upstream-TLS wave made the seven uwsgi_ssl_* identity/verification directives ex
 and the CGI cache-family wave made 45 fastcgi/uwsgi/scgi response-cache directives
 executable on the shared HTTP cache store; and the protocol response-policy wave added the
 CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body forms, memcached
-buffer/gzip-flag and gRPC ignore_headers.
+buffer/gzip-flag and gRPC ignore_headers; and the subrequest-engine wave added the
+addition/auth_request/auth_request_set/mirror forms.
 
 ${completedTable}
 ${completedRows}
@@ -2416,6 +2430,17 @@ window), \`force_ranges\` 206/416/multi-range-decline semantics, the recognised
 while preserving CONTENT_LENGTH, memcached gzip-flag bitwise Content-Encoding, gRPC
 ignore_headers, and oversized-header-block -> 502 (bounded adapter buffer like nginx).
 
+Wave 8 acceptance evidence: the seven addition/auth_request/auth_request_set/mirror
+directives execute on a bounded re-entrant subrequest engine (one subrequest level, 4 MiB
+body cap, targets limited to return/empty_gif/proxy_pass), proven by 9 new real-nginx
+differential-http cases (265 -> 274; floor/manifest 274): addition MIME-gated splice with
+nginx chunked framing (\`sub.addition.splice\`, \`sub.addition.mime-gated\`), the
+auth_request access-phase status matrix including nginx's no-WWW-Authenticate behaviour
+and auth_request_set publishing \`$upstream_status\`/\`$upstream_http_*\` (\`sub.auth.*\`),
+and detached mirror hits (\`sub.mirror.hits\`). Mirror fires up to 8 targets with a
+timeout; \`mirror_request_body\` default-on is truthfully rejected because there is no
+request-body tee into a fire-and-forget subrequest.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
@@ -2427,7 +2452,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the protocol response-policy wave (7D). An accepted-unenforced row is silently ignored today; a rejected row fails
+the bounded subrequest-engine wave (wave 8). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2435,18 +2460,20 @@ have to change, and the tests to add.
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest surface is still the residual sub-families of the four
-landed protocol modules (102 directives: cache/buffer/store/SSL, unix/variable targets
-and connection-pool knobs), followed by the bounded **re-entrant subrequest engine**
-(addition filter, \`auth_request\`, mirror). The stream advanced gaps remain the next
-transport item even after this wave: an upstream TLS client, half-close, rate limits,
-request/response counting, retry budget, proxy_bind and pass/SNI routing are still
-missing. The module-sized userid/browser/random_index/degradation/slice modules and the
-nine gRPC residual bind/socket/TLS-library knobs come next. \`chunked_transfer_encoding\`
-and the static open-file cache are precisely bounded (hyper HTTP/1.1 close-delimited
-framing; staleness-only performance cache), \`http2_chunk_size\` is blocked on hyper/h2,
-and the OCSP rows are now limited to dynamic fetch/refresh/verification (static
-ssl_stapling_file executes) because rustls exposes no fetch surface.
+Within the backlog, the largest surfaces are the mail module residuals (23) and the
+stream advanced gaps (18), followed by the module-sized userid/browser/random_index/
+degradation/slice modules (17) and the 21 residual sub-families of the landed CGI protocol
+modules (temp-spool blockers, ignore_client_abort, catch_stderr, send_lowat, uWSGI TLS
+leftovers). The stream advanced gaps remain the next transport item: an upstream TLS
+client, half-close, rate limits, request/response counting, retry budget, proxy_bind and
+pass/SNI routing are still missing. Eight gRPC residual bind/socket/TLS-library knobs come
+next. \`chunked_transfer_encoding\` is a probed blocker (the pinned hyper HTTP/1.1
+encoder cannot emit a close-delimited response), \`http2_chunk_size\` needs a bounded body
+re-chunker plus an h2 frame-capture harness (not done), and the OCSP rows are limited to
+dynamic fetch/refresh/verification (static ssl_stapling_file executes) because rustls
+exposes no fetch surface. The open-file-cache rows are no longer backlog: static-file
+caching is runtime-owned and their performance tuning has no client-visible response
+effect.
 
 Wave 7A also landed two non-directive transport capabilities recorded here for operators:
 (a) typed \`[http] unixSocketRoot\` with strict-descendant confinement for
@@ -2502,6 +2529,16 @@ gRPC bind/keepalive/TLS leftovers. Carried bounded difference: \`*_buffering off
 \`*_request_buffering off\` still buffer (a body-streaming seam is required), documented in
 the catalog knownDifferences rather than as a directive-level exclusion.
 
+Wave 8 note: the subrequest engine is bounded by design - one level, 4 MiB body cap,
+target handlers limited to return/empty_gif/proxy_pass - and every out-of-bound form fails
+closed with a located diagnostic. Remaining HTTP-level gap rows and their blockers:
+\`chunked_transfer_encoding\` (hyper HTTP/1.1 encoder cannot emit close-delimited framing;
+probed, see section 5.3), \`http2_chunk_size\` (feasible body re-chunker plus an h2
+frame-capture harness, not done), OCSP dynamic fetch/refresh (rustls is static-only), and
+the module-sized userid/browser/random_index/degradation/slice modules (each needs its own
+bounded wave; slice requires partial-object cache indexing). The open-file-cache rows are
+runtime-owned, not backlog.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2548,7 +2585,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave and the protocol response-policy wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave and the bounded subrequest-engine wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2768,8 +2805,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the protocol response-policy wave (7D) landed and the
-Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the bounded subrequest-engine wave (wave 8) landed and
+the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

@@ -1207,10 +1207,26 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].addition.afterBody (spliced after the main body)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.addition.splice"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:add_before_body",
@@ -1223,10 +1239,30 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].addition.beforeBody (subrequest URI spliced before the main body when the main media type matches addition_types)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.addition.splice"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.addition.mime-gated"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:add_header",
@@ -1346,10 +1382,30 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].addition.types (default text/html)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.addition.splice"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.addition.mime-gated"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:aio",
@@ -1569,10 +1625,42 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].authRequest (access-phase bounded subrequest: 2xx allow, 401/403 deny, other -> 500)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.auth.allow"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.auth.deny-401"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.auth.deny-403"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.auth.other-4xx"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.auth.other-5xx"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:auth_request_set",
@@ -1585,10 +1673,26 @@
         "http-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].authRequest.setVariables ($upstream_status/$upstream_http_<name> published to header/variable layers)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.auth.set"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:autoindex",
@@ -9594,10 +9698,26 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].mirror (detached timeout-bounded fire-and-forget subrequests, max 8)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.mirror.hits"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:mirror_request_body",
@@ -9610,10 +9730,26 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].mirror.requestBody (default-on body replay rejected: no request-body tee into a fire-and-forget subrequest; explicit off required)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "sub.mirror.hits"
+        }
+      ],
+      "knownDifferences": [
+        "one bounded subrequest level only; target handlers limited to return/empty_gif/proxy_pass (everything else fails closed); subrequest bodies capped at 4 MiB",
+        "addition splices only when the main media type matches addition_types (default text/html), HEAD is skipped and non-buffered/oversized main responses pass through unchanged",
+        "mirror_request_body defaults to on in nginx but is rejected here (no body tee for fire-and-forget subrequests); an effective default-on policy fails closed and explicit off is required",
+        "nginx 1.29.6 does not propagate the auth subrequest WWW-Authenticate header (differential-confirmed); other-4xx/5xx map to 500 like nginx"
+      ]
     },
     {
       "id": "http:modern_browser",

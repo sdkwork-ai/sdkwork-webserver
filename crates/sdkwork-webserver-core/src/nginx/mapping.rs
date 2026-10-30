@@ -494,9 +494,13 @@ pub fn materialize_nginx_app(
     // nginx `add_header` inherits from the http context into every server that
     // declares none. Directive order inside `http {}` is irrelevant to that
     // merge, so collect the http-level array before materializing any server.
+    // `auth_request_set` variables declared in the same context are request
+    // variables for header expansion.
+    let http_auth_request_variables = subrequest_set_variables(&http_directives);
     for directive in &http_directives {
         if directive.name == "add_header" {
-            let map_variables = mapper.map_variable_refs();
+            let mut map_variables = mapper.map_variable_refs();
+            map_variables.extend(http_auth_request_variables.iter().map(String::as_str));
             mapper
                 .http_add_headers
                 .push(parse_add_header(directive, &map_variables)?);
@@ -949,10 +953,12 @@ impl AuthRequestSettings {
     }
 
     fn resolve(&self) -> Option<crate::config::AuthRequestConfig> {
-        self.uri.clone().map(|uri| crate::config::AuthRequestConfig {
-            uri,
-            set: self.set.clone().unwrap_or_default(),
-        })
+        self.uri
+            .clone()
+            .map(|uri| crate::config::AuthRequestConfig {
+                uri,
+                set: self.set.clone().unwrap_or_default(),
+            })
     }
 }
 
@@ -2112,6 +2118,7 @@ impl<'a> Mapper<'a> {
         directive: &NginxDirective,
         server_index: usize,
     ) -> Result<(), NginxConfigError> {
+        let server_auth_request_variables = subrequest_set_variables(&directive.children);
         let mut listen_specs = Vec::new();
         let mut server_names: Vec<String> = Vec::new();
         let mut certificate_file: Option<String> = None;
@@ -2301,7 +2308,8 @@ impl<'a> Mapper<'a> {
                 // `add_header Name value [always];` -> ordered response-header
                 // policy with nginx status gating (`always`).
                 "add_header" => {
-                    let map_variables = self.map_variable_refs();
+                    let mut map_variables = self.map_variable_refs();
+                    map_variables.extend(server_auth_request_variables.iter().map(String::as_str));
                     add_headers.push(parse_add_header(child, &map_variables)?);
                 }
                 "client_max_body_size" => {
@@ -3454,25 +3462,19 @@ impl<'a> Mapper<'a> {
         let effective_addition = self.server_addition.overlay(&extras.addition);
         if let Some(addition) = effective_addition.resolve() {
             route["addition"] = serde_json::to_value(&addition).map_err(|error| {
-                NginxConfigError::ValidationFailed(format!(
-                    "nginx materialization failed: {error}"
-                ))
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
         let effective_auth = self.server_auth_request.overlay(&extras.auth_request);
         if let Some(auth_request) = effective_auth.resolve() {
             route["authRequest"] = serde_json::to_value(&auth_request).map_err(|error| {
-                NginxConfigError::ValidationFailed(format!(
-                    "nginx materialization failed: {error}"
-                ))
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
         let effective_mirror = self.server_mirror.overlay(&extras.mirror);
         if let Some(mirror) = effective_mirror.resolve() {
             route["mirror"] = serde_json::to_value(&mirror).map_err(|error| {
-                NginxConfigError::ValidationFailed(format!(
-                    "nginx materialization failed: {error}"
-                ))
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
         if extras.internal {
@@ -3582,6 +3584,7 @@ impl<'a> Mapper<'a> {
         let mut auth_realm = inherited_auth_realm.map(str::to_owned);
         let mut auth_file = inherited_auth_file.map(str::to_owned);
         let mut auth_off = inherited_auth_off;
+        let location_auth_request_variables = subrequest_set_variables(&location.children);
         let mut location_proxy_ssl = ProxySslSettings::default();
         let mut location_addition = AdditionSettings::default();
         let mut location_auth = AuthRequestSettings::default();
@@ -3823,7 +3826,11 @@ impl<'a> Mapper<'a> {
                 }
                 "add_header" => {
                     // Location-level policy replaces the inherited host array.
-                    let map_variables = self.map_variable_refs();
+                    // `auth_request_set` variables of this location are
+                    // request variables for the header value.
+                    let mut map_variables = self.map_variable_refs();
+                    map_variables
+                        .extend(location_auth_request_variables.iter().map(String::as_str));
                     extras
                         .response_headers
                         .push(parse_add_header(child, &map_variables)?);
@@ -5536,6 +5543,22 @@ impl<'a> Mapper<'a> {
         self.note_client_max_body_size(effective_client_max_body_size);
         extras.max_request_body_bytes = effective_client_max_body_size;
         extras.rewrite_phase = location_rewrite_phase;
+        // nginx `mirror_request_body` defaults to `on`; the runtime cannot tee
+        // request bodies into fire-and-forget subrequests, so an effective
+        // mirror policy without an explicit `mirror_request_body off` fails
+        // closed instead of silently dropping the body.
+        let effective_mirror = self.server_mirror.overlay(&location_mirror);
+        if effective_mirror
+            .targets
+            .as_ref()
+            .is_some_and(|targets| !targets.is_empty())
+            && effective_mirror.request_body != Some(false)
+        {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`mirror` defaults `mirror_request_body on`, but the runtime does not replay request bodies into fire-and-forget subrequests; declare `mirror_request_body off` explicitly",
+            ));
+        }
         extras.addition = location_addition;
         extras.auth_request = location_auth;
         extras.mirror = location_mirror;
@@ -9888,6 +9911,34 @@ fn parse_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfigError> 
     validate_map_definitions(std::slice::from_ref(&map))
         .map_err(|message| NginxConfigError::unsupported(directive, message))?;
     Ok(map)
+}
+
+/// Collect the `auth_request_set` target variables declared directly in a
+/// directive list. They are request variables at runtime, so the bounded
+/// `add_header` expander must accept them even though they are not declared
+/// `map` results.
+fn subrequest_set_variables(directives: &[NginxDirective]) -> Vec<String> {
+    let mut names = Vec::new();
+    for directive in directives {
+        if directive.name != "auth_request_set" {
+            continue;
+        }
+        let Some(name) = directive
+            .args
+            .first()
+            .and_then(|value| value.strip_prefix('$'))
+        else {
+            continue;
+        };
+        if !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        {
+            names.push(name.to_owned());
+        }
+    }
+    names
 }
 
 /// Parse `add_header <name> <value> [always];` into one ordered runtime
@@ -17908,6 +17959,98 @@ http {
 
     #[test]
     #[test]
+    #[test]
+    fn materializes_subrequest_filters_with_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    add_before_body /shared-before;
+    auth_request /shared-auth;
+    auth_request_set $shared_user $upstream_http_x_user;
+    server {
+        listen 80;
+        server_name sub.example.com;
+        add_after_body /server-after;
+        location /main/ {
+            return 200 "main";
+        }
+        location /full/ {
+            add_before_body /loc-before;
+            add_after_body /loc-after;
+            addition_types text/plain;
+            auth_request /loc-auth;
+            auth_request_set $loc_status $upstream_status;
+            mirror /mirror-target;
+            mirror_request_body off;
+            return 200 "full";
+        }
+        location = /shared-before { return 200 "b"; }
+        location = /server-after { return 200 "a"; }
+        location = /loc-before { return 200 "B"; }
+        location = /loc-after { return 200 "A"; }
+        location = /shared-auth { return 204; }
+        location = /loc-auth { return 204; }
+        location = /mirror-target { return 204; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let route_for = |suffix: &str| {
+            config
+                .virtual_hosts
+                .iter()
+                .flat_map(|host| host.routes.iter())
+                .find(|route| route.route_match.path == suffix)
+                .expect("route")
+        };
+        let main = route_for("/main/");
+        let addition = main.addition.as_ref().expect("inherited addition");
+        assert_eq!(addition.before.as_deref(), Some("/shared-before"));
+        assert_eq!(addition.after.as_deref(), Some("/server-after"));
+        assert_eq!(addition.types, vec!["text/html".to_owned()]);
+        let auth = main.auth_request.as_ref().expect("inherited auth");
+        assert_eq!(auth.uri, "/shared-auth");
+        assert_eq!(auth.set[0].variable, "shared_user");
+        let full = route_for("/full/");
+        let addition = full.addition.as_ref().expect("location addition");
+        assert_eq!(addition.before.as_deref(), Some("/loc-before"));
+        assert_eq!(addition.after.as_deref(), Some("/loc-after"));
+        assert_eq!(addition.types, vec!["text/plain".to_owned()]);
+        assert_eq!(full.auth_request.as_ref().expect("auth").uri, "/loc-auth");
+        assert_eq!(
+            full.auth_request.as_ref().expect("auth").set[0].variable,
+            "loc_status"
+        );
+        assert_eq!(
+            full.mirror.as_ref().expect("mirror").targets,
+            vec!["/mirror-target"]
+        );
+        assert!(!full.mirror.as_ref().expect("mirror").request_body);
+    }
+
+    #[test]
+    fn subrequest_directives_fail_closed_outside_the_bounded_subset() {
+        for (directive, needle) in [
+            ("add_before_body /x $uri;", "one URI"),
+            ("add_before_body \"\";", "internal absolute path"),
+            ("auth_request_set;", "`<variable> <value>`"),
+            ("auth_request_set $x $host;", "not executable"),
+            ("mirror;", "requires an internal URI"),
+            ("mirror /x;", "mirror_request_body on"),
+            ("mirror_request_body on;", "mirror_request_body on"),
+        ] {
+            let text = format!(
+                "http {{ server {{ listen 80; server_name a.test; location / {{ return 200 \"ok\"; {directive} }} }} }}"
+            );
+            let error = materialize(&text).expect_err("must fail closed");
+            assert!(
+                error.to_string().contains(needle),
+                "expected `{needle}` in: {error}"
+            );
+        }
+    }
+
     fn materializes_cgi_cache_family_with_inheritance_and_defaults() {
         let config = materialize(
             r#"

@@ -3789,6 +3789,130 @@ fn certificate_covers_any(
 // into a struct would still be a nine-field parameter bag. Keep the explicit
 // arguments.
 #[allow(clippy::too_many_arguments)]
+/// Validate the subrequest family (`addition`, `auth_request`, `mirror`) on
+/// one route: bounded URIs, MIME lists, auth-set variable vocabulary and the
+/// mirror body restriction.
+fn validate_subrequest_policy(validator: &mut SemanticValidator, path: &str, route: &RouteConfig) {
+    const SUBREQUEST_URI_MAX: usize = 2048;
+    let check_uri = |validator: &mut SemanticValidator, field: &str, uri: &str| {
+        if !uri.starts_with('/') || uri.len() > SUBREQUEST_URI_MAX || uri.contains('$') {
+            validator.push(
+                field.to_owned(),
+                format!(
+                    "subrequest URI `{uri}` must be an absolute internal path without variables"
+                ),
+            );
+        }
+    };
+    if let Some(addition) = &route.addition {
+        if let Some(uri) = &addition.before {
+            check_uri(validator, &format!("{path}/addition/before"), uri);
+        }
+        if let Some(uri) = &addition.after {
+            check_uri(validator, &format!("{path}/addition/after"), uri);
+        }
+        if addition.types.is_empty() {
+            validator.push(
+                format!("{path}/addition/types"),
+                "addition_types must declare at least one MIME type",
+            );
+        }
+        for (index, media_type) in addition.types.iter().enumerate() {
+            if media_type.is_empty()
+                || !media_type
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"/.!#$&^_-+".contains(&byte))
+            {
+                validator.push(
+                    format!("{path}/addition/types/{index}"),
+                    format!("invalid addition_types entry `{media_type}`"),
+                );
+            }
+        }
+    }
+    if let Some(auth_request) = &route.auth_request {
+        check_uri(
+            validator,
+            &format!("{path}/authRequest/uri"),
+            &auth_request.uri,
+        );
+        for (index, assignment) in auth_request.set.iter().enumerate() {
+            let assignment_path = format!("{path}/authRequest/set/{index}");
+            if assignment.variable.is_empty()
+                || !assignment
+                    .variable
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            {
+                validator.push(
+                    format!("{assignment_path}/variable"),
+                    format!(
+                        "invalid auth_request_set variable `{}`",
+                        assignment.variable
+                    ),
+                );
+            }
+            let mut remainder = assignment.value.as_str();
+            while let Some(position) = remainder.find('$') {
+                let after = &remainder[position + 1..];
+                if let Some(rest) = after.strip_prefix('$') {
+                    remainder = rest;
+                    continue;
+                }
+                let end = after
+                    .find(|character: char| {
+                        !(character.is_ascii_alphanumeric() || character == '_')
+                    })
+                    .unwrap_or(after.len());
+                if end == 0 {
+                    validator.push(
+                        format!("{assignment_path}/value"),
+                        "auth_request_set contains a lone `$`",
+                    );
+                    break;
+                }
+                let name = &after[..end];
+                if name != "upstream_status"
+                    && !(name.starts_with("upstream_http_") && name.len() > 14)
+                {
+                    validator.push(
+                        format!("{assignment_path}/value"),
+                        format!("auth_request_set value variable `${name}` is not executable"),
+                    );
+                }
+                remainder = &after[end..];
+            }
+        }
+    }
+    if let Some(mirror) = &route.mirror {
+        if mirror.targets.is_empty() {
+            validator.push(
+                format!("{path}/mirror/targets"),
+                "mirror must declare at least one target",
+            );
+        }
+        if mirror.targets.len() > 8 {
+            validator.push(
+                format!("{path}/mirror/targets"),
+                "at most 8 mirror targets are executable",
+            );
+        }
+        for (index, target) in mirror.targets.iter().enumerate() {
+            check_uri(validator, &format!("{path}/mirror/targets/{index}"), target);
+        }
+        if mirror.request_body {
+            validator.push(
+                format!("{path}/mirror/requestBody"),
+                "mirror_request_body on is not executable: the runtime does not replay request bodies into subrequests",
+            );
+        }
+    }
+}
+
+// The route validator threads the host-level inherited policy (zones, named
+// targets, error pages, rewrite variables, root allowlist) into every route;
+// bundling them into a struct would hide that each is a distinct contract.
+#[allow(clippy::too_many_arguments)]
 fn validate_routes(
     validator: &mut SemanticValidator,
     host_path: &str,
@@ -3890,6 +4014,7 @@ fn validate_routes(
                 format!("unknown resource {}", route.resource_ref),
             );
         }
+        validate_subrequest_policy(validator, &path, route);
         if let Some(ResourceConfig::Static {
             dynamic_root: Some(template),
             ..
@@ -4006,7 +4131,20 @@ fn validate_routes(
                     ),
                 );
             }
-            validate_custom_header_declaration(validator, &header_path, header);
+            // `auth_request_set` variables declared on this route are request
+            // variables for its response headers.
+            let auth_variables: Vec<String> = route
+                .auth_request
+                .as_ref()
+                .map(|auth_request| {
+                    auth_request
+                        .set
+                        .iter()
+                        .map(|assignment| assignment.variable.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            validate_custom_header_declaration(validator, &header_path, header, &auth_variables);
         }
         for (rule_index, rule) in route.limit_req.iter().enumerate() {
             if !zone_names.contains(rule.zone.as_str()) {
@@ -4221,6 +4359,7 @@ fn validate_security_headers(
             validator,
             &format!("{host_path}/securityHeaders/customHeaders/{index}"),
             header,
+            &[],
         );
     }
 }
@@ -4312,8 +4451,10 @@ fn validate_custom_header_declaration(
     validator: &mut SemanticValidator,
     path: &str,
     header: &super::CustomHeaderConfig,
+    extra_variables: &[String],
 ) {
-    let map_variables: Vec<&str> = validator.map_variables.iter().map(String::as_str).collect();
+    let mut map_variables: Vec<&str> = validator.map_variables.iter().map(String::as_str).collect();
+    map_variables.extend(extra_variables.iter().map(String::as_str));
     if let Err(message) = super::CustomHeaderConfig::validate_declaration_with_variables(
         &header.name,
         &header.value,
