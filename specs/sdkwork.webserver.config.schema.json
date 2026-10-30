@@ -220,6 +220,44 @@
       "items": {
         "$ref": "#/$defs/splitClients"
       }
+    },
+    "streamLimitConnZones": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "key",
+          "maxKeys"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "key": {
+            "enum": [
+              "$binary_remote_addr",
+              "$remote_addr"
+            ]
+          },
+          "maxKeys": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000
+          }
+        }
+      }
+    },
+    "streamMaps": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/map"
+      }
     }
   },
   "$defs": {
@@ -1078,6 +1116,12 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 4096
+        },
+        "ocspStaplingFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "nginx ssl_stapling_file: static DER OCSP response served as the stapled response (loaded when TLS material is built; refresh requires a reload)."
         }
       }
     },
@@ -3108,6 +3152,38 @@
           "minLength": 1,
           "maxLength": 4096,
           "description": "nginx stream `return <value>`: literal bytes written to the connection before it is closed; mutually exclusive with `target`."
+        },
+        "limitConn": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/streamLimitConnRule"
+          },
+          "description": "Stream limit_conn rules checked at accept time; over-limit connections are closed silently."
+        },
+        "limitConnDryRun": {
+          "type": "boolean",
+          "description": "Stream limit_conn_dry_run: count but do not deny."
+        },
+        "setVariables": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/streamSetVariable"
+          },
+          "description": "Stream set $variable value assignments (bounded accept/preread variable engine)."
+        },
+        "prereadTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000,
+          "description": "Stream preread_timeout: TLS ClientHello read deadline."
+        },
+        "prereadBufferBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "description": "Stream preread_buffer_size: ClientHello peek buffer bound."
         }
       }
     },
@@ -3834,6 +3910,46 @@
           "items": {
             "$ref": "#/$defs/splitClientsPart"
           }
+        }
+      }
+    },
+    "streamLimitConnRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone",
+        "maxConnections"
+      ],
+      "properties": {
+        "zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "maxConnections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "streamSetVariable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
         }
       }
     }

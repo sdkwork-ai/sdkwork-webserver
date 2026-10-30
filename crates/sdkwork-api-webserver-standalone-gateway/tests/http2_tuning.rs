@@ -314,13 +314,12 @@ async fn http2_requests_succeed_and_oversized_header_lists_are_rejected() {
             Ok(http::StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE)
         }
     };
-    match oversized {
-        Ok(status) => assert_ne!(
+    if let Ok(status) = oversized {
+        assert_ne!(
             status,
             http::StatusCode::OK,
             "an oversized header list must not be served"
-        ),
-        Err(_) => {}
+        );
     }
 
     drop(client);

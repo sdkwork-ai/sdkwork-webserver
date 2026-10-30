@@ -1535,7 +1535,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         assert_eq!(expanded[0].path, conf_a.to_string_lossy());
         assert_eq!(expanded[1].id, "sdkwork-b");
         assert_eq!(expanded[1].path, conf_b.to_string_lossy());
-        let _ = std::fs::remove_dir_all(&temp);
+        let _ = std::fs::remove_dir_all(temp.as_path());
     }
 
     #[test]
@@ -1827,6 +1827,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
                 certificate_file: format!("certs/{id}/fullchain.pem"),
                 private_key_file: format!("certs/{id}/privkey.pem"),
                 chain_file: None,
+                ocsp_stapling_file: None,
             },
         }
     }
@@ -1848,6 +1849,8 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             maps: Vec::new(),
             geo: Vec::new(),
             split_clients: Vec::new(),
+            stream_limit_conn_zones: Vec::new(),
+            stream_maps: Vec::new(),
             mime_types: None,
             default_type: None,
             gzip: Default::default(),
@@ -1900,7 +1903,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&temp);
-        std::fs::create_dir_all(&temp.join("certs/example.com")).unwrap();
+        std::fs::create_dir_all(temp.join("certs/example.com")).unwrap();
         std::fs::write(temp.join("certs/example.com/fullchain.pem"), "stale").unwrap();
         let app = crate::config::WebServerAppConfig {
             tunnel: None,
@@ -1911,6 +1914,8 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             maps: Vec::new(),
             geo: Vec::new(),
             split_clients: Vec::new(),
+            stream_limit_conn_zones: Vec::new(),
+            stream_maps: Vec::new(),
             mime_types: None,
             default_type: None,
             gzip: Default::default(),

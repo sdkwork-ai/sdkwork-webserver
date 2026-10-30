@@ -763,6 +763,10 @@ fn compile_candidate(
             &certificate_file,
             &private_key_file,
             None,
+            // Dynamic certificate assignments have no config certificate source
+            // to carry `ssl_stapling_file`; static stapling is a configured-
+            // certificate feature.
+            None,
             &assignment.server_names,
             provider,
         )

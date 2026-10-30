@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '5ebfee21';
+const AUDIT_HEAD = '64e7dfd5';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5) and the gRPC wave (wave 6) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6) and the stream/OCSP wave (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -267,6 +267,21 @@ const COMPLETED_WAVES = [
       'http:grpc_ssl_verify_depth',
     ],
   },
+  {
+    key: 'stream/OCSP wave',
+    summary:
+      'stream limit_conn/zone/dry_run, bounded stream map/set, preread timeout and buffer sizing, and static OCSP stapling (ssl_stapling_file)',
+    ids: [
+      'http:ssl_stapling_file',
+      'stream:limit_conn',
+      'stream:limit_conn_zone',
+      'stream:limit_conn_dry_run',
+      'stream:map',
+      'stream:set',
+      'stream:preread_timeout',
+      'stream:preread_buffer_size',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -373,7 +388,7 @@ const REMAINING_GAP_CATEGORIES = [
   },
   {
     key: 'ocsp',
-    label: 'OCSP stapling / trust chain',
+    label: 'OCSP dynamic fetch / refresh / verification',
     priority: 'medium (architecture blocker, commercial impact bounded)',
     ids: [
       'http:ssl_stapling',
@@ -384,24 +399,28 @@ const REMAINING_GAP_CATEGORIES = [
       'stream:ssl_trusted_certificate',
     ],
     rejectedLoss:
-      'the directive is accepted-but-ignored; no OCSP response is stapled to the handshake.',
-    why: 'the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so even a bounded static form has nowhere to plug in; the catalog now carries that architecture blocker as the precise diagnostic instead of implying an equivalent runtime setting exists.',
+      'the directive is accepted-but-ignored; only the static ssl_stapling_file form is stapled, so no dynamically fetched/refreshed OCSP response or OCSP verification runs.',
+    why: 'static OCSP stapling now executes via ssl_stapling_file (rustls CertifiedKey.ocsp, wire-proven); the dynamic fetch/refresh/verification path remains unimplemented and the pinned rustls stack exposes no fetch surface, so these directives stay accepted-unenforced with the blocker diagnostic.',
     surface:
       'crates/sdkwork-webserver-core/src/tls_runtime/, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/tls.rs, certificate material distribution',
-    tests: 'none possible until the TLS stack exposes a stapling/OCSP surface; the directives stay accepted-unenforced with the blocker diagnostic',
+    tests: 'the static-file form is covered by tests/tls_ocsp_stapling.rs wire proof; dynamic fetch/refresh/verification needs a fetch owner and remains out of scope',
   },
   {
     key: 'stream',
     label: 'stream advanced gaps',
     priority: 'high',
     ids: [
-      'stream:limit_conn',
-      'stream:limit_conn_zone',
-      'stream:limit_conn_dry_run',
-      'stream:set',
-      'stream:preread_timeout',
       'stream:proxy_protocol_timeout',
-      'stream:map',
+      'stream:pass',
+      'stream:server_name',
+      'stream:proxy_bind',
+      'stream:proxy_half_close',
+      'stream:proxy_next_upstream_timeout',
+      'stream:proxy_next_upstream_tries',
+      'stream:proxy_requests',
+      'stream:proxy_responses',
+      'stream:proxy_download_rate',
+      'stream:proxy_upload_rate',
       'stream:proxy_ssl',
       'stream:proxy_ssl_certificate',
       'stream:proxy_ssl_certificate_key',
@@ -411,11 +430,11 @@ const REMAINING_GAP_CATEGORIES = [
       'stream:proxy_ssl_trusted_certificate',
     ],
     rejectedLoss:
-      'a stock stream sidecar that uses this stream-plane feature fails to activate.',
-    why: 'the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies.',
+      'the directive is rejected at load, so a stock stream sidecar that uses this stream-plane feature fails to activate.',
+    why: 'the stream plane now executes access, limit_conn, variable map/set/return, limit and preread tuning, but still lacks an upstream TLS client (proxy_ssl identity/verification), half-close/rate/counting/retry controls, proxy_bind/new-connection selection, pass/SNI routing (pass, server_name) and the PROXY-protocol timeout; the HTTP plane executes the analogous policies.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables)',
-    tests: 'stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs',
+    tests: 'stream_proxy.rs integration tests for upstream TLS identity, half-close, rates/counters/retry, bind and pass/SNI routing plus extended differential-stream cases against nginx 1.29.6',
   },
   {
     key: 'grpc-residual',
@@ -941,27 +960,27 @@ const FAIL_CLOSED_REASONS = [
 const GAP_RATIONALE_SUFFIX = new Map([
   [
     'http:ssl_stapling',
-    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+    ' Architecture blocker: static stapling executes via ssl_stapling_file; dynamic OCSP fetch/refresh/verification has no rustls surface.',
   ],
   [
     'http:ssl_stapling_verify',
-    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+    ' Architecture blocker: static stapling executes via ssl_stapling_file; dynamic OCSP fetch/refresh/verification has no rustls surface.',
   ],
   [
     'http:ssl_trusted_certificate',
-    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+    ' Architecture blocker: static stapling executes via ssl_stapling_file; dynamic OCSP fetch/refresh/verification has no rustls surface.',
   ],
   [
     'stream:ssl_stapling',
-    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+    ' Architecture blocker: static stapling executes via ssl_stapling_file; dynamic OCSP fetch/refresh/verification has no rustls surface.',
   ],
   [
     'stream:ssl_stapling_verify',
-    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+    ' Architecture blocker: static stapling executes via ssl_stapling_file; dynamic OCSP fetch/refresh/verification has no rustls surface.',
   ],
   [
     'stream:ssl_trusted_certificate',
-    ' Architecture blocker: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface.',
+    ' Architecture blocker: static stapling executes via ssl_stapling_file; dynamic OCSP fetch/refresh/verification has no rustls surface.',
   ],
   [
     'http:chunked_transfer_encoding',
@@ -1563,6 +1582,28 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the grpcs positive case succeeds with a trusted CA and the negative case fails with an unrelated CA, matching nginx; the runtime enforces full-chain verification even where nginx accepts a depth setting',
   },
+  {
+    id: 'http:ssl_stapling_file',
+    evidence:
+      'crates/sdkwork-api-webserver-standalone-gateway/tests/tls_ocsp_stapling.rs::ssl_stapling_file_is_served_and_absent_without_it',
+    claim: 'ssl_stapling_file feeds a static OCSP response into the served certificate',
+    proves:
+      'a wire-level TLS handshake test serves the configured DER OCSP response in the CertificateStatus message and asserts it is absent when no file is configured (rustls CertifiedKey.ocsp)',
+  },
+  {
+    id: 'stream:limit_conn',
+    evidence: 'tests/nginx/differential-stream/battery.py::limit_conn.enforce',
+    claim: 'stream limit_conn closes over-limit connections silently and releases the slot',
+    proves:
+      'the differential-stream slice compares per-connection outcomes against nginx 1.29.6: over-limit connections are closed with no bytes, the holder is proxied, and the slot is released after disconnect; dry-run is covered by a sibling case',
+  },
+  {
+    id: 'stream:map',
+    evidence: 'tests/nginx/differential-stream/battery.py::map.return-remote-addr',
+    claim: 'stream map evaluates bounded accept-time facts into a variable consumed by return',
+    proves:
+      'differential-stream cases compare `map` over an accept-time fact and `map $ssl_preread_server_name` from a synthetic ClientHello feeding `return` byte-for-byte against nginx 1.29.6',
+  },
 ];
 
 /**
@@ -1853,7 +1894,8 @@ function renderHeader(inventory, catalog) {
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
-  3a-2, 3b, 4a, the upstream-protocol wave (wave 5) and the gRPC wave (wave 6).** The code, tests, generated operator matrix and the re-synced directive
+  3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6) and the
+  stream/OCSP wave.** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -1865,9 +1907,11 @@ function renderHeader(inventory, catalog) {
   proxy_method, stream allow/deny and literal return), Wave 4a (geo and
   split_clients variable blocks plus valid_referers), the upstream-protocol wave
   (FastCGI/uWSGI/SCGI/memcached implemented forms plus the bounded memcached-backed
-  \`set\` form) and the gRPC wave (grpc_pass/h2 client with headers, timeouts, buffer,
-  retry, intercept and always-verified grpc_ssl_* forms) are recorded as completed in
-  section 3, and every one of them is asserted executable by \`--verify-evidence\`.
+  \`set\` form), the gRPC wave (grpc_pass/h2 client with headers, timeouts, buffer,
+  retry, intercept and always-verified grpc_ssl_* forms) and the stream/OCSP wave
+  (stream limit_conn/map/set/preread tuning plus static ssl_stapling_file) are recorded
+  as completed in section 3, and every one of them is asserted executable by
+  \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -1972,7 +2016,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave and the gRPC wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave and the stream/OCSP wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2007,7 +2051,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-gRPC-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-stream/OCSP-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2081,7 +2125,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2097,7 +2141,10 @@ SCGI and memcached from out-of-profile to executable for their implemented
 request/response forms and added the bounded memcached-backed \`set\` variable form;
 the gRPC wave added the h2 upstream client with header/timeout/buffer/retry/intercept
 and always-verified grpc_ssl_* forms (trailers forwarded and non-zero grpc-status
-following nginx rather than mapping to 502).
+following nginx rather than mapping to 502); the stream/OCSP wave added stream
+limit_conn/zone/dry_run, the bounded stream map/set variable engine, preread timeout and
+buffer sizing, and static OCSP stapling via ssl_stapling_file (rustls CertifiedKey.ocsp,
+wire-proven).
 
 ${completedTable}
 ${completedRows}
@@ -2113,7 +2160,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the gRPC wave. An accepted-unenforced row is silently ignored today; a rejected row fails
+the stream/OCSP wave. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2124,13 +2171,15 @@ ${backlogSections}
 Within the backlog, the largest surface is still the residual sub-families of the four
 landed protocol modules (110 directives: cache/buffer/store/SSL, unix/variable targets
 and connection-pool knobs), followed by the bounded **re-entrant subrequest engine**
-(addition filter, \`auth_request\`, mirror). The stream advanced gaps (zone state, stream
-variable engine, upstream TLS client) and the module-sized userid/browser/random_index/
-degradation/slice modules come next. The gRPC wave reduced its category to nine residual
-bind/socket/TLS-library knobs. \`chunked_transfer_encoding\` and the static open-file
-cache are precisely bounded (hyper HTTP/1.1 close-delimited framing; staleness-only
-performance cache), while \`http2_chunk_size\` and the OCSP/trust-chain rows are
-architecture-blocked (hyper/h2; rustls).
+(addition filter, \`auth_request\`, mirror). The stream advanced gaps remain the next
+transport item even after this wave: an upstream TLS client, half-close, rate limits,
+request/response counting, retry budget, proxy_bind and pass/SNI routing are still
+missing. The module-sized userid/browser/random_index/degradation/slice modules and the
+nine gRPC residual bind/socket/TLS-library knobs come next. \`chunked_transfer_encoding\`
+and the static open-file cache are precisely bounded (hyper HTTP/1.1 close-delimited
+framing; staleness-only performance cache), \`http2_chunk_size\` is blocked on hyper/h2,
+and the OCSP rows are now limited to dynamic fetch/refresh/verification (static
+ssl_stapling_file executes) because rustls exposes no fetch surface.
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -2178,7 +2227,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave and the gRPC wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave and the stream/OCSP wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2307,6 +2356,12 @@ Implemented forms execute; the residual cache/buffer/store/SSL, unix/variable-ta
 connection-pool and gRPC bind/socket/TLS-library knobs are backlog rows, not profile
 exclusions.
 
+Mail-substrate note: a separate crate, \`crates/sdkwork-webserver-mail-protocol\`, has
+landed with POP3/IMAP/SMTP state machines and 45 tests. It is **not wired into the data
+plane yet**, so the nginx mail modules remain out-of-profile / planned in this ledger;
+wiring it would still need the mail auth-backend, certificate and security review work
+listed above.
+
 ### 5.3 Fail-Closed Groups (${failClosed.length} directives, top modules)
 
 ${failClosedByModule.map(([module, count]) => `- \`${module}\` - ${count} directive(s)`).join('\n')}
@@ -2339,7 +2394,8 @@ GeoIP, a QUIC transport, embedded template/language filters, dynamic module load
 the residual protocol/gRPC sub-families that are now backlog rather than profile
 exclusions. Five embedded application protocols (FastCGI/uWSGI/SCGI/memcached/gRPC) are
 no longer in that excluded set: their implemented forms execute end-to-end on the Rust
-data plane against nginx 1.29.6. The coherent target remains the declared
+data plane against nginx 1.29.6, and the landed mail-protocol substrate (POP3/IMAP/SMTP,
+45 tests, not yet wired) is the next candidate to move. The coherent target remains the declared
 \`${PROFILE}\` profile with the four PRD section 2 grades (parse, semantic, behavioral,
 operational), a generated directive catalog, and a versioned evidence revision. That is
 what this ledger audits.
@@ -2375,8 +2431,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the gRPC wave landed and the Lead re-synced the
-catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the stream/OCSP wave landed and the Lead re-synced
+the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

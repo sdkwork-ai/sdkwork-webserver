@@ -719,6 +719,8 @@ mod tests {
             gzip: Default::default(),
             limit_req_zones: Vec::new(),
             limit_conn_zones: Vec::new(),
+            stream_limit_conn_zones: Vec::new(),
+            stream_maps: Vec::new(),
             resolution_cache: None,
             limits: Default::default(),
             listeners: Vec::new(),

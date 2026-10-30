@@ -526,6 +526,7 @@ const SERVER_TLS_KEYS: &[&str] = &[
     "certFile",
     "certKeyFile",
     "chainFile",
+    "ocspStaplingFile",
     "protocols",
     "ciphers",
     "preferServerCiphers",
@@ -1648,6 +1649,19 @@ impl<'a> Materializer<'a> {
                 ))
             }
         };
+        let ocsp_stapling_file = match cert.get("ocspStaplingFile") {
+            None => None,
+            Some(value) => {
+                let path = value.as_str().map(str::trim).unwrap_or_default();
+                if path.is_empty() {
+                    return Err(materialize_error(
+                        &format!("{path}.ocspStaplingFile"),
+                        "ocspStaplingFile must be a non-empty DER path",
+                    ));
+                }
+                Some(path.to_owned())
+            }
+        };
         let mut source = json!({
             "type": "protected-file",
             "certificateFile": certificate_file,
@@ -1655,6 +1669,9 @@ impl<'a> Materializer<'a> {
         });
         if let Some(chain_file) = chain_file {
             source["chainFile"] = Value::String(chain_file);
+        }
+        if let Some(ocsp_stapling_file) = ocsp_stapling_file {
+            source["ocspStaplingFile"] = Value::String(ocsp_stapling_file);
         }
         self.certificates.push(json!({
             "id": name,
@@ -2901,6 +2918,11 @@ impl<'a> Materializer<'a> {
                 target,
                 access,
                 return_value,
+                limit_conn: Vec::new(),
+                limit_conn_dry_run: false,
+                set_variables: Vec::new(),
+                preread_timeout_ms: 30_000,
+                preread_buffer_bytes: 16 * 1024,
                 proxy_timeout_ms,
                 proxy_protocol,
                 tls,
@@ -5860,9 +5882,9 @@ proxyPass = "http://127.0.0.1:9001"
                 (name == "host").then(|| self.0.to_owned())
             }
         }
-        let resolved = crate::config::evaluate_map(&zones, &Facts("a.example.test"));
+        let resolved = crate::config::evaluate_map(zones, &Facts("a.example.test"));
         assert_eq!(resolved, "zone-a");
-        let fallback = crate::config::evaluate_map(&zones, &Facts("c.example.test"));
+        let fallback = crate::config::evaluate_map(zones, &Facts("c.example.test"));
         assert_eq!(fallback, "anonymous");
     }
 
@@ -6121,7 +6143,7 @@ etag = false",
             .expect("route cache policy");
         assert_eq!(policy.expires, ExpiresMode::Access);
         assert_eq!(policy.expires_seconds, 604_800);
-        assert_eq!(policy.etag, false);
+        assert!(!policy.etag);
         // The nginx default, since the typed plane declares no equivalent key.
         assert_eq!(policy.if_modified_since, IfModifiedSinceMode::Exact);
 
@@ -6271,8 +6293,7 @@ etag = \"off\"",
         standalone = standalone.replacen("profile = \"standalone\"", "profile = \"cloud\"", 1);
         write_layout_v3_dir(&dir, &common, MINIMAL_PRODUCTION, &standalone);
         let error = load_server_toml_app(&dir, "standalone", "production", "sdkwork-example")
-            .err()
-            .expect("profile mismatch must be rejected");
+            .expect_err("profile mismatch must be rejected");
         let message = error.to_string();
         assert!(
             message.contains("must declare profile"),
@@ -6459,8 +6480,7 @@ proxyPass = "http://127.0.0.1:9001"
             .expect("proxy resource");
         assert_eq!(proxy_method.as_deref(), Some("POST"));
         let error = materialize("proxyMethod = \"GET /x\"")
-            .err()
-            .expect("invalid method token must fail closed");
+            .expect_err("invalid method token must fail closed");
         assert!(
             error.to_string().contains("not a valid HTTP method token"),
             "{error}"
@@ -6547,8 +6567,7 @@ returnStatus = 404
             "",
         );
         let error = load_server_toml_app(&dir, "standalone", "production", "stream-access-test")
-            .err()
-            .expect("return + proxyPass must fail closed");
+            .expect_err("return + proxyPass must fail closed");
         assert!(
             error
                 .to_string()
@@ -6762,8 +6781,7 @@ proxyPass = "missing-upstream"
         )
         .unwrap();
         let error = load_server_toml_app(&dir, "standalone", "production", "stream-reject")
-            .err()
-            .expect("unknown upstream must be rejected");
+            .expect_err("unknown upstream must be rejected");
         assert!(
             error.to_string().contains("undefined upstream"),
             "unexpected error: {error}"
@@ -6792,8 +6810,7 @@ proxyPass = "127.0.0.1:3306"
         )
         .expect("write common");
         let error = load_server_toml_app(&dir, "standalone", "production", "stream-reject")
-            .err()
-            .expect("public stream bind must be rejected");
+            .expect_err("public stream bind must be rejected");
         assert!(
             error.to_string().contains("loopback or private address"),
             "unexpected error: {error}"
@@ -6958,8 +6975,7 @@ returnStatus = 404
         )
         .unwrap();
         let error = load_server_toml_app(&dir, "standalone", "production", "alias-reject")
-            .err()
-            .expect("alias without trailing slash must fail");
+            .expect_err("alias without trailing slash must fail");
         assert!(
             error
                 .to_string()
@@ -7001,8 +7017,7 @@ returnStatus = 404
         )
         .unwrap();
         let error = load_server_toml_app(&dir, "standalone", "production", "alias-regex-reject")
-            .err()
-            .expect("regex alias must fail");
+            .expect_err("regex alias must fail");
         assert!(
             error.to_string().contains("regex location"),
             "unexpected error: {error}"

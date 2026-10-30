@@ -53,9 +53,9 @@ use crate::config::{
     GeoConfig, GeoEntryConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
     MapEntryConfig, MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
     ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry,
-    SplitClientsConfig, SplitClientsPartConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
-    UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig, WebServerConfigError,
-    ACME_HTTP_01_CHALLENGE_PREFIX,
+    SplitClientsConfig, SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig,
+    StreamTlsMode, TlsVersion, UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig,
+    WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
 use super::parser::NginxDirective;
@@ -236,11 +236,10 @@ const NGINX_OBSOLETE_NOOP: &[&str] = &[
 /// stack exposes no stapling/OCSP fetch surface, so the value is accepted but
 /// has no effect — the diagnostic states that explicitly instead of implying an
 /// equivalent runtime setting exists.
-const NGINX_OCSP_STAPLING_UNSUPPORTED: &[&str] = &[
-    "ssl_stapling",
-    "ssl_stapling_verify",
-    "ssl_trusted_certificate",
-];
+const NGINX_OCSP_DYNAMIC_UNSUPPORTED: &[&str] = &["ssl_stapling", "ssl_stapling_verify"];
+
+/// `ssl_trusted_certificate` is consumed as an extra PEM chain only.
+const NGINX_TRUSTED_CERTIFICATE_CHAIN_ONLY: &[&str] = &["ssl_trusted_certificate"];
 
 /// Static-file descriptor/metadata cache. The runtime opens static paths per
 /// request through `cap-std` and owns no cross-request descriptor cache; nginx's
@@ -276,9 +275,14 @@ pub(crate) fn ignored_directive_diagnostics(
                 "`{}` is obsolete in the pinned nginx 1.29.6 reference build (nginx accepts it as a deprecated no-op and ignores the value); the runtime likewise executes nothing for it",
                 directive.name
             )
-        } else if NGINX_OCSP_STAPLING_UNSUPPORTED.contains(&directive.name.as_str()) {
+        } else if NGINX_OCSP_DYNAMIC_UNSUPPORTED.contains(&directive.name.as_str()) {
             format!(
-                "`{}` has no effect: OCSP stapling is not implemented because the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface; the runtime does not publish an OCSP response",
+                "`{}` itself has no effect: dynamic OCSP fetching/verification is not implemented. The runtime serves only a static `ssl_stapling_file` DER response per certificate (loaded when TLS material is built; refresh requires a reload)",
+                directive.name
+            )
+        } else if NGINX_TRUSTED_CERTIFICATE_CHAIN_ONLY.contains(&directive.name.as_str()) {
+            format!(
+                "`{}` is consumed only as an extra PEM chain for the served certificate (`chainFile`); OCSP verification is not implemented",
                 directive.name
             )
         } else if OPEN_FILE_CACHE_FAMILY.contains(&directive.name.as_str()) {
@@ -314,11 +318,10 @@ pub(crate) fn ignored_directive_diagnostics(
             // happens to spell an ignored directive name must not be reported
             // as an accepted-but-unenforced directive.
             if matches!(directive.name.as_str(), "map" | "types") {
-                // An http `map` is executed; a stream `map` (no stream-variable
-                // evaluation in the runtime) is accepted-unenforced.
-                if in_stream {
-                    push(out, directive);
-                }
+                // Both `map` planes are executed (HTTP map engine / bounded
+                // stream variable engine); `types` rows are data, not
+                // directives. Neither is an accepted-unenforced diagnostic.
+                let _ = in_stream;
                 continue;
             }
             if ACCEPTED_IGNORED.contains(&directive.name.as_str()) {
@@ -458,6 +461,12 @@ pub fn materialize_nginx_app(
             "limit_conn_zone" => mapper.materialize_limit_conn_zone(directive)?,
             "types" => mapper.materialize_types(directive)?,
             "default_type" => mapper.materialize_default_type(directive)?,
+            "ssl_stapling_file" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "http-level `ssl_stapling_file` is not supported; declare it in the `server` block that declares `ssl_certificate` so it applies to a concrete certificate",
+                ))
+            }
             "gzip" => mapper.materialize_gzip(directive)?,
             "gzip_types" => mapper.materialize_gzip_types(directive)?,
             "gzip_min_length" => mapper.materialize_gzip_min_length(directive)?,
@@ -1205,6 +1214,18 @@ struct Mapper<'a> {
     /// Ordered nginx stream-context `allow`/`deny` rules inherited by every
     /// stream server that declares none.
     stream_access: Vec<Value>,
+    /// nginx stream `map` blocks (bounded per-connection variable engine).
+    stream_maps: Vec<MapConfig>,
+    stream_map_results: Vec<String>,
+    /// nginx stream `limit_conn_zone` declarations (separate from HTTP zones).
+    stream_limit_conn_zones: Vec<Value>,
+    stream_limit_conn_zone_names: Vec<String>,
+    /// nginx stream-context `limit_conn_dry_run` inherited by stream servers.
+    stream_limit_conn_dry_run: bool,
+    /// nginx stream-context `preread_timeout` inherited by stream servers.
+    stream_preread_timeout_ms: Option<u64>,
+    /// nginx stream-context `preread_buffer_size` inherited by stream servers.
+    stream_preread_buffer_bytes: Option<usize>,
     /// `proxy_method` resolved for the server currently being materialized.
     server_proxy_method: Option<String>,
     /// Largest `client_max_body_size` seen while materializing nginx config.
@@ -1294,6 +1315,13 @@ impl<'a> Mapper<'a> {
             server_proxy_method: None,
             server_referer: None,
             stream_access: Vec::new(),
+            stream_maps: Vec::new(),
+            stream_map_results: Vec::new(),
+            stream_limit_conn_zones: Vec::new(),
+            stream_limit_conn_zone_names: Vec::new(),
+            stream_limit_conn_dry_run: false,
+            stream_preread_timeout_ms: None,
+            stream_preread_buffer_bytes: None,
         }
     }
 
@@ -1739,6 +1767,7 @@ impl<'a> Mapper<'a> {
         let mut server_real_ip = RealIpSettings::default();
         let mut ssl_verify_client: Option<&str> = None;
         let mut ssl_client_certificate: Option<String> = None;
+        let mut ocsp_stapling_file: Option<String> = None;
         let mut server_ssl_protocols: Option<SslProtocolRange> = None;
         let mut server_cache = CacheDirectives::default();
         // nginx http→server→location inheritance for the wave-2 response
@@ -1803,6 +1832,10 @@ impl<'a> Mapper<'a> {
                 }
                 "server_name" => {
                     server_names.extend(child.args.iter().cloned());
+                }
+                "ssl_stapling_file" => {
+                    let path = self.resolve_path(child)?;
+                    ocsp_stapling_file = Some(validate_ocsp_stapling_file(child, &path)?);
                 }
                 "ssl_certificate" => {
                     if child.args.len() > 1 {
@@ -2283,14 +2316,20 @@ impl<'a> Mapper<'a> {
             // wildcard names only; `.suffix` expands, regex/trailing wildcard
             // fail closed here rather than serving the wrong certificate.
             let certificate_names = certificate_server_names(directive, &server_names)?;
+            let mut certificate_source = json!({
+                "type": "protected-file",
+                "certificateFile": certificate_file,
+                "privateKeyFile": certificate_key,
+            });
+            // nginx `ssl_stapling_file`: a static DER OCSP response for this
+            // certificate, served as the stapled response.
+            if let Some(ocsp_file) = &ocsp_stapling_file {
+                certificate_source["ocspStaplingFile"] = Value::String(ocsp_file.clone());
+            }
             self.certificates.push(json!({
                 "id": certificate_name,
                 "serverNames": certificate_names,
-                "source": {
-                    "type": "protected-file",
-                    "certificateFile": certificate_file,
-                    "privateKeyFile": certificate_key,
-                },
+                "source": certificate_source,
             }));
             // nginx inheritance: an explicit server-level `ssl_protocols`
             // replaces the http-level window; the runtime default applies when
@@ -5150,13 +5189,83 @@ impl<'a> Mapper<'a> {
                     stream_index += 1;
                 }
                 "log_format" | "access_log" | "error_log" | "resolver" => {}
-                // nginx `stream` context also supports `map`; the runtime has
-                // no stream-variable evaluation, so it is accepted-unenforced
-                // (with the diagnostic emitted by `ignored_directive_diagnostics`)
-                // rather than failing a stock configuration closed.
-                "map" => {}
+                // nginx `stream` context `map`: executable over the bounded
+                // per-connection variable set (accept/preread facts).
+                "map" => {
+                    let map = parse_stream_map(directive)?;
+                    if let Some(result) = map.result.strip_prefix('$') {
+                        if self.stream_map_results.iter().any(|name| name == result) {
+                            return Err(NginxConfigError::unsupported(
+                                directive,
+                                format!("duplicate stream map result variable `${result}`"),
+                            ));
+                        }
+                        self.stream_map_results.push(result.to_owned());
+                    }
+                    self.stream_maps.push(map);
+                }
                 // nginx stream access phase: ordered peer allow/deny rules.
                 "allow" | "deny" => self.stream_access.push(parse_access_rule(directive)?),
+                "limit_conn_zone" => {
+                    let entry = directive.args.join(" ");
+                    let zone = parse_limit_conn_zone(&entry).map_err(|error| {
+                        NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid stream limit_conn_zone: {error}"),
+                        )
+                    })?;
+                    if self.stream_limit_conn_zone_names.contains(&zone.name) {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("duplicate stream limit_conn_zone `{}`", zone.name),
+                        ));
+                    }
+                    self.stream_limit_conn_zone_names.push(zone.name.clone());
+                    self.stream_limit_conn_zones.push(json!({
+                        "name": zone.name,
+                        "key": zone.key,
+                        "maxKeys": zone.max_keys,
+                    }));
+                }
+                "limit_conn_dry_run" => {
+                    self.stream_limit_conn_dry_run = parse_on_off(directive, "limit_conn_dry_run")?;
+                }
+                "preread_timeout" => {
+                    let Some(value) = directive.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "preread_timeout requires a duration",
+                        ));
+                    };
+                    let Some(seconds) = parse_nginx_time_seconds(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid preread_timeout `{value}`"),
+                        ));
+                    };
+                    self.stream_preread_timeout_ms = Some(seconds.saturating_mul(1000));
+                }
+                "preread_buffer_size" => {
+                    let Some(bytes) = parse_body_size(directive)? else {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "preread_buffer_size requires a size",
+                        ));
+                    };
+                    if !(512..=1024 * 1024).contains(&bytes) {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "preread_buffer_size must be between 512 bytes and 1 MiB",
+                        ));
+                    }
+                    self.stream_preread_buffer_bytes = Some(bytes as usize);
+                }
+                "proxy_protocol_timeout" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "`proxy_protocol_timeout` bounds reading an inbound PROXY protocol header, which the runtime does not parse; the runtime emits PROXY protocol v1 to the upstream (`proxy_protocol on`) and has no inbound header to time out",
+                    ));
+                }
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name => {
                     return Err(NginxConfigError::unsupported(
@@ -5185,6 +5294,14 @@ impl<'a> Mapper<'a> {
         let mut ssl_client_certificate: Option<String> = None;
         let mut access: Vec<Value> = Vec::new();
         let mut return_value: Option<String> = None;
+        let mut limit_conn: Vec<Value> = Vec::new();
+        let mut limit_conn_dry_run: Option<bool> = None;
+        let mut set_variables: Vec<StreamSetVariableConfig> = Vec::new();
+        let mut preread_timeout_ms: Option<u64> = None;
+        let mut preread_buffer_bytes: Option<usize> = None;
+        // Variables a `set`/`return` template may reference: stream map
+        // results plus earlier `set` assignments of this server.
+        let mut available_variables: Vec<String> = self.stream_map_results.clone();
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
@@ -5256,7 +5373,89 @@ impl<'a> Mapper<'a> {
                         }
                     };
                 }
+                "set" => {
+                    let [name, value] = child.args.as_slice() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream `set` takes `set $variable value`",
+                        ));
+                    };
+                    let Some(variable) = name.strip_prefix('$') else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("stream `set` target `{name}` must be a `$variable`"),
+                        ));
+                    };
+                    crate::config::validate_stream_set(variable, value, &available_variables)
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
+                    set_variables.push(StreamSetVariableConfig {
+                        name: variable.to_owned(),
+                        value: value.clone(),
+                    });
+                    available_variables.push(variable.to_owned());
+                }
                 "allow" | "deny" => access.push(parse_access_rule(child)?),
+                "limit_conn" => {
+                    let entry = child.args.join(" ");
+                    let rule = parse_limit_conn(&entry).map_err(|error| {
+                        NginxConfigError::unsupported(
+                            child,
+                            format!("invalid stream limit_conn: {error}"),
+                        )
+                    })?;
+                    if !self.stream_limit_conn_zone_names.contains(&rule.zone) {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!(
+                                "stream limit_conn references undefined zone `{}`",
+                                rule.zone
+                            ),
+                        ));
+                    }
+                    limit_conn.push(json!({
+                        "zone": rule.zone,
+                        "maxConnections": rule.max_connections,
+                    }));
+                }
+                "limit_conn_dry_run" => {
+                    limit_conn_dry_run = Some(parse_on_off(child, "limit_conn_dry_run")?);
+                }
+                "preread_timeout" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "preread_timeout requires a duration",
+                        ));
+                    };
+                    let Some(seconds) = parse_nginx_time_seconds(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid preread_timeout `{value}`"),
+                        ));
+                    };
+                    preread_timeout_ms = Some(seconds.saturating_mul(1000));
+                }
+                "preread_buffer_size" => {
+                    let Some(bytes) = parse_body_size(child)? else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "preread_buffer_size requires a size",
+                        ));
+                    };
+                    if !(512..=1024 * 1024).contains(&bytes) {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "preread_buffer_size must be between 512 bytes and 1 MiB",
+                        ));
+                    }
+                    preread_buffer_bytes = Some(bytes as usize);
+                }
+                "proxy_protocol_timeout" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "`proxy_protocol_timeout` bounds reading an inbound PROXY protocol header, which the runtime does not parse; the runtime emits PROXY protocol v1 to the upstream (`proxy_protocol on`) and has no inbound header to time out",
+                    ));
+                }
                 "return" => {
                     // nginx stream `return <value>`: write the value to the
                     // connection and close it. The value may not use stream
@@ -5268,18 +5467,8 @@ impl<'a> Mapper<'a> {
                         ));
                     }
                     let value = &child.args[0];
-                    if value.contains('$') {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "stream `return` variables are not supported; the runtime has no stream-variable engine — use a literal value",
-                        ));
-                    }
-                    if value.is_empty() || value.len() > 4096 {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "stream `return` value must be 1..4096 bytes",
-                        ));
-                    }
+                    crate::config::validate_stream_return(value, &available_variables)
+                        .map_err(|message| NginxConfigError::unsupported(child, message))?;
                     return_value = Some(value.clone());
                 }
                 "ssl_certificate" => {
@@ -5407,6 +5596,25 @@ impl<'a> Mapper<'a> {
             if let Some(value) = &return_value {
                 stream["returnValue"] = Value::String(value.clone());
             }
+            if !limit_conn.is_empty() {
+                stream["limitConn"] = Value::Array(limit_conn.clone());
+            }
+            if limit_conn_dry_run.unwrap_or(self.stream_limit_conn_dry_run) {
+                stream["limitConnDryRun"] = Value::Bool(true);
+            }
+            stream["prereadTimeoutMs"] = json!(
+                preread_timeout_ms.unwrap_or(self.stream_preread_timeout_ms.unwrap_or(30_000))
+            );
+            stream["prereadBufferBytes"] = json!(preread_buffer_bytes
+                .unwrap_or(self.stream_preread_buffer_bytes.unwrap_or(16 * 1024)));
+            if !set_variables.is_empty() {
+                stream["setVariables"] = Value::Array(
+                    set_variables
+                        .iter()
+                        .map(|set| json!({"name": set.name, "value": set.value}))
+                        .collect(),
+                );
+            }
             if ssl_preread {
                 stream["tls"] = json!({ "mode": "preread" });
             } else if ssl {
@@ -5522,6 +5730,8 @@ impl<'a> Mapper<'a> {
             "upstreams": self.upstreams,
             "virtualHosts": self.virtual_hosts,
             "streams": self.streams,
+            "streamLimitConnZones": self.stream_limit_conn_zones,
+            "streamMaps": self.stream_maps,
             "proxyCache": proxy_cache,
             "metadata": { "source": "nginx configuration" },
         });
@@ -6985,6 +7195,142 @@ fn validate_media_type(directive: &NginxDirective, value: &str) -> Result<(), Ng
 /// (already expanded by the parser) and any other statement shape fail closed;
 /// regex keys and unsupported variables are rejected by the shared map
 /// validator with a located diagnostic.
+/// Validate an nginx `ssl_stapling_file` path: the file must exist, be a
+/// bounded DER `OCSPResponse` (ASN.1 SEQUENCE), and is read when TLS material
+/// is built.
+fn validate_ocsp_stapling_file(
+    directive: &NginxDirective,
+    path: &str,
+) -> Result<String, NginxConfigError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        NginxConfigError::unsupported(
+            directive,
+            format!("ssl_stapling_file `{path}` cannot be read: {error}"),
+        )
+    })?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > 64 * 1024 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "ssl_stapling_file must be a non-empty DER OCSP response of at most 64 KiB",
+        ));
+    }
+    let mut tag = [0_u8; 1];
+    use std::io::Read;
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut tag))
+        .map_err(|error| {
+            NginxConfigError::unsupported(
+                directive,
+                format!("ssl_stapling_file `{path}` cannot be read: {error}"),
+            )
+        })?;
+    if tag[0] != 0x30 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "ssl_stapling_file is not a DER OCSP response (missing SEQUENCE tag)",
+        ));
+    }
+    Ok(path.to_owned())
+}
+
+/// Parse nginx stream context `map $source $result { … }`.
+///
+/// Bounded to the variables the stream plane knows at accept/preread time; a
+/// source outside that set fails closed instead of silently evaluating to an
+/// empty string.
+fn parse_stream_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfigError> {
+    let [source, result] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream map requires `map $source $result { … }`",
+        ));
+    };
+    let Some(source_name) = source.strip_prefix('$') else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream map source `{source}` must be a `$variable`"),
+        ));
+    };
+    if !crate::config::STREAM_MAP_SOURCES.contains(&source_name) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "stream map source `{source}` is not known at accept/preread time; supported: {}",
+                crate::config::STREAM_MAP_SOURCES
+                    .iter()
+                    .map(|name| format!("${name}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        ));
+    }
+    if !result.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream map result `{result}` must be a `$variable`"),
+        ));
+    }
+    if directive.children.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream map requires a `{ … }` block",
+        ));
+    }
+    let mut default = None;
+    let mut entries: Vec<MapEntryConfig> = Vec::new();
+    for child in &directive.children {
+        if child.name == "hostnames" {
+            return Err(NginxConfigError::unsupported(
+                child,
+                "stream `map … hostnames` is not supported; declare explicit per-address entries",
+            ));
+        }
+        if child.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "stream map entry `{}` requires exactly one value",
+                    child.name
+                ),
+            ));
+        }
+        let value = &child.args[0];
+        if value.contains('$') {
+            return Err(NginxConfigError::unsupported(
+                child,
+                "stream map values must be literal strings; variable values are not supported",
+            ));
+        }
+        if child.name == "default" {
+            if default.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    child,
+                    "stream map declares `default` more than once",
+                ));
+            }
+            default = Some(value.clone());
+            continue;
+        }
+        entries.push(MapEntryConfig {
+            key: child.name.clone(),
+            value: value.clone(),
+        });
+    }
+    if entries.len() > 4096 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream map supports at most 4096 entries",
+        ));
+    }
+    Ok(MapConfig {
+        source: source.clone(),
+        result: result.clone(),
+        hostnames: false,
+        default,
+        entries,
+    })
+}
+
 /// Parse nginx `geo [$address] $variable { … }` (http context).
 fn parse_geo(directive: &NginxDirective) -> Result<GeoConfig, NginxConfigError> {
     if directive.children.is_empty() {
@@ -9265,6 +9611,7 @@ server {
     }
 
     #[test]
+    #[allow(clippy::useless_format)]
     fn materializes_ssl_listener_with_certificates() {
         let directory = tempfile::tempdir().expect("temp dir");
         std::fs::write(directory.path().join("site.pem"), "cert").unwrap();
@@ -9562,7 +9909,7 @@ http {
             .expect("http-level declarations must reach the host");
         assert_eq!(host.expires, ExpiresMode::Access);
         assert_eq!(host.expires_seconds, 3_600);
-        assert_eq!(host.etag, false);
+        assert!(!host.etag);
         assert_eq!(host.if_modified_since, IfModifiedSinceMode::Before);
 
         let routes = &config.virtual_hosts[0].routes;
@@ -9571,7 +9918,7 @@ http {
         let override_policy = routes[0].cache_policy.as_ref().expect("override policy");
         assert_eq!(override_policy.expires, ExpiresMode::Modified);
         assert_eq!(override_policy.expires_seconds, 1_800);
-        assert_eq!(override_policy.etag, false);
+        assert!(!override_policy.etag);
         assert_eq!(
             override_policy.if_modified_since,
             IfModifiedSinceMode::Before
@@ -9580,7 +9927,7 @@ http {
         assert!(routes[1].cache_policy.is_none());
         // `etag on` at the location re-enables what the http context disabled.
         let etag_on = routes[2].cache_policy.as_ref().expect("etag policy");
-        assert_eq!(etag_on.etag, true);
+        assert!(etag_on.etag);
         assert_eq!(etag_on.expires, ExpiresMode::Access);
         assert_eq!(etag_on.expires_seconds, 3_600);
     }
@@ -9815,8 +10162,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("unknown rewrite flag must be rejected");
+        .expect_err("unknown rewrite flag must be rejected");
         assert!(error.to_string().contains("rewrite flag"), "{error}");
     }
 
@@ -9913,7 +10259,7 @@ server {
                 "printable ASCII",
             ),
         ] {
-            let error = materialize(text).err().expect("must fail closed");
+            let error = materialize(text).expect_err("must fail closed");
             assert!(error.to_string().contains(expected), "{error}");
         }
     }
@@ -10132,8 +10478,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("duplicate default_server must be rejected");
+        .expect_err("duplicate default_server must be rejected");
         assert!(
             error.to_string().contains("duplicate `default_server`"),
             "{error}"
@@ -10141,6 +10486,7 @@ server {
     }
 
     #[test]
+    #[allow(clippy::useless_format)]
     fn http2_on_directive_enables_h2_protocols() {
         let directory = tempfile::tempdir().expect("temp dir");
         std::fs::write(directory.path().join("site.pem"), "cert").unwrap();
@@ -10263,8 +10609,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("return 444 must fail closed");
+        .expect_err("return 444 must fail closed");
         assert!(error.to_string().contains("return 444"), "{error}");
     }
 
@@ -10305,8 +10650,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("alias gluing footgun must fail closed");
+        .expect_err("alias gluing footgun must fail closed");
         assert!(error.to_string().contains("trailing slash"), "{error}");
     }
 
@@ -10747,8 +11091,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("resolve parameter must fail closed");
+        .expect_err("resolve parameter must fail closed");
         assert!(
             error
                 .to_string()
@@ -10792,8 +11135,7 @@ stream {
 }
 "#,
         )
-        .err()
-        .expect("proxy_protocol v2 must fail closed");
+        .expect_err("proxy_protocol v2 must fail closed");
         assert!(error.to_string().contains("proxy_protocol v2"), "{error}");
     }
 
@@ -10813,8 +11155,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("conflicting body limits must fail closed");
+        .expect_err("conflicting body limits must fail closed");
         assert!(
             error
                 .to_string()
@@ -10977,8 +11318,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("named -> named chain must fail closed");
+        .expect_err("named -> named chain must fail closed");
         assert!(
             error.to_string().contains("internal redirect depth bound"),
             "{error}"
@@ -10993,8 +11333,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("unknown named target must fail closed");
+        .expect_err("unknown named target must fail closed");
         assert!(
             error.to_string().contains("not a declared named location"),
             "{error}"
@@ -11059,8 +11398,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("a recursive named error_page cycle must fail closed");
+        .expect_err("a recursive named error_page cycle must fail closed");
         assert!(error.to_string().contains("cycle"), "{error}");
     }
 
@@ -11177,8 +11515,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("undefined cache zone must fail closed");
+        .expect_err("undefined cache zone must fail closed");
         assert!(
             error.to_string().contains("undefined cache zone"),
             "{error}"
@@ -11314,6 +11651,7 @@ server {
     }
 
     #[test]
+    #[allow(clippy::useless_format)]
     fn proxy_ssl_settings_materialize_upstream_tls() {
         let directory = tempfile::tempdir().expect("temp dir");
         std::fs::write(directory.path().join("ca.pem"), "ca").unwrap();
@@ -11434,8 +11772,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("conflicting upstream TLS settings must fail closed");
+        .expect_err("conflicting upstream TLS settings must fail closed");
         assert!(
             error
                 .to_string()
@@ -11487,8 +11824,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("unsupported real_ip_header must fail closed");
+        .expect_err("unsupported real_ip_header must fail closed");
         assert!(error.to_string().contains("X-Forwarded-For"), "{error}");
         let error = materialize(
             r#"
@@ -11507,8 +11843,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("conflicting real_ip settings must fail closed");
+        .expect_err("conflicting real_ip settings must fail closed");
         assert!(
             error.to_string().contains("conflicting `set_real_ip_from`"),
             "{error}"
@@ -11516,6 +11851,7 @@ server {
     }
 
     #[test]
+    #[allow(clippy::useless_format)]
     fn http_level_http2_on_inherits_to_ssl_listeners() {
         let directory = tempfile::tempdir().expect("temp dir");
         std::fs::write(directory.path().join("site.pem"), "cert").unwrap();
@@ -11564,8 +11900,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("unsupported variable return bodies must fail closed");
+        .expect_err("unsupported variable return bodies must fail closed");
         assert!(
             error
                 .to_string()
@@ -12124,8 +12459,7 @@ http2_max_concurrent_streams 7;
 server { listen 80; server_name h2.example.test; http2_max_concurrent_streams 9; location / { return 200 "ok"; } }
 "#,
         )
-        .err()
-        .expect("conflicting values must fail closed");
+        .expect_err("conflicting values must fail closed");
         assert!(conflict.to_string().contains("conflicting"), "{conflict}");
         for value in ["0", "10001", "many"] {
             let error = materialize(&format!(
@@ -12182,12 +12516,13 @@ http {
             );
         }
         assert!(
-            message("ssl_stapling").contains("OCSP stapling is not implemented"),
-            "ssl_stapling diagnostic must state the OCSP blocker"
+            message("ssl_stapling")
+                .contains("dynamic OCSP fetching/verification is not implemented"),
+            "ssl_stapling diagnostic must state the dynamic-fetch blocker and the static-file path"
         );
         assert!(
-            message("ssl_trusted_certificate").contains("OCSP stapling is not implemented"),
-            "ssl_trusted_certificate diagnostic must state the OCSP blocker"
+            message("ssl_trusted_certificate").contains("consumed only as an extra PEM chain"),
+            "ssl_trusted_certificate diagnostic must state that it is chain-only"
         );
         assert!(
             message("open_file_cache").contains("descriptor/metadata cache"),
@@ -12201,8 +12536,7 @@ http2_chunk_size 4k;
 server { listen 80; server_name h2.example.test; location / { return 200 "ok"; } }
 "#,
         )
-        .err()
-        .expect("http2_chunk_size must fail closed");
+        .expect_err("http2_chunk_size must fail closed");
         assert!(
             error.to_string().contains("hyper/h2 ingress"),
             "http2_chunk_size diagnostic must name the runtime blocker: {error}"
@@ -12245,8 +12579,7 @@ server {
         let error = materialize(
             "server { listen 80; server_name method.example.test; location / { proxy_method \"GET /x\"; proxy_pass http://127.0.0.1:8080; } }",
         )
-        .err()
-        .expect("invalid method token must fail closed");
+        .expect_err("invalid method token must fail closed");
         assert!(error.to_string().contains("proxy_method"), "{error}");
     }
 
@@ -12304,9 +12637,9 @@ stream {
         // Fail-closed forms.
         for (label, body, needle) in [
             (
-                "return with variables",
-                "listen 127.0.0.1:9104; return \"$ssl_preread_server_name\";",
-                "stream `return` variables",
+                "return with an unknown variable",
+                "listen 127.0.0.1:9104; return \"$nope\";",
+                "does not know at accept/preread time",
             ),
             (
                 "return with proxy_pass",
@@ -12488,6 +12821,327 @@ server { listen 80; server_name geo.example.test; location / { return 200 "ok"; 
             .unwrap_or_else(|| panic!("`{label}` must fail closed"));
             assert!(error.to_string().contains(needle), "`{label}`: {error}");
         }
+    }
+
+    #[test]
+    fn materializes_stream_limit_conn_and_dry_run() {
+        let config = materialize(
+            r#"
+stream {
+    limit_conn_zone $binary_remote_addr zone=addr:1m;
+    limit_conn_dry_run on;
+
+    server {
+        listen 127.0.0.1:9601;
+        proxy_pass 127.0.0.1:9701;
+    }
+
+    server {
+        listen 127.0.0.1:9602;
+        limit_conn addr 2;
+        limit_conn_dry_run off;
+        proxy_pass 127.0.0.1:9701;
+    }
+}
+"#,
+        )
+        .expect("materialize stream limit_conn");
+        assert_eq!(config.stream_limit_conn_zones.len(), 1);
+        let zone = &config.stream_limit_conn_zones[0];
+        assert_eq!(zone.name, "addr");
+        assert_eq!(zone.key, "$binary_remote_addr");
+        assert!(zone.max_keys > 0);
+        // A server without rules inherits only the dry-run flag.
+        let inherited = config
+            .streams
+            .iter()
+            .find(|stream| stream.id.contains("9601"))
+            .expect("inheriting stream");
+        assert!(inherited.limit_conn.is_empty());
+        assert!(inherited.limit_conn_dry_run);
+        // A server declaration replaces the flag and adds the rules.
+        let own = config
+            .streams
+            .iter()
+            .find(|stream| stream.id.contains("9602"))
+            .expect("own rules stream");
+        assert_eq!(own.limit_conn.len(), 1);
+        assert_eq!(own.limit_conn[0].zone, "addr");
+        assert_eq!(own.limit_conn[0].max_connections, 2);
+        assert!(!own.limit_conn_dry_run);
+        // Fail-closed forms.
+        for (label, body, needle) in [
+            (
+                "undefined zone",
+                "stream { server { listen 127.0.0.1:9603; limit_conn missing 1; proxy_pass 127.0.0.1:9701; } }",
+                "undefined zone",
+            ),
+            (
+                "duplicate zone",
+                "stream { limit_conn_zone $remote_addr zone=addr:1m; limit_conn_zone $remote_addr zone=addr:1m; }",
+                "duplicate stream limit_conn_zone",
+            ),
+            (
+                "unsupported key",
+                "stream { limit_conn_zone $host zone=addr:1m; }",
+                "invalid stream limit_conn_zone",
+            ),
+            (
+                "zero connections",
+                "stream { limit_conn_zone $remote_addr zone=addr:1m; server { listen 127.0.0.1:9604; limit_conn addr 0; proxy_pass 127.0.0.1:9701; } }",
+                "invalid stream limit_conn",
+            ),
+        ] {
+            let error = materialize(body)
+                .err()
+                .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_stream_set_map_and_variable_return() {
+        let config = materialize(
+            r#"
+stream {
+    map $remote_addr $who {
+        default "other";
+        127.0.0.1 "loopback";
+    }
+    map $ssl_preread_server_name $backend {
+        default "none";
+        a.example "backend-a";
+    }
+
+    server {
+        listen 127.0.0.1:9611;
+        set $tag "tagged";
+        return $tag;
+    }
+
+    server {
+        listen 127.0.0.1:9612;
+        set $greeting "hello-$who";
+        return $greeting;
+    }
+
+    server {
+        listen 127.0.0.1:9613;
+        ssl_preread on;
+        return $backend;
+    }
+}
+"#,
+        )
+        .expect("materialize stream variables");
+        assert_eq!(config.stream_maps.len(), 2);
+        assert_eq!(config.stream_maps[0].source, "$remote_addr");
+        assert_eq!(config.stream_maps[1].source, "$ssl_preread_server_name");
+        let by_port = |port: &str| {
+            config
+                .streams
+                .iter()
+                .find(|stream| stream.id.contains(port))
+                .expect("stream listener")
+        };
+        let set_return = by_port("9611");
+        assert_eq!(set_return.set_variables.len(), 1);
+        assert_eq!(set_return.set_variables[0].name, "tag");
+        assert_eq!(set_return.return_value.as_deref(), Some("$tag"));
+        let map_return = by_port("9612");
+        assert_eq!(map_return.return_value.as_deref(), Some("$greeting"));
+        assert_eq!(map_return.set_variables[0].value, "hello-$who");
+        let preread = by_port("9613");
+        assert_eq!(preread.return_value.as_deref(), Some("$backend"));
+        // Fail-closed forms.
+        for (label, body, needle) in [
+            (
+                "unknown map source",
+                "stream { map $host $m { default \"x\"; } }",
+                "not known at accept/preread time",
+            ),
+            (
+                "unknown set variable reference",
+                "stream { server { listen 127.0.0.1:9614; set $x $missing; return 200; } }",
+                "does not know at accept/preread time",
+            ),
+            (
+                "unknown return variable",
+                "stream { server { listen 127.0.0.1:9615; return $nope; } }",
+                "does not know at accept/preread time",
+            ),
+            (
+                "map variable value",
+                "stream { map $remote_addr $m { default \"$host\"; } }",
+                "must be literal strings",
+            ),
+        ] {
+            let error = materialize(body)
+                .err()
+                .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_stream_preread_timeout_and_buffer() {
+        let config = materialize(
+            r#"
+stream {
+    preread_timeout 5s;
+    preread_buffer_size 8k;
+
+    server {
+        listen 127.0.0.1:9621;
+        ssl_preread on;
+        proxy_pass 127.0.0.1:9721;
+    }
+
+    server {
+        listen 127.0.0.1:9622;
+        ssl_preread on;
+        preread_timeout 2s;
+        preread_buffer_size 4k;
+        proxy_pass 127.0.0.1:9721;
+    }
+}
+"#,
+        )
+        .expect("materialize preread settings");
+        let by_port = |port: &str| {
+            config
+                .streams
+                .iter()
+                .find(|stream| stream.id.contains(port))
+                .expect("stream listener")
+        };
+        let inherited = by_port("9621");
+        assert_eq!(inherited.preread_timeout_ms, 5_000);
+        assert_eq!(inherited.preread_buffer_bytes, 8 * 1024);
+        let own = by_port("9622");
+        assert_eq!(own.preread_timeout_ms, 2_000);
+        assert_eq!(own.preread_buffer_bytes, 4 * 1024);
+        // The fixed defaults apply when nothing is declared.
+        let default_config =
+            materialize("stream { server { listen 127.0.0.1:9623; proxy_pass 127.0.0.1:9721; } }")
+                .expect("materialize defaults");
+        assert_eq!(default_config.streams[0].preread_timeout_ms, 30_000);
+        assert_eq!(default_config.streams[0].preread_buffer_bytes, 16 * 1024);
+        // Fail-closed forms: inbound PROXY protocol timing has no runtime path,
+        // and the buffer bound is enforced.
+        for (label, body, needle) in [
+            (
+                "proxy_protocol_timeout",
+                "stream { server { listen 127.0.0.1:9624; proxy_protocol_timeout 3s; proxy_pass 127.0.0.1:9721; } }",
+                "does not parse",
+            ),
+            (
+                "buffer too small",
+                "stream { preread_buffer_size 100; }",
+                "between 512 bytes and 1 MiB",
+            ),
+            (
+                "buffer too large",
+                "stream { preread_buffer_size 2m; }",
+                "between 512 bytes and 1 MiB",
+            ),
+        ] {
+            let error = materialize(body)
+                .err()
+                .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_static_ocsp_stapling_file() {
+        let directory = std::env::temp_dir().join(format!(
+            "sdkwork-nginx-stapling-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).expect("temp dir");
+        let ocsp_path = directory.join("ocsp.der");
+        // A minimal ASN.1 SEQUENCE: real OCSP parsing is the TLS stack's job;
+        // the runtime validates the DER envelope and serves the bytes verbatim.
+        std::fs::write(&ocsp_path, [0x30_u8, 0x03, 0x0a, 0x01, 0x00]).expect("write ocsp");
+        let certificate_path = directory.join("server.pem");
+        let key_path = directory.join("server.key");
+        std::fs::write(&certificate_path, "placeholder").expect("cert");
+        std::fs::write(&key_path, "placeholder").expect("key");
+        let config = materialize(&format!(
+            r#"
+server {{
+    listen 443 ssl;
+    server_name stapling.example.test;
+    ssl_certificate {};
+    ssl_certificate_key {};
+    ssl_stapling on;
+    ssl_stapling_file {};
+    location / {{ return 200 "ok"; }}
+}}
+"#,
+            certificate_path.display(),
+            key_path.display(),
+            ocsp_path.display()
+        ))
+        .expect("materialize stapling");
+        let certificate = config.certificates.first().expect("certificate");
+        let crate::config::CertificateSource::ProtectedFile {
+            ocsp_stapling_file, ..
+        } = &certificate.source;
+        assert_eq!(
+            ocsp_stapling_file.as_deref(),
+            Some(ocsp_path.to_string_lossy().as_ref())
+        );
+        // Fail-closed forms: a missing file and a non-DER payload are located
+        // configuration errors, and the http context is rejected with a
+        // pointer to the server block.
+        let invalid = directory.join("invalid.der");
+        std::fs::write(&invalid, b"not-der").expect("invalid");
+        for (label, body, needle) in [
+            (
+                "missing file",
+                "ssl_stapling_file /nonexistent/ocsp.der;".to_owned(),
+                "cannot be read",
+            ),
+            (
+                "not DER",
+                format!("ssl_stapling_file {};", invalid.display()),
+                "missing SEQUENCE tag",
+            ),
+        ] {
+            let error = materialize(&format!(
+                r#"
+server {{
+    listen 443 ssl;
+    server_name stapling.example.test;
+    ssl_certificate {};
+    ssl_certificate_key {};
+    {body}
+    location / {{ return 200 "ok"; }}
+}}
+"#,
+                certificate_path.display(),
+                key_path.display()
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+        let error = materialize(
+            r#"
+ssl_stapling_file /tmp/ocsp.der;
+server { listen 80; server_name stapling.example.test; location / { return 200 "ok"; } }
+"#,
+        )
+        .expect_err("http-level stapling must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("declare it in the `server` block"),
+            "{error}"
+        );
+        std::fs::remove_dir_all(&directory).ok();
     }
 
     #[test]
@@ -12731,17 +13385,13 @@ server { listen 80; server_name geo.example.test; location / { return 200 "ok"; 
             "server { listen 80; server_name x; location / { auth_basic_user_file; } }",
         ];
         for (index, case) in cases.iter().enumerate() {
-            let parsed = parse_nginx_config(case, Path::new("adversarial.conf"));
-            match parsed {
-                Ok(directives) => {
-                    // Materialization may fail; it must not panic.
-                    let _ = materialize_nginx_app(
-                        &directives,
-                        Path::new("/etc/nginx/sites-enabled"),
-                        "adversarial",
-                    );
-                }
-                Err(_) => {}
+            if let Ok(directives) = parse_nginx_config(case, Path::new("adversarial.conf")) {
+                // Materialization may fail; it must not panic.
+                let _ = materialize_nginx_app(
+                    &directives,
+                    Path::new("/etc/nginx/sites-enabled"),
+                    "adversarial",
+                );
             }
             let _ = index;
         }
@@ -12756,8 +13406,7 @@ server { listen 80; server_name geo.example.test; location / { return 200 "ok"; 
             "}".repeat(depth)
         );
         let error = parse_nginx_config(&text, Path::new("deep.conf"))
-            .err()
-            .expect("excessive nesting must fail closed");
+            .expect_err("excessive nesting must fail closed");
         assert!(error.to_string().contains("nesting exceeds"), "{error}");
         // Reasonable nesting still parses.
         let shallow = format!("{}server {{ }}{}", "http { ".repeat(64), "}".repeat(64));
@@ -12776,8 +13425,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("invalid client_max_body_size must fail closed");
+        .expect_err("invalid client_max_body_size must fail closed");
         assert!(
             error.to_string().contains("invalid client_max_body_size"),
             "{error}"
@@ -12795,8 +13443,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("unix proxy_pass must fail closed");
+        .expect_err("unix proxy_pass must fail closed");
         assert!(error.to_string().contains("unix:"), "{error}");
         let config = materialize(
             r#"
@@ -12891,8 +13538,7 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("an undeclared variable still fails closed");
+        .expect_err("an undeclared variable still fails closed");
         assert!(error.to_string().contains("not_declared"), "{error}");
     }
 
@@ -12961,27 +13607,22 @@ server {
 types { application/x-txt .txt; }
 server { listen 80; server_name ext.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(bad_extension)
-            .err()
-            .expect("leading dot extension must fail closed");
+        let error = materialize(bad_extension).expect_err("leading dot extension must fail closed");
         assert!(error.to_string().contains("invalid extension"), "{error}");
 
         let bad_mime = r#"
 types { notamimetype txt; }
 server { listen 80; server_name mime.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(bad_mime)
-            .err()
-            .expect("invalid mime must fail closed");
+        let error = materialize(bad_mime).expect_err("invalid mime must fail closed");
         assert!(error.to_string().contains("MIME type"), "{error}");
 
         let no_extension = r#"
 types { application/x-txt; }
 server { listen 80; server_name noext.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(no_extension)
-            .err()
-            .expect("types row without extension must fail closed");
+        let error =
+            materialize(no_extension).expect_err("types row without extension must fail closed");
         assert!(error.to_string().contains("file extension"), "{error}");
     }
 
@@ -13056,13 +13697,12 @@ server {
 }
 "#,
         )
-        .err()
-        .expect("unknown gzip_static mode must fail closed");
+        .expect_err("unknown gzip_static mode must fail closed");
         assert!(error.to_string().contains("gzip_static"), "{error}");
     }
 
     #[test]
-    fn stream_map_is_accepted_unenforced_while_http_map_executes() {
+    fn stream_map_executes_with_bounded_sources_and_no_diagnostic() {
         let text = r#"
 http {
     map $host $zone { default http-zone; }
@@ -13073,7 +13713,7 @@ http {
     }
 }
 stream {
-    map $host $stream_zone { default stream-zone; }
+    map $remote_addr $stream_zone { default stream-zone; }
     server {
         listen 5100;
         proxy_pass 127.0.0.1:15100;
@@ -13084,21 +13724,23 @@ stream {
             super::super::parser::parse_nginx_config(text, std::path::Path::new("site.conf"))
                 .expect("parse");
         let app = materialize_nginx_app(&parsed, std::path::Path::new("/etc/nginx"), "stream-map")
-            .expect("stream map is accepted-unenforced, not fail-closed");
-        assert_eq!(app.maps.len(), 1, "only the http map is executable");
+            .expect("both map planes are executable");
+        assert_eq!(app.maps.len(), 1, "the http map uses the HTTP map engine");
         assert_eq!(app.maps[0].result, "$zone");
+        assert_eq!(
+            app.stream_maps.len(),
+            1,
+            "the stream map uses the bounded stream variable engine"
+        );
+        assert_eq!(app.stream_maps[0].result, "$stream_zone");
 
         let diagnostics = ignored_directive_diagnostics(&parsed);
-        let map_diagnostics = diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.message.contains("`map`"))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            map_diagnostics.len(),
-            1,
-            "only the stream map is accepted-unenforced: {diagnostics:?}"
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("`map`")),
+            "an executed map must not carry an accepted-unenforced diagnostic: {diagnostics:?}"
         );
-        assert_eq!(map_diagnostics[0].path, "site.conf:11");
     }
 
     #[test]
@@ -13108,9 +13750,7 @@ map $host $zone { default a; }
 map $uri $zone { default b; }
 server { listen 80; server_name dup.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(duplicate)
-            .err()
-            .expect("duplicate map result must fail closed");
+        let error = materialize(duplicate).expect_err("duplicate map result must fail closed");
         assert!(
             error.to_string().contains("duplicate map result"),
             "{error}"
@@ -13120,18 +13760,15 @@ server { listen 80; server_name dup.example.com; location / { return 200 "ok"; }
 map $upstream_addr $zone { default a; }
 server { listen 80; server_name src.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(unsupported_source)
-            .err()
-            .expect("unsupported map source must fail closed");
+        let error =
+            materialize(unsupported_source).expect_err("unsupported map source must fail closed");
         assert!(error.to_string().contains("not supported"), "{error}");
 
         let volatile = r#"
 map $host $zone { volatile; default a; }
 server { listen 80; server_name vol.example.com; location / { return 200 "ok"; } }
 "#;
-        let error = materialize(volatile)
-            .err()
-            .expect("volatile map must fail closed");
+        let error = materialize(volatile).expect_err("volatile map must fail closed");
         assert!(error.to_string().contains("volatile"), "{error}");
 
         let conflicting_key = r#"
@@ -13139,8 +13776,7 @@ map $host $zone { a A; A B; }
 server { listen 80; server_name key.example.com; location / { return 200 "ok"; } }
 "#;
         let error = materialize(conflicting_key)
-            .err()
-            .expect("case-insensitively duplicate keys must fail closed");
+            .expect_err("case-insensitively duplicate keys must fail closed");
         assert!(error.to_string().contains("duplicate key"), "{error}");
     }
 

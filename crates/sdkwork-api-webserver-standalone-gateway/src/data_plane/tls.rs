@@ -100,6 +100,9 @@ pub(crate) fn compile_policy_tls_material(
             certificate_file,
             private_key_file,
             generation.app.certificate_chain_file(&certificate.id),
+            generation
+                .app
+                .certificate_ocsp_stapling_file(&certificate.id),
             &certificate.server_names,
             provider,
         ) {

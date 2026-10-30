@@ -43,7 +43,7 @@ fn materialize_ok(text: &str) -> WebServerAppConfig {
 /// Parse + materialize, expecting a fail-closed diagnostic containing
 /// `expected`.
 fn materialize_err(text: &str, expected: &str) {
-    let error = materialize(text).err().expect("must fail closed");
+    let error = materialize(text).expect_err("must fail closed");
     let message = error.to_string();
     assert!(
         message.contains(expected),
@@ -1665,8 +1665,7 @@ fn include_missing_and_cycle_fail_closed() {
     let mut budget = 16;
     let mut stack = Vec::new();
     let error = expand_includes(parsed, root.path(), &mut budget, &mut stack)
-        .err()
-        .expect("missing include must fail");
+        .expect_err("missing include must fail");
     assert!(error.to_string().contains("matches no files"), "{error}");
 
     std::fs::write(root.path().join("loop.conf"), "include loop.conf;\n").unwrap();
@@ -1678,8 +1677,7 @@ fn include_missing_and_cycle_fail_closed() {
     let mut budget = 16;
     let mut stack = Vec::new();
     let error = expand_includes(parsed, root.path(), &mut budget, &mut stack)
-        .err()
-        .expect("include cycle must fail");
+        .expect_err("include cycle must fail");
     assert!(error.to_string().contains("cycle"), "{error}");
 }
 
@@ -1721,8 +1719,8 @@ server {
     assert_eq!(file_report.app.virtual_hosts.len(), 1);
 
     let missing = load_nginx_compat(&root.path().join("absent"), "compat")
-        .err()
-        .expect("missing path must fail");
+        .map(|_| ())
+        .expect_err("missing path must fail");
     assert!(missing.to_string().contains("does not exist"), "{missing}");
 }
 

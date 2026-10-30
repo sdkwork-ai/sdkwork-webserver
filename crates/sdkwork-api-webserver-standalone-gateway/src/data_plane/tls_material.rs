@@ -158,6 +158,7 @@ pub(crate) fn load_certified_key(
     certificate_file: &Path,
     private_key_file: &Path,
     chain_file: Option<&Path>,
+    ocsp_stapling_file: Option<&Path>,
     declared_server_names: &[String],
     provider: &rustls::crypto::CryptoProvider,
 ) -> Result<LoadedCertifiedKey, DataPlaneError> {
@@ -208,14 +209,54 @@ pub(crate) fn load_certified_key(
         .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
     let private_key = parse_single_private_key(&private_key_pem)
         .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
-    let certified_key =
-        CertifiedKey::from_der(certificate_chain, private_key, provider).map_err(|source| {
+    let mut certified_key = CertifiedKey::from_der(certificate_chain, private_key, provider)
+        .map_err(|source| {
             tls_files_error(
                 certificate_file,
                 private_key_file,
                 io::Error::new(io::ErrorKind::InvalidData, source),
             )
         })?;
+    // nginx `ssl_stapling_file`: a static DER OCSP response served as the
+    // stapled response. The file is read once when TLS material is built; nginx
+    // refreshes it from disk, the runtime requires a config reload (documented
+    // limitation). rustls sends `CertifiedKey::ocsp` verbatim.
+    if let Some(ocsp_file) = ocsp_stapling_file {
+        let response = read_bounded_tls_material(ocsp_file)?;
+        if response.is_empty() {
+            return Err(tls_files_error(
+                ocsp_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "ssl_stapling_file contains no OCSP response",
+                ),
+            ));
+        }
+        if response.len() > 64 * 1024 {
+            return Err(tls_files_error(
+                ocsp_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "ssl_stapling_file exceeds the 64 KiB OCSP response bound",
+                ),
+            ));
+        }
+        // An OCSPResponse is an ASN.1 SEQUENCE; reject obvious non-DER files
+        // early instead of stapling arbitrary bytes.
+        if response[0] != 0x30 {
+            return Err(tls_files_error(
+                ocsp_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "ssl_stapling_file is not a DER OCSP response (missing SEQUENCE tag)",
+                ),
+            ));
+        }
+        certified_key.ocsp = Some(response);
+    }
     Ok(LoadedCertifiedKey {
         certified_key,
         leaf_fingerprint_sha256: evidence.fingerprint_sha256,
@@ -488,6 +529,7 @@ mod tests {
             &certificate_path,
             &private_key_path,
             Some(&chain_path),
+            None,
             &["chain.example.test".to_owned()],
             provider,
         )
@@ -503,6 +545,7 @@ mod tests {
             &certificate_path,
             &private_key_path,
             None,
+            None,
             &["chain.example.test".to_owned()],
             provider,
         )
@@ -515,6 +558,7 @@ mod tests {
             &certificate_path,
             &private_key_path,
             Some(&chain_path),
+            None,
             &["chain.example.test".to_owned()],
             provider,
         )

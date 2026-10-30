@@ -466,6 +466,18 @@ pub struct WebServerAppConfig {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub split_clients: Vec<SplitClientsConfig>,
+    /// nginx stream `map` blocks (evaluated against the variables the stream
+    /// plane knows at accept/preread time).
+    #[serde(rename = "streamMaps", default, skip_serializing_if = "Vec::is_empty")]
+    pub stream_maps: Vec<MapConfig>,
+    /// nginx **stream** `limit_conn_zone` declarations (the stream module owns
+    /// a separate zone table from the HTTP one).
+    #[serde(
+        rename = "streamLimitConnZones",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub stream_limit_conn_zones: Vec<LimitConnZoneConfig>,
     /// nginx http-level `types { <mime> <ext…>; }` table, in authored order.
     /// `None` keeps the runtime's built-in MIME table; `Some` (including an
     /// explicitly empty `types {}` block) *replaces* it for this application,
@@ -650,6 +662,18 @@ pub struct MapConfig {
     pub default: Option<String>,
     /// Authored key/value entries in declaration order.
     pub entries: Vec<MapEntryConfig>,
+}
+
+/// One nginx stream `set $variable value;` assignment. The value is a literal
+/// template over the stream variables known at accept/preread time
+/// (`$remote_addr`, `$remote_port`, `$server_addr`, `$server_port`,
+/// `$ssl_preread_server_name`, stream `map` results and earlier `set` values).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StreamSetVariableConfig {
+    /// Variable name without the `$`.
+    pub name: String,
+    pub value: String,
 }
 
 /// One entry of a nginx `geo` block: a CIDR/IP (or an `a-b` range with
@@ -1186,6 +1210,12 @@ pub enum CertificateSource {
         /// never silently dropped.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         chain_file: Option<String>,
+        /// Optional static OCSP response (nginx `ssl_stapling_file`, DER).
+        /// Served as the stapled response for this certificate; the file is
+        /// read once when the TLS material is built (nginx refreshes it, the
+        /// runtime requires a reload — a documented limitation).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ocsp_stapling_file: Option<String>,
     },
 }
 
@@ -1844,6 +1874,24 @@ pub struct StreamServerConfig {
     /// connection and close it instead of proxying.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_value: Option<String>,
+    /// nginx stream `limit_conn <zone> <n>` rules (checked at accept time;
+    /// a denied connection is closed silently, like nginx).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub limit_conn: Vec<LimitConnConfig>,
+    /// nginx stream `limit_conn_dry_run on`: count concurrent connections but
+    /// do not deny the over-limit ones.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub limit_conn_dry_run: bool,
+    /// nginx stream `set $variable value;` assignments, in authored order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set_variables: Vec<StreamSetVariableConfig>,
+    /// nginx stream `preread_timeout`: the deadline for reading the TLS
+    /// ClientHello during `ssl_preread on`.
+    #[serde(default = "default_stream_preread_timeout_ms")]
+    pub preread_timeout_ms: u64,
+    /// nginx stream `preread_buffer_size`: the ClientHello peek buffer bound.
+    #[serde(default = "default_stream_preread_buffer_bytes")]
+    pub preread_buffer_bytes: usize,
     /// Idle timeout on both directions of the proxied connection
     /// (`proxyTimeout`; nginx `proxy_timeout`).
     #[serde(default = "default_stream_proxy_timeout_ms")]
@@ -1880,6 +1928,14 @@ pub enum StreamTlsMode {
 
 fn default_stream_proxy_timeout_ms() -> u64 {
     60 * 1000
+}
+
+fn default_stream_preread_timeout_ms() -> u64 {
+    30 * 1000
+}
+
+fn default_stream_preread_buffer_bytes() -> usize {
+    16 * 1024
 }
 
 /// Stream proxy destination: a declared upstream (load-balanced, resolves its

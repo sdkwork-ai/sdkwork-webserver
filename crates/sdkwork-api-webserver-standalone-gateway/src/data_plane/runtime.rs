@@ -86,6 +86,8 @@ pub(crate) struct RuntimeGeneration {
     /// generation's zones and limits, instead of a table swapped mid-request.
     pub limit_req: LimitReqRuntime,
     pub limit_conn: LimitConnRuntime,
+    /// Stream `limit_conn_zone` counters (separate zone table from HTTP).
+    pub stream_limit_conn: LimitConnRuntime,
 }
 
 impl RuntimeGeneration {
@@ -140,6 +142,7 @@ impl RuntimeGeneration {
         });
         let limit_req = LimitReqRuntime::from_zones(&app.config().limit_req_zones);
         let limit_conn = LimitConnRuntime::from_zones(&app.config().limit_conn_zones);
+        let stream_limit_conn = LimitConnRuntime::from_zones(&app.config().stream_limit_conn_zones);
         Ok(Arc::new(Self {
             id,
             revision,
@@ -151,6 +154,7 @@ impl RuntimeGeneration {
             resolution_chain,
             limit_req,
             limit_conn,
+            stream_limit_conn,
         }))
     }
 

@@ -37,7 +37,6 @@ use super::{
 
 const STREAM_COPY_BUFFER_BYTES: usize = 16 * 1024;
 const STREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const STREAM_PREREAD_MAX_BYTES: usize = 16 * 1024;
 
 pub(crate) struct PreparedStreamListener {
     pub(crate) id: String,
@@ -53,9 +52,10 @@ pub(crate) struct PreparedStreamListener {
     /// Ordered nginx stream `allow`/`deny` rules (first match wins; an
     /// unmatched peer is allowed).
     access: Vec<AccessRuleConfig>,
-    /// nginx stream `return <value>`: the literal bytes written to the
-    /// connection before it is closed.
-    return_value: Option<String>,
+    /// nginx stream `preread_timeout` (ClientHello read deadline).
+    preread_timeout: Duration,
+    /// nginx stream `preread_buffer_size` (ClientHello peek buffer bound).
+    preread_buffer_bytes: usize,
 }
 
 pub(crate) async fn prepare_stream_listener(
@@ -110,7 +110,8 @@ pub(crate) async fn prepare_stream_listener(
         tls: config.tls.clone(),
         tls_acceptor,
         access: config.access.clone(),
-        return_value: config.return_value.clone(),
+        preread_timeout: Duration::from_millis(config.preread_timeout_ms),
+        preread_buffer_bytes: config.preread_buffer_bytes,
     })
 }
 
@@ -207,26 +208,53 @@ pub(crate) async fn serve_stream_listener(
                     drop(downstream);
                     continue;
                 }
-                if let Some(value) = &listener.return_value {
-                    // nginx stream `return`: write the literal value, then
-                    // close (differential-probed against nginx 1.29.6).
-                    let mut downstream = downstream;
-                    let write = timeout(
-                        Duration::from_secs(5),
-                        downstream.write_all(value.as_bytes()),
-                    )
-                    .await;
-                    if let Err(error) = write {
-                        tracing::debug!(
-                            stream_id = %listener.id,
-                            peer = %peer,
-                            error = %error,
-                            "stream return response write failed"
-                        );
+                // nginx stream `limit_conn` runs in the preread phase, after
+                // the access phase and before the content handler. The rules
+                // and dry-run flag come from the current generation so a
+                // reload applies per connection.
+                let limit_lease = {
+                    let generation = runtime.current();
+                    let rules = generation
+                        .app
+                        .streams()
+                        .iter()
+                        .find(|stream| stream.id == listener.id)
+                        .map(|stream| {
+                            (
+                                stream.limit_conn.clone(),
+                                stream.limit_conn_dry_run,
+                            )
+                        })
+                        .unwrap_or_default();
+                    if rules.0.is_empty() {
+                        None
+                    } else {
+                        match generation
+                            .stream_limit_conn
+                            .stream_admit(peer.ip(), &rules.0, rules.1)
+                        {
+                            Ok((lease, dry_run_reject)) => {
+                                if dry_run_reject {
+                                    tracing::info!(
+                                        stream_id = %listener.id,
+                                        peer = %peer,
+                                        "stream limit_conn dry run: connection would be rejected"
+                                    );
+                                }
+                                Some(lease)
+                            }
+                            Err(_) => {
+                                tracing::debug!(
+                                    stream_id = %listener.id,
+                                    peer = %peer,
+                                    "stream connection rejected by limit_conn"
+                                );
+                                drop(downstream);
+                                continue;
+                            }
+                        }
                     }
-                    let _ = downstream.shutdown().await;
-                    continue;
-                }
+                };
                 let permit = match Arc::clone(&runtime.connection_permits).try_acquire_owned() {
                     Ok(permit) => permit,
                     Err(_) => {
@@ -241,12 +269,18 @@ pub(crate) async fn serve_stream_listener(
                 };
                 let stream_id = listener.id.clone();
                 let runtime = Arc::clone(&runtime);
+                let limit_lease = limit_lease;
                 let round_robin = Arc::clone(&listener.round_robin);
                 let proxy_timeout = listener.proxy_timeout;
+                let preread_timeout = listener.preread_timeout;
+                let preread_buffer_bytes = listener.preread_buffer_bytes;
                 let proxy_protocol = listener.proxy_protocol;
                 let tls = listener.tls.clone();
                 let tls_acceptor = listener.tls_acceptor.clone();
                 tasks.spawn(async move {
+                    // Held for the whole connection: dropping it releases the
+                    // zone counters.
+                    let _limit_lease = limit_lease;
                     let result = serve_stream_connection(
                         runtime,
                         &stream_id,
@@ -258,6 +292,8 @@ pub(crate) async fn serve_stream_listener(
                         maximum_age,
                         tls.as_ref(),
                         tls_acceptor.as_ref(),
+                        preread_timeout,
+                        preread_buffer_bytes,
                     )
                     .await;
                     drop(permit);
@@ -300,6 +336,19 @@ pub(crate) async fn serve_stream_listener(
     Ok(())
 }
 
+/// Write one nginx stream `return` value and shut the connection down.
+async fn write_stream_response<S: tokio::io::AsyncWrite + Unpin>(
+    stream: &mut S,
+    text: &str,
+) -> Result<(), ()> {
+    let write = timeout(Duration::from_secs(5), stream.write_all(text.as_bytes())).await;
+    if write.is_err() {
+        tracing::debug!("stream return response write failed");
+    }
+    let _ = stream.shutdown().await;
+    Ok(())
+}
+
 async fn serve_stream_connection(
     runtime: Arc<DataPlaneRuntime>,
     stream_id: &str,
@@ -311,6 +360,8 @@ async fn serve_stream_connection(
     maximum_age: Duration,
     tls: Option<&StreamTlsMode>,
     tls_acceptor: Option<&TlsAcceptor>,
+    preread_timeout: Duration,
+    preread_buffer_bytes: usize,
 ) -> Result<(), ()> {
     let generation = runtime.current();
     let stream_config = generation
@@ -322,13 +373,38 @@ async fn serve_stream_connection(
         tracing::warn!(stream_id, peer = %peer, "stream target is no longer configured");
         return Err(());
     };
-    let Some(target) = stream_config.target.as_ref() else {
-        tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
-        return Err(());
+    // nginx stream `return <value>`: a content handler that writes the expanded
+    // value and closes the connection. Variables are resolved from the facts the
+    // plane knows at this point (`$ssl_preread_server_name` only after the
+    // ClientHello is read).
+    let return_template = stream_config.return_value.clone();
+    let local = downstream.local_addr().unwrap_or(peer);
+    let stream_return_text = |sni: Option<&str>| {
+        return_template.as_ref().map(|template| {
+            let variables = super::stream_variables::resolve_stream_variables(
+                generation.app.config(),
+                stream_config,
+                peer,
+                local,
+                sni,
+            );
+            super::stream_variables::expand_stream_value(&variables, template)
+        })
     };
+
+    let target = stream_config.target.as_ref();
 
     match tls {
         None => {
+            if let Some(text) = stream_return_text(None) {
+                let mut downstream = downstream;
+                let _ = write_stream_response(&mut downstream, &text).await;
+                return Ok(());
+            }
+            let Some(target) = target else {
+                tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
+                return Err(());
+            };
             let (upstream, authority, health) =
                 connect_upstream(&generation, target, peer, &round_robin).await?;
             if proxy_protocol {
@@ -357,12 +433,20 @@ async fn serve_stream_connection(
                 );
                 return Err(());
             };
-            let tls_downstream = match acceptor.accept(downstream).await {
+            let mut tls_downstream = match acceptor.accept(downstream).await {
                 Ok(stream) => stream,
                 Err(error) => {
                     tracing::warn!(stream_id, peer = %peer, error = %error, "stream TLS handshake failed");
                     return Err(());
                 }
+            };
+            if let Some(text) = stream_return_text(None) {
+                let _ = write_stream_response(&mut tls_downstream, &text).await;
+                return Ok(());
+            }
+            let Some(target) = target else {
+                tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
+                return Err(());
             };
             let (upstream, authority, health) =
                 connect_upstream(&generation, target, peer, &round_robin).await?;
@@ -389,7 +473,13 @@ async fn serve_stream_connection(
         }
         Some(StreamTlsMode::Preread) => {
             let local = downstream.local_addr().unwrap_or(peer);
-            let (downstream, preface, sni) = match preread_client_hello(downstream).await {
+            let (downstream, preface, sni) = match preread_client_hello(
+                downstream,
+                preread_timeout,
+                preread_buffer_bytes,
+            )
+            .await
+            {
                 Ok(peeked) => peeked,
                 Err(error) => {
                     tracing::warn!(stream_id, peer = %peer, error = %error, "stream ssl_preread failed");
@@ -399,6 +489,15 @@ async fn serve_stream_connection(
             if let Some(sni) = sni.as_deref() {
                 tracing::debug!(stream_id, peer = %peer, sni, "stream ssl_preread observed SNI");
             }
+            if let Some(text) = stream_return_text(sni.as_deref()) {
+                let mut downstream = downstream;
+                let _ = write_stream_response(&mut downstream, &text).await;
+                return Ok(());
+            }
+            let Some(target) = target else {
+                tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
+                return Err(());
+            };
             let (mut upstream, authority, health) =
                 connect_upstream(&generation, target, peer, &round_robin).await?;
             if proxy_protocol {
@@ -527,6 +626,9 @@ fn build_stream_tls_acceptor(
         certificate_file,
         private_key_file,
         generation.app.certificate_chain_file(&certificate.id),
+        generation
+            .app
+            .certificate_ocsp_stapling_file(&certificate.id),
         &certificate.server_names,
         provider,
     )
@@ -553,20 +655,20 @@ fn build_stream_tls_acceptor(
 /// Peek a TLS ClientHello, returning the buffered preface and optional SNI.
 async fn preread_client_hello(
     mut downstream: TcpStream,
+    preread_timeout: Duration,
+    maximum_bytes: usize,
 ) -> Result<(TcpStream, Vec<u8>, Option<String>), String> {
-    let mut buffer = vec![0_u8; STREAM_PREREAD_MAX_BYTES];
+    let maximum_bytes = maximum_bytes.max(512);
+    let mut buffer = vec![0_u8; maximum_bytes];
     let mut filled = 0_usize;
     loop {
-        if filled >= STREAM_PREREAD_MAX_BYTES {
+        if filled >= maximum_bytes {
             return Err("ClientHello exceeds stream ssl_preread buffer".to_owned());
         }
-        let read = timeout(
-            STREAM_CONNECT_TIMEOUT,
-            downstream.read(&mut buffer[filled..]),
-        )
-        .await
-        .map_err(|_| "ssl_preread idle timeout".to_owned())?
-        .map_err(|error| error.to_string())?;
+        let read = timeout(preread_timeout, downstream.read(&mut buffer[filled..]))
+            .await
+            .map_err(|_| "ssl_preread idle timeout".to_owned())?
+            .map_err(|error| error.to_string())?;
         if read == 0 {
             return Err("downstream closed before ClientHello".to_owned());
         }
@@ -581,7 +683,7 @@ async fn preread_client_hello(
         if filled >= 5 {
             let record_len = u16::from_be_bytes([buffer[3], buffer[4]]) as usize;
             let total = 5 + record_len;
-            if total > STREAM_PREREAD_MAX_BYTES {
+            if total > maximum_bytes {
                 return Err("TLS record exceeds stream ssl_preread buffer".to_owned());
             }
             if filled >= total {

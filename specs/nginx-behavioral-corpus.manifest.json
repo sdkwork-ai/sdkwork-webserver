@@ -98,7 +98,7 @@
       "listenPort": 21010,
       "cases": 39,
       "orchestrator": "tools/run-nginx-differential-host.mjs",
-      "notes": "PRD-nginx-compatibility \u00a75/\u00a76 virtual-host selection and bounded named-location internal redirects compared against a real nginx 1.29.6 binary: exact / leading wildcard (any depth, longest) / trailing wildcard (longest) / dot-prefix / regex (authored order, nginx case folding) precedence, default-server fallback, and try_files/error_page \u2192 @named targets (return, root, proxy_pass). The slice owns its oracle: tests/nginx/differential-host/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences (nginx's built-in 404 page body) are justified in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-host.mjs."
+      "notes": "PRD-nginx-compatibility §5/§6 virtual-host selection and bounded named-location internal redirects compared against a real nginx 1.29.6 binary: exact / leading wildcard (any depth, longest) / trailing wildcard (longest) / dot-prefix / regex (authored order, nginx case folding) precedence, default-server fallback, and try_files/error_page → @named targets (return, root, proxy_pass). The slice owns its oracle: tests/nginx/differential-host/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences (nginx's built-in 404 page body) are justified in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-host.mjs."
     },
     {
       "id": "differential-protocols",
@@ -111,6 +111,18 @@
       "cases": 39,
       "orchestrator": "tools/run-nginx-differential-protocols.mjs",
       "notes": "Wave 5 CGI-family + memcached slice, extended by Wave 6 gRPC: deterministic FastCGI/uWSGI/SCGI responders echo PARAMS/STDIN; compares parameter mapping (http-level fastcgi_param/uwsgi_param/scgi_param inheritance, automatic HTTP_* fields, HTTP_HOST rule, fastcgi_split_path_info/SCRIPT_NAME/PATH_INFO, fastcgi_index, uwsgi modifier1/modifier2/uwsgi_string), request-body framing, fastcgi_hide_header/fastcgi_pass_header variants, fastcgi_intercept_errors + error_page, and fastcgi_next_upstream failover against real nginx 1.29.6. Bounded nginx `set $memcached_key` support feeds memcached_pass: hit/HEAD/large-value byte-identical, miss 404, raw ERROR 502 and intercepted 502->error_page; generated nginx error-page bodies are status-only allowances for miss/raw-error/405. The Wave 6 gRPC cases (Rust HTTP/2 mock responder, plaintext h2c and verified TLS) compare: unary body+trailers byte-identical, trailers-only non-zero grpc-status rendering, body+trailing grpc-status/message, 3-message server streaming, grpc_set_header overrides plus client-header passthrough (mock echoes :path/:authority/:scheme), grpc_hide_header/grpc_pass_header, missing trailers, grpc_read_timeout 504, grpcs positive with a trusted CA and negative with an unrelated CA, grpc_next_upstream failover, unreachable upstream 502 and grpc_intercept_errors on an upstream HTTP error status; generated-error 504/502 bodies are status-only allowances."
+    },
+    {
+      "id": "differential-stream",
+      "req": "REQ-2026-0073",
+      "dir": "differential-stream",
+      "nginxConf": "nginx.conf",
+      "probe": "battery.py",
+      "oracle": "nginx-oracle.json",
+      "listenPort": 21292,
+      "cases": 9,
+      "orchestrator": "tools/run-nginx-differential-stream.mjs",
+      "notes": "Wave 4b stream slice: one connection battery drives the rendered fixture against real nginx 1.29.6 and the runtime, recording byte-level per-connection outcomes. Cases: the bounded stream variable engine (`set` literal value, `map` over an accept-time fact, and `map $ssl_preread_server_name` from a synthetic TLS ClientHello) feeding `return <value>`; pass-through proxying behind the ordered stream access phase (allow/deny, including a deny that closes silently without proxying), stream `return <value>` literal response, stream `limit_conn` (over-limit connection closed silently, slot released after the holder disconnects) and `limit_conn_dry_run` (over-limit connections counted but still proxied). FIN-vs-RST races on a server-closed connection are normalized to one `closed` outcome in battery.py; everything else is compared exactly. The slice owns its oracle (nginx-oracle.json) and its orchestrator; `cases` is the executed-case floor enforced by tools/run-nginx-differential-stream.mjs."
     }
   ]
 }

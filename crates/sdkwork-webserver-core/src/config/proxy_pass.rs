@@ -140,10 +140,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_variables() {
-        assert!(
-            validate_proxy_pass_template("http://$request_uri").is_err() == false
-                || validate_proxy_pass_template("http://$request_uri").is_ok()
-        );
+        assert!(validate_proxy_pass_template("http://$request_uri").is_ok());
         assert!(validate_proxy_pass_template("http://$remote_addr").is_err());
         assert!(validate_proxy_pass_template("http://$scheme").is_err());
         assert!(validate_proxy_pass_template("http://$").is_err());

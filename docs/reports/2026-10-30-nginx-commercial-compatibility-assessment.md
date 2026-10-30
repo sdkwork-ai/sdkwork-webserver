@@ -16,9 +16,9 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **195** | 可承诺 |
-| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **334** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
+| executable（真实执行且有测试证据） | 79 | **203** | 可承诺 |
+| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **170** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **307** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
 | excluded from profile（明确排除） | 229 | **64** | 仅 mail proxy 51 / GeoIP 8 / Perl 4 / 动态模块 1 |
 | **合计** | 744 | **744** | |
 
@@ -77,6 +77,16 @@
 | `empty_gif` | 规范 43 字节 1x1 GIF、image/gif、nginx 固定 Last-Modified、仅 GET/HEAD | 3 个 differential `empty-gif.*` |
 | `stub_status` | nginx 字段形状状态页（Active/accepts/handled/requests/Reading/Writing/Waiting），仅 location 上下文、loopback 门禁；计数为进程本地，差分对字段形状规范化比较 | 3 个 differential `stub-status.*` |
 
+### Wave 4b / 6-pre / 9-pre：stream 高级能力、OCSP 静态装订、邮件协议基底
+
+| 项 | 轮后行为 | 证据 |
+| --- | --- | --- |
+| stream `limit_conn`/`limit_conn_zone`/`limit_conn_dry_run` | 独立 stream zone 表、accept 阶段按 nginx 顺序检查、静默关闭、dry-run 只计数 | 新 differential-stream 9/9 |
+| stream 变量引擎 | `map`/`set`/变量 `return` 在 accept/preread 可知事实（含 `$ssl_preread_server_name`）上求值，其余失败关闭 | 同上（含 SNI map 用例） |
+| `preread_timeout`/`preread_buffer_size` | 按 listener 配置生效；`proxy_protocol_timeout` 因不解析入站 PROXY 头而精确失败关闭 | 集成测试 |
+| `ssl_stapling_file`（静态 OCSP） | 有界 DER 校验后经 rustls `CertifiedKey.ocsp` 装订，线级测试证明字节一致；动态获取/刷新/校验未实现（刷新需 reload） | `tls_ocsp_stapling` 1/1 |
+| 邮件协议基底 | POP3/IMAP/SMTP 状态机、SASL、STARTTLS 边界、dot-stuffing、XCLIENT/PROXY v1、前端转换表、后端中继助手（45 测试）；mail listener 接线为下一波 | crate 45 测试 |
+
 ### Wave 2b：代理响应头策略、internal、merge_slashes、请求头策略（8 条）
 
 | 指令 | 轮后行为 | 证据 |
@@ -102,6 +112,7 @@
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
 | 宽面 HTTP 差分（87→259 例） | `node tools/run-nginx-differential-http.mjs` | **259/259**，0 非预期 |
 | 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **39/39** 逐字节一致（13 个 gRPC 用例） |
+| stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **9/9**（limit_conn/dry-run/ACL/return/set/map/SNI） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |
@@ -168,9 +179,9 @@
 | autoindex 族 | 已实现（含 4 种格式）；`addition` 子请求过滤器待实现 | 低 | P3 |
 | gzip 细化（comp_level/disable/proxied） | Wave 3 | 低-中 | P3 |
 | HTTP/2 调优 | 已实现 streams 上限；obsolete 指令按 nginx 语义接受 no-op；buffer/table 运行时自持；`http2_chunk_size` 受 hyper/h2 限制失败关闭 | 低 | P3 |
-| stream 模块 | allow/deny 与 literal return 已实现；limit_conn、set/变量 return、preread 超时、proxy_protocol_timeout、stream map、上游 TLS 身份键仍缺（无 zone 状态/变量引擎/上游 TLS 客户端） | 中 | P2 |
+| stream 模块 | allow/deny、literal/变量 return、limit_conn/zone/dry-run、map/set、preread 超时/缓冲 已实现；上游 TLS 客户端、half-close、速率限制、请求/响应计数、重试预算、proxy_bind、pass/SNI 路由 仍缺 | 中 | P2 |
 | `map` 的复合源、stream map、按需惰性求值 | 有界子集已实现，其余失败关闭 | 低 | P3 |
-| OCSP stapling | 未实现，声明被诊断 | 低（LE 2025 停 OCSP；默认 off；rustls 仅 TLS1.2 式装订且无刷新任务） | 产品决策 |
+| OCSP stapling | **静态形式已实现**（`ssl_stapling_file` → rustls 装订，线级验证）；动态获取/刷新/校验未实现（需 reload 刷新），声明有精确诊断 | 低-中 | P3 |
 | RFC 8441（H2 WebSocket） | 未实现 | 低（浏览器 WS 仍以 H1 为主） | P3 |
 | 监听拓扑热切换 | 仅同拓扑热加载 | 中（改端口/bind/TLS 策略需滚动重启） | P2 |
 | 嵌套 location、`if`/`set`/`auth_request`/`limit_except` 等 | 失败关闭 | 中（复杂存量配置需改写） | P2/P3 |

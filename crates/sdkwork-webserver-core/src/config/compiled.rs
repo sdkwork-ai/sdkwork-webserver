@@ -32,6 +32,9 @@ pub struct CompiledWebServerApp {
     /// Resolved optional `chainFile` (nginx `ssl_trusted_certificate` /
     /// client-auth trust chain) per certificate id.
     certificate_chain_paths: HashMap<String, PathBuf>,
+    /// Resolved optional static OCSP response (`ssl_stapling_file`) per
+    /// certificate id.
+    certificate_ocsp_paths: HashMap<String, PathBuf>,
     upstream_tls_paths: HashMap<String, CompiledUpstreamTlsPaths>,
     /// Resolved `clientAuth.caCertificateFiles` per TLS policy (relative
     /// paths chrooted to the configuration directory).
@@ -147,11 +150,13 @@ impl CompiledWebServerApp {
 
         let mut certificate_paths = HashMap::new();
         let mut certificate_chain_paths = HashMap::new();
+        let mut certificate_ocsp_paths = HashMap::new();
         for (index, certificate) in config.certificates.iter().enumerate() {
             let CertificateSource::ProtectedFile {
                 certificate_file,
                 private_key_file,
                 chain_file,
+                ocsp_stapling_file,
             } = &certificate.source;
             if let Some(chain_file) = chain_file {
                 let chain_path = resolve_required_file(
@@ -160,6 +165,14 @@ impl CompiledWebServerApp {
                     &format!("/certificates/{index}/source/chainFile"),
                 )?;
                 certificate_chain_paths.insert(certificate.id.clone(), chain_path);
+            }
+            if let Some(ocsp_file) = ocsp_stapling_file {
+                let ocsp_path = resolve_required_file(
+                    &base_directory,
+                    ocsp_file,
+                    &format!("/certificates/{index}/source/ocspStaplingFile"),
+                )?;
+                certificate_ocsp_paths.insert(certificate.id.clone(), ocsp_path);
             }
             let certificate_path = resolve_required_file(
                 &base_directory,
@@ -386,6 +399,7 @@ impl CompiledWebServerApp {
             static_h5_roots,
             certificate_paths,
             certificate_chain_paths,
+            certificate_ocsp_paths,
             upstream_tls_paths,
             client_auth_ca_paths,
             stream_client_auth_ca_paths,
@@ -523,6 +537,14 @@ impl CompiledWebServerApp {
     /// chain for one certificate (downstream client-auth trust chain).
     pub fn certificate_chain_file(&self, certificate_id: &str) -> Option<&Path> {
         self.certificate_chain_paths
+            .get(certificate_id)
+            .map(PathBuf::as_path)
+    }
+
+    /// Resolved nginx `ssl_stapling_file` (static OCSP response) for one
+    /// certificate, if declared.
+    pub fn certificate_ocsp_stapling_file(&self, certificate_id: &str) -> Option<&Path> {
+        self.certificate_ocsp_paths
             .get(certificate_id)
             .map(PathBuf::as_path)
     }

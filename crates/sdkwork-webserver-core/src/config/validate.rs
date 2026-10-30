@@ -2144,6 +2144,78 @@ impl SemanticValidator {
         config: &WebServerAppConfig,
         upstreams: &HashMap<&str, &UpstreamConfig>,
     ) {
+        // The stream module owns a separate `limit_conn_zone` table; validate
+        // it before any server references it.
+        // Stream `map` blocks and `set`/`return` templates use the bounded
+        // accept/preread variable engine.
+        let mut stream_map_results: Vec<String> = Vec::new();
+        for (index, map) in config.stream_maps.iter().enumerate() {
+            let path = format!("/streamMaps/{index}");
+            let Some(source) = map.source.strip_prefix('$') else {
+                self.push(
+                    format!("{path}/source"),
+                    "stream map source must be a `$variable`",
+                );
+                continue;
+            };
+            if !crate::config::STREAM_MAP_SOURCES.contains(&source) {
+                self.push(
+                    format!("{path}/source"),
+                    format!("stream map source `${source}` is not known at accept/preread time"),
+                );
+            }
+            if !map.result.starts_with('$') {
+                self.push(
+                    format!("{path}/result"),
+                    "stream map result must be a `$variable`",
+                );
+                continue;
+            }
+            let result = map.result.trim_start_matches('$').to_owned();
+            if stream_map_results.iter().any(|name| name == &result) {
+                self.push(
+                    format!("{path}/result"),
+                    format!("duplicate stream map result `${result}`"),
+                );
+            }
+            if map.entries.iter().any(|entry| entry.value.contains('$'))
+                || map
+                    .default
+                    .as_deref()
+                    .is_some_and(|value| value.contains('$'))
+            {
+                self.push(
+                    &path,
+                    "stream map values must be literal strings; variable values are not supported",
+                );
+            }
+            if map.hostnames {
+                self.push(&path, "stream map `hostnames` is not supported");
+            }
+            stream_map_results.push(result);
+        }
+        let mut stream_zone_names: HashSet<&str> = HashSet::new();
+        for (index, zone) in config.stream_limit_conn_zones.iter().enumerate() {
+            let path = format!("/streamLimitConnZones/{index}");
+            if !stream_zone_names.insert(zone.name.as_str()) {
+                self.push(
+                    &path,
+                    format!("duplicate stream limit_conn_zone `{}`", zone.name),
+                );
+            }
+            if zone.key != "$binary_remote_addr" && zone.key != "$remote_addr" {
+                self.push(
+                    format!("{path}/key"),
+                    "stream limit_conn_zone supports $binary_remote_addr or $remote_addr",
+                );
+            }
+            if zone.max_keys == 0 {
+                self.push(
+                    format!("{path}/maxKeys"),
+                    "zone must track at least one key",
+                );
+            }
+        }
         let mut sockets = HashSet::new();
         for (index, stream) in config.streams.iter().enumerate() {
             let path = format!("/streams/{index}");
@@ -2164,6 +2236,56 @@ impl SemanticValidator {
                 format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port) == socket_key
             }) {
                 self.push(&path, "an http listener already owns this bind and port");
+            }
+            if !(1..=3_600_000).contains(&stream.preread_timeout_ms) {
+                self.push(
+                    format!("{path}/prereadTimeoutMs"),
+                    "stream preread_timeout must be between 1 ms and 1 hour",
+                );
+            }
+            if !(512..=1024 * 1024).contains(&stream.preread_buffer_bytes) {
+                self.push(
+                    format!("{path}/prereadBufferBytes"),
+                    "stream preread_buffer_size must be between 512 bytes and 1 MiB",
+                );
+            }
+            for (set_index, set) in stream.set_variables.iter().enumerate() {
+                let set_path = format!("{path}/setVariables/{set_index}");
+                let mut available = stream_map_results.clone();
+                for prior in &stream.set_variables[..set_index] {
+                    available.push(prior.name.clone());
+                }
+                if let Err(message) =
+                    crate::config::validate_stream_set(&set.name, &set.value, &available)
+                {
+                    self.push(&set_path, message);
+                }
+            }
+            if let Some(return_value) = &stream.return_value {
+                let mut available = stream_map_results.clone();
+                for set in &stream.set_variables {
+                    available.push(set.name.clone());
+                }
+                if let Err(message) =
+                    crate::config::validate_stream_return(return_value, &available)
+                {
+                    self.push(format!("{path}/returnValue"), message);
+                }
+            }
+            for (rule_index, rule) in stream.limit_conn.iter().enumerate() {
+                let rule_path = format!("{path}/limitConn/{rule_index}");
+                if !stream_zone_names.contains(rule.zone.as_str()) {
+                    self.push(
+                        &rule_path,
+                        format!("unknown stream limit_conn_zone `{}`", rule.zone),
+                    );
+                }
+                if rule.max_connections == 0 {
+                    self.push(
+                        format!("{rule_path}/maxConnections"),
+                        "must allow at least one connection",
+                    );
+                }
             }
             // nginx stream `return` servers answer without an upstream; every
             // other stream server needs exactly one target.

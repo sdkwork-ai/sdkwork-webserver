@@ -21,6 +21,7 @@ mod secure_link;
 mod server_name;
 mod server_toml;
 mod source;
+pub mod stream_variables;
 mod sub_filter;
 mod upstream_params;
 mod uri;
@@ -73,9 +74,9 @@ pub use model::{
     ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag, RewriteRuleConfig,
     RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode, SecurityHeadersConfig,
     SplitClientsConfig, SplitClientsPartConfig, StreamProtocol, StreamServerConfig,
-    StreamTargetConfig, StreamTlsMode, StrictTransportSecurityConfig, SubFilterConfig,
-    SubFilterRule, TlsCertificateResolution, TlsPolicyConfig, TlsVersion, TrustedProxyConfig,
-    TrustedProxyHeader, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
+    StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode, StrictTransportSecurityConfig,
+    SubFilterConfig, SubFilterRule, TlsCertificateResolution, TlsPolicyConfig, TlsVersion,
+    TrustedProxyConfig, TrustedProxyHeader, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
     UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar,
     UpstreamLoadBalancingStrategy, UpstreamParamConfig, UpstreamPassiveHealthConfig,
     UpstreamRetryCondition, UpstreamRetryConfig, UpstreamTargetConfig, UpstreamTlsConfig,
@@ -119,6 +120,11 @@ pub use source::{
     ConfigFormat, ConfigLoadOptions, ConfigSource, JsonConfigSource, LoadedWebServerConfig,
     NginxConfConfigSource, TomlConfigSource, WebServerConfigLoader, DEFAULT_APP_KEY,
     DEFAULT_TOML_PROFILE,
+};
+pub use stream_variables::{
+    evaluate_stream_sets, expand_stream_template, stream_template_variables,
+    validate_stream_return, validate_stream_set, StreamVariableFacts, STREAM_MAP_SOURCES,
+    STREAM_TEMPLATE_VARIABLES,
 };
 pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,

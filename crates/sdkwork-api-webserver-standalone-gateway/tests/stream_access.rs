@@ -202,6 +202,91 @@ async fn stream_allow_first_match_proxies_and_deny_first_match_closes() {
 }
 
 #[tokio::test]
+async fn stream_preread_timeout_closes_a_silent_connection() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let echo_port = free_port();
+    let upstream = spawn_echo_upstream(echo_port);
+    let listener_port = free_port();
+    let config = write_config(
+        directory.path(),
+        free_port(),
+        &[(
+            listener_port,
+            json!({
+                "tls": {"mode": "preread"},
+                "prereadTimeoutMs": 1000,
+                "target": {"type": "literal", "host": "127.0.0.1", "port": echo_port},
+            }),
+        )],
+    );
+    let (shutdown_tx, task) = spawn_data_plane(&config).await;
+
+    let mut socket = connect(listener_port).await;
+    // Send nothing: the ClientHello read must time out and close the stream.
+    let started = tokio::time::Instant::now();
+    let mut buffer = [0_u8; 8];
+    let closed = tokio::time::timeout(Duration::from_secs(6), socket.read(&mut buffer))
+        .await
+        .expect("preread_timeout must close the connection")
+        .expect("read");
+    let elapsed = started.elapsed();
+    assert_eq!(closed, 0, "a timed-out preread closes without data");
+    assert!(
+        elapsed >= Duration::from_millis(800),
+        "preread_timeout 1s closed too early: {elapsed:?}"
+    );
+    assert!(
+        elapsed <= Duration::from_secs(4),
+        "preread_timeout 1s closed too late: {elapsed:?}"
+    );
+
+    let _ = shutdown_tx.send(());
+    let _ = task.await;
+    upstream.abort();
+}
+
+#[tokio::test]
+async fn stream_preread_buffer_bound_rejects_an_oversized_record() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let echo_port = free_port();
+    let upstream = spawn_echo_upstream(echo_port);
+    let listener_port = free_port();
+    let config = write_config(
+        directory.path(),
+        free_port(),
+        &[(
+            listener_port,
+            json!({
+                "tls": {"mode": "preread"},
+                "prereadTimeoutMs": 5000,
+                "prereadBufferBytes": 512,
+                "target": {"type": "literal", "host": "127.0.0.1", "port": echo_port},
+            }),
+        )],
+    );
+    let (shutdown_tx, task) = spawn_data_plane(&config).await;
+
+    let mut socket = connect(listener_port).await;
+    // TLS handshake record header claiming a 60000-byte payload: larger than
+    // the configured 512-byte preread buffer, so the connection closes instead
+    // of buffering an unbounded ClientHello.
+    socket
+        .write_all(&[0x16, 0x03, 0x01, 0xEA, 0x60])
+        .await
+        .expect("write header");
+    let mut buffer = [0_u8; 8];
+    let closed = tokio::time::timeout(Duration::from_secs(4), socket.read(&mut buffer))
+        .await
+        .expect("oversized record must close the connection")
+        .expect("read");
+    assert_eq!(closed, 0);
+
+    let _ = shutdown_tx.send(());
+    let _ = task.await;
+    upstream.abort();
+}
+
+#[tokio::test]
 async fn stream_return_writes_the_literal_value_and_closes() {
     let directory = tempfile::tempdir().expect("temp dir");
     let echo_port = free_port();

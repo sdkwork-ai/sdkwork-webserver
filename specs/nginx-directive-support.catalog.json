@@ -12799,10 +12799,22 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "certificates[].source.ocspStaplingFile (server context; DER response fed to rustls CertifiedKey.ocsp)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/tls_ocsp_stapling.rs",
+          "case": "ssl_stapling_file_is_served_and_absent_without_it"
+        }
+      ],
+      "knownDifferences": [
+        "the response is read when TLS material is built and refreshed only by a reload (nginx refreshes on its own timer)",
+        "the runtime validates the DER envelope and serves the bytes verbatim; nginx additionally parses the response with OpenSSL at config load, so structural OCSP validation is a bounded difference"
+      ]
     },
     {
       "id": "http:ssl_stapling_responder",
@@ -16021,10 +16033,25 @@
         "stream-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].limitConn (zone name + concurrent connection count; stream zone table)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "limit_conn.enforce"
+        },
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "limit_conn.dry-run"
+        }
+      ],
+      "knownDifferences": [
+        "over-limit connections are closed silently like nginx; the zone table is bounded by the configured zone size"
+      ]
     },
     {
       "id": "stream:limit_conn_dry_run",
@@ -16036,10 +16063,19 @@
         "stream-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].limitConnDryRun",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "limit_conn.dry-run"
+        }
+      ]
     },
     {
       "id": "stream:limit_conn_log_level",
@@ -16070,10 +16106,22 @@
         "stream"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamLimiterZones[] (separate from the HTTP zone table)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "limit_conn.enforce"
+        },
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "limit_conn.dry-run"
+        }
+      ]
     },
     {
       "id": "stream:listen",
@@ -16127,11 +16175,22 @@
       "supportedContexts": [
         "stream"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "variable maps are not evaluated; every mapped variable resolves as missing",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `stream:map` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamMaps[] (bounded sources: $remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "map.return-remote-addr"
+        },
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "preread.map.return-sni"
+        }
+      ],
+      "knownDifferences": [
+        "unsupported stream sources fail closed; upstream selected by a variable, `if` and $proxy_protocol_* are not implemented"
+      ]
     },
     {
       "id": "stream:map_hash_bucket_size",
@@ -16208,10 +16267,19 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].prereadBufferBytes (bounded 512 B..1 MiB) feeding the ClientHello peek",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs",
+          "case": "stream_preread_buffer_bound_rejects_an_oversized_record"
+        }
+      ]
     },
     {
       "id": "stream:preread_timeout",
@@ -16223,10 +16291,19 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].prereadTimeoutMs feeding the preread deadline",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_access.rs",
+          "case": "stream_preread_timeout_closes_a_silent_connection"
+        }
+      ]
     },
     {
       "id": "stream:proxy_bind",
@@ -16962,10 +17039,18 @@
         "stream-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].setVariables (literal templates over stream facts + map results + earlier sets)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/battery.py",
+          "case": "set.return-literal"
+        }
+      ]
     },
     {
       "id": "stream:set_real_ip_from",

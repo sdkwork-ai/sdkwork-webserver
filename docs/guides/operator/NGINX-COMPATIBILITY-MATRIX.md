@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 195 |
-| accepted, NOT enforced | 171 |
-| rejected (fail closed) | 314 |
+| executable | 203 |
+| accepted, NOT enforced | 170 |
+| rejected (fail closed) | 307 |
 | excluded from profile | 64 |
 | **total** | **744** |
 
@@ -62,7 +62,6 @@ states what is lost and what to configure instead.
 | `ssl_stapling` | http, http-server | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | No enforced typed equivalent: typed TOML key `http.server.tls.stapling` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_stapling` (specs/nginx-gap.catalog.json). |
 | `ssl_stapling_verify` | http, http-server | OCSP stapling verification does not run | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ssl_stapling_verify` (specs/nginx-gap.catalog.json). |
 | `ssl_trusted_certificate` | http, http-server | the OCSP/verification trust chain is not used | Import renders the enforced typed key `http.certificates.chainFile`; verify it with `--write-toml`. |
-| `map` | stream | variable maps are not evaluated; every mapped variable resolves as missing | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:map` (specs/nginx-gap.catalog.json). |
 | `proxy_next_upstream` | stream, stream-server | the upstream retry condition list is not applied; the runtime uses its own retry policy | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_next_upstream` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_ciphers` | stream, stream-server | the upstream TLS cipher policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_ssl_ciphers` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_protocols` | stream, stream-server | the upstream TLS protocol window is not applied from nginx.conf (typed TOML owns upstream TLS) | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_ssl_protocols` (specs/nginx-gap.catalog.json). |
@@ -107,7 +106,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_scgi_module` (30) — `scgi_bind`, `scgi_buffer_size`, `scgi_buffers`, `scgi_busy_buffers_size`, `scgi_cache`, `scgi_cache_background_update`, `scgi_cache_bypass`, `scgi_cache_key`, `scgi_cache_lock`, `scgi_cache_lock_age`, `scgi_cache_lock_timeout`, `scgi_cache_max_range_offset`, `scgi_cache_methods`, `scgi_cache_min_uses`, `scgi_cache_path`, `scgi_cache_revalidate`, `scgi_cache_use_stale`, `scgi_cache_valid`, `scgi_force_ranges`, `scgi_ignore_client_abort`, `scgi_ignore_headers`, `scgi_limit_rate`, `scgi_max_temp_file_size`, `scgi_no_cache`, `scgi_pass_request_body`, `scgi_socket_keepalive`, `scgi_store`, `scgi_store_access`, `scgi_temp_file_write_size`, `scgi_temp_path`
 - `ngx_http_slice_filter_module` (1) — `slice`
 - `ngx_http_ssi_filter_module` (7) — `ssi`, `ssi_ignore_recycled_buffers`, `ssi_last_modified`, `ssi_min_file_chunk`, `ssi_silent_errors`, `ssi_types`, `ssi_value_length`
-- `ngx_http_ssl_module` (13) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
+- `ngx_http_ssl_module` (12) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_responder`
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
 - `ngx_http_upstream_zone_module` (1) — `zone`
 - `ngx_http_userid_filter_module` (9) — `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`
@@ -117,14 +116,12 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
 - `ngx_openssl_cache_module` (1) — `ssl_object_cache_inheritable`
 - `ngx_quic_bpf_module` (1) — `quic_bpf`
-- `ngx_stream_core_module` (4) — `preread_buffer_size`, `preread_timeout`, `proxy_protocol_timeout`, `server_name`
+- `ngx_stream_core_module` (2) — `proxy_protocol_timeout`, `server_name`
 - `ngx_stream_geo_module` (1) — `geo`
-- `ngx_stream_limit_conn_module` (3) — `limit_conn`, `limit_conn_dry_run`, `limit_conn_zone`
 - `ngx_stream_log_module` (1) — `open_log_file_cache`
 - `ngx_stream_pass_module` (1) — `pass`
 - `ngx_stream_proxy_module` (21) — `proxy_bind`, `proxy_download_rate`, `proxy_downstream_buffer`, `proxy_half_close`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_requests`, `proxy_responses`, `proxy_ssl`, `proxy_ssl_certificate`, `proxy_ssl_certificate_cache`, `proxy_ssl_certificate_key`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_ssl_server_name`, `proxy_ssl_trusted_certificate`, `proxy_ssl_verify`, `proxy_upload_rate`, `proxy_upstream_buffer`
 - `ngx_stream_realip_module` (1) — `set_real_ip_from`
-- `ngx_stream_set_module` (1) — `set`
 - `ngx_stream_split_clients_module` (1) — `split_clients`
 - `ngx_stream_ssl_module` (14) — `ssl_alpn`, `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_ech_file`, `ssl_handshake_timeout`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
 - `ngx_stream_upstream_zone_module` (1) — `zone`
@@ -983,7 +980,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `ssl_session_tickets` | flag | http, http-server | accepted, NOT enforced | TLS session ticket policy is not applied |
 | `ssl_session_timeout` | 1 | http, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
 | `ssl_stapling` | flag | http, http-server | accepted, NOT enforced | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) |
-| `ssl_stapling_file` | 1 | http, http-server | rejected (fail closed) |  |
+| `ssl_stapling_file` | 1 | http, http-server | executable | runtime: `certificates[].source.ocspStaplingFile (server context; DER response fed to rustls CertifiedKey.ocsp)`. the response is read when TLS material is built and refreshed only by a reload (nginx refreshes on its own timer); the runtime validates the DER envelope and serves the bytes verbatim; nginx additionally parses the response with OpenSSL at config load, so structural OCSP validation is a bounded difference |
 | `ssl_stapling_responder` | 1 | http, http-server | rejected (fail closed) |  |
 | `ssl_stapling_verify` | flag | http, http-server | accepted, NOT enforced | OCSP stapling verification does not run |
 | `ssl_trusted_certificate` | 1 | http, http-server | accepted, NOT enforced | the OCSP/verification trust chain is not used |
@@ -1296,8 +1293,8 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | --- | --- | --- | --- | --- |
 | `error_log` | 1+ | stream, stream-server | accepted, NOT enforced | the nginx log target/format is ignored; use SDKWork observability |
 | `listen` | 1+ | stream-server | executable | runtime: `streams[].bind/port/protocol` |
-| `preread_buffer_size` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `preread_timeout` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `preread_buffer_size` | 1 | stream, stream-server | executable | runtime: `streamServers[].prereadBufferBytes (bounded 512 B..1 MiB) feeding the ClientHello peek` |
+| `preread_timeout` | 1 | stream, stream-server | executable | runtime: `streamServers[].prereadTimeoutMs feeding the preread deadline` |
 | `proxy_protocol_timeout` | 1 | stream, stream-server | rejected (fail closed) |  |
 | `resolver` | 1+ | stream, stream-server, stream-upstream | accepted, NOT enforced | the nginx resolver configuration is not used; the runtime resolves hostnames itself |
 | `resolver_timeout` | 1 | stream, stream-server, stream-upstream | accepted, NOT enforced | the nginx resolver timeout is not applied |
@@ -1327,10 +1324,10 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `limit_conn` | 2 | stream, stream-server | rejected (fail closed) |  |
-| `limit_conn_dry_run` | flag | stream, stream-server | rejected (fail closed) |  |
+| `limit_conn` | 2 | stream, stream-server | executable | runtime: `streamServers[].limitConn (zone name + concurrent connection count; stream zone table)`. over-limit connections are closed silently like nginx; the zone table is bounded by the configured zone size |
+| `limit_conn_dry_run` | flag | stream, stream-server | executable | runtime: `streamServers[].limitConnDryRun` |
 | `limit_conn_log_level` | 1 | stream, stream-server | accepted, NOT enforced | the connection-limit log level is not configurable from nginx.conf |
-| `limit_conn_zone` | 2 | stream | rejected (fail closed) |  |
+| `limit_conn_zone` | 2 | stream | executable | runtime: `streamLimiterZones[] (separate from the HTTP zone table)` |
 
 #### `ngx_stream_log_module` (3 directives)
 
@@ -1344,7 +1341,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `map` | 2 | stream | accepted, NOT enforced | variable maps are not evaluated; every mapped variable resolves as missing |
+| `map` | 2 | stream | executable | runtime: `streamMaps[] (bounded sources: $remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name)`. unsupported stream sources fail closed; upstream selected by a variable, `if` and $proxy_protocol_* are not implemented |
 | `map_hash_bucket_size` | 1 | stream | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `map_hash_max_size` | 1 | stream | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 
@@ -1413,7 +1410,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `set` | 2 | stream-server | rejected (fail closed) |  |
+| `set` | 2 | stream-server | executable | runtime: `streamServers[].setVariables (literal templates over stream facts + map results + earlier sets)` |
 
 #### `ngx_stream_split_clients_module` (1 directives)
 
