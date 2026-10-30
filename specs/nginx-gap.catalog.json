@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Mail module end-to-end (Waves 9A/9B, 2026-10-30): the POP3/IMAP/SMTP mail proxy is in profile with 9/9 real-nginx mail differential (auth_http exchange, login/relay, AUTH failures, SMTP AUTH+XCLIENT, implicit TLS, STARTTLS). Catalog: 239 executable / 171 accepted-unenforced / 321 fail-closed / 13 excluded (perl 4, geoip 8, load_module 1). HTTP/3 remains excluded pending a QUIC/h3 listener plane; rustls-unsupported mail ssl_* knobs and client-certificate flows fail closed.",
     "Rewrite/variable engine wave (Wave 10, 2026-10-30): the REAL production nginx snapshot from api.birdcoder.com (nginx/1.28.0, 33 config files) now materializes cleanly (virtualHosts=41, listeners=4, resources=150, upstreams=88, skipped=0) through the new bounded rewrite/variable engine and a new aggregate-gate step tools/check-nginx-real-world.mjs. differential-http 259->265 (6 rewrite-engine cases, 265/265). Bounded gaps recorded: if-body proxy_pass/root/error_page fail closed; multiple matched if add_header approximated by last applied set; dynamic-proxy retries rebuild a static target (expanded path not preserved); per-route client_max_body_size on Content-Length only; regex SNI needs its own differential slice. Catalog: 212 executable / 170 accepted-unenforced / 298 fail-closed / 64 excluded.",
     "Mail listener plane (Wave 9A, 2026-10-30): mail config plane + nginx mail{} materialization + gateway mail listener with plaintext POP3/IMAP/SMTP dialog and PROXY v1 landed (10 integration tests, aggregate gate green). The nginx mail module remains out-of-profile until Wave 9B (auth_http, frontend/backend TLS, XCLIENT, relay, real-nginx differential). Also: a real production nginx snapshot (Ubuntu nginx/1.28.0, 3692-line resolved config, 30 files) was pulled from api.birdcoder.com for compatibility work; it fails materialization on server/location `set` and uses 75 `if` blocks, 324 `set` statements, 53 variable proxy_pass targets and variable root — the rewrite/variable engine wave is queued as the top compatibility priority.",
     "CGI transport wave (2026-10-30, REQ-2026-0073 wave 7A): *_bind, *_socket_keepalive, typed unixSocketRoot with confined unix targets and a bounded FastCGI keep_conn pool are executable; differential-protocols grew 39->46 and the aggregate gate now runs 5 slices. Catalog: 211 executable / 170 accepted-unenforced / 299 fail-closed / 64 excluded. Still open: gRPC bind/keepalive, hostname/transparent binds, uWSGI/SCGI/memcached reuse, TLS-over-unix (7B), nginx-plane unix targets (typed-only by design).",
@@ -575,14 +576,20 @@
     {
       "id": "mail.listener-plane",
       "group": "mail",
-      "status": "partial",
-      "summary": "mail listener plane (Wave 9A): top-level mail config (servers, listen, protocol pop3|imap|smtp, server_name, timeout, so_keepalive, proxy_protocol, bounded buffers), JSON schema/validation, typed TOML materialization, nginx mail{} context materialization, gateway mail listener driving the sdkwork-webserver-mail-protocol FrontendSession plaintext greeting/auth dialog with timeout/PROXY v1 and explicit no-auth_http behavior; auth_http, TLS (frontend implicit/STARTTLS, backend proxy_ssl), XCLIENT, backend relay and the real-nginx mail differential are Wave 9B. mail module still out-of-profile until 9B (REQ-2026-0073)"
+      "status": "implemented",
+      "summary": "mail module end-to-end (Waves 9A/9B): mail{} listeners (listen/protocol/server_name/timeout/so_keepalive/proxy_protocol), frontend implicit TLS and STARTTLS, nginx auth_http exchange (request/response headers, bounded WAIT retry, credential override), POP3/IMAP/SMTP frontend auth, backend connect + relay with half-close and idle timeout, SMTP XCLIENT, outbound PROXY v1, proxy_pass_error_message, bounded buffers/max_errors, backend TLS typed extension (always-verified default); real-nginx 1.29.6 differential 9/9. Fail-closed: rustls-unsupported ssl_* knobs, client-certificate verification/auth_http_pass_client_cert, custom capability lists, mail resolver/real_ip."
     },
     {
       "id": "rewrite.variable-engine",
       "group": "rewrite",
       "status": "implemented",
       "summary": "bounded nginx rewrite/variable engine (Wave 10): template grammar ($name, ${name}, $1..$9, $$, bounded 8 KiB), server/location set with nginx phase ordering (server phase before selection, location phase after, rewrite last/break reselect), server/location if with truthy/= /!=/~ /!~ /~* /!~* conditions and executable bodies (set/add_header/return/rewrite), regex captures from location/if matches, request-time variable proxy_pass resolving the expanded authority to declared upstreams (real LB/health/TLS) or SSRF-policed literals, and variable root/alias confined by typed [http] documentRootAllowlist; acceptance target the committed production snapshot tests/nginx/real-world/production-api-birdcoder (41 virtual hosts, 150 resources, 88 upstreams, 0 skipped) enforced by tools/check-nginx-real-world.mjs in the aggregate gate; differential-http 265/265 vs nginx 1.29.6 (REQ-2026-0073 wave 10)"
+    },
+    {
+      "id": "mail.auth-http",
+      "group": "mail",
+      "status": "implemented",
+      "summary": "nginx auth_http authentication service client for mail listeners: nginx-exact HTTP/1.0 request headers (Auth-Method/User/Pass/Protocol/Login-Attempt, Client-IP, SMTP Client-Host [UNAVAILABLE], inbound Proxy-Protocol-*, Auth-SSL facts, auth_http_header lines), response parser (Auth-Status/Server/Port/User/Pass/Wait/Error-Code), bounded WAIT retry and credential override; backend selection by Auth-Server/Auth-Port with bounded DNS (REQ-2026-0073 wave 9B)"
     }
   ]
 }

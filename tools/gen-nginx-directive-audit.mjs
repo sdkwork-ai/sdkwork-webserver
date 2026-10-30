@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '390afdbb';
+const AUDIT_HEAD = 'ff3ea103';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A) and the rewrite/variable-engine wave (wave 10) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10) and the mail waves (9A/9B) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -302,6 +302,40 @@ const COMPLETED_WAVES = [
     summary:
       'server/location `if` conditions (truthy, =, !=, ~, !~, ~*, !~*) over the bounded variable engine, with true bodies executing set/add_header/return/rewrite',
     ids: ['http:if'],
+  },
+  {
+    key: 'mail waves (9A/9B)',
+    summary:
+      'POP3/IMAP/SMTP mail proxy end-to-end (auth_http, login/relay, STARTTLS/implicit TLS) after the PRD section 4 mail-module amendment',
+    ids: [
+      'mail:auth_http',
+      'mail:auth_http_header',
+      'mail:auth_http_timeout',
+      'mail:imap_auth',
+      'mail:imap_client_buffer',
+      'mail:listen',
+      'mail:mail',
+      'mail:max_errors',
+      'mail:pop3_auth',
+      'mail:protocol',
+      'mail:proxy',
+      'mail:proxy_buffer',
+      'mail:proxy_pass_error_message',
+      'mail:proxy_protocol',
+      'mail:proxy_smtp_auth',
+      'mail:proxy_timeout',
+      'mail:server',
+      'mail:server_name',
+      'mail:smtp_auth',
+      'mail:smtp_client_buffer',
+      'mail:smtp_greeting_delay',
+      'mail:ssl_certificate',
+      'mail:ssl_certificate_key',
+      'mail:ssl_protocols',
+      'mail:starttls',
+      'mail:timeout',
+      'mail:xclient',
+    ],
   },
 ];
 
@@ -633,6 +667,42 @@ const REMAINING_GAP_CATEGORIES = [
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/memcached.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with buffer/socket/gzip-flag cases',
   },
+  {
+    key: 'mail-residual',
+    label: 'mail module residuals',
+    priority: 'medium',
+    ids: [
+      'mail:auth_http_pass_client_cert',
+      'mail:imap_capabilities',
+      'mail:pop3_capabilities',
+      'mail:resolver',
+      'mail:resolver_timeout',
+      'mail:set_real_ip_from',
+      'mail:smtp_capabilities',
+      'mail:ssl_certificate_compression',
+      'mail:ssl_ciphers',
+      'mail:ssl_client_certificate',
+      'mail:ssl_conf_command',
+      'mail:ssl_crl',
+      'mail:ssl_dhparam',
+      'mail:ssl_ecdh_curve',
+      'mail:ssl_password_file',
+      'mail:ssl_prefer_server_ciphers',
+      'mail:ssl_session_cache',
+      'mail:ssl_session_ticket_key',
+      'mail:ssl_session_tickets',
+      'mail:ssl_session_timeout',
+      'mail:ssl_trusted_certificate',
+      'mail:ssl_verify_client',
+      'mail:ssl_verify_depth',
+    ],
+    rejectedLoss:
+      'the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate.',
+    why: 'the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog.',
+    surface:
+      'crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands',
+  },
 
 ];
 
@@ -747,10 +817,6 @@ const OUT_OF_PROFILE_REASONS = [
   [
     /^ngx_stream_geoip_module$/,
     'GeoIP database lookup is excluded by PRD section 4 (OS/database-specific surface; MaxMind database dependency).',
-  ],
-  [
-    /^ngx_mail/,
-    'the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends.',
   ],
   [
     /^ngx_core_module$/,
@@ -1652,6 +1718,27 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the regex-header differential case asserts the same response/header outcome as nginx 1.29.6 for a `~` condition (with the known if-body proxy_pass/root/error_page bounded differences documented)',
   },
+  {
+    id: 'mail:auth_http',
+    evidence: 'tests/nginx/differential-mail/battery.py::pop3.login.relay',
+    claim: 'mail auth_http drives the POP3/IMAP/SMTP auth exchange against a backend',
+    proves:
+      'the 9-case differential-mail slice compares the client transcript, backend authentication sequence and every auth_http request header against real nginx 1.29.6 for login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS',
+  },
+  {
+    id: 'mail:proxy',
+    evidence: 'tests/nginx/differential-mail/battery.py::smtp.auth-xclient.relay',
+    claim: 'the mail proxy relays the client session to the backend after auth',
+    proves:
+      'the SMTP AUTH+XCLIENT case compares the relayed commands, XCLIENT client host and backend authentication sequence against nginx 1.29.6',
+  },
+  {
+    id: 'mail:starttls',
+    evidence: 'tests/nginx/differential-mail/battery.py::smtp_starttls',
+    claim: 'mail starttls upgrades the session without re-greeting and continues AUTH',
+    proves:
+      'the STARTTLS case compares greeting, EHLO capabilities, the 220 upgrade, decrypted application bytes and the post-upgrade AUTH exchange against nginx 1.29.6',
+  },
 ];
 
 /**
@@ -1943,8 +2030,8 @@ function renderHeader(inventory, catalog) {
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
-  stream/OCSP wave, the CGI-transport wave (wave 7A) and the rewrite/variable-engine
-  wave (wave 10).** The code, tests, generated operator matrix and the re-synced directive
+  stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
+  wave (wave 10) and the mail waves (9A/9B).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -1960,9 +2047,10 @@ function renderHeader(inventory, catalog) {
   retry, intercept and always-verified grpc_ssl_* forms), the stream/OCSP wave
   (stream limit_conn/map/set/preread tuning plus static ssl_stapling_file), the
   CGI-transport wave (IP-literal *_bind and *_socket_keepalive) and the
-  rewrite/variable-engine wave (\`if\` conditions over the bounded variable engine) are
-  recorded as completed in section 3, and every one of them is asserted executable by
-  \`--verify-evidence\`.
+  rewrite/variable-engine wave (\`if\` conditions over the bounded variable engine) and
+  the mail waves (POP3/IMAP/SMTP proxy end-to-end after the PRD section 4 mail-module
+  amendment) are recorded as completed in section 3, and every one of them is asserted
+  executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2067,7 +2155,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave and the rewrite/variable-engine wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave and the mail waves landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2102,7 +2190,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-rewrite/variable-engine-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-mail-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2176,7 +2264,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2197,7 +2285,9 @@ limit_conn/zone/dry_run, the bounded stream map/set variable engine, preread tim
 buffer sizing, and static OCSP stapling via ssl_stapling_file (rustls CertifiedKey.ocsp,
 wire-proven); the CGI-transport wave added IP-literal *_bind and *_socket_keepalive for
 the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance); and the
-rewrite/variable-engine wave made server/location \`if\` conditions executable.
+rewrite/variable-engine wave made server/location \`if\` conditions executable; and the
+mail waves brought the POP3/IMAP/SMTP mail proxy in profile (PRD section 4 amendment) with
+the 27 implemented mail-module directives executing end-to-end.
 
 ${completedTable}
 ${completedRows}
@@ -2214,6 +2304,15 @@ upstreams=88, skipped=0), enforced by the aggregate-gate step
 \`tools/check-nginx-real-world.mjs\`; the synthetic differential-http slice grew to
 265/265 against nginx 1.29.6 (6 rewrite-engine cases).
 
+Mail waves acceptance evidence: the new \`tests/nginx/differential-mail\` slice (9 cases,
+the sixth aggregate differential slice) compares the mail proxy against real nginx 1.29.6
+for POP3/IMAP/SMTP login and relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and
+STARTTLS, including the auth_http request headers and backend command transcripts. One
+scope caveat is explicit: frontend implicit/STARTTLS TLS executes, and backend TLS is a
+typed-plane extension (nginx mail has no proxy_ssl), proven by integration tests only -
+the audit does not claim nginx parity for backend TLS, and client-certificate verification
+is absent.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
@@ -2225,7 +2324,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the rewrite/variable-engine wave. An accepted-unenforced row is silently ignored today; a rejected row fails
+the mail waves (9A/9B). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2262,6 +2361,16 @@ static target (the expanded path is not preserved); per-route \`client_max_body_
 enforced on \`Content-Length\` only (chunked bodies are bounded by the app max); regex SNI
 selection still needs its own differential slice; and regexes are compiled per request
 (bounded compile budget).
+
+Mail waves residual note: the mail module is in profile and its implemented planes
+execute, but 23 mail directives remain backlog - rustls-unsupported ssl_* policy knobs
+(ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers,
+session cache/timeout/tickets/ticket_key, certificate_compression), client-certificate
+flows (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/
+auth_http_pass_client_cert), capability lists (smtp/imap/pop3_capabilities),
+resolver/resolver_timeout and set_real_ip_from. Client-certificate verification remains
+absent, and backend TLS stays a typed-plane extension rather than a claimed nginx parity
+surface.
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -2309,7 +2418,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave and the rewrite/variable-engine wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave and the mail waves**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2416,15 +2525,14 @@ feature below.
 
 ${excludedByModule.map(([module, count]) => `- \`${module}\` - ${count} directive(s)`).join('\n')}
 
-After the upstream-protocol wave, only the mail proxy, embedded Perl, GeoIP and dynamic
-module loading remain outside the declared profile. All four embedded application
-protocol modules moved **into** the profile and are audited in the ledger.
+Only embedded Perl, GeoIP and dynamic module loading remain outside the declared
+profile. The four embedded application protocol modules and (after the PRD section 4
+amendment) the mail proxy moved **into** the profile and are audited in the ledger.
 
 What implementing each remaining group would actually require:
 
 | Group | Directives | What full parity would require |
 | --- | ---: | --- |
-| Mail proxy (SMTP/IMAP/POP3 + auth) | ${outOfProfile.filter((row) => row.module.startsWith('ngx_mail')).length} | three protocol state machines, STARTTLS, auth backends (HTTP/IMAP/POP3), and a mail-specific security review. |
 | Perl | ${outOfProfile.filter((row) => row.module === 'ngx_http_perl_module').length} | an embedded Perl interpreter - executable configuration, explicitly excluded. |
 | GeoIP | ${outOfProfile.filter((row) => row.module.includes('geoip')).length} | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | ${outOfProfile.filter((row) => row.module === 'ngx_core_module').length} | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
@@ -2441,12 +2549,15 @@ keep_conn pool with the pooled-socket framing fix. The residual cache/buffer/sto
 unix/variable-target, hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library
 knobs are backlog rows, not profile exclusions.
 
-Mail-substrate note: a separate crate, \`crates/sdkwork-webserver-mail-protocol\`, has
-landed with POP3/IMAP/SMTP state machines and 45 tests, and the mail listener plane
-(wave 9A: config plane, nginx mail{} materialization, plaintext POP3/IMAP/SMTP dialog and
-PROXY v1) is behind it. The nginx mail **module** still stays out-of-profile / planned in
-this ledger: it needs auth_http, frontend/backend TLS, XCLIENT, relay and a real-nginx
-differential (wave 9B) before the mail module can be audited as executable.
+Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
+\`crates/sdkwork-webserver-mail-protocol\` crate (POP3/IMAP/SMTP state machines) and the
+mail listener plane (wave 9A: config plane, nginx mail{} materialization, plaintext
+dialog and PROXY v1) are now wired end-to-end (wave 9B): 27 mail-module directives are
+executable, proven by the new 9-case \`tests/nginx/differential-mail\` slice against real
+nginx 1.29.6 (the sixth aggregate differential slice). Two scope caveats stay explicit:
+backend TLS is a typed-plane extension (nginx mail has no proxy_ssl), so nginx parity is
+not claimed for it; client-certificate verification is absent and those flows remain
+fail-closed backlog (section 3.2 mail module residuals).
 
 ### 5.3 Fail-Closed Groups (${failClosed.length} directives, top modules)
 
@@ -2475,13 +2586,13 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 
 ### 5.5 Conclusion
 
-A "parity" target would still require: the mail proxy (three protocols), embedded Perl,
-GeoIP, a QUIC transport, embedded template/language filters, dynamic module loading, and
-the residual protocol/gRPC sub-families that are now backlog rather than profile
-exclusions. Five embedded application protocols (FastCGI/uWSGI/SCGI/memcached/gRPC) are
+A "parity" target would still require: embedded Perl, GeoIP, a QUIC transport, embedded
+template/language filters and dynamic module loading, plus the residual protocol/gRPC/
+mail sub-families that are now backlog rather than profile exclusions. Six application
+protocols (FastCGI/uWSGI/SCGI/memcached/gRPC and now the POP3/IMAP/SMTP mail proxy) are
 no longer in that excluded set: their implemented forms execute end-to-end on the Rust
-data plane against nginx 1.29.6, and the landed mail-protocol substrate (POP3/IMAP/SMTP,
-45 tests, not yet wired) is the next candidate to move. The coherent target remains the declared
+data plane against nginx 1.29.6 (mail backend TLS is a typed-plane extension, not a
+claimed nginx parity surface). The coherent target remains the declared
 \`${PROFILE}\` profile with the four PRD section 2 grades (parse, semantic, behavioral,
 operational), a generated directive catalog, and a versioned evidence revision. That is
 what this ledger audits.
@@ -2520,8 +2631,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the rewrite/variable-engine wave (wave 10) landed and
-the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the mail waves (9A/9B) landed and the Lead re-synced
+the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

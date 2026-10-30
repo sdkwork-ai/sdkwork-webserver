@@ -3251,6 +3251,21 @@
           "type": "boolean",
           "default": false
         },
+        "authHttp": {
+          "$ref": "#/$defs/mailAuthHttp"
+        },
+        "tls": {
+          "$ref": "#/$defs/mailTls"
+        },
+        "proxy": {
+          "$ref": "#/$defs/mailProxy"
+        },
+        "maxErrors": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 5
+        },
         "smtpClientBuffer": {
           "description": "nginx `smtp_client_buffer`: SMTP client command line bound.",
           "type": "integer",
@@ -3309,6 +3324,164 @@
           "minimum": 0,
           "maximum": 60000,
           "default": 0
+        }
+      }
+    },
+    "mailAuthHttp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx mail auth_http authentication service (bounded GET exchange).",
+      "required": [
+        "uri"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "host[:port][/path], with an optional http:// prefix (nginx auth_http grammar)."
+        },
+        "hostHeader": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000,
+          "default": 60000
+        },
+        "passClientCert": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "mailTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx mail frontend TLS (ssl_certificate/ssl_certificate_key/ssl_protocols) and STARTTLS mode.",
+      "required": [
+        "certificateFile",
+        "privateKeyFile"
+      ],
+      "properties": {
+        "certificateFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "privateKeyFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "protocols": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "TLSv1.2",
+              "TLSv1.3"
+            ]
+          }
+        },
+        "starttls": {
+          "enum": [
+            "off",
+            "on",
+            "only"
+          ],
+          "default": "off"
+        },
+        "implicit": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "mailProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx mail backend relay policy (proxy_*/xclient) plus the typed-plane backend TLS extension.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "xclient": {
+          "type": "boolean",
+          "default": true
+        },
+        "smtpAuth": {
+          "type": "boolean",
+          "default": false
+        },
+        "proxyProtocol": {
+          "type": "boolean",
+          "default": false
+        },
+        "passErrorMessage": {
+          "type": "boolean",
+          "default": false
+        },
+        "bufferBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 86400000
+        },
+        "tls": {
+          "$ref": "#/$defs/mailProxyTls"
+        }
+      }
+    },
+    "mailProxyTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "SDKWork typed-config extension: TLS for the mail backend leg (nginx has no proxy_ssl in the mail module).",
+      "properties": {
+        "verify": {
+          "type": "boolean",
+          "default": true
+        },
+        "trustedCertificateFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "certificateFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "certificateKeyFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "serverName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
         }
       }
     },

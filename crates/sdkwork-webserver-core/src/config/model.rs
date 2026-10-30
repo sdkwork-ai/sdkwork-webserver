@@ -2099,6 +2099,202 @@ pub struct MailServerConfig {
     /// nginx `smtp_greeting_delay`: delay before the SMTP `220` greeting.
     #[serde(default)]
     pub smtp_greeting_delay_ms: u64,
+    /// nginx `auth_http` authentication service (Wave 9B). Absent keeps the
+    /// Wave 9A behavior: the authorization attempt is answered with nginx's
+    /// auth-service-unavailable reply and the session closes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_http: Option<MailAuthHttpConfig>,
+    /// nginx mail frontend TLS (`ssl_certificate`, `ssl_certificate_key`,
+    /// `ssl_protocols`) and STARTTLS mode (Wave 9B). Absent means the listener
+    /// is plaintext with no STARTTLS, exactly like a nginx mail server with no
+    /// `ssl_*` directives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<MailTlsConfig>,
+    /// nginx mail backend relay policy (`proxy_*`, `xclient`, `proxy_protocol`,
+    /// `proxy_smtp_auth`) resolved for this listener (Wave 9B).
+    #[serde(default)]
+    pub proxy: MailProxyConfig,
+    /// nginx mail `max_errors` (default 5): the number of client protocol
+    /// errors tolerated before the session is closed.
+    #[serde(default = "default_mail_max_errors")]
+    pub max_errors: u32,
+}
+
+/// nginx mail `auth_http` authentication service (Wave 9B).
+///
+/// nginx issues a bounded `GET <uri> HTTP/1.0` request to this service for
+/// every authorization attempt, then uses the response `Auth-*` headers to
+/// decide the client reply and the backend target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailAuthHttpConfig {
+    /// `auth_http <host[:port][/path]>` (an optional `http://` prefix is
+    /// accepted, exactly like nginx).
+    pub uri: String,
+    /// `Host` header sent to the auth service (nginx defaults it to the
+    /// configured host).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_header: Option<String>,
+    /// `auth_http_header <name> <value>` entries, in declaration order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<String>,
+    /// `auth_http_timeout` (nginx default 60s).
+    #[serde(default = "default_mail_auth_http_timeout_ms")]
+    pub timeout_ms: u64,
+    /// `auth_http_pass_client_cert on`: forward the client certificate in the
+    /// exchange when the listener terminates TLS with client verification.
+    #[serde(default)]
+    pub pass_client_cert: bool,
+}
+
+impl MailAuthHttpConfig {
+    /// The bounded `host:port` peer and request target parsed from `uri`.
+    #[must_use]
+    pub fn endpoint(&self) -> Option<String> {
+        let uri = self
+            .uri
+            .strip_prefix("http://")
+            .unwrap_or(self.uri.as_str())
+            .trim();
+        let uri = uri.trim_end_matches('/');
+        if uri.is_empty() {
+            return None;
+        }
+        Some(uri.to_owned())
+    }
+}
+
+/// nginx mail frontend TLS material (Wave 9B).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailTlsConfig {
+    pub certificate_file: String,
+    pub private_key_file: String,
+    /// `ssl_protocols`: the TLS 1.2/1.3 window (the runtime never negotiates
+    /// older versions, matching the platform floor).
+    #[serde(default = "default_mail_tls_protocols")]
+    pub protocols: Vec<MailTlsProtocol>,
+    /// `starttls on|off|only` (nginx default off).
+    #[serde(default)]
+    pub starttls: MailStarttlsMode,
+    /// Listen with implicit TLS (`listen … ssl`).
+    #[serde(default)]
+    pub implicit: bool,
+}
+
+/// One allowed TLS protocol token from mail `ssl_protocols`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MailTlsProtocol {
+    #[serde(rename = "TLSv1.2")]
+    Tls12,
+    #[serde(rename = "TLSv1.3")]
+    Tls13,
+}
+
+/// nginx mail `starttls` mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MailStarttlsMode {
+    #[default]
+    Off,
+    On,
+    Only,
+}
+
+/// Resolved nginx mail backend relay policy (Wave 9B).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailProxyConfig {
+    /// nginx mail `proxy on|off`: accepted for compatibility (nginx 1.29.6
+    /// merges the flag but never reads it; the relay always runs).
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// nginx `xclient on|off`: send an `XCLIENT` line to the SMTP backend
+    /// (nginx default on).
+    #[serde(default = "default_true")]
+    pub xclient: bool,
+    /// nginx `proxy_smtp_auth on|off`: re-authenticate to the SMTP backend
+    /// instead of passing the XCLIENT LOGIN attribute.
+    #[serde(default)]
+    pub smtp_auth: bool,
+    /// nginx `proxy_protocol on|off`: send a PROXY protocol v1 header to the
+    /// backend before the backend greeting.
+    #[serde(default)]
+    pub proxy_protocol: bool,
+    /// nginx `proxy_pass_error_message on|off`: relay the backend's error
+    /// response to the client instead of the generic internal error.
+    #[serde(default)]
+    pub pass_error_message: bool,
+    /// nginx `proxy_buffer`: the backend response line buffer bound.
+    #[serde(default = "default_mail_proxy_buffer_bytes")]
+    pub buffer_bytes: usize,
+    /// nginx `proxy_timeout` (nginx default 24h).
+    #[serde(default = "default_mail_proxy_timeout_ms")]
+    pub timeout_ms: u64,
+    /// Typed-plane mail backend TLS (nginx has no `proxy_ssl` in the mail
+    /// module; this is the SDKWork typed-config extension). Absent keeps the
+    /// backend leg plaintext.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<MailProxyTlsConfig>,
+}
+
+impl Default for MailProxyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            xclient: true,
+            smtp_auth: false,
+            proxy_protocol: false,
+            pass_error_message: false,
+            buffer_bytes: default_mail_proxy_buffer_bytes(),
+            timeout_ms: default_mail_proxy_timeout_ms(),
+            tls: None,
+        }
+    }
+}
+
+/// SDKWork typed-config extension: TLS for the mail backend leg.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailProxyTlsConfig {
+    /// Verify the backend certificate chain (default on; the runtime is
+    /// stricter than nginx's HTTP `proxy_ssl_verify` default).
+    #[serde(default = "default_true")]
+    pub verify: bool,
+    /// PEM trust anchors for `verify on`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trusted_certificate_file: Option<String>,
+    /// Client certificate presented to the backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate_file: Option<String>,
+    /// Client private key paired with `certificate_file`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate_key_file: Option<String>,
+    /// SNI name sent to the backend (defaults to the auth service's
+    /// `Auth-Server` host when it is a name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+}
+
+/// Default `max_errors` (nginx `ngx_mail_core_module` merge: 5).
+fn default_mail_max_errors() -> u32 {
+    5
+}
+
+fn default_mail_auth_http_timeout_ms() -> u64 {
+    60 * 1000
+}
+
+fn default_mail_tls_protocols() -> Vec<MailTlsProtocol> {
+    vec![MailTlsProtocol::Tls12, MailTlsProtocol::Tls13]
+}
+
+fn default_mail_proxy_buffer_bytes() -> usize {
+    4096
+}
+
+fn default_mail_proxy_timeout_ms() -> u64 {
+    24 * 60 * 60 * 1000
 }
 
 impl MailServerConfig {

@@ -15,7 +15,7 @@ use std::path::Path;
 
 use sdkwork_webserver_core::config::{
     ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailServerProtocol,
-    ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
+    MailStarttlsMode, ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
     WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
@@ -2276,63 +2276,136 @@ mail {
     );
 }
 
-/// Wave 9B mail features fail closed with a located diagnostic naming that
-/// wave; they are never accepted and silently ignored.
+/// Wave 9B mail features materialize: `auth_http*`, frontend TLS/STARTTLS,
+/// the backend relay policy (`proxy_*`, `xclient`) and `max_errors` are
+/// inherited from the mail context into each server.
 #[test]
-fn mail_wave_9b_features_fail_closed_with_located_diagnostics() {
+fn mail_9b_features_materialize_with_context_inheritance() {
+    let config = materialize_ok(
+        r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    auth_http_timeout 3s;
+    auth_http_header X-Tenant acme;
+    ssl_certificate cert.pem;
+    ssl_certificate_key key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    xclient off;
+    proxy_buffer 8k;
+    proxy_timeout 30s;
+    max_errors 7;
+
+    server {
+        listen 127.0.0.1:2993 ssl;
+        protocol smtp;
+        starttls off;
+    }
+
+    server {
+        listen 127.0.0.1:2994;
+        protocol pop3;
+        starttls on;
+        proxy_protocol on;
+        proxy_smtp_auth on;
+        proxy_pass_error_message on;
+        max_errors 3;
+    }
+}
+"#,
+    );
+    assert_eq!(config.mail.servers.len(), 2);
+    let smtp = &config.mail.servers[0];
+    let auth = smtp.auth_http.as_ref().expect("inherited auth_http");
+    assert_eq!(auth.uri, "127.0.0.1:9000/auth");
+    assert_eq!(auth.timeout_ms, 3_000);
+    assert_eq!(auth.headers, vec!["X-Tenant: acme".to_owned()]);
+    let tls = smtp.tls.as_ref().expect("inherited mail TLS");
+    assert!(tls.implicit, "listen … ssl selects implicit TLS");
+    assert_eq!(tls.protocols.len(), 2);
+    assert!(smtp.proxy.enabled);
+    assert!(
+        !smtp.proxy.xclient,
+        "xclient off inherited from mail context"
+    );
+    assert_eq!(smtp.max_errors, 7);
+
+    let pop3 = &config.mail.servers[1];
+    let tls = pop3.tls.as_ref().expect("inherited mail TLS");
+    assert!(!tls.implicit);
+    assert_eq!(
+        tls.starttls,
+        MailStarttlsMode::On,
+        "server starttls overrides the inherited default"
+    );
+    assert!(pop3.proxy.proxy_protocol, "backend PROXY protocol");
+    assert!(pop3.proxy.smtp_auth);
+    assert!(pop3.proxy.pass_error_message);
+    assert_eq!(pop3.max_errors, 3);
+    assert!(!pop3.proxy.xclient, "xclient off is inherited");
+}
+
+/// Forms the rustls TLS stack and the bounded runtime cannot honour fail
+/// closed with a located diagnostic instead of being accepted and ignored.
+#[test]
+fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
     for (nginx, expected) in [
         (
-            "mail { auth_http 127.0.0.1:9000/auth; server { listen 127.0.0.1:2525; protocol pop3; } }",
-            "Wave 9B",
+            "mail { auth_http 127.0.0.1:9000/auth; server { listen 127.0.0.1:2993; protocol smtp; ssl_ciphers HIGH:!aNULL; } }",
+            "ssl_ciphers",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_conf_command Options PrioritizeChaCha; } }",
+            "ssl_conf_command",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_crl crl.pem; } }",
+            "ssl_crl",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_password_file pass.txt; } }",
+            "ssl_password_file",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_session_cache shared:SSL:10m; } }",
+            "ssl_session_cache",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver 127.0.0.1; } }",
+            "resolver",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; set_real_ip_from 127.0.0.1; } }",
+            "set_real_ip_from",
         ),
         (
             "mail { server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
-            "Wave 9B",
-        ),
-        (
-            "mail { server { listen 127.0.0.1:2993; protocol imap; ssl_certificate cert.pem; ssl_certificate_key key.pem; } }",
-            "Wave 9B",
+            "requires `ssl_certificate`",
         ),
         (
             "mail { server { listen 127.0.0.1:2993; protocol imap; starttls on; } }",
-            "Wave 9B",
+            "requires `ssl_certificate`",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol smtp; xclient on; } }",
-            "Wave 9B",
+            "mail { auth_http not a url; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "auth_http",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol smtp; proxy_timeout 30s; } }",
-            "Wave 9B",
+            "mail { auth_http 127.0.0.1:9000/auth; auth_http_pass_client_cert on; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "auth_http_pass_client_cert",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol pop3; pop3_auth apop; } }",
-            "Wave 9B",
+            "mail { max_errors 0; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "max_errors",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol imap; imap_capabilities IMAP4rev1 IDLE; } }",
-            "not part of Wave 9A",
+            "mail { proxy_buffer 1; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "proxy_buffer",
         ),
         (
-            "mail { server { listen 127.0.0.1; protocol imap; } }",
-            "explicit port",
-        ),
-        (
-            "mail { server { protocol imap; } }",
-            "requires listen",
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_protocols TLSv1.1; } }",
+            "ssl_protocols",
         ),
     ] {
         materialize_err(nginx, expected);
     }
-    // `pop3_auth login` is invalid nginx (LOGIN is implicit); the importer
-    // reports nginx's grammar instead of accepting a form nginx rejects.
-    materialize_err(
-        "mail { server { listen 127.0.0.1:2993; protocol pop3; pop3_auth login; } }",
-        "does not accept `login`",
-    );
-    // A second `mail {}` block is an nginx duplicate-context error.
-    materialize_err(
-        "mail { server { listen 127.0.0.1:2993; protocol imap; } } mail { server { listen 127.0.0.1:2994; protocol pop3; } }",
-        "multiple `mail` blocks",
-    );
 }

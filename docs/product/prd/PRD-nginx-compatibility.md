@@ -58,6 +58,7 @@ The conformance catalog, not this summary, is the machine-readable authority for
 | Routing | Exact, prefix, `^~`, case-sensitive regex, case-insensitive regex locations, named-location mapping where supported, `return`, and the supported `rewrite` subset. |
 | TLS | `ssl` listeners, certificate selection, protocols, policy-safe cipher mapping, session behavior, client certificate validation, OCSP policy, and SNI. |
 | Response behavior | Header transforms, error-page mapping, redirects, gzip, cache control, proxy cache subset, access control, connection limits, and rate limits. |
+| Mail proxy | `mail {}` listeners with `listen`, `protocol`, `server_name`, `timeout`, `so_keepalive`, inbound `proxy_protocol`, `starttls on|only`, `ssl_certificate`/`_key`/`ssl_protocols`, `auth_http` (+ headers/timeout), POP3/IMAP/SMTP `*_auth`, client buffers, `max_errors`, `xclient`, `proxy*` relay controls — with a real-nginx 1.29.6 differential (9/9 cases). rustls-unsupported `ssl_*` knobs (ciphers/CRL/session/ticket/dhparam/ecdh/prefer-server-ciphers/certificate-compression) and client-certificate/auth_http-pass-client-cert flows fail closed with located diagnostics. |
 | Operations | Config test, explain, source-mapped diagnostics, atomic reload, graceful drain, access/error logs, and revision status. |
 
 Every directive has a catalog entry containing allowed contexts, argument grammar, inheritance, normalized field, runtime support, renderer support, risk classification, diagnostics, comparison fixture, and known differences.
@@ -69,10 +70,10 @@ V1 excludes:
 - Arbitrary third-party or dynamically loaded Nginx modules.
 - OpenResty/Lua, Perl, njs, and embedded executable configuration.
 - Nginx Plus proprietary APIs, active health-check implementation details, key-value zones, and commercial-only features unless separately licensed and specified.
-- Mail proxy and HTTP/3 (QUIC). Generic TCP/UDP `stream` proxying is **in profile**: plaintext TCP relay, stream SSL termination, `ssl_preread` passthrough and UDP datagram forwarding execute on the Rust data plane and are cataloged as `stream.*` capabilities. Mail-protocol proxying remains excluded.
+- HTTP/3 (QUIC). Generic TCP/UDP `stream` proxying is **in profile**: plaintext TCP relay, stream SSL termination, `ssl_preread` passthrough and UDP datagram forwarding execute on the Rust data plane and are cataloged as `stream.*` capabilities. The POP3/IMAP/SMTP mail proxy is **in profile as of the mail-listener expansion** (Wave 9A/9B): plaintext and TLS listeners, STARTTLS, nginx `auth_http` authentication service, XCLIENT and backend relay execute end-to-end, proven by a 9-case real-nginx differential; the rustls-unsupported TLS knobs and client-certificate flows remain fail-closed. HTTP/3 (QUIC) remains excluded pending a QUIC/h3 listener plane.
 - OS-specific directives that cannot be reproduced safely and portably.
 - Arbitrary forward-proxy/`CONNECT` execution and executable embedded configuration.
-- Perl, `geoip`, and the nginx mail proxy modules.
+- Perl, `geoip`, and dynamically loaded third-party modules. (The nginx mail proxy modules are no longer excluded: see the mail-proxy row above; mail client-certificate verification and custom capability lists remain fail-closed.)
 - FastCGI, uWSGI, SCGI, `memcached` and gRPC are **in profile as of the upstream-protocol expansion**: the edge implements its own bounded protocol adapters: FastCGI/uWSGI/SCGI/memcached and gRPC are executable end-to-end with real-nginx differential evidence. They are not "embedded CGI" — no process is spawned; the edge is only a protocol client to a configured upstream, with SSRF policy, bounded bodies, timeouts and retry gates identical to HTTP proxying.
 - Arbitrary directives carried as opaque text into Rust activation.
 

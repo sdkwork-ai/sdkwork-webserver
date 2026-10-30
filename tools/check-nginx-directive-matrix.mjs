@@ -83,15 +83,6 @@ export const EXCLUDED_MODULES = new Set([
   'ngx_http_perl_module',
   'ngx_http_geoip_module',
   'ngx_stream_geoip_module',
-  'ngx_mail_module',
-  'ngx_mail_core_module',
-  'ngx_mail_proxy_module',
-  'ngx_mail_auth_http_module',
-  'ngx_mail_pop3_module',
-  'ngx_mail_imap_module',
-  'ngx_mail_smtp_module',
-  'ngx_mail_ssl_module',
-  'ngx_mail_realip_module',
 ]);
 
 /**
@@ -120,10 +111,12 @@ export const CONTEXT_FUNCTIONS = [
   { fn: 'materialize_upstream', context: 'http-upstream', also: 'stream-upstream' },
   { fn: 'materialize_stream_context', context: 'stream' },
   { fn: 'materialize_stream_server', context: 'stream-server' },
+  { fn: 'materialize_mail_context', context: 'mail' },
+  { fn: 'materialize_mail_server', context: 'mail-server' },
 ];
 
 /** Top-level (main) context directives accepted by `extract_http_context`. */
-export const MAIN_STRUCTURAL = new Set(['http', 'stream']);
+export const MAIN_STRUCTURAL = new Set(['http', 'stream', 'mail']);
 
 /**
  * Directives the parser executes before materialization instead of a
@@ -200,6 +193,33 @@ export const PARSER_EXECUTED = new Map([
   ['http:memcached_next_upstream_tries', 'mapping memcached settings pipeline'],
   ['http:memcached_next_upstream_timeout', 'mapping memcached settings pipeline'],
   ['http:set', 'mapping materialize_location bounded set arm'],
+  ['mail:mail', 'extract_mail_context mail block wrapper'],
+  ['mail:server', 'materialize_mail_context server blocks'],
+  ['mail:listen', 'mapping mail settings pipeline'],
+  ['mail:protocol', 'mapping mail settings pipeline'],
+  ['mail:server_name', 'mapping mail settings pipeline'],
+  ['mail:timeout', 'mapping mail settings pipeline'],
+  ['mail:auth_http', 'mapping mail settings pipeline'],
+  ['mail:auth_http_header', 'mapping mail settings pipeline'],
+  ['mail:auth_http_timeout', 'mapping mail settings pipeline'],
+  ['mail:starttls', 'mapping mail settings pipeline'],
+  ['mail:xclient', 'mapping mail settings pipeline'],
+  ['mail:proxy', 'mapping mail settings pipeline'],
+  ['mail:proxy_buffer', 'mapping mail settings pipeline'],
+  ['mail:proxy_timeout', 'mapping mail settings pipeline'],
+  ['mail:proxy_pass_error_message', 'mapping mail settings pipeline'],
+  ['mail:proxy_smtp_auth', 'mapping mail settings pipeline'],
+  ['mail:proxy_protocol', 'mapping mail settings pipeline'],
+  ['mail:max_errors', 'mapping mail settings pipeline'],
+  ['mail:smtp_auth', 'mapping mail settings pipeline'],
+  ['mail:smtp_greeting_delay', 'mapping mail settings pipeline'],
+  ['mail:smtp_client_buffer', 'mapping mail settings pipeline'],
+  ['mail:imap_auth', 'mapping mail settings pipeline'],
+  ['mail:imap_client_buffer', 'mapping mail settings pipeline'],
+  ['mail:pop3_auth', 'mapping mail settings pipeline'],
+  ['mail:ssl_certificate', 'mapping mail settings pipeline'],
+  ['mail:ssl_certificate_key', 'mapping mail settings pipeline'],
+  ['mail:ssl_protocols', 'mapping mail settings pipeline'],
   ['http:fastcgi_bind', 'mapping cgi settings transport fields'],
   ['http:fastcgi_socket_keepalive', 'mapping cgi settings transport fields'],
   ['http:uwsgi_bind', 'mapping cgi settings transport fields'],
@@ -604,7 +624,7 @@ export function recommendClassification(entry, implementation) {
   }
   const groupExcluded = EXCLUDED_MODULES.has(entry.name)
     || entry.modules?.some((module) => EXCLUDED_MODULES.has(module));
-  const nameExcluded = EXCLUDED_DIRECTIVE_NAMES.has(entry.name) || entry.group === 'mail';
+  const nameExcluded = EXCLUDED_DIRECTIVE_NAMES.has(entry.name);
   // `mapping.rs` accepts an entire `events {}` block through the
   // ACCEPTED_IGNORED catch-all and never descends into it, so every
   // events-context directive is accepted without being enforced.

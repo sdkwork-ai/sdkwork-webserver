@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `390afdbb` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A) and the rewrite/variable-engine wave (wave 10) (code plus the re-synced directive catalog), on top of HEAD 390afdbb |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `ff3ea103` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10) and the mail waves (9A/9B) (code plus the re-synced directive catalog), on top of HEAD ff3ea103 |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `cf134254597fed609184145f01fe6110f13dc17f11b0f1e2374d3a64d07a9c9b` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `3cc2737baa5318597e8ad84c034d8246977c9258946d7d93a758b1364f06ea23` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -26,10 +26,10 @@
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
-  stream/OCSP wave, the CGI-transport wave (wave 7A) and the rewrite/variable-engine
-  wave (wave 10).** The code, tests, generated operator matrix and the re-synced directive
+  stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
+  wave (wave 10) and the mail waves (9A/9B).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `390afdbb`; the audit is regenerated against that post-wave catalog (evidence
+  `ff3ea103`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
@@ -43,9 +43,10 @@
   retry, intercept and always-verified grpc_ssl_* forms), the stream/OCSP wave
   (stream limit_conn/map/set/preread tuning plus static ssl_stapling_file), the
   CGI-transport wave (IP-literal *_bind and *_socket_keepalive) and the
-  rewrite/variable-engine wave (`if` conditions over the bounded variable engine) are
-  recorded as completed in section 3, and every one of them is asserted executable by
-  `--verify-evidence`.
+  rewrite/variable-engine wave (`if` conditions over the bounded variable engine) and
+  the mail waves (POP3/IMAP/SMTP proxy end-to-end after the PRD section 4 mail-module
+  amendment) are recorded as completed in section 3, and every one of them is asserted
+  executable by `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` are generated/checked by
@@ -74,15 +75,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 212 | 28.5% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
-| `runtime-owned` | 143 | 19.2% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
+| `enforced` | 239 | 32.1% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `runtime-owned` | 144 | 19.4% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 164 | 22.0% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
-| `out-of-profile` | 64 | 8.6% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
+| `behavior-gap` | 187 | 25.1% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `out-of-profile` | 13 | 1.7% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
 | `fail-closed` | 144 | 19.4% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 212 + 143 + 17 + 164 + 64 + 144 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 239 + 144 + 17 + 187 + 13 + 144 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -94,11 +95,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 212 | 212 | 0 | 0 | 0 | 0 | 0 |
-| `accepted-unenforced` | 170 | 0 | 143 | 17 | 10 | 0 | 0 |
-| `unsupported-fail-closed` | 298 | 0 | 0 | 0 | 154 | 0 | 144 |
-| `excluded` | 64 | 0 | 0 | 0 | 0 | 64 | 0 |
-| **total** | **744** | 212 | 143 | 17 | 164 | 64 | 144 |
+| `executable` | 239 | 239 | 0 | 0 | 0 | 0 | 0 |
+| `accepted-unenforced` | 171 | 0 | 144 | 17 | 10 | 0 | 0 |
+| `unsupported-fail-closed` | 321 | 0 | 0 | 0 | 177 | 0 | 144 |
+| `excluded` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| **total** | **744** | 239 | 144 | 17 | 187 | 13 | 144 |
 
 ### 1.3 Wave Completion Status
 
@@ -116,8 +117,9 @@ wave-3 backlog entries that are currently rejected.
 | `stream/OCSP wave` | 8 | done - stream limit_conn/zone/dry_run, bounded stream map/set, preread timeout and buffer sizing, and static OCSP stapling (ssl_stapling_file) (catalog: executable) |
 | `wave 7A (CGI transport)` | 8 | done - IP-literal *_bind and *_socket_keepalive for the FastCGI/uWSGI/SCGI/memcached transports (http/server/location inheritance) (catalog: executable) |
 | `wave 10 (rewrite/variable engine)` | 1 | done - server/location `if` conditions (truthy, =, !=, ~, !~, ~*, !~*) over the bounded variable engine, with true bodies executing set/add_header/return/rewrite (catalog: executable) |
-| remaining backlog | 164 | open - 12 categories, see section 3.2 |
-| **total planned work** | **297** | 133 completed, 164 remaining |
+| `mail waves (9A/9B)` | 27 | done - POP3/IMAP/SMTP mail proxy end-to-end (auth_http, login/relay, STARTTLS/implicit TLS) after the PRD section 4 mail-module amendment (catalog: executable) |
+| remaining backlog | 187 | open - 13 categories, see section 3.2 |
+| **total planned work** | **347** | 160 completed, 187 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -130,23 +132,23 @@ them fails the gate.
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
 | `http` | 547 | 186 | 86 | 9 | 143 | 9 | 114 |
-| `mail` | 51 | 0 | 0 | 0 | 0 | 51 | 0 |
+| `mail` | 51 | 27 | 1 | 0 | 23 | 0 | 0 |
 | `stream` | 105 | 25 | 23 | 8 | 21 | 3 | 25 |
-| **total** | **744** | 212 | 143 | 17 | 164 | 64 | 144 |
+| **total** | **744** | 239 | 144 | 17 | 187 | 13 | 144 |
 
 ### 1.5 Headline Findings
 
-1. **212 of 744 directives (28.5%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave and the rewrite/variable-engine wave landed 133 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
-2. **164 behavior-gap directives remain in the remaining backlog** (22.0% of the surface): HTTP/1 framing policy (1), re-entrant subrequest engine (7), module-sized functional modules (17), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP dynamic fetch / refresh / verification (6), stream advanced gaps (18), gRPC residual forms (9), FastCGI residual forms (30), uWSGI residual forms (42), SCGI residual forms (28), memcached residual forms (2).
-3. **208 of 744 directives (28.0%) are excluded or rejected, not silently emulated.** 64 are explicit PRD section 4 profile exclusions and 144 are fail-closed rejections outside the planned backlog.
+1. **239 of 744 directives (32.1%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave and the mail waves landed 160 directives. 144 more are deliberately runtime-owned (19.4%) and 17 are intentional, spec-justified security differences.
+2. **187 behavior-gap directives remain in the remaining backlog** (25.1% of the surface): HTTP/1 framing policy (1), re-entrant subrequest engine (7), module-sized functional modules (17), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP dynamic fetch / refresh / verification (6), stream advanced gaps (18), gRPC residual forms (9), FastCGI residual forms (30), uWSGI residual forms (42), SCGI residual forms (28), memcached residual forms (2), mail module residuals (23).
+3. **157 of 744 directives (21.1%) are excluded or rejected, not silently emulated.** 13 are explicit PRD section 4 profile exclusions and 144 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
    all 11 "enforced typed key" migration actions now
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-rewrite/variable-engine-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-mail-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -1134,97 +1136,97 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `auth_http` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `auth_http_header` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `auth_http_pass_client_cert` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `auth_http_timeout` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `auth_http` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].authHttp (endpoint/uri/headers/timeout)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `auth_http_header` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].authHttp.headers`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `auth_http_pass_client_cert` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `auth_http_timeout` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].authHttp.timeoutMs`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_core_module` (9 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `error_log` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `listen` | mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `max_errors` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `protocol` | mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `resolver` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `resolver_timeout` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `server` | mail | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `server_name` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `timeout` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `error_log` | mail, mail-server | accepted-unenforced | **runtime-owned** | runtime-owned: `mail:error_log` is accepted for compatibility but the runtime uses its own logging configuration; the value has no effect. |
+| `listen` | mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].listen`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `max_errors` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].maxErrors`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `protocol` | mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].protocol`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `resolver` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `resolver_timeout` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `server` | mail | executable | **enforced** | enforced: the value reaches `mail server blocks (listen/protocol/server_name/timeout/tls)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `server_name` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].serverName`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `timeout` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].timeoutMs`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_imap_module` (3 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `imap_auth` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `imap_capabilities` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `imap_client_buffer` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `imap_auth` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].imapAuth`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `imap_capabilities` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `imap_client_buffer` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].imapClientBufferBytes`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `mail` | main | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `mail` | main | executable | **enforced** | enforced: the value reaches `main-context mail{} block wrapper`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_pop3_module` (2 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `pop3_auth` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `pop3_capabilities` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `pop3_auth` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].pop3Auth`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `pop3_capabilities` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_mail_proxy_module` (7 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `proxy` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `proxy_buffer` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `proxy_pass_error_message` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `proxy_protocol` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `proxy_smtp_auth` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `proxy_timeout` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `xclient` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `proxy` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].proxy (accepted like nginx, read-only flag)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `proxy_buffer` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].proxyBufferBytes`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `proxy_pass_error_message` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].proxyPassErrorMessage`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `proxy_protocol` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].proxyProtocol (outbound v1 to backend)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `proxy_smtp_auth` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].proxySmtpAuth`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `proxy_timeout` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].proxyTimeoutMs`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `xclient` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].xclient`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_realip_module` (1 directive)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `set_real_ip_from` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `set_real_ip_from` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 
 #### `ngx_mail_smtp_module` (4 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `smtp_auth` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `smtp_capabilities` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `smtp_client_buffer` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `smtp_greeting_delay` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `smtp_auth` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].smtpAuth`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `smtp_capabilities` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `smtp_client_buffer` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].smtpClientBufferBytes`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `smtp_greeting_delay` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].smtpGreetingDelayMs`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_ssl_module` (20 directives)
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `ssl_certificate` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_certificate_compression` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_certificate_key` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_ciphers` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_client_certificate` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_conf_command` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_crl` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_dhparam` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_ecdh_curve` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_password_file` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_prefer_server_ciphers` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_protocols` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_session_cache` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_session_ticket_key` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_session_tickets` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_session_timeout` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_trusted_certificate` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_verify_client` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `ssl_verify_depth` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
-| `starttls` | mail, mail-server | excluded | **out-of-profile** | out-of-profile: the mail proxy (SMTP/IMAP/POP3 plus auth backends) is excluded by PRD section 4; it would need protocol state machines and mail auth backends. |
+| `ssl_certificate` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.certificateFile`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `ssl_certificate_compression` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_certificate_key` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.certificateKeyFile`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `ssl_ciphers` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_client_certificate` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_conf_command` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_crl` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_dhparam` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_ecdh_curve` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_password_file` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_prefer_server_ciphers` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_protocols` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.protocols`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
+| `ssl_session_cache` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_session_ticket_key` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_session_tickets` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_session_timeout` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_trusted_certificate` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_verify_client` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_verify_depth` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail module residuals): currently rejected at load; the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `starttls` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].starttls (on\|only\|off)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 ### Stream (`stream`) - 105 directives
 
@@ -1440,7 +1442,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 ## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B)
 
 The catalog now classifies every directive below as `executable` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -1461,7 +1463,9 @@ limit_conn/zone/dry_run, the bounded stream map/set variable engine, preread tim
 buffer sizing, and static OCSP stapling via ssl_stapling_file (rustls CertifiedKey.ocsp,
 wire-proven); the CGI-transport wave added IP-literal *_bind and *_socket_keepalive for
 the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance); and the
-rewrite/variable-engine wave made server/location `if` conditions executable.
+rewrite/variable-engine wave made server/location `if` conditions executable; and the
+mail waves brought the POP3/IMAP/SMTP mail proxy in profile (PRD section 4 amendment) with
+the 27 implemented mail-module directives executing end-to-end.
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1598,6 +1602,33 @@ rewrite/variable-engine wave made server/location `if` conditions executable.
 | `wave 7A (CGI transport)` | `memcached_bind` (`http:memcached_bind`) | `resources[].bindAddress / socketKeepalive (memcached_bind on the CGI-family transport)` | `tests/nginx/differential-protocols/battery.py::bind` |
 | `wave 7A (CGI transport)` | `memcached_socket_keepalive` (`http:memcached_socket_keepalive`) | `resources[].bindAddress / socketKeepalive (memcached_socket_keepalive on the CGI-family transport)` | `tests/nginx/differential-protocols/battery.py::bind` |
 | `wave 10 (rewrite/variable engine)` | `if` (`http:if`) | `server/location rewrite phase 'if' conditions (truthy, =, !=, ~, !~, ~*, !~*) feeding the bounded variable engine; true bodies execute set/add_header/return/rewrite` | `tests/nginx/differential-http/battery.py::rewrite.if-truthy-header` |
+| `mail waves (9A/9B)` | `auth_http` (`mail:auth_http`) | `mailServers[].authHttp (endpoint/uri/headers/timeout)` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `auth_http_header` (`mail:auth_http_header`) | `mailServers[].authHttp.headers` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `auth_http_timeout` (`mail:auth_http_timeout`) | `mailServers[].authHttp.timeoutMs` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `imap_auth` (`mail:imap_auth`) | `mailServers[].imapAuth` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `imap_client_buffer` (`mail:imap_client_buffer`) | `mailServers[].imapClientBufferBytes` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `listen` (`mail:listen`) | `mailServers[].listen` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `mail` (`mail:mail`) | `main-context mail{} block wrapper` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `max_errors` (`mail:max_errors`) | `mailServers[].maxErrors` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `pop3_auth` (`mail:pop3_auth`) | `mailServers[].pop3Auth` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `protocol` (`mail:protocol`) | `mailServers[].protocol` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `proxy` (`mail:proxy`) | `mailServers[].proxy (accepted like nginx, read-only flag)` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `proxy_buffer` (`mail:proxy_buffer`) | `mailServers[].proxyBufferBytes` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `proxy_pass_error_message` (`mail:proxy_pass_error_message`) | `mailServers[].proxyPassErrorMessage` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `proxy_protocol` (`mail:proxy_protocol`) | `mailServers[].proxyProtocol (outbound v1 to backend)` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `proxy_smtp_auth` (`mail:proxy_smtp_auth`) | `mailServers[].proxySmtpAuth` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `proxy_timeout` (`mail:proxy_timeout`) | `mailServers[].proxyTimeoutMs` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `server` (`mail:server`) | `mail server blocks (listen/protocol/server_name/timeout/tls)` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `server_name` (`mail:server_name`) | `mailServers[].serverName` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `smtp_auth` (`mail:smtp_auth`) | `mailServers[].smtpAuth` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `smtp_client_buffer` (`mail:smtp_client_buffer`) | `mailServers[].smtpClientBufferBytes` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `smtp_greeting_delay` (`mail:smtp_greeting_delay`) | `mailServers[].smtpGreetingDelayMs` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `ssl_certificate` (`mail:ssl_certificate`) | `mailServers[].tls.certificateFile` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `ssl_certificate_key` (`mail:ssl_certificate_key`) | `mailServers[].tls.certificateKeyFile` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `ssl_protocols` (`mail:ssl_protocols`) | `mailServers[].tls.protocols` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `starttls` (`mail:starttls`) | `mailServers[].starttls (on\|only\|off)` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `timeout` (`mail:timeout`) | `mailServers[].timeoutMs` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
+| `mail waves (9A/9B)` | `xclient` (`mail:xclient`) | `mailServers[].xclient` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` |
 
 Wave 10 also landed engine capabilities that are not directive rows but are part of the
 claim: a bounded template grammar (`$name`, `${name}`, `$1..$9`), server/location `set`
@@ -1611,15 +1642,24 @@ upstreams=88, skipped=0), enforced by the aggregate-gate step
 `tools/check-nginx-real-world.mjs`; the synthetic differential-http slice grew to
 265/265 against nginx 1.29.6 (6 rewrite-engine cases).
 
+Mail waves acceptance evidence: the new `tests/nginx/differential-mail` slice (9 cases,
+the sixth aggregate differential slice) compares the mail proxy against real nginx 1.29.6
+for POP3/IMAP/SMTP login and relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and
+STARTTLS, including the auth_http request headers and backend command transcripts. One
+scope caveat is explicit: frontend implicit/STARTTLS TLS executes, and backend TLS is a
+typed-plane extension (nginx mail has no proxy_ssl), proven by integration tests only -
+the audit does not claim nginx parity for backend TLS, and client-certificate verification
+is absent.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (164 directives)
+### 3.2 Remaining Behavior-Gap Backlog (187 directives)
 
 These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
-the rewrite/variable-engine wave. An accepted-unenforced row is silently ignored today; a rejected row fails
+the mail waves (9A/9B). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1848,6 +1888,34 @@ have to change, and the tests to add.
 | `memcached_buffer_size` | low | unsupported-fail-closed | a stock nginx.conf that uses this memcached sub-family fails to activate. | the implemented memcached request/response and transport forms (IP-literal bind, SO_KEEPALIVE) now execute end-to-end; the residual buffer/socket-pool, gzip-flag and connection-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/memcached.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with buffer/socket/gzip-flag cases |
 | `memcached_gzip_flag` | low | unsupported-fail-closed | a stock nginx.conf that uses this memcached sub-family fails to activate. | the implemented memcached request/response and transport forms (IP-literal bind, SO_KEEPALIVE) now execute end-to-end; the residual buffer/socket-pool, gzip-flag and connection-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/memcached.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with buffer/socket/gzip-flag cases |
 
+### 3.2.13 mail module residuals - 23 directive(s)
+
+| Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
+| --- | --- | --- | --- | --- | --- | --- |
+| `auth_http_pass_client_cert` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `imap_capabilities` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `pop3_capabilities` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `resolver` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `resolver_timeout` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `set_real_ip_from` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `smtp_capabilities` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_certificate_compression` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_ciphers` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_client_certificate` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_conf_command` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_crl` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_dhparam` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_ecdh_curve` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_password_file` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_prefer_server_ciphers` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_session_cache` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_session_ticket_key` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_session_tickets` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_session_timeout` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_trusted_certificate` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_verify_client` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+| `ssl_verify_depth` | medium | unsupported-fail-closed | the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-cert/capability form fails to activate. | the mail module is now in profile and the implemented POP3/IMAP/SMTP planes execute end-to-end against nginx 1.29.6; the residual rustls-unsupported ssl_* policy knobs, client-certificate verification flows, capability lists, resolver/real-IP forms and auth_http client-cert pass-through are unimplemented backlog. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with client-certificate, capability-list, resolver and STARTTLS-policy cases once rustls/backend support lands |
+
 ### 3.3 Backlog Sequencing Note
 
 Within the backlog, the largest surface is still the residual sub-families of the four
@@ -1880,6 +1948,16 @@ enforced on `Content-Length` only (chunked bodies are bounded by the app max); r
 selection still needs its own differential slice; and regexes are compiled per request
 (bounded compile budget).
 
+Mail waves residual note: the mail module is in profile and its implemented planes
+execute, but 23 mail directives remain backlog - rustls-unsupported ssl_* policy knobs
+(ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers,
+session cache/timeout/tickets/ticket_key, certificate_compression), client-certificate
+flows (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/
+auth_http_pass_client_cert), capability lists (smtp/imap/pop3_capabilities),
+resolver/resolver_timeout and set_real_ip_from. Client-certificate verification remains
+absent, and backend TLS stays a typed-plane extension rather than a claimed nginx parity
+surface.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and `gzip_comp_level` (the
@@ -1889,9 +1967,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 87 `executable` directive rows was drawn,
+- A sample of 90 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave and the rewrite/variable-engine wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave and the mail waves**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1900,7 +1978,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (87 directive rows)
+### 4.2 Verified Sample (90 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -1991,6 +2069,9 @@ compression layer owns the level).
 | `http:memcached_bind` | `memcached_bind pins the outbound memcached transport to the configured IP literal` | `tests/nginx/differential-protocols/battery.py::bind` | the memcached binder differential case compares the peer address observed by the mock responder against nginx 1.29.6 | verified |
 | `http:if` | `'if' executes a truthy-header condition and runs the true-body directives` | `tests/nginx/differential-http/battery.py::rewrite.if-truthy-header` | real-nginx differential cases compare the truthy, false and regex header conditions; a true body executes set/add_header/return/rewrite while a false body does not run | verified |
 | `http:if` | `'if' supports regex conditions and captures over the bounded variable engine` | `tests/nginx/differential-http/battery.py::rewrite.if-regex-header` | the regex-header differential case asserts the same response/header outcome as nginx 1.29.6 for a `~` condition (with the known if-body proxy_pass/root/error_page bounded differences documented) | verified |
+| `mail:auth_http` | `mail auth_http drives the POP3/IMAP/SMTP auth exchange against a backend` | `tests/nginx/differential-mail/battery.py::pop3.login.relay` | the 9-case differential-mail slice compares the client transcript, backend authentication sequence and every auth_http request header against real nginx 1.29.6 for login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS | verified |
+| `mail:proxy` | `the mail proxy relays the client session to the backend after auth` | `tests/nginx/differential-mail/battery.py::smtp.auth-xclient.relay` | the SMTP AUTH+XCLIENT case compares the relayed commands, XCLIENT client host and backend authentication sequence against nginx 1.29.6 | verified |
+| `mail:starttls` | `mail starttls upgrades the session without re-greeting and continues AUTH` | `tests/nginx/differential-mail/battery.py::smtp_starttls` | the STARTTLS case compares greeting, EHLO capabilities, the 220 upgrade, decrypted application bytes and the post-upgrade AUTH exchange against nginx 1.29.6 | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -2036,7 +2117,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-212 executable rows cite only the generic
+239 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -2047,7 +2128,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (212 <=> 212). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (239 <=> 239). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -2055,44 +2136,34 @@ Consistent: `executable` <=> `enforced` in both directions (212 <=> 212). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 212 | 28.5% |
+| `enforced` (actually nginx-compatible behavior) | 239 | 32.1% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 164 | 22.0% |
-| `runtime-owned` (deliberately not nginx value) | 143 | 19.2% |
-| `out-of-profile` (PRD section 4 exclusion) | 64 | 8.6% |
+| `behavior-gap` (planned toward compatibility) | 187 | 25.1% |
+| `runtime-owned` (deliberately not nginx value) | 144 | 19.4% |
+| `out-of-profile` (PRD section 4 exclusion) | 13 | 1.7% |
 | `fail-closed` (rejected, not planned) | 144 | 19.4% |
 
-351 of 744 directives (47.2%) are
+301 of 744 directives (40.5%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 212 executed directives plus the 164 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 239 executed directives plus the 187 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
-### 5.2 Out-Of-Profile Groups (64 directives)
+### 5.2 Out-Of-Profile Groups (13 directives)
 
 - `ngx_core_module` - 1 directive(s)
 - `ngx_http_geoip_module` - 5 directive(s)
 - `ngx_http_perl_module` - 4 directive(s)
-- `ngx_mail_auth_http_module` - 4 directive(s)
-- `ngx_mail_core_module` - 9 directive(s)
-- `ngx_mail_imap_module` - 3 directive(s)
-- `ngx_mail_module` - 1 directive(s)
-- `ngx_mail_pop3_module` - 2 directive(s)
-- `ngx_mail_proxy_module` - 7 directive(s)
-- `ngx_mail_realip_module` - 1 directive(s)
-- `ngx_mail_smtp_module` - 4 directive(s)
-- `ngx_mail_ssl_module` - 20 directive(s)
 - `ngx_stream_geoip_module` - 3 directive(s)
 
-After the upstream-protocol wave, only the mail proxy, embedded Perl, GeoIP and dynamic
-module loading remain outside the declared profile. All four embedded application
-protocol modules moved **into** the profile and are audited in the ledger.
+Only embedded Perl, GeoIP and dynamic module loading remain outside the declared
+profile. The four embedded application protocol modules and (after the PRD section 4
+amendment) the mail proxy moved **into** the profile and are audited in the ledger.
 
 What implementing each remaining group would actually require:
 
 | Group | Directives | What full parity would require |
 | --- | ---: | --- |
-| Mail proxy (SMTP/IMAP/POP3 + auth) | 51 | three protocol state machines, STARTTLS, auth backends (HTTP/IMAP/POP3), and a mail-specific security review. |
 | Perl | 4 | an embedded Perl interpreter - executable configuration, explicitly excluded. |
 | GeoIP | 8 | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | 1 | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
@@ -2109,12 +2180,15 @@ keep_conn pool with the pooled-socket framing fix. The residual cache/buffer/sto
 unix/variable-target, hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library
 knobs are backlog rows, not profile exclusions.
 
-Mail-substrate note: a separate crate, `crates/sdkwork-webserver-mail-protocol`, has
-landed with POP3/IMAP/SMTP state machines and 45 tests, and the mail listener plane
-(wave 9A: config plane, nginx mail{} materialization, plaintext POP3/IMAP/SMTP dialog and
-PROXY v1) is behind it. The nginx mail **module** still stays out-of-profile / planned in
-this ledger: it needs auth_http, frontend/backend TLS, XCLIENT, relay and a real-nginx
-differential (wave 9B) before the mail module can be audited as executable.
+Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
+`crates/sdkwork-webserver-mail-protocol` crate (POP3/IMAP/SMTP state machines) and the
+mail listener plane (wave 9A: config plane, nginx mail{} materialization, plaintext
+dialog and PROXY v1) are now wired end-to-end (wave 9B): 27 mail-module directives are
+executable, proven by the new 9-case `tests/nginx/differential-mail` slice against real
+nginx 1.29.6 (the sixth aggregate differential slice). Two scope caveats stay explicit:
+backend TLS is a typed-plane extension (nginx mail has no proxy_ssl), so nginx parity is
+not claimed for it; client-certificate verification is absent and those flows remain
+fail-closed backlog (section 3.2 mail module residuals).
 
 ### 5.3 Fail-Closed Groups (144 directives, top modules)
 
@@ -2160,13 +2234,13 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 
 ### 5.5 Conclusion
 
-A "parity" target would still require: the mail proxy (three protocols), embedded Perl,
-GeoIP, a QUIC transport, embedded template/language filters, dynamic module loading, and
-the residual protocol/gRPC sub-families that are now backlog rather than profile
-exclusions. Five embedded application protocols (FastCGI/uWSGI/SCGI/memcached/gRPC) are
+A "parity" target would still require: embedded Perl, GeoIP, a QUIC transport, embedded
+template/language filters and dynamic module loading, plus the residual protocol/gRPC/
+mail sub-families that are now backlog rather than profile exclusions. Six application
+protocols (FastCGI/uWSGI/SCGI/memcached/gRPC and now the POP3/IMAP/SMTP mail proxy) are
 no longer in that excluded set: their implemented forms execute end-to-end on the Rust
-data plane against nginx 1.29.6, and the landed mail-protocol substrate (POP3/IMAP/SMTP,
-45 tests, not yet wired) is the next candidate to move. The coherent target remains the declared
+data plane against nginx 1.29.6 (mail backend TLS is a typed-plane extension, not a
+claimed nginx parity surface). The coherent target remains the declared
 `http-core-v1` profile with the four PRD section 2 grades (parse, semantic, behavioral,
 operational), a generated directive catalog, and a versioned evidence revision. That is
 what this ledger audits.
@@ -2196,8 +2270,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the rewrite/variable-engine wave (wave 10) landed and
-the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the mail waves (9A/9B) landed and the Lead re-synced
+the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |
@@ -2335,13 +2409,40 @@ current state:
 | `memcached_bind` (`http:memcached_bind`) | `wave 7A (CGI transport)` | completed - `enforced` |
 | `memcached_socket_keepalive` (`http:memcached_socket_keepalive`) | `wave 7A (CGI transport)` | completed - `enforced` |
 | `if` (`http:if`) | `wave 10 (rewrite/variable engine)` | completed - `enforced` |
+| `auth_http` (`mail:auth_http`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `auth_http_header` (`mail:auth_http_header`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `auth_http_timeout` (`mail:auth_http_timeout`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `imap_auth` (`mail:imap_auth`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `imap_client_buffer` (`mail:imap_client_buffer`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `listen` (`mail:listen`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `mail` (`mail:mail`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `max_errors` (`mail:max_errors`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `pop3_auth` (`mail:pop3_auth`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `protocol` (`mail:protocol`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `proxy` (`mail:proxy`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `proxy_buffer` (`mail:proxy_buffer`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `proxy_pass_error_message` (`mail:proxy_pass_error_message`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `proxy_protocol` (`mail:proxy_protocol`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `proxy_smtp_auth` (`mail:proxy_smtp_auth`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `proxy_timeout` (`mail:proxy_timeout`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `server` (`mail:server`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `server_name` (`mail:server_name`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `smtp_auth` (`mail:smtp_auth`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `smtp_client_buffer` (`mail:smtp_client_buffer`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `smtp_greeting_delay` (`mail:smtp_greeting_delay`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `ssl_certificate` (`mail:ssl_certificate`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `ssl_certificate_key` (`mail:ssl_certificate_key`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `ssl_protocols` (`mail:ssl_protocols`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `starttls` (`mail:starttls`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `timeout` (`mail:timeout`) | `mail waves (9A/9B)` | completed - `enforced` |
+| `xclient` (`mail:xclient`) | `mail waves (9A/9B)` | completed - `enforced` |
 
-All 133 rows above were re-spot-checked (section 4.2) and are
+All 160 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 164 wave-3 backlog rows are the only behavior-gap
+The 187 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 

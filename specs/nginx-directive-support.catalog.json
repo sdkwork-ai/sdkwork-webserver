@@ -15202,10 +15202,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].authHttp (endpoint/uri/headers/timeout)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:auth_http_header",
@@ -15217,10 +15261,54 @@
         "mail-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].authHttp.headers",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:auth_http_pass_client_cert",
@@ -15233,9 +15321,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "client-certificate forwarding to auth_http is not implemented (no mail client-cert model)"
     },
     {
       "id": "mail:auth_http_timeout",
@@ -15247,10 +15335,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].authHttp.timeoutMs",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:error_log",
@@ -15262,10 +15394,14 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "mail"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "accepted for compatibility but not enforced by the mail listener plane",
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `mail:error_log` (specs/nginx-gap.catalog.json).",
+      "migrationImpact": "`mail:error_log` is accepted for compatibility but the runtime uses its own logging configuration; the value has no effect"
     },
     {
       "id": "mail:imap_auth",
@@ -15277,10 +15413,54 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].imapAuth",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:imap_capabilities",
@@ -15293,9 +15473,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "custom IMAP capability lists are not implemented"
     },
     {
       "id": "mail:imap_client_buffer",
@@ -15307,10 +15487,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].imapClientBufferBytes",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:listen",
@@ -15321,10 +15545,53 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].listen",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:mail",
@@ -15335,10 +15602,53 @@
         "main"
       ],
       "grammar": "no-args",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "main"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "main-context mail{} block wrapper",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:max_errors",
@@ -15350,10 +15660,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].maxErrors",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:pop3_auth",
@@ -15365,10 +15719,54 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].pop3Auth",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:pop3_capabilities",
@@ -15381,9 +15779,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "custom POP3 capability lists are not implemented"
     },
     {
       "id": "mail:protocol",
@@ -15394,10 +15792,53 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].protocol",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:proxy",
@@ -15409,10 +15850,54 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].proxy (accepted like nginx, read-only flag)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:proxy_buffer",
@@ -15424,10 +15909,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].proxyBufferBytes",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:proxy_pass_error_message",
@@ -15439,10 +15968,54 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].proxyPassErrorMessage",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:proxy_protocol",
@@ -15454,10 +16027,54 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].proxyProtocol (outbound v1 to backend)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:proxy_smtp_auth",
@@ -15469,10 +16086,54 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].proxySmtpAuth",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:proxy_timeout",
@@ -15484,10 +16145,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].proxyTimeoutMs",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:resolver",
@@ -15500,9 +16205,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "mail listeners resolve auth_http/backend names with the bounded runtime resolver; a custom mail resolver is not implemented"
     },
     {
       "id": "mail:resolver_timeout",
@@ -15515,9 +16220,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "mail listeners use the bounded runtime resolver; a custom mail resolver timeout is not implemented"
     },
     {
       "id": "mail:server",
@@ -15528,10 +16233,53 @@
         "mail"
       ],
       "grammar": "no-args",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mail server blocks (listen/protocol/server_name/timeout/tls)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:server_name",
@@ -15543,10 +16291,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].serverName",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:set_real_ip_from",
@@ -15559,9 +16351,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "real-IP trust for mail listeners is not implemented (HTTP/stream real_ip only)"
     },
     {
       "id": "mail:smtp_auth",
@@ -15573,10 +16365,54 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].smtpAuth",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:smtp_capabilities",
@@ -15589,9 +16425,9 @@
       ],
       "grammar": "1+",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "custom SMTP capability lists are not implemented"
     },
     {
       "id": "mail:smtp_client_buffer",
@@ -15603,10 +16439,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].smtpClientBufferBytes",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:smtp_greeting_delay",
@@ -15618,10 +16498,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].smtpGreetingDelayMs",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:ssl_certificate",
@@ -15633,10 +16557,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.certificateFile",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:ssl_certificate_compression",
@@ -15649,9 +16617,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls does not expose certificate compression"
     },
     {
       "id": "mail:ssl_certificate_key",
@@ -15663,10 +16631,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.certificateKeyFile",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:ssl_ciphers",
@@ -15679,9 +16691,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls has no OpenSSL cipher-string surface; the rustls provider selects suites (fail closed rather than silently ignoring the cipher list)"
     },
     {
       "id": "mail:ssl_client_certificate",
@@ -15694,9 +16706,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "client-certificate verification is not implemented for mail listeners"
     },
     {
       "id": "mail:ssl_conf_command",
@@ -15709,9 +16721,9 @@
       ],
       "grammar": "2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "OpenSSL-specific TLS configuration command; rustls has no equivalent"
     },
     {
       "id": "mail:ssl_crl",
@@ -15724,9 +16736,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls/webpki path has no CRL support"
     },
     {
       "id": "mail:ssl_dhparam",
@@ -15739,9 +16751,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls does not use finite-field DH parameters"
     },
     {
       "id": "mail:ssl_ecdh_curve",
@@ -15754,9 +16766,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls does not expose curve configuration"
     },
     {
       "id": "mail:ssl_password_file",
@@ -15769,9 +16781,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls does not load encrypted private keys"
     },
     {
       "id": "mail:ssl_prefer_server_ciphers",
@@ -15784,9 +16796,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls does not expose server cipher preference ordering"
     },
     {
       "id": "mail:ssl_protocols",
@@ -15798,10 +16810,54 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.protocols",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:ssl_session_cache",
@@ -15814,9 +16870,9 @@
       ],
       "grammar": "1|2",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls owns session resumption internally; nginx cache semantics are not expressible"
     },
     {
       "id": "mail:ssl_session_ticket_key",
@@ -15829,9 +16885,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls owns ticket keys; not expressible"
     },
     {
       "id": "mail:ssl_session_tickets",
@@ -15844,9 +16900,9 @@
       ],
       "grammar": "flag",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls owns ticket resumption; not expressible"
     },
     {
       "id": "mail:ssl_session_timeout",
@@ -15859,9 +16915,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "rustls owns session resumption timeouts; not expressible"
     },
     {
       "id": "mail:ssl_trusted_certificate",
@@ -15874,9 +16930,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "trusted client-certificate chains are not implemented for mail listeners"
     },
     {
       "id": "mail:ssl_verify_client",
@@ -15889,9 +16945,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "client-certificate verification is not implemented for mail listeners"
     },
     {
       "id": "mail:ssl_verify_depth",
@@ -15904,9 +16960,9 @@
       ],
       "grammar": "1",
       "supportedContexts": [],
-      "classification": "excluded",
+      "classification": "unsupported-fail-closed",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "diagnostics": "client-certificate verification is not implemented for mail listeners"
     },
     {
       "id": "mail:starttls",
@@ -15918,10 +16974,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].starttls (on|only|off)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:timeout",
@@ -15933,10 +17033,54 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].timeoutMs",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:xclient",
@@ -15948,10 +17092,54 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
-      "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].xclient",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-login.dialog"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "pop3.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.login.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "imap.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-xclient.relay"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.auth-failure"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp.implicit-tls"
+        },
+        {
+          "file": "tests/nginx/differential-mail/battery.py",
+          "case": "smtp_starttls"
+        }
+      ],
+      "knownDifferences": [
+        "mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "stream:access_log",

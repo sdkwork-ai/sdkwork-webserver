@@ -758,6 +758,257 @@ fn materialize_mail_buffer(value: &Value, path: &str) -> Result<usize, WebServer
     Ok(bytes as usize)
 }
 
+/// Parse a typed-TOML `[mail.server.authHttp]` table into the runtime model.
+fn materialize_mail_auth_http(value: &Value, path: &str) -> Result<Value, WebServerConfigError> {
+    let table = value
+        .as_object()
+        .ok_or_else(|| materialize_error(path, "authHttp must be a table"))?;
+    check_supported_keys(
+        table,
+        path,
+        &[
+            "uri",
+            "hostHeader",
+            "headers",
+            "timeoutMs",
+            "passClientCert",
+        ],
+    )?;
+    let uri = table
+        .get("uri")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|uri| !uri.is_empty())
+        .ok_or_else(|| materialize_error(&format!("{path}.uri"), "`uri` is required"))?;
+    let uri = uri.strip_prefix("http://").unwrap_or(uri);
+    let mut out = json!({ "uri": uri });
+    if let Some(host_header) = table.get("hostHeader") {
+        out["hostHeader"] = host_header.clone();
+    }
+    if let Some(headers) = table.get("headers") {
+        let headers = headers
+            .as_array()
+            .ok_or_else(|| materialize_error(&format!("{path}.headers"), "must be an array"))?;
+        let mut entries = Vec::with_capacity(headers.len());
+        for (index, header) in headers.iter().enumerate() {
+            let header = header.as_str().ok_or_else(|| {
+                materialize_error(
+                    &format!("{path}.headers[{index}]"),
+                    "auth_http_header entries must be `Name: value` strings",
+                )
+            })?;
+            let valid = header.split_once(':').is_some_and(|(name, value)| {
+                !name.trim().is_empty() && !value.contains(['\r', '\n'])
+            });
+            if !valid {
+                return Err(materialize_error(
+                    &format!("{path}.headers[{index}]"),
+                    "auth_http_header entries must be `Name: value` on one line",
+                ));
+            }
+            entries.push(Value::String(header.to_owned()));
+        }
+        out["headers"] = Value::Array(entries);
+    }
+    if let Some(timeout) = table.get("timeoutMs") {
+        let millis = timeout.as_u64().ok_or_else(|| {
+            materialize_error(&format!("{path}.timeoutMs"), "must be a millisecond count")
+        })?;
+        if !(1..=600_000).contains(&millis) {
+            return Err(materialize_error(
+                &format!("{path}.timeoutMs"),
+                "auth_http_timeout must be between 1 ms and 10 minutes",
+            ));
+        }
+        out["timeoutMs"] = Value::from(millis);
+    }
+    if let Some(pass_client_cert) = table.get("passClientCert") {
+        out["passClientCert"] = Value::Bool(pass_client_cert.as_bool().unwrap_or(false));
+    }
+    Ok(out)
+}
+
+/// Parse a typed-TOML `[mail.server.tls]` table.
+fn materialize_mail_tls(value: &Value, path: &str) -> Result<Value, WebServerConfigError> {
+    let table = value
+        .as_object()
+        .ok_or_else(|| materialize_error(path, "tls must be a table"))?;
+    check_supported_keys(
+        table,
+        path,
+        &[
+            "certificateFile",
+            "privateKeyFile",
+            "protocols",
+            "starttls",
+            "implicit",
+        ],
+    )?;
+    let certificate_file = table
+        .get("certificateFile")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|file| !file.is_empty())
+        .ok_or_else(|| {
+            materialize_error(
+                &format!("{path}.certificateFile"),
+                "`certificateFile` is required",
+            )
+        })?;
+    let private_key_file = table
+        .get("privateKeyFile")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|file| !file.is_empty())
+        .ok_or_else(|| {
+            materialize_error(
+                &format!("{path}.privateKeyFile"),
+                "`privateKeyFile` is required",
+            )
+        })?;
+    let mut out = json!({
+        "certificateFile": certificate_file,
+        "privateKeyFile": private_key_file,
+    });
+    if let Some(protocols) = table.get("protocols") {
+        let protocols = protocols
+            .as_array()
+            .ok_or_else(|| materialize_error(&format!("{path}.protocols"), "must be an array"))?;
+        let mut tokens = Vec::with_capacity(protocols.len());
+        for (index, token) in protocols.iter().enumerate() {
+            let token = token.as_str().ok_or_else(|| {
+                materialize_error(&format!("{path}.protocols[{index}]"), "must be a string")
+            })?;
+            if !matches!(token, "TLSv1.2" | "TLSv1.3") {
+                return Err(materialize_error(
+                    &format!("{path}.protocols[{index}]"),
+                    format!("protocol `{token}` is not executable; TLSv1.2/TLSv1.3 only"),
+                ));
+            }
+            tokens.push(Value::String(token.to_owned()));
+        }
+        if tokens.is_empty() {
+            return Err(materialize_error(
+                &format!("{path}.protocols"),
+                "at least one TLS protocol is required",
+            ));
+        }
+        out["protocols"] = Value::Array(tokens);
+    }
+    if let Some(starttls) = table.get("starttls") {
+        let mode = starttls
+            .as_str()
+            .ok_or_else(|| materialize_error(&format!("{path}.starttls"), "must be a string"))?;
+        if !matches!(mode, "off" | "on" | "only") {
+            return Err(materialize_error(
+                &format!("{path}.starttls"),
+                "`starttls` accepts off|on|only",
+            ));
+        }
+        out["starttls"] = Value::String(mode.to_owned());
+    }
+    Ok(out)
+}
+
+/// Parse a typed-TOML `[mail.server.proxy]` table (backend relay policy).
+fn materialize_mail_proxy(value: &Value, path: &str) -> Result<Value, WebServerConfigError> {
+    let table = value
+        .as_object()
+        .ok_or_else(|| materialize_error(path, "proxy must be a table"))?;
+    check_supported_keys(
+        table,
+        path,
+        &[
+            "enabled",
+            "xclient",
+            "smtpAuth",
+            "proxyProtocol",
+            "passErrorMessage",
+            "bufferBytes",
+            "timeoutMs",
+            "tls",
+        ],
+    )?;
+    let mut out = json!({});
+    for (key, field) in [
+        ("enabled", "enabled"),
+        ("xclient", "xclient"),
+        ("smtpAuth", "smtpAuth"),
+        ("proxyProtocol", "proxyProtocol"),
+        ("passErrorMessage", "passErrorMessage"),
+    ] {
+        if let Some(flag) = table.get(key) {
+            let flag = flag
+                .as_bool()
+                .ok_or_else(|| materialize_error(&format!("{path}.{key}"), "must be a boolean"))?;
+            out[field] = Value::Bool(flag);
+        }
+    }
+    if let Some(buffer) = table.get("bufferBytes") {
+        let bytes = buffer.as_u64().ok_or_else(|| {
+            materialize_error(&format!("{path}.bufferBytes"), "must be a byte count")
+        })?;
+        if !(512..=1024 * 1024).contains(&bytes) {
+            return Err(materialize_error(
+                &format!("{path}.bufferBytes"),
+                "proxy_buffer must be between 512 bytes and 1 MiB",
+            ));
+        }
+        out["bufferBytes"] = Value::from(bytes);
+    }
+    if let Some(timeout) = table.get("timeoutMs") {
+        let millis = timeout.as_u64().ok_or_else(|| {
+            materialize_error(&format!("{path}.timeoutMs"), "must be a millisecond count")
+        })?;
+        if !(1..=86_400_000).contains(&millis) {
+            return Err(materialize_error(
+                &format!("{path}.timeoutMs"),
+                "proxy_timeout must be between 1 ms and 24 hours",
+            ));
+        }
+        out["timeoutMs"] = Value::from(millis);
+    }
+    if let Some(tls) = table.get("tls") {
+        let tls_table = tls
+            .as_object()
+            .ok_or_else(|| materialize_error(&format!("{path}.tls"), "must be a table"))?;
+        check_supported_keys(
+            tls_table,
+            &format!("{path}.tls"),
+            &[
+                "verify",
+                "trustedCertificateFile",
+                "certificateFile",
+                "certificateKeyFile",
+                "serverName",
+            ],
+        )?;
+        let mut proxy_tls = json!({});
+        if let Some(verify) = tls_table.get("verify") {
+            proxy_tls["verify"] = Value::Bool(verify.as_bool().unwrap_or(true));
+        }
+        for (key, field) in [
+            ("trustedCertificateFile", "trustedCertificateFile"),
+            ("certificateFile", "certificateFile"),
+            ("certificateKeyFile", "certificateKeyFile"),
+            ("serverName", "serverName"),
+        ] {
+            if let Some(file) = tls_table.get(key) {
+                let file = file
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|file| !file.is_empty())
+                    .ok_or_else(|| {
+                        materialize_error(&format!("{path}.tls.{key}"), "must be a non-empty path")
+                    })?;
+                proxy_tls[field] = Value::String(file.to_owned());
+            }
+        }
+        out["tls"] = proxy_tls;
+    }
+    Ok(out)
+}
+
 /// Parse a `pop3Auth` / `imapAuth` / `smtpAuth` mechanism list.
 ///
 /// Wave 9A parses PLAIN and LOGIN only. nginx also accepts `apop`,
@@ -3020,15 +3271,15 @@ impl<'a> Materializer<'a> {
     /// Materialize the optional `[mail]` section: `[[mail.server]]` entries
     /// into the mail proxy plane (`MailConfig.servers`).
     ///
-    /// Wave 9A keys only: `listen`, `protocol`, `serverName`, `timeout`,
-    /// `soKeepalive`, `proxyProtocol`, `smtpClientBuffer`, `imapClientBuffer`,
-    /// `pop3Auth`, `imapAuth`, `smtpAuth`, `smtpGreetingDelay`. `auth_http`,
-    /// mail TLS and the backend relay keys are rejected by
-    /// `check_supported_keys` with a located diagnostic (Wave 9B).
+    /// Wave 9B keys: the Wave 9A listener/dialog knobs plus `authHttp`, `tls`
+    /// (frontend TLS + STARTTLS), `proxy` (backend relay, XCLIENT, PROXY to the
+    /// backend and the typed-plane backend TLS extension), and `maxErrors`.
+    #[allow(clippy::too_many_lines)]
     fn materialize_mail(&mut self, root: &Map<String, Value>) -> Result<(), WebServerConfigError> {
         let Some(mail) = root.get("mail").and_then(Value::as_object) else {
             return Ok(());
         };
+        check_supported_keys(mail, "server.toml.mail", &["server"])?;
         let Some(servers) = mail.get("server").and_then(Value::as_array) else {
             return Ok(());
         };
@@ -3054,6 +3305,10 @@ impl<'a> Materializer<'a> {
                     "imapAuth",
                     "smtpAuth",
                     "smtpGreetingDelay",
+                    "authHttp",
+                    "tls",
+                    "proxy",
+                    "maxErrors",
                 ],
             )?;
             let listen = as_array(server, &path, "listen")?;
@@ -3063,16 +3318,10 @@ impl<'a> Materializer<'a> {
             if listen.len() != 1 {
                 return Err(materialize_error(
                     &path,
-                    "each mail server declares exactly one listen binding in Wave 9A",
+                    "each mail server declares exactly one listen binding",
                 ));
             }
-            let (bind, port, ssl, _) = parse_listen(first, &path)?;
-            if ssl {
-                return Err(materialize_error(
-                    &path,
-                    "mail `listen … ssl` (implicit TLS) is Wave 9B; the runtime cannot terminate mail TLS yet",
-                ));
-            }
+            let (bind, port, implicit_tls, _) = parse_listen(first, &path)?;
             let protocol = match server.get("protocol").and_then(Value::as_str) {
                 None | Some("imap") => crate::config::model::MailServerProtocol::Imap,
                 Some("pop3") => crate::config::model::MailServerProtocol::Pop3,
@@ -3167,6 +3416,47 @@ impl<'a> Materializer<'a> {
                     entry[key] = serde_json::to_value(mechanisms)
                         .map_err(|source| materialize_error("mail.server", source))?;
                 }
+            }
+            if let Some(auth_http) = server.get("authHttp") {
+                entry["authHttp"] =
+                    materialize_mail_auth_http(auth_http, &format!("{path}.authHttp"))?;
+            }
+            if let Some(tls) = server.get("tls") {
+                let mut tls = materialize_mail_tls(tls, &format!("{path}.tls"))?;
+                tls["implicit"] = Value::Bool(implicit_tls);
+                if implicit_tls {
+                    let starttls = tls.get("starttls").and_then(Value::as_str).unwrap_or("off");
+                    if starttls == "only" {
+                        return Err(materialize_error(
+                            &format!("{path}.tls.starttls"),
+                            "implicit TLS (`listen … ssl`) and `starttls only` are mutually exclusive",
+                        ));
+                    }
+                }
+                entry["tls"] = tls;
+            } else if implicit_tls {
+                return Err(materialize_error(
+                    &path,
+                    "mail `listen … ssl` requires a `[mail.server.tls]` table with certificateFile and privateKeyFile",
+                ));
+            }
+            if let Some(proxy) = server.get("proxy") {
+                entry["proxy"] = materialize_mail_proxy(proxy, &format!("{path}.proxy"))?;
+            }
+            if let Some(max_errors) = server.get("maxErrors") {
+                let max_errors = max_errors.as_u64().ok_or_else(|| {
+                    materialize_error(
+                        &format!("{path}.maxErrors"),
+                        "`maxErrors` must be an integer between 1 and 100",
+                    )
+                })?;
+                if !(1..=100).contains(&max_errors) {
+                    return Err(materialize_error(
+                        &format!("{path}.maxErrors"),
+                        "`maxErrors` must be an integer between 1 and 100",
+                    ));
+                }
+                entry["maxErrors"] = Value::from(max_errors);
             }
             mail_servers.push(entry);
         }
@@ -7545,6 +7835,61 @@ smtpAuth = ["plain", "login"]
     }
 
     #[test]
+    fn typed_mail_9b_section_materializes_auth_http_tls_proxy_and_max_errors() {
+        let toml_text = r#"
+[mail]
+
+[[mail.server]]
+listen = ["127.0.0.1:2525"]
+protocol = "smtp"
+maxErrors = 3
+
+[mail.server.authHttp]
+uri = "127.0.0.1:9000/auth"
+timeoutMs = 3000
+headers = ["X-Tenant: acme"]
+
+[mail.server.tls]
+certificateFile = "/etc/sdkwork/certs/mail.pem"
+privateKeyFile = "/etc/sdkwork/certs/mail.key"
+starttls = "on"
+protocols = ["TLSv1.2", "TLSv1.3"]
+
+[mail.server.proxy]
+xclient = false
+proxyProtocol = true
+bufferBytes = 8192
+timeoutMs = 30000
+
+[mail.server.proxy.tls]
+verify = false
+serverName = "backend.example.com"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "mail-only").expect("materialize");
+        let server = &config.mail.servers[0];
+        let auth = server.auth_http.as_ref().expect("auth_http");
+        assert_eq!(auth.uri, "127.0.0.1:9000/auth");
+        assert_eq!(auth.timeout_ms, 3000);
+        assert_eq!(auth.headers, vec!["X-Tenant: acme".to_owned()]);
+        let tls = server.tls.as_ref().expect("mail tls");
+        assert!(!tls.implicit);
+        assert_eq!(tls.starttls, crate::config::MailStarttlsMode::On);
+        assert_eq!(tls.protocols.len(), 2);
+        assert!(!server.proxy.xclient);
+        assert!(server.proxy.proxy_protocol);
+        assert_eq!(server.proxy.buffer_bytes, 8192);
+        let proxy_tls = server.proxy.tls.as_ref().expect("backend tls extension");
+        assert!(!proxy_tls.verify);
+        assert_eq!(
+            proxy_tls.server_name.as_deref(),
+            Some("backend.example.com")
+        );
+        assert_eq!(server.max_errors, 3);
+    }
+
+    #[test]
     fn typed_mail_section_rejects_wave_9b_mechanisms_and_unbounded_values() {
         for (mail_section, expected) in [
             (
@@ -7561,7 +7906,7 @@ smtpAuth = ["plain", "login"]
             ),
             (
                 "[[mail.server]]\nlisten = [\"127.0.0.1:2525 ssl\"]\nprotocol = \"imap\"\n",
-                "Wave 9B",
+                "requires a `[mail.server.tls]`",
             ),
             (
                 "[[mail.server]]\nlisten = [\"127.0.0.1:2525\"]\nprotocol = \"imap\"\nunknownKey = 1\n",

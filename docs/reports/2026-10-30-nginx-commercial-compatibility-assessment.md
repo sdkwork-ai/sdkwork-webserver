@@ -16,10 +16,10 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **212** | 可承诺 |
-| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **170** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **298** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
-| excluded from profile（明确排除） | 229 | **64** | 仅 mail proxy 51 / GeoIP 8 / Perl 4 / 动态模块 1 |
+| executable（真实执行且有测试证据） | 79 | **239** | 可承诺 |
+| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **321** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
+| excluded from profile（明确排除） | 229 | **13** | 仅 GeoIP 8 / Perl 4 / 动态模块 1；HTTP/3 为 fail-closed 规划项 |
 | **合计** | 744 | **744** | |
 
 判定：
@@ -77,6 +77,15 @@
 | `empty_gif` | 规范 43 字节 1x1 GIF、image/gif、nginx 固定 Last-Modified、仅 GET/HEAD | 3 个 differential `empty-gif.*` |
 | `stub_status` | nginx 字段形状状态页（Active/accepts/handled/requests/Reading/Writing/Waiting），仅 location 上下文、loopback 门禁；计数为进程本地，差分对字段形状规范化比较 | 3 个 differential `stub-status.*` |
 
+### Wave 9A/9B：mail 模块端到端（POP3/IMAP/SMTP 代理）
+
+| 项 | 轮后行为 | 证据 |
+| --- | --- | --- |
+| mail 监听面 | `mail {}`（listen/protocol/server_name/timeout/so_keepalive/proxy_protocol）、前端隐式 TLS 与 STARTTLS | differential-mail 9/9 |
+| auth_http | nginx 精确请求头（Auth-Method/User/Pass/Protocol、Client-IP、Auth-SSL 等）+ 响应解析 + 有界 WAIT 重试 + 凭据覆盖 | 同上（逐请求头对比） |
+| 后端中继 | 连接 Auth-Server、POP3 USER/PASS、IMAP tagged LOGIN、SMTP EHLO→XCLIENT→AUTH、双向中继 half-close、proxy_timeout、proxy_pass_error_message | 同上 |
+| 未实现形式 | rustls 不支持的 ssl_* 旋钮、客户端证书校验/auth_http_pass_client_cert、自定义 capabilities、mail resolver/real_ip → 失败关闭 + 定位诊断 | 目录逐条 diagnostics |
+
 ### Wave 10：rewrite/变量引擎（真实生产配置验收）
 
 | 项 | 轮后行为 | 证据 |
@@ -123,6 +132,7 @@
 | 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **46/46** 逐字节一致（含 bind/keep-conn/unix 传输用例） |
 | 真实生产配置验收（api.birdcoder.com 快照） | `node tools/check-nginx-real-world.mjs` | virtualHosts=41 / listeners=4 / resources=150 / upstreams=88 / skipped=0，纳入聚合门禁 |
 | stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **9/9**（limit_conn/dry-run/ACL/return/set/map/SNI） |
+| 邮件代理差分（POP3/IMAP/SMTP vs nginx） | `node tools/run-nginx-differential-mail.mjs` | **9/9**（auth_http、登录/中继、AUTH 失败、XCLIENT、隐式 TLS、STARTTLS） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |

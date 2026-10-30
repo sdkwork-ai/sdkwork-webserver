@@ -35,10 +35,10 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 212 |
-| accepted, NOT enforced | 170 |
-| rejected (fail closed) | 298 |
-| excluded from profile | 64 |
+| executable | 239 |
+| accepted, NOT enforced | 171 |
+| rejected (fail closed) | 321 |
+| excluded from profile | 13 |
 | **total** | **744** |
 
 ## Differences From Nginx And Migration Guide
@@ -114,6 +114,13 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_v2_module` (1) — `http2_chunk_size`
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
+- `ngx_mail_auth_http_module` (1) — `auth_http_pass_client_cert`
+- `ngx_mail_core_module` (2) — `resolver`, `resolver_timeout`
+- `ngx_mail_imap_module` (1) — `imap_capabilities`
+- `ngx_mail_pop3_module` (1) — `pop3_capabilities`
+- `ngx_mail_realip_module` (1) — `set_real_ip_from`
+- `ngx_mail_smtp_module` (1) — `smtp_capabilities`
+- `ngx_mail_ssl_module` (16) — `ssl_certificate_compression`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`
 - `ngx_openssl_cache_module` (1) — `ssl_object_cache_inheritable`
 - `ngx_quic_bpf_module` (1) — `quic_bpf`
 - `ngx_stream_core_module` (2) — `proxy_protocol_timeout`, `server_name`
@@ -136,15 +143,6 @@ memcached, and do not import mail or third-party module blocks.
 - `ngx_core_module` (1) — `load_module`
 - `ngx_http_geoip_module` (5) — `geoip_city`, `geoip_country`, `geoip_org`, `geoip_proxy`, `geoip_proxy_recursive`
 - `ngx_http_perl_module` (4) — `perl`, `perl_modules`, `perl_require`, `perl_set`
-- `ngx_mail_auth_http_module` (4) — `auth_http`, `auth_http_header`, `auth_http_pass_client_cert`, `auth_http_timeout`
-- `ngx_mail_core_module` (9) — `error_log`, `listen`, `max_errors`, `protocol`, `resolver`, `resolver_timeout`, `server`, `server_name`, `timeout`
-- `ngx_mail_imap_module` (3) — `imap_auth`, `imap_capabilities`, `imap_client_buffer`
-- `ngx_mail_module` (1) — `mail`
-- `ngx_mail_pop3_module` (2) — `pop3_auth`, `pop3_capabilities`
-- `ngx_mail_proxy_module` (7) — `proxy`, `proxy_buffer`, `proxy_pass_error_message`, `proxy_protocol`, `proxy_smtp_auth`, `proxy_timeout`, `xclient`
-- `ngx_mail_realip_module` (1) — `set_real_ip_from`
-- `ngx_mail_smtp_module` (4) — `smtp_auth`, `smtp_capabilities`, `smtp_client_buffer`, `smtp_greeting_delay`
-- `ngx_mail_ssl_module` (20) — `ssl_certificate`, `ssl_certificate_compression`, `ssl_certificate_key`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_protocols`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`, `starttls`
 - `ngx_stream_geoip_module` (3) — `geoip_city`, `geoip_country`, `geoip_org`
 
 ### Typed TOML keys that are accepted but NOT enforced
@@ -1186,97 +1184,97 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `auth_http` | 1 | mail, mail-server | excluded from profile |  |
-| `auth_http_header` | 2 | mail, mail-server | excluded from profile |  |
-| `auth_http_pass_client_cert` | flag | mail, mail-server | excluded from profile |  |
-| `auth_http_timeout` | 1 | mail, mail-server | excluded from profile |  |
+| `auth_http` | 1 | mail, mail-server | executable | runtime: `mailServers[].authHttp (endpoint/uri/headers/timeout)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `auth_http_header` | 2 | mail, mail-server | executable | runtime: `mailServers[].authHttp.headers`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `auth_http_pass_client_cert` | flag | mail, mail-server | rejected (fail closed) |  |
+| `auth_http_timeout` | 1 | mail, mail-server | executable | runtime: `mailServers[].authHttp.timeoutMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_core_module` (9 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `error_log` | 1+ | mail, mail-server | excluded from profile |  |
-| `listen` | 1+ | mail-server | excluded from profile |  |
-| `max_errors` | 1 | mail, mail-server | excluded from profile |  |
-| `protocol` | 1 | mail-server | excluded from profile |  |
-| `resolver` | 1+ | mail, mail-server | excluded from profile |  |
-| `resolver_timeout` | 1 | mail, mail-server | excluded from profile |  |
-| `server` | no-args | mail | excluded from profile |  |
-| `server_name` | 1 | mail, mail-server | excluded from profile |  |
-| `timeout` | 1 | mail, mail-server | excluded from profile |  |
+| `error_log` | 1+ | mail, mail-server | accepted, NOT enforced | `mail:error_log` is accepted for compatibility but the runtime uses its own logging configuration; the value has no effect |
+| `listen` | 1+ | mail-server | executable | runtime: `mailServers[].listen`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `max_errors` | 1 | mail, mail-server | executable | runtime: `mailServers[].maxErrors`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `protocol` | 1 | mail-server | executable | runtime: `mailServers[].protocol`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `resolver` | 1+ | mail, mail-server | rejected (fail closed) |  |
+| `resolver_timeout` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `server` | no-args | mail | executable | runtime: `mail server blocks (listen/protocol/server_name/timeout/tls)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `server_name` | 1 | mail, mail-server | executable | runtime: `mailServers[].serverName`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `timeout` | 1 | mail, mail-server | executable | runtime: `mailServers[].timeoutMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_imap_module` (3 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `imap_auth` | 1+ | mail, mail-server | excluded from profile |  |
-| `imap_capabilities` | 1+ | mail, mail-server | excluded from profile |  |
-| `imap_client_buffer` | 1 | mail, mail-server | excluded from profile |  |
+| `imap_auth` | 1+ | mail, mail-server | executable | runtime: `mailServers[].imapAuth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `imap_capabilities` | 1+ | mail, mail-server | rejected (fail closed) |  |
+| `imap_client_buffer` | 1 | mail, mail-server | executable | runtime: `mailServers[].imapClientBufferBytes`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_module` (1 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `mail` | no-args | main | excluded from profile |  |
+| `mail` | no-args | main | executable | runtime: `main-context mail{} block wrapper`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_pop3_module` (2 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `pop3_auth` | 1+ | mail, mail-server | excluded from profile |  |
-| `pop3_capabilities` | 1+ | mail, mail-server | excluded from profile |  |
+| `pop3_auth` | 1+ | mail, mail-server | executable | runtime: `mailServers[].pop3Auth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `pop3_capabilities` | 1+ | mail, mail-server | rejected (fail closed) |  |
 
 #### `ngx_mail_proxy_module` (7 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `proxy` | flag | mail, mail-server | excluded from profile |  |
-| `proxy_buffer` | 1 | mail, mail-server | excluded from profile |  |
-| `proxy_pass_error_message` | flag | mail, mail-server | excluded from profile |  |
-| `proxy_protocol` | flag | mail, mail-server | excluded from profile |  |
-| `proxy_smtp_auth` | flag | mail, mail-server | excluded from profile |  |
-| `proxy_timeout` | 1 | mail, mail-server | excluded from profile |  |
-| `xclient` | flag | mail, mail-server | excluded from profile |  |
+| `proxy` | flag | mail, mail-server | executable | runtime: `mailServers[].proxy (accepted like nginx, read-only flag)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `proxy_buffer` | 1 | mail, mail-server | executable | runtime: `mailServers[].proxyBufferBytes`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `proxy_pass_error_message` | flag | mail, mail-server | executable | runtime: `mailServers[].proxyPassErrorMessage`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `proxy_protocol` | flag | mail, mail-server | executable | runtime: `mailServers[].proxyProtocol (outbound v1 to backend)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `proxy_smtp_auth` | flag | mail, mail-server | executable | runtime: `mailServers[].proxySmtpAuth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `proxy_timeout` | 1 | mail, mail-server | executable | runtime: `mailServers[].proxyTimeoutMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `xclient` | flag | mail, mail-server | executable | runtime: `mailServers[].xclient`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_realip_module` (1 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `set_real_ip_from` | 1 | mail, mail-server | excluded from profile |  |
+| `set_real_ip_from` | 1 | mail, mail-server | rejected (fail closed) |  |
 
 #### `ngx_mail_smtp_module` (4 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `smtp_auth` | 1+ | mail, mail-server | excluded from profile |  |
-| `smtp_capabilities` | 1+ | mail, mail-server | excluded from profile |  |
-| `smtp_client_buffer` | 1 | mail, mail-server | excluded from profile |  |
-| `smtp_greeting_delay` | 1 | mail, mail-server | excluded from profile |  |
+| `smtp_auth` | 1+ | mail, mail-server | executable | runtime: `mailServers[].smtpAuth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `smtp_capabilities` | 1+ | mail, mail-server | rejected (fail closed) |  |
+| `smtp_client_buffer` | 1 | mail, mail-server | executable | runtime: `mailServers[].smtpClientBufferBytes`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `smtp_greeting_delay` | 1 | mail, mail-server | executable | runtime: `mailServers[].smtpGreetingDelayMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_ssl_module` (20 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `ssl_certificate` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_certificate_compression` | flag | mail, mail-server | excluded from profile |  |
-| `ssl_certificate_key` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_ciphers` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_client_certificate` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_conf_command` | 2 | mail, mail-server | excluded from profile |  |
-| `ssl_crl` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_dhparam` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_ecdh_curve` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_password_file` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_prefer_server_ciphers` | flag | mail, mail-server | excluded from profile |  |
-| `ssl_protocols` | 1+ | mail, mail-server | excluded from profile |  |
-| `ssl_session_cache` | 1\|2 | mail, mail-server | excluded from profile |  |
-| `ssl_session_ticket_key` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_session_tickets` | flag | mail, mail-server | excluded from profile |  |
-| `ssl_session_timeout` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_trusted_certificate` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_verify_client` | 1 | mail, mail-server | excluded from profile |  |
-| `ssl_verify_depth` | 1 | mail, mail-server | excluded from profile |  |
-| `starttls` | 1 | mail, mail-server | excluded from profile |  |
+| `ssl_certificate` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.certificateFile`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `ssl_certificate_compression` | flag | mail, mail-server | rejected (fail closed) |  |
+| `ssl_certificate_key` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.certificateKeyFile`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `ssl_ciphers` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_client_certificate` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_conf_command` | 2 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_crl` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_dhparam` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_ecdh_curve` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_password_file` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_prefer_server_ciphers` | flag | mail, mail-server | rejected (fail closed) |  |
+| `ssl_protocols` | 1+ | mail, mail-server | executable | runtime: `mailServers[].tls.protocols`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
+| `ssl_session_cache` | 1\|2 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_session_ticket_key` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_session_tickets` | flag | mail, mail-server | rejected (fail closed) |  |
+| `ssl_session_timeout` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_trusted_certificate` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_verify_client` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_verify_depth` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `starttls` | 1 | mail, mail-server | executable | runtime: `mailServers[].starttls (on\|only\|off)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 ### Stream (`stream`)
 

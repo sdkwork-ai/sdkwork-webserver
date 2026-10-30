@@ -5957,96 +5957,46 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
-    /// Materialize the nginx `mail {}` context (mail proxy plane, Wave 9A).
+    /// Materialize the nginx `mail {}` context (mail proxy plane, Wave 9B).
     ///
-    /// Executed: `mail { server { listen, protocol, server_name, timeout,
-    /// so_keepalive, proxy_protocol, smtp_client_buffer, imap_client_buffer,
-    /// pop3_auth, imap_auth, smtp_auth, smtp_greeting_delay } }`.
+    /// Executed: `auth_http`, `auth_http_header`, `auth_http_timeout`,
+    /// `auth_http_pass_client_cert`, `ssl_certificate`,
+    /// `ssl_certificate_key`, `ssl_protocols`, `starttls`, `xclient`,
+    /// `proxy`, `proxy_buffer`, `proxy_timeout`, `proxy_pass_error_message`,
+    /// `proxy_protocol`, `proxy_smtp_auth`, `max_errors`, and the Wave 9A
+    /// listener/dialog knobs.
     ///
-    /// Everything that belongs to Wave 9B fails closed with a located
-    /// diagnostic naming that wave instead of being accepted and ignored:
-    /// `auth_http*` (the authentication service), every `ssl_*` /
-    /// `starttls` form (frontend implicit TLS + STARTTLS), `xclient` (backend
-    /// client identity), the `proxy_*` backend-relay family, `resolver` /
-    /// `resolver_timeout` (auth_http backend resolution), `set_real_ip_from`
-    /// (mail realip), and `max_errors`.
+    /// Everything the runtime cannot honour fails closed with a located
+    /// diagnostic: user-defined capability lists, mail realip, the mail
+    /// resolver (only needed for SMTP PTR/forward-confirmed client host names
+    /// and for `Auth-Server` host names, which the runtime resolves with its
+    /// own bounded DNS policy), and the OpenSSL-only TLS knobs
+    /// (`ssl_ciphers`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`,
+    /// `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`,
+    /// `ssl_session_*`, `ssl_certificate_compression`).
     fn materialize_mail_context(
         &mut self,
         directives: &[NginxDirective],
     ) -> Result<(), NginxConfigError> {
+        let mut defaults = MailContextDefaults::default();
+        // First pass: main-context directives are inherited by every server
+        // that does not declare its own value (nginx mail merge semantics).
+        for directive in directives {
+            if directive.name == "server" {
+                continue;
+            }
+            match directive.name.as_str() {
+                "error_log" | "access_log" | "include" => {}
+                _ => parse_mail_context_directive(self, directive, &mut defaults)?,
+            }
+        }
         let mut mail_index = 0usize;
         for directive in directives {
-            match directive.name.as_str() {
-                "server" => {
-                    self.materialize_mail_server(directive, mail_index)?;
-                    mail_index += 1;
-                }
-                "error_log" | "access_log" | "include" => {}
-                name if name.starts_with("auth_http") => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        format!(
-                            "`{name}` (mail authentication service) is Wave 9B; Wave 9A serves the plaintext greeting/auth dialog and closes with the auth-service-unavailable response because the auth_http exchange is not implemented yet"
-                        ),
-                    ))
-                }
-                name if name.starts_with("ssl_") => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        format!(
-                            "`{name}` (mail TLS) is Wave 9B; Wave 9A has no mail TLS termination or STARTTLS"
-                        ),
-                    ))
-                }
-                "starttls" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "mail `starttls` (STARTTLS enablement) is Wave 9B; Wave 9A has no mail TLS",
-                    ))
-                }
-                "xclient" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "mail `xclient` (backend client identity relay) is Wave 9B; Wave 9A has no backend relay",
-                    ))
-                }
-                name if name.starts_with("proxy_") => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        format!(
-                            "`{name}` (mail backend relay) is Wave 9B; Wave 9A does not relay to a backend"
-                        ),
-                    ))
-                }
-                "resolver" | "resolver_timeout" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        format!(
-                            "mail `{}` (auth_http backend name resolution) is Wave 9B; Wave 9A has no auth_http exchange",
-                            directive.name
-                        ),
-                    ))
-                }
-                "set_real_ip_from" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "mail `set_real_ip_from` (mail realip module) is Wave 9B",
-                    ))
-                }
-                "max_errors" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "mail `max_errors` (auth/session error budget) is Wave 9B; Wave 9A closes on the first failed auth attempt",
-                    ))
-                }
-                name if ACCEPTED_IGNORED.contains(&name) => {}
-                name => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        format!("unsupported mail directive `{name}`"),
-                    ))
-                }
+            if directive.name != "server" {
+                continue;
             }
+            self.materialize_mail_server(directive, mail_index, &defaults)?;
+            mail_index += 1;
         }
         Ok(())
     }
@@ -6056,182 +6006,16 @@ impl<'a> Mapper<'a> {
         &mut self,
         directive: &NginxDirective,
         index: usize,
+        defaults: &MailContextDefaults,
     ) -> Result<(), NginxConfigError> {
         let mut listen_specs: Vec<MailListenSpec> = Vec::new();
-        let mut protocol: Option<&'static str> = None;
-        let mut server_name: Option<String> = None;
-        let mut timeout_ms: Option<u64> = None;
-        let mut so_keepalive: Option<bool> = None;
-        let mut proxy_protocol = false;
-        let mut smtp_client_buffer: Option<usize> = None;
-        let mut imap_client_buffer: Option<usize> = None;
-        let mut pop3_auth: Option<Vec<String>> = None;
-        let mut imap_auth: Option<Vec<String>> = None;
-        let mut smtp_auth: Option<Vec<String>> = None;
-        let mut smtp_greeting_delay_ms = 0_u64;
+        let mut server: MailServerDraft = MailServerDraft::from_defaults(defaults);
         for child in &directive.children {
-            match child.name.as_str() {
-                "listen" => listen_specs.push(parse_mail_listen_spec(child)?),
-                "protocol" => {
-                    let Some(value) = child.args.first() else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "mail `protocol` requires pop3|imap|smtp",
-                        ));
-                    };
-                    protocol = Some(match value.as_str() {
-                        "pop3" => "pop3",
-                        "imap" => "imap",
-                        "smtp" => "smtp",
-                        other => {
-                            return Err(NginxConfigError::unsupported(
-                                child,
-                                format!("mail `protocol` accepts pop3|imap|smtp, found `{other}`"),
-                            ))
-                        }
-                    });
-                }
-                "server_name" => {
-                    let [name] = child.args.as_slice() else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "mail `server_name` takes exactly one name in Wave 9A",
-                        ));
-                    };
-                    server_name = Some(name.clone());
-                }
-                "timeout" => {
-                    let Some(value) = child.args.first() else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "mail `timeout` requires a time value",
-                        ));
-                    };
-                    let Some(seconds) = parse_nginx_time_seconds(value) else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            format!("invalid mail timeout `{value}`"),
-                        ));
-                    };
-                    let millis = seconds.saturating_mul(1_000);
-                    if !(1..=86_400_000).contains(&millis) {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            format!("mail timeout `{value}` is outside 1ms..=24h"),
-                        ));
-                    }
-                    timeout_ms = Some(millis);
-                }
-                "so_keepalive" => {
-                    so_keepalive = Some(parse_mail_so_keepalive(child)?);
-                }
-                "proxy_protocol" => {
-                    proxy_protocol = parse_on_off(child, "proxy_protocol")?;
-                }
-                "smtp_client_buffer" => {
-                    smtp_client_buffer = Some(parse_mail_client_buffer(child)?);
-                }
-                "imap_client_buffer" => {
-                    imap_client_buffer = Some(parse_mail_client_buffer(child)?);
-                }
-                "pop3_auth" => pop3_auth = Some(require_mail_auth_args(child)?),
-                "imap_auth" => imap_auth = Some(require_mail_auth_args(child)?),
-                "smtp_auth" => smtp_auth = Some(require_mail_auth_args(child)?),
-                "pop3_capabilities" | "imap_capabilities" | "smtp_capabilities" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        format!(
-                            "mail `{}` (custom capability advertisement) is not part of Wave 9A; the runtime advertises nginx's default capability set and backend capability passthrough lands with the Wave 9B relay",
-                            child.name
-                        ),
-                    ))
-                }
-                "smtp_greeting_delay" => {
-                    let Some(value) = child.args.first() else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "mail `smtp_greeting_delay` requires a time value",
-                        ));
-                    };
-                    let Some(millis) = parse_mail_delay_millis(value) else {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            format!("invalid smtp_greeting_delay `{value}`"),
-                        ));
-                    };
-                    if millis > 60_000 {
-                        return Err(NginxConfigError::unsupported(
-                            child,
-                            "smtp_greeting_delay must not exceed 60s",
-                        ));
-                    }
-                    smtp_greeting_delay_ms = millis;
-                }
-                name if name.starts_with("auth_http") => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        format!(
-                            "`{name}` (mail authentication service) is Wave 9B; Wave 9A serves the plaintext greeting/auth dialog and closes with the auth-service-unavailable response because the auth_http exchange is not implemented yet"
-                        ),
-                    ))
-                }
-                name if name.starts_with("ssl_") => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        format!(
-                            "`{name}` (mail TLS) is Wave 9B; Wave 9A has no mail TLS termination or STARTTLS"
-                        ),
-                    ))
-                }
-                "starttls" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "mail `starttls` (STARTTLS enablement) is Wave 9B; Wave 9A has no mail TLS",
-                    ))
-                }
-                "xclient" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "mail `xclient` (backend client identity relay) is Wave 9B; Wave 9A has no backend relay",
-                    ))
-                }
-                name if name.starts_with("proxy_") => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        format!(
-                            "`{name}` (mail backend relay) is Wave 9B; Wave 9A does not relay to a backend"
-                        ),
-                    ))
-                }
-                "resolver" | "resolver_timeout" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        format!(
-                            "mail `{}` (auth_http backend name resolution) is Wave 9B; Wave 9A has no auth_http exchange",
-                            child.name
-                        ),
-                    ))
-                }
-                "set_real_ip_from" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "mail `set_real_ip_from` (mail realip module) is Wave 9B",
-                    ))
-                }
-                "max_errors" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "mail `max_errors` (auth/session error budget) is Wave 9B; Wave 9A closes on the first failed auth attempt",
-                    ))
-                }
-                name if ACCEPTED_IGNORED.contains(&name) => {}
-                name => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        format!("unsupported mail server directive `{name}`"),
-                    ))
-                }
+            if child.name == "listen" {
+                listen_specs.push(parse_mail_listen_spec(child)?);
+                continue;
             }
+            parse_mail_server_directive(self, child, &mut server)?;
         }
         if listen_specs.is_empty() {
             return Err(NginxConfigError::unsupported(
@@ -6241,26 +6025,82 @@ impl<'a> Mapper<'a> {
         }
         // nginx allows several `listen` directives in one mail server block;
         // the runtime materializes one mail listener per listen.
-        let protocol = protocol.unwrap_or("imap");
-        let pop3_auth = normalize_mail_auth_mechanisms(directive, protocol, pop3_auth)?;
-        let imap_auth = normalize_mail_auth_mechanisms(directive, protocol, imap_auth)?;
-        let smtp_auth = normalize_mail_auth_mechanisms(directive, protocol, smtp_auth)?;
+        let protocol = server.protocol.unwrap_or("imap");
+        let auth_http_json = server.auth_http_json();
+        let pop3_auth = normalize_mail_auth_mechanisms(directive, protocol, server.pop3_auth)?;
+        let imap_auth = normalize_mail_auth_mechanisms(directive, protocol, server.imap_auth)?;
+        let smtp_auth = normalize_mail_auth_mechanisms(directive, protocol, server.smtp_auth)?;
         for (listen_index, listen) in listen_specs.iter().enumerate() {
-            let effective_proxy_protocol = proxy_protocol || listen.proxy_protocol;
-            let effective_so_keepalive = listen.so_keepalive.or(so_keepalive).unwrap_or(false);
+            let effective_proxy_protocol = server.inbound_proxy_protocol || listen.proxy_protocol;
+            let effective_so_keepalive =
+                listen.so_keepalive.or(server.so_keepalive).unwrap_or(false);
+            let implicit_tls = listen.ssl;
+            let mut tls = match (&server.tls_cert, &server.tls_key) {
+                (Some(cert), Some(key)) => Some(json!({
+                    "certificateFile": cert,
+                    "privateKeyFile": key,
+                    "protocols": server.tls_protocols.clone(),
+                    "starttls": server.starttls.clone(),
+                    "implicit": implicit_tls,
+                })),
+                (None, None) => None,
+                _ => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail TLS requires both `ssl_certificate` and `ssl_certificate_key`",
+                    ))
+                }
+            };
+            if implicit_tls && tls.is_none() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `listen … ssl` requires `ssl_certificate` and `ssl_certificate_key`",
+                ));
+            }
+            if tls.is_none() && server.starttls != "off" {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `starttls on|only` requires `ssl_certificate` and `ssl_certificate_key`",
+                ));
+            }
+            if implicit_tls && server.starttls == "only" {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `listen … ssl` and `starttls only` are mutually exclusive",
+                ));
+            }
+            if let Some(tls) = tls.as_mut() {
+                if !implicit_tls && server.starttls == "off" {
+                    // TLS material is declared but unused by this listener;
+                    // nginx accepts it (main-context certificate for a
+                    // STARTTLS listener). Keep it for a later `starttls on` in
+                    // the same server block: the value is not silently dropped.
+                    let _ = tls;
+                }
+            }
             let mut entry = json!({
                 "id": format!("mail-{index}-{listen_index}-{}", listen.port),
                 "bind": listen.bind,
                 "port": listen.port,
                 "protocol": protocol,
-                "timeoutMs": timeout_ms.unwrap_or(60_000),
+                "timeoutMs": server.timeout_ms,
                 "soKeepalive": effective_so_keepalive,
                 "proxyProtocol": effective_proxy_protocol,
-                "smtpClientBuffer": smtp_client_buffer.unwrap_or(4 * 1024),
-                "imapClientBuffer": imap_client_buffer.unwrap_or(4 * 1024),
-                "smtpGreetingDelayMs": smtp_greeting_delay_ms,
+                "smtpClientBuffer": server.smtp_client_buffer.unwrap_or(4 * 1024),
+                "imapClientBuffer": server.imap_client_buffer.unwrap_or(4 * 1024),
+                "smtpGreetingDelayMs": server.smtp_greeting_delay_ms,
+                "maxErrors": server.max_errors,
+                "proxy": {
+                    "enabled": server.proxy_enabled,
+                    "xclient": server.xclient,
+                    "smtpAuth": server.proxy_smtp_auth,
+                    "proxyProtocol": server.outbound_proxy_protocol,
+                    "passErrorMessage": server.pass_error_message,
+                    "bufferBytes": server.proxy_buffer_bytes,
+                    "timeoutMs": server.proxy_timeout_ms,
+                },
             });
-            if let Some(server_name) = &server_name {
+            if let Some(server_name) = &server.server_name {
                 entry["serverName"] = Value::String(server_name.clone());
             }
             for (key, mechanisms) in [
@@ -6271,6 +6111,15 @@ impl<'a> Mapper<'a> {
                 if let Some(mechanisms) = mechanisms {
                     entry[key] = Value::Array(mechanisms.clone());
                 }
+            }
+            if let Some(auth_http) = &auth_http_json {
+                entry["authHttp"] = auth_http.clone();
+            }
+            if let Some(tls) = tls {
+                entry["tls"] = tls;
+            }
+            if let Some(proxy_tls) = &server.proxy_tls {
+                entry["proxy"]["tls"] = proxy_tls.clone();
             }
             // Type-check against the runtime model early for clearer
             // diagnostics (deny_unknown_fields catches an unmodeled key here
@@ -6852,6 +6701,667 @@ fn parse_listen_address(address: &str, spec: &str) -> Result<(String, u16), Stri
     Ok((address.to_owned(), 80))
 }
 
+/// Main-context nginx mail directives inherited by every server block.
+///
+/// nginx's mail module merges main-context `auth_http*`, `ssl_*`, `proxy_*`,
+/// `xclient` and `max_errors` into each server before applying the server's own
+/// declarations. This struct holds those resolved defaults.
+#[derive(Clone)]
+struct MailContextDefaults {
+    server_name: Option<String>,
+    timeout_ms: u64,
+    auth_uri: Option<String>,
+    auth_host: Option<String>,
+    auth_headers: Vec<String>,
+    auth_timeout_ms: u64,
+    auth_pass_client_cert: bool,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    tls_protocols: Vec<String>,
+    starttls: String,
+    proxy_enabled: bool,
+    xclient: bool,
+    proxy_smtp_auth: bool,
+    outbound_proxy_protocol: bool,
+    pass_error_message: bool,
+    proxy_buffer_bytes: usize,
+    proxy_timeout_ms: u64,
+    max_errors: u32,
+}
+
+impl Default for MailContextDefaults {
+    fn default() -> Self {
+        Self {
+            server_name: None,
+            timeout_ms: 60_000,
+            auth_uri: None,
+            auth_host: None,
+            auth_headers: Vec::new(),
+            auth_timeout_ms: 60_000,
+            auth_pass_client_cert: false,
+            tls_cert: None,
+            tls_key: None,
+            tls_protocols: default_mail_tls_protocols(),
+            starttls: "off".to_owned(),
+            // nginx mail proxy module defaults (ngx_mail_proxy_module merge).
+            proxy_enabled: true,
+            xclient: true,
+            proxy_smtp_auth: false,
+            outbound_proxy_protocol: false,
+            pass_error_message: false,
+            proxy_buffer_bytes: 4096,
+            proxy_timeout_ms: 24 * 60 * 60 * 1000,
+            max_errors: 5,
+        }
+    }
+}
+
+/// One mail server's resolved configuration while directives are read.
+struct MailServerDraft {
+    protocol: Option<&'static str>,
+    server_name: Option<String>,
+    timeout_ms: u64,
+    so_keepalive: Option<bool>,
+    inbound_proxy_protocol: bool,
+    smtp_client_buffer: Option<usize>,
+    imap_client_buffer: Option<usize>,
+    pop3_auth: Option<Vec<String>>,
+    imap_auth: Option<Vec<String>>,
+    smtp_auth: Option<Vec<String>>,
+    smtp_greeting_delay_ms: u64,
+    auth_uri: Option<String>,
+    auth_host: Option<String>,
+    auth_headers: Vec<String>,
+    auth_headers_declared: bool,
+    auth_timeout_ms: u64,
+    auth_pass_client_cert: bool,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    tls_protocols: Vec<String>,
+    starttls: String,
+    proxy_enabled: bool,
+    xclient: bool,
+    proxy_smtp_auth: bool,
+    outbound_proxy_protocol: bool,
+    pass_error_message: bool,
+    proxy_buffer_bytes: usize,
+    proxy_timeout_ms: u64,
+    max_errors: u32,
+    proxy_tls: Option<Value>,
+}
+
+impl MailServerDraft {
+    fn from_defaults(defaults: &MailContextDefaults) -> Self {
+        Self {
+            protocol: None,
+            server_name: defaults.server_name.clone(),
+            timeout_ms: defaults.timeout_ms,
+            so_keepalive: None,
+            inbound_proxy_protocol: false,
+            smtp_client_buffer: None,
+            imap_client_buffer: None,
+            pop3_auth: None,
+            imap_auth: None,
+            smtp_auth: None,
+            smtp_greeting_delay_ms: 0,
+            auth_uri: defaults.auth_uri.clone(),
+            auth_host: defaults.auth_host.clone(),
+            auth_headers: defaults.auth_headers.clone(),
+            auth_headers_declared: false,
+            auth_timeout_ms: defaults.auth_timeout_ms,
+            auth_pass_client_cert: defaults.auth_pass_client_cert,
+            tls_cert: defaults.tls_cert.clone(),
+            tls_key: defaults.tls_key.clone(),
+            tls_protocols: defaults.tls_protocols.clone(),
+            starttls: defaults.starttls.clone(),
+            proxy_enabled: defaults.proxy_enabled,
+            xclient: defaults.xclient,
+            proxy_smtp_auth: defaults.proxy_smtp_auth,
+            outbound_proxy_protocol: defaults.outbound_proxy_protocol,
+            pass_error_message: defaults.pass_error_message,
+            proxy_buffer_bytes: defaults.proxy_buffer_bytes,
+            proxy_timeout_ms: defaults.proxy_timeout_ms,
+            max_errors: defaults.max_errors,
+            proxy_tls: None,
+        }
+    }
+
+    /// The resolved `auth_http` JSON value, if the service is configured.
+    fn auth_http_json(&self) -> Option<Value> {
+        let uri = self.auth_uri.as_ref()?;
+        let mut value = json!({
+            "uri": uri,
+            "headers": self.auth_headers,
+            "timeoutMs": self.auth_timeout_ms,
+            "passClientCert": self.auth_pass_client_cert,
+        });
+        if let Some(host_header) = &self.auth_host {
+            value["hostHeader"] = Value::String(host_header.clone());
+        }
+        Some(value)
+    }
+}
+
+fn default_mail_tls_protocols() -> Vec<String> {
+    vec!["TLSv1.2".to_owned(), "TLSv1.3".to_owned()]
+}
+
+/// Parse a main-context mail directive into the inherited defaults.
+fn parse_mail_context_directive(
+    mapper: &Mapper<'_>,
+    directive: &NginxDirective,
+    defaults: &mut MailContextDefaults,
+) -> Result<(), NginxConfigError> {
+    match directive.name.as_str() {
+        "server_name" => {
+            let [name] = directive.args.as_slice() else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `server_name` takes exactly one name",
+                ));
+            };
+            defaults.server_name = Some(name.clone());
+            Ok(())
+        }
+        "timeout" => {
+            defaults.timeout_ms = parse_mail_timeout(directive)?;
+            Ok(())
+        }
+        "auth_http" => parse_mail_auth_http(directive, &mut defaults.auth_uri),
+        "auth_http_timeout" => {
+            defaults.auth_timeout_ms = parse_mail_auth_http_timeout(directive)?;
+            Ok(())
+        }
+        "auth_http_header" => parse_mail_auth_http_header(directive, &mut defaults.auth_headers),
+        "auth_http_pass_client_cert" => {
+            defaults.auth_pass_client_cert = parse_on_off(directive, "auth_http_pass_client_cert")?;
+            Ok(())
+        }
+        "ssl_certificate" => {
+            let path = parse_mail_single_path(mapper, directive)?;
+            defaults.tls_cert = Some(path);
+            Ok(())
+        }
+        "ssl_certificate_key" => {
+            let path = parse_mail_single_path(mapper, directive)?;
+            defaults.tls_key = Some(path);
+            Ok(())
+        }
+        "ssl_protocols" => {
+            defaults.tls_protocols = parse_mail_ssl_protocols(directive)?;
+            Ok(())
+        }
+        "starttls" => {
+            defaults.starttls = parse_mail_starttls(directive)?;
+            Ok(())
+        }
+        "proxy" => {
+            defaults.proxy_enabled = parse_on_off(directive, "proxy")?;
+            Ok(())
+        }
+        "proxy_buffer" => {
+            defaults.proxy_buffer_bytes = parse_mail_proxy_buffer(directive)?;
+            Ok(())
+        }
+        "proxy_timeout" => {
+            defaults.proxy_timeout_ms = parse_mail_proxy_timeout(directive)?;
+            Ok(())
+        }
+        "proxy_pass_error_message" => {
+            defaults.pass_error_message = parse_on_off(directive, "proxy_pass_error_message")?;
+            Ok(())
+        }
+        "proxy_protocol" => {
+            defaults.outbound_proxy_protocol = parse_on_off(directive, "proxy_protocol")?;
+            Ok(())
+        }
+        "proxy_smtp_auth" => {
+            defaults.proxy_smtp_auth = parse_on_off(directive, "proxy_smtp_auth")?;
+            Ok(())
+        }
+        "xclient" => {
+            defaults.xclient = parse_on_off(directive, "xclient")?;
+            Ok(())
+        }
+        "max_errors" => {
+            defaults.max_errors = parse_mail_max_errors(directive)?;
+            Ok(())
+        }
+        name if ACCEPTED_IGNORED.contains(&name) => Ok(()),
+        name => Err(NginxConfigError::unsupported(
+            directive,
+            format!("unsupported mail context directive `{name}`"),
+        )),
+    }
+}
+
+/// Parse a server-context mail directive into the draft.
+fn parse_mail_server_directive(
+    mapper: &Mapper<'_>,
+    directive: &NginxDirective,
+    server: &mut MailServerDraft,
+) -> Result<(), NginxConfigError> {
+    match directive.name.as_str() {
+        "protocol" => {
+            let Some(value) = directive.args.first() else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `protocol` requires pop3|imap|smtp",
+                ));
+            };
+            server.protocol = Some(match value.as_str() {
+                "pop3" => "pop3",
+                "imap" => "imap",
+                "smtp" => "smtp",
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("mail `protocol` accepts pop3|imap|smtp, found `{other}`"),
+                    ))
+                }
+            });
+            Ok(())
+        }
+        "server_name" => {
+            let [name] = directive.args.as_slice() else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `server_name` takes exactly one name",
+                ));
+            };
+            server.server_name = Some(name.clone());
+            Ok(())
+        }
+        "timeout" => {
+            server.timeout_ms = parse_mail_timeout(directive)?;
+            Ok(())
+        }
+        "so_keepalive" => {
+            server.so_keepalive = Some(parse_mail_so_keepalive(directive)?);
+            Ok(())
+        }
+        "proxy_protocol" => {
+            // nginx mail server-context `proxy_protocol` sends a PROXY header
+            // to the backend; inbound PROXY acceptance is the
+            // `listen … proxy_protocol` parameter.
+            server.outbound_proxy_protocol = parse_on_off(directive, "proxy_protocol")?;
+            Ok(())
+        }
+        "smtp_client_buffer" => {
+            server.smtp_client_buffer = Some(parse_mail_client_buffer(directive)?);
+            Ok(())
+        }
+        "imap_client_buffer" => {
+            server.imap_client_buffer = Some(parse_mail_client_buffer(directive)?);
+            Ok(())
+        }
+        "pop3_auth" => {
+            server.pop3_auth = Some(require_mail_auth_args(directive)?);
+            Ok(())
+        }
+        "imap_auth" => {
+            server.imap_auth = Some(require_mail_auth_args(directive)?);
+            Ok(())
+        }
+        "smtp_auth" => {
+            server.smtp_auth = Some(require_mail_auth_args(directive)?);
+            Ok(())
+        }
+        "smtp_greeting_delay" => {
+            server.smtp_greeting_delay_ms = parse_mail_greeting_delay(directive)?;
+            Ok(())
+        }
+        "auth_http" => parse_mail_auth_http(directive, &mut server.auth_uri),
+        "auth_http_timeout" => {
+            server.auth_timeout_ms = parse_mail_auth_http_timeout(directive)?;
+            Ok(())
+        }
+        "auth_http_header" => {
+            if !server.auth_headers_declared {
+                server.auth_headers.clear();
+                server.auth_headers_declared = true;
+            }
+            parse_mail_auth_http_header(directive, &mut server.auth_headers)
+        }
+        "auth_http_pass_client_cert" => {
+            server.auth_pass_client_cert = parse_on_off(directive, "auth_http_pass_client_cert")?;
+            Ok(())
+        }
+        "ssl_certificate" => {
+            server.tls_cert = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
+        "ssl_certificate_key" => {
+            server.tls_key = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
+        "ssl_protocols" => {
+            server.tls_protocols = parse_mail_ssl_protocols(directive)?;
+            Ok(())
+        }
+        "starttls" => {
+            server.starttls = parse_mail_starttls(directive)?;
+            Ok(())
+        }
+        "proxy" => {
+            server.proxy_enabled = parse_on_off(directive, "proxy")?;
+            Ok(())
+        }
+        "proxy_buffer" => {
+            server.proxy_buffer_bytes = parse_mail_proxy_buffer(directive)?;
+            Ok(())
+        }
+        "proxy_timeout" => {
+            server.proxy_timeout_ms = parse_mail_proxy_timeout(directive)?;
+            Ok(())
+        }
+        "proxy_pass_error_message" => {
+            server.pass_error_message = parse_on_off(directive, "proxy_pass_error_message")?;
+            Ok(())
+        }
+        "proxy_smtp_auth" => {
+            server.proxy_smtp_auth = parse_on_off(directive, "proxy_smtp_auth")?;
+            Ok(())
+        }
+        "xclient" => {
+            server.xclient = parse_on_off(directive, "xclient")?;
+            Ok(())
+        }
+        "max_errors" => {
+            server.max_errors = parse_mail_max_errors(directive)?;
+            Ok(())
+        }
+        "pop3_capabilities" | "imap_capabilities" | "smtp_capabilities" => {
+            Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "mail `{}` (custom capability advertisement) is not executable; the runtime advertises nginx's default capability set",
+                    directive.name
+                ),
+            ))
+        }
+        "ssl_client_certificate" | "ssl_verify_client" | "ssl_verify_depth" => {
+            Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "mail `{}` (client certificate verification) is not executable yet; client-cert auth is not modeled in the mail plane",
+                    directive.name
+                ),
+            ))
+        }
+        "ssl_ciphers"
+        | "ssl_conf_command"
+        | "ssl_crl"
+        | "ssl_dhparam"
+        | "ssl_ecdh_curve"
+        | "ssl_password_file"
+        | "ssl_prefer_server_ciphers"
+        | "ssl_session_cache"
+        | "ssl_session_timeout"
+        | "ssl_session_tickets"
+        | "ssl_session_ticket_key"
+        | "ssl_certificate_compression" => Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `{}` is not executable on the rustls TLS stack; the runtime pins TLSv1.2/1.3 and its own cipher/session policy",
+                directive.name
+            ),
+        )),
+        "resolver" | "resolver_timeout" => Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `{}` (SMTP client-host PTR/forward-confirmed resolution) is not executable; the runtime resolves the `Auth-Server` backend with its own bounded DNS policy",
+                directive.name
+            ),
+        )),
+        "set_real_ip_from" => Err(NginxConfigError::unsupported(
+            directive,
+            "mail `set_real_ip_from` (mail realip module) is not executable",
+        )),
+        name if ACCEPTED_IGNORED.contains(&name) => Ok(()),
+        name => Err(NginxConfigError::unsupported(
+            directive,
+            format!("unsupported mail server directive `{name}`"),
+        )),
+    }
+}
+
+fn parse_mail_auth_http(
+    directive: &NginxDirective,
+    target: &mut Option<String>,
+) -> Result<(), NginxConfigError> {
+    let Some(uri) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `auth_http` requires a service URL",
+        ));
+    };
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `auth_http` takes exactly one URL",
+        ));
+    }
+    let uri = uri.strip_prefix("http://").unwrap_or(uri);
+    if uri.trim().is_empty() || uri.contains(char::is_whitespace) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid mail auth_http URL `{uri}`"),
+        ));
+    }
+    *target = Some(uri.to_owned());
+    Ok(())
+}
+
+fn parse_mail_auth_http_header(
+    directive: &NginxDirective,
+    headers: &mut Vec<String>,
+) -> Result<(), NginxConfigError> {
+    if directive.args.len() != 2 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `auth_http_header` requires a name and a value",
+        ));
+    }
+    let name = &directive.args[0];
+    let value = &directive.args[1];
+    let valid_name = !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
+    if !valid_name || value.contains(['\r', '\n']) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `auth_http_header` requires a token name and a single-line value",
+        ));
+    }
+    headers.push(format!("{name}: {value}"));
+    Ok(())
+}
+
+fn parse_mail_auth_http_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `auth_http_timeout` requires a time value",
+        ));
+    };
+    let Some(seconds) = parse_nginx_time_seconds(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid auth_http_timeout `{value}`"),
+        ));
+    };
+    let millis = seconds.saturating_mul(1_000);
+    if !(1..=600_000).contains(&millis) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("auth_http_timeout `{value}` is outside 1ms..=10m"),
+        ));
+    }
+    Ok(millis)
+}
+
+fn parse_mail_single_path(
+    mapper: &Mapper<'_>,
+    directive: &NginxDirective,
+) -> Result<String, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `{}` takes exactly one file", directive.name),
+        ));
+    }
+    mapper.resolve_path(directive)
+}
+
+fn parse_mail_ssl_protocols(directive: &NginxDirective) -> Result<Vec<String>, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `ssl_protocols` requires at least one protocol token",
+        ));
+    }
+    let mut protocols = Vec::new();
+    for token in &directive.args {
+        match token.as_str() {
+            "TLSv1.2" | "TLSv1.3" => {
+                if !protocols.contains(token) {
+                    protocols.push(token.clone());
+                }
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "mail `ssl_protocols` token `{other}` is not executable; the rustls stack pins TLSv1.2/TLSv1.3 (NGINX_SPEC section 3)"
+                    ),
+                ))
+            }
+        }
+    }
+    Ok(protocols)
+}
+
+fn parse_mail_starttls(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    match directive.args.first().map(String::as_str) {
+        Some("on") => Ok("on".to_owned()),
+        Some("off") => Ok("off".to_owned()),
+        Some("only") => Ok("only".to_owned()),
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `starttls` accepts on|off|only, found `{other:?}`"),
+        )),
+    }
+}
+
+fn parse_mail_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `timeout` requires a time value",
+        ));
+    };
+    let Some(seconds) = parse_nginx_time_seconds(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid mail timeout `{value}`"),
+        ));
+    };
+    let millis = seconds.saturating_mul(1_000);
+    if !(1..=86_400_000).contains(&millis) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail timeout `{value}` is outside 1ms..=24h"),
+        ));
+    }
+    Ok(millis)
+}
+
+fn parse_mail_proxy_buffer(directive: &NginxDirective) -> Result<usize, NginxConfigError> {
+    let Some(bytes) = parse_body_size(directive)? else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `proxy_buffer` requires a size",
+        ));
+    };
+    let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
+    if !(512..=1024 * 1024).contains(&bytes) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `proxy_buffer` must be between 512 bytes and 1 MiB",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn parse_mail_proxy_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `proxy_timeout` requires a time value",
+        ));
+    };
+    let Some(seconds) = parse_nginx_time_seconds(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid proxy_timeout `{value}`"),
+        ));
+    };
+    let millis = seconds.saturating_mul(1_000);
+    if !(1..=86_400_000).contains(&millis) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("proxy_timeout `{value}` is outside 1ms..=24h"),
+        ));
+    }
+    Ok(millis)
+}
+
+fn parse_mail_max_errors(directive: &NginxDirective) -> Result<u32, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `max_errors` requires a count",
+        ));
+    };
+    let errors = value.parse::<u32>().map_err(|_| {
+        NginxConfigError::unsupported(
+            directive,
+            format!("mail `max_errors` requires a positive integer, found `{value}`"),
+        )
+    })?;
+    if !(1..=100).contains(&errors) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `max_errors` must be between 1 and 100",
+        ));
+    }
+    Ok(errors)
+}
+
+fn parse_mail_greeting_delay(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `smtp_greeting_delay` requires a time value",
+        ));
+    };
+    let Some(millis) = parse_mail_delay_millis(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid smtp_greeting_delay `{value}`"),
+        ));
+    };
+    if millis > 60_000 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "smtp_greeting_delay must not exceed 60s",
+        ));
+    }
+    Ok(millis)
+}
+
 /// One parsed mail `listen` entry.
 #[derive(Debug, Clone)]
 struct MailListenSpec {
@@ -6859,6 +7369,8 @@ struct MailListenSpec {
     port: u16,
     proxy_protocol: bool,
     so_keepalive: Option<bool>,
+    /// `listen … ssl`: implicit TLS from the first byte.
+    ssl: bool,
 }
 
 /// Parse `listen <address:port> [proxy_protocol] [so_keepalive=on|off]
@@ -6875,14 +7387,10 @@ fn parse_mail_listen_spec(directive: &NginxDirective) -> Result<MailListenSpec, 
     })?;
     let mut proxy_protocol = false;
     let mut so_keepalive = None;
+    let mut ssl = false;
     for part in parts {
         match part.as_str() {
-            "ssl" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "mail `listen … ssl` (implicit TLS) is Wave 9B; Wave 9A has no mail TLS",
-                ))
-            }
+            "ssl" => ssl = true,
             "proxy_protocol" => proxy_protocol = true,
             "so_keepalive=on" => so_keepalive = Some(true),
             "so_keepalive=off" => so_keepalive = Some(false),
@@ -6918,6 +7426,7 @@ fn parse_mail_listen_spec(directive: &NginxDirective) -> Result<MailListenSpec, 
         port,
         proxy_protocol,
         so_keepalive,
+        ssl,
     })
 }
 

@@ -2644,6 +2644,181 @@ impl SemanticValidator {
                     }
                 }
             }
+            self.validate_mail_auth_http(&path, server);
+            self.validate_mail_tls(&path, server);
+            self.validate_mail_proxy(&path, server);
+            if !(1..=100).contains(&server.max_errors) {
+                self.push(
+                    format!("{path}/maxErrors"),
+                    "mail max_errors must be between 1 and 100",
+                );
+            }
+        }
+    }
+
+    /// Validate the mail `auth_http` service declaration (Wave 9B).
+    fn validate_mail_auth_http(&mut self, path: &str, server: &crate::config::MailServerConfig) {
+        let Some(auth) = &server.auth_http else {
+            return;
+        };
+        let endpoint = auth.endpoint();
+        let valid_uri = endpoint.is_some_and(|endpoint| {
+            let (host, rest) = match endpoint.split_once('/') {
+                Some((host, rest)) => (host, Some(rest)),
+                None => (endpoint.as_str(), None),
+            };
+            let (host, port) = match host.rsplit_once(':') {
+                Some((host, port)) => (host, Some(port)),
+                None => (host, None),
+            };
+            !host.is_empty()
+                && !host.contains(char::is_whitespace)
+                && port.is_none_or(|port| {
+                    !port.is_empty()
+                        && port.bytes().all(|byte| byte.is_ascii_digit())
+                        && port.parse::<u16>().is_ok_and(|port| port != 0)
+                })
+                && rest.is_none_or(|rest| !rest.contains(char::is_whitespace))
+        });
+        if !valid_uri {
+            self.push(
+                format!("{path}/authHttp/uri"),
+                "auth_http must be `host[:port][/path]` with an optional `http://` prefix",
+            );
+        }
+        if !(1..=600_000).contains(&auth.timeout_ms) {
+            self.push(
+                format!("{path}/authHttp/timeoutMs"),
+                "auth_http_timeout must be between 1 ms and 10 minutes",
+            );
+        }
+        if let Some(host_header) = &auth.host_header {
+            if host_header.is_empty()
+                || host_header.len() > 255
+                || host_header.contains(char::is_whitespace)
+                || host_header.contains(char::is_control)
+            {
+                self.push(
+                    format!("{path}/authHttp/hostHeader"),
+                    "auth_http Host header must be a 1..=255 byte token",
+                );
+            }
+        }
+        for (header_index, header) in auth.headers.iter().enumerate() {
+            let valid = header.split_once(':').is_some_and(|(name, value)| {
+                !name.trim().is_empty()
+                    && name
+                        .trim()
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+                    && !value.contains(['\r', '\n'])
+                    && header.len() <= 4096
+            });
+            if !valid {
+                self.push(
+                    format!("{path}/authHttp/headers/{header_index}"),
+                    "auth_http_header must be `Name: value` on one line",
+                );
+            }
+        }
+        if auth.pass_client_cert {
+            // Forwarding the client certificate requires the mail plane to
+            // model downstream client-certificate verification, which it does
+            // not (mail `ssl_verify_client` fails closed). Accepting the flag
+            // would silently drop it, so it fails closed instead.
+            self.push(
+                format!("{path}/authHttp/passClientCert"),
+                "auth_http_pass_client_cert requires downstream client-certificate verification, which the mail plane does not model; remove the directive",
+            );
+        }
+    }
+
+    /// Validate the mail frontend TLS material (Wave 9B).
+    fn validate_mail_tls(&mut self, path: &str, server: &crate::config::MailServerConfig) {
+        let Some(tls) = &server.tls else {
+            return;
+        };
+        if tls.certificate_file.trim().is_empty() {
+            self.push(
+                format!("{path}/tls/certificateFile"),
+                "ssl_certificate path must not be empty",
+            );
+        }
+        if tls.private_key_file.trim().is_empty() {
+            self.push(
+                format!("{path}/tls/privateKeyFile"),
+                "ssl_certificate_key path must not be empty",
+            );
+        }
+        if tls.protocols.is_empty() {
+            self.push(
+                format!("{path}/tls/protocols"),
+                "ssl_protocols must declare TLSv1.2 and/or TLSv1.3",
+            );
+        }
+        if matches!(tls.starttls, crate::config::MailStarttlsMode::Off) && !tls.implicit {
+            self.push(
+                format!("{path}/tls"),
+                "mail TLS is declared but neither `listen … ssl` nor `starttls on|only` enables it",
+            );
+        }
+        if tls.implicit && matches!(tls.starttls, crate::config::MailStarttlsMode::Only) {
+            self.push(
+                format!("{path}/tls/starttls"),
+                "implicit TLS and `starttls only` are mutually exclusive",
+            );
+        }
+    }
+
+    /// Validate the mail backend relay policy (Wave 9B).
+    fn validate_mail_proxy(&mut self, path: &str, server: &crate::config::MailServerConfig) {
+        let proxy = &server.proxy;
+        if !(512..=1024 * 1024).contains(&proxy.buffer_bytes) {
+            self.push(
+                format!("{path}/proxy/bufferBytes"),
+                "proxy_buffer must be between 512 bytes and 1 MiB",
+            );
+        }
+        if !(1..=86_400_000).contains(&proxy.timeout_ms) {
+            self.push(
+                format!("{path}/proxy/timeoutMs"),
+                "proxy_timeout must be between 1 ms and 24 hours",
+            );
+        }
+        if let Some(tls) = &proxy.tls {
+            if tls.verify && tls.trusted_certificate_file.is_none() {
+                // webpki roots are the default trust store, so an explicit
+                // bundle is optional; nothing to reject here.
+            }
+            if tls.certificate_file.is_some() != tls.certificate_key_file.is_some() {
+                self.push(
+                    format!("{path}/proxy/tls"),
+                    "mail backend TLS client identity requires both certificateFile and certificateKeyFile",
+                );
+            }
+            if let Some(server_name) = &tls.server_name {
+                if server_name.is_empty()
+                    || server_name.len() > 253
+                    || server_name.contains(|character: char| {
+                        character.is_whitespace() || character.is_control()
+                    })
+                {
+                    self.push(
+                        format!("{path}/proxy/tls/serverName"),
+                        "mail backend TLS server name must be a 1..=253 byte host name",
+                    );
+                }
+            }
+        }
+        if proxy.proxy_protocol
+            && !matches!(
+                server.protocol,
+                crate::config::MailServerProtocol::Smtp
+                    | crate::config::MailServerProtocol::Pop3
+                    | crate::config::MailServerProtocol::Imap
+            )
+        {
+            // Every mail protocol can carry a backend PROXY header.
         }
     }
 

@@ -98,7 +98,7 @@
       "listenPort": 21010,
       "cases": 39,
       "orchestrator": "tools/run-nginx-differential-host.mjs",
-      "notes": "PRD-nginx-compatibility §5/§6 virtual-host selection and bounded named-location internal redirects compared against a real nginx 1.29.6 binary: exact / leading wildcard (any depth, longest) / trailing wildcard (longest) / dot-prefix / regex (authored order, nginx case folding) precedence, default-server fallback, and try_files/error_page → @named targets (return, root, proxy_pass). The slice owns its oracle: tests/nginx/differential-host/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences (nginx's built-in 404 page body) are justified in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-host.mjs."
+      "notes": "PRD-nginx-compatibility \u00a75/\u00a76 virtual-host selection and bounded named-location internal redirects compared against a real nginx 1.29.6 binary: exact / leading wildcard (any depth, longest) / trailing wildcard (longest) / dot-prefix / regex (authored order, nginx case folding) precedence, default-server fallback, and try_files/error_page \u2192 @named targets (return, root, proxy_pass). The slice owns its oracle: tests/nginx/differential-host/nginx-oracle.json is the real-nginx side, so the comparison still runs where nginx is absent; intentional differences (nginx's built-in 404 page body) are justified in compare.py. `cases` is the executed-case floor enforced by tools/run-nginx-differential-host.mjs."
     },
     {
       "id": "differential-protocols",
@@ -123,6 +123,18 @@
       "cases": 9,
       "orchestrator": "tools/run-nginx-differential-stream.mjs",
       "notes": "Wave 4b stream slice: one connection battery drives the rendered fixture against real nginx 1.29.6 and the runtime, recording byte-level per-connection outcomes. Cases: the bounded stream variable engine (`set` literal value, `map` over an accept-time fact, and `map $ssl_preread_server_name` from a synthetic TLS ClientHello) feeding `return <value>`; pass-through proxying behind the ordered stream access phase (allow/deny, including a deny that closes silently without proxying), stream `return <value>` literal response, stream `limit_conn` (over-limit connection closed silently, slot released after the holder disconnects) and `limit_conn_dry_run` (over-limit connections counted but still proxied). FIN-vs-RST races on a server-closed connection are normalized to one `closed` outcome in battery.py; everything else is compared exactly. The slice owns its oracle (nginx-oracle.json) and its orchestrator; `cases` is the executed-case floor enforced by tools/run-nginx-differential-stream.mjs."
+    },
+    {
+      "id": "differential-mail",
+      "req": "REQ-2026-0073",
+      "dir": "differential-mail",
+      "nginxConf": "nginx.conf",
+      "probe": "battery.py",
+      "oracle": "nginx-oracle.json",
+      "listenPort": 21490,
+      "cases": 9,
+      "orchestrator": "tools/run-nginx-differential-mail.mjs",
+      "notes": "Wave 9B mail-proxy slice: one nginx `mail {}` fixture is rendered for real nginx 1.29.6 (built --with-mail --with-mail_ssl_module) and for the gateway; a deterministic mock auth_http service plus mock POP3/IMAP/SMTP backends record the three observable flows per case: the client-visible byte transcript, every backend line (including the backend authentication sequence, SMTP XCLIENT with the `[UNAVAILABLE]` client host, the replayed client EHLO and relayed commands) and every auth_http request header. Cases: POP3 USER/PASS + relay, POP3 AUTH LOGIN dialog, POP3 auth failure, IMAP LOGIN + relay, IMAP auth failure, SMTP AUTH PLAIN with XCLIENT + relay, SMTP auth failure with Auth-Error-Code, implicit-TLS SMTP session, and STARTTLS (greeting, EHLO with STARTTLS capability, STARTTLS 220, TLS handshake, no re-greeting, AUTH). TLS cases compare decrypted application bytes; `Auth-SSL-Cipher` is normalised because nginx reports an OpenSSL cipher name while rustls reports its own suite label. The slice owns its oracle and orchestrator; `cases` is the executed-case floor enforced by tools/run-nginx-differential-mail.mjs."
     }
   ]
 }

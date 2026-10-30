@@ -131,6 +131,7 @@ is `specs/nginx-directive-support.catalog.json` rendered as
 | Upstream-protocol differential vs nginx 1.29.6 (FastCGI/uWSGI/SCGI/memcached/gRPC) | `node tools/run-nginx-differential-protocols.mjs` | 46/46 byte-identical (bind/keep-conn/unix included) |
 | Stream differential vs nginx 1.29.6 (limit_conn/dry-run/ACL/return/set/map/SNI) | `node tools/run-nginx-differential-stream.mjs` | 9/9 |
 | Real production config acceptance (api.birdcoder.com snapshot, 33 files) | `node tools/check-nginx-real-world.mjs` | 41 vhosts / 4 listeners / 150 resources / 88 upstreams / 0 skipped |
+| Mail proxy differential vs nginx 1.29.6 (auth_http + POP3/IMAP/SMTP + STARTTLS) | `node tools/run-nginx-differential-mail.mjs` | 9/9 byte/transcript-identical |
 | Virtual-host selection and named locations vs nginx 1.29.6 | `node tools/run-nginx-differential-host.mjs` | 39/39, 0 unexpected (3 documented allowances) |
 | Directive catalog drift (inventory ↔ catalog ↔ implementation ↔ CLI ↔ docs) | `node tools/check-nginx-directive-matrix.mjs` | 12/12 |
 | Migration CLI consumes the catalog | `node --test tools/import-nginx-conf.test.mjs` | 14/14 |
@@ -138,7 +139,7 @@ is `specs/nginx-directive-support.catalog.json` rendered as
 
 The differential oracles are committed and pinned to nginx 1.29.6, so CI compares without a real
 nginx binary; `SDKWORK_REQUIRE_NGINX_EVIDENCE=1` (set by the aggregate gate) turns any "this machine
-cannot execute the evidence" skip into a failure. The directive catalog now classifies 212 directives
+cannot execute the evidence" skip into a failure. The directive catalog now classifies 239 directives
 executable, 170 accepted-but-unenforced (each with a located diagnostic and a migration action), 334
 fail-closed and 64 excluded out of the 744 nginx 1.29.6 directives; a generated 744-row audit ledger
 records one decision and rationale per directive (116 enforced / 143 runtime-owned / 17 security-difference / 29 behavior-gap / 229 out-of-profile / 210 fail-closed). Remaining catalogued gaps (`tls.ocsp-stapling`,
