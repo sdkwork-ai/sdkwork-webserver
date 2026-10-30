@@ -16,11 +16,19 @@
 //!   upstream, and the FastCGI response records are parsed into an HTTP
 //!   response with `fastcgi_hide_header` / `fastcgi_pass_header` applied.
 //!
-//! Bounded differences (documented, not silent): `fastcgi_pass unix:` and
-//! variable targets fail closed at materialization; `fastcgi_keep_conn` is sent
-//! on the wire but the connection is closed after each response, so pooling is
-//! not implemented; response/request buffering are materialized but the adapter
-//! always buffers within the configured byte limits.
+//! Transport (Wave 7A): `*_bind` binds the upstream source address through
+//! `TcpSocket` (IP literal only), `*_socket_keepalive` sets `SO_KEEPALIVE`, and
+//! `fastcgi_keep_conn` returns a cleanly completed connection to the bounded
+//! per-generation pool so the next request on the same target can reuse it.
+//! Unix-socket pass targets are typed-plane only (the nginx compatibility plane
+//! fails closed with a located diagnostic pointing at `[http] unixSocketRoot`)
+//! and are connected through the same seam with `UnixStream`.
+//!
+//! Bounded differences (documented, not silent): uWSGI/SCGI responses have no
+//! protocol-level end marker (nginx never reuses those connections either), so
+//! they are never pooled; a response body is still fully buffered within the
+//! configured byte limits (`*_buffering`/`*_request_buffering` are materialized
+//! but not streamed).
 
 use std::{
     collections::HashSet,
@@ -52,14 +60,17 @@ use sdkwork_webserver_upstream_protocol::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
     time::timeout,
 };
 use url::Url;
 
 use super::{
-    dns::GuardedDnsResolver, map_variables::MapResults, metrics::DataPlaneMetrics,
-    proxy::text_response, runtime::RuntimeGeneration,
+    dns::GuardedDnsResolver,
+    map_variables::MapResults,
+    metrics::DataPlaneMetrics,
+    protocol_pool::{connect_stream, PoolKey, ProtocolPool, ResolvedTarget},
+    proxy::text_response,
+    runtime::RuntimeGeneration,
 };
 
 /// nginx `ngx_http_fastcgi_hide_headers` default-hidden response fields (the
@@ -344,6 +355,51 @@ fn build_parameters(
     FastCgiParams::from_variables(&variables, &Limits::default()).map_err(|error| error.to_string())
 }
 
+/// Optional FastCGI connection-pool policy for one request. `keep_conn` alone
+/// only sets the wire flag; the runtime also requires the upstream's idle-pool
+/// settings, exactly like nginx needing both `fastcgi_keep_conn on` and an
+/// `upstream { keepalive …; }` cache.
+pub(crate) struct PoolPolicy<'a> {
+    pool: &'a ProtocolPool,
+    per_key_max: usize,
+    idle_timeout: Duration,
+}
+
+/// Resolve one upstream target URL to a stream destination. `unix:` targets are
+/// validated again here against the typed `nginx.unixSocketRoot` before any
+/// socket is opened (defense in depth: semantic validation already confined
+/// them).
+async fn resolve_stream_target(
+    generation: &RuntimeGeneration,
+    policy: &UpstreamAddressPolicyConfig,
+    metrics: &Arc<DataPlaneMetrics>,
+    target: &Url,
+) -> Result<ResolvedTarget, ()> {
+    if target.scheme() == "unix" {
+        let path = sdkwork_webserver_core::unix_target_path(target.as_str()).ok_or(())?;
+        let root = generation
+            .app
+            .config()
+            .nginx
+            .unix_socket_root
+            .as_deref()
+            .ok_or(())?;
+        if !sdkwork_webserver_core::unix_path_is_confined(root, &path) {
+            return Err(());
+        }
+        #[cfg(unix)]
+        {
+            return Ok(ResolvedTarget::Unix(std::path::PathBuf::from(path)));
+        }
+        #[cfg(not(unix))]
+        {
+            return Err(());
+        }
+    }
+    let address = resolve_target(generation, policy, metrics, target).await?;
+    Ok(ResolvedTarget::Tcp(address))
+}
+
 /// Resolve one upstream target URL to a socket address, enforcing the
 /// upstream's authorized-network policy on hostname results.
 async fn resolve_target(
@@ -519,14 +575,36 @@ async fn exchange(
     connect_timeout: Duration,
     send_timeout: Duration,
     read_timeout: Duration,
+    bind_address: Option<IpAddr>,
+    socket_keepalive: bool,
+    pool: Option<&PoolPolicy<'_>>,
 ) -> Result<(StatusCode, HeaderMap, Vec<u8>), ExchangeFailure> {
-    let address = resolve_target(generation, policy, metrics, target)
+    let resolved = resolve_stream_target(generation, policy, metrics, target)
         .await
         .map_err(|_| ExchangeFailure::Transport)?;
-    let mut stream = timeout(connect_timeout, TcpStream::connect(address))
+    let pool_key = pool.map(|_policy| PoolKey {
+        target: pool_target_key(target),
+        bind: bind_address,
+    });
+    let mut stream = match (pool, pool_key.as_ref()) {
+        (Some(policy), Some(key)) => match policy.pool.take(key) {
+            Some(stream) => stream,
+            None => timeout(
+                connect_timeout,
+                connect_stream(&resolved, bind_address, socket_keepalive),
+            )
+            .await
+            .map_err(|_| ExchangeFailure::Timeout)?
+            .map_err(|_| ExchangeFailure::Transport)?,
+        },
+        _ => timeout(
+            connect_timeout,
+            connect_stream(&resolved, bind_address, socket_keepalive),
+        )
         .await
         .map_err(|_| ExchangeFailure::Timeout)?
-        .map_err(|_| ExchangeFailure::Transport)?;
+        .map_err(|_| ExchangeFailure::Transport)?,
+    };
     timeout(send_timeout, stream.write_all(wire))
         .await
         .map_err(|_| ExchangeFailure::Timeout)?
@@ -542,6 +620,10 @@ async fn exchange(
     let mut body: Vec<u8> = Vec::new();
     let mut errors: Vec<u8> = Vec::new();
     let mut buffer = [0u8; 16 * 1024];
+    // FastCGI responses are framed by `END_REQUEST`; the connection may be
+    // pooled only after that record was parsed (a Content-Length break would
+    // leave the END record unread and misalign the socket).
+    let mut fastcgi_complete = false;
     loop {
         let read = timeout(read_timeout, stream.read(&mut buffer))
             .await
@@ -571,12 +653,15 @@ async fn exchange(
             &mut body,
             &mut errors,
         )? {
+            fastcgi_complete = protocol == WireProtocol::FastCgi;
             break;
         }
-        if let Some(value) = &head {
-            if let Some(expected) = declared_body_length(value) {
-                if body.len() as u64 >= expected {
-                    break;
+        if protocol != WireProtocol::FastCgi {
+            if let Some(value) = &head {
+                if let Some(expected) = declared_body_length(value) {
+                    if body.len() as u64 >= expected {
+                        break;
+                    }
                 }
             }
         }
@@ -591,6 +676,19 @@ async fn exchange(
     let Some(head) = head else {
         return Err(ExchangeFailure::Protocol);
     };
+    // A complete, clean `END_REQUEST` with no trailing bytes means the socket is
+    // aligned for the next request; only then is it returned to the pool. An app
+    // that ignores the `keep_conn` flag closes the socket instead and the idle
+    // health probe discards it on the next take. uWSGI/SCGI responses have no
+    // protocol-level end marker (nginx never reuses those connections), so they
+    // are never pooled.
+    if protocol == WireProtocol::FastCgi && fastcgi_complete {
+        if let (Some(policy), Some(key)) = (pool, pool_key) {
+            policy
+                .pool
+                .put(key, stream, policy.per_key_max, policy.idle_timeout);
+        }
+    }
     let status = StatusCode::from_u16(head.status).map_err(|_| ExchangeFailure::Protocol)?;
     let mut headers = HeaderMap::new();
     for (name, value) in &head.headers {
@@ -607,6 +705,13 @@ async fn exchange(
         headers.append(header_name, header_value);
     }
     Ok((status, headers, body))
+}
+
+/// Stable pool identity for one upstream target: scheme/host/port/path from the
+/// selected target URL, with any trailing slash removed so repeated selections
+/// of the same target share their cached connections.
+fn pool_target_key(target: &Url) -> String {
+    target.as_str().trim_end_matches('/').to_owned()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -626,6 +731,8 @@ pub(crate) async fn serve_fastcgi(
     index: Option<&str>,
     pass_request_headers: bool,
     keep_conn: bool,
+    bind_address: Option<IpAddr>,
+    socket_keepalive: bool,
     connect_timeout_ms: u64,
     send_timeout_ms: u64,
     read_timeout_ms: u64,
@@ -641,6 +748,26 @@ pub(crate) async fn serve_fastcgi(
             "FastCGI upstream is not configured\n",
         );
     };
+    // `fastcgi_keep_conn on` sets the wire flag; reuse additionally needs the
+    // upstream's idle cache (nginx requires `upstream { keepalive N; }` too).
+    let (pool_per_key_max, pool_idle_timeout_ms) = generation
+        .app
+        .config()
+        .upstreams
+        .iter()
+        .find(|configured| configured.id == upstream_ref)
+        .map(|configured| {
+            (
+                configured.max_idle_connections,
+                configured.idle_connection_timeout_ms,
+            )
+        })
+        .unwrap_or((0, 0));
+    let pool = keep_conn.then(|| PoolPolicy {
+        pool: &generation.protocol_pool,
+        per_key_max: pool_per_key_max,
+        idle_timeout: Duration::from_millis(pool_idle_timeout_ms),
+    });
     let (script_name, path_info) = compute_script_names(facts.path, split_path_info, index);
     let facts = CgiRequestFacts {
         script_name,
@@ -716,6 +843,9 @@ pub(crate) async fn serve_fastcgi(
             Duration::from_millis(connect_timeout_ms),
             Duration::from_millis(send_timeout_ms),
             Duration::from_millis(read_timeout_ms),
+            bind_address,
+            socket_keepalive,
+            pool.as_ref(),
         )
         .await;
         match outcome {
@@ -771,6 +901,8 @@ pub(crate) async fn serve_cgi(
     upstream_ref: &str,
     params: &[UpstreamParamConfig],
     pass_request_headers: bool,
+    bind_address: Option<IpAddr>,
+    socket_keepalive: bool,
     connect_timeout_ms: u64,
     send_timeout_ms: u64,
     read_timeout_ms: u64,
@@ -884,6 +1016,9 @@ pub(crate) async fn serve_cgi(
             Duration::from_millis(connect_timeout_ms),
             Duration::from_millis(send_timeout_ms),
             Duration::from_millis(read_timeout_ms),
+            bind_address,
+            socket_keepalive,
+            None,
         )
         .await;
         match outcome {
@@ -937,6 +1072,8 @@ pub(crate) async fn serve_memcached(
     generation: &Arc<RuntimeGeneration>,
     upstream_ref: &str,
     key_template: &str,
+    bind_address: Option<IpAddr>,
+    socket_keepalive: bool,
     connect_timeout_ms: u64,
     send_timeout_ms: u64,
     read_timeout_ms: u64,
@@ -1016,6 +1153,8 @@ pub(crate) async fn serve_memcached(
             Duration::from_millis(connect_timeout_ms),
             Duration::from_millis(send_timeout_ms),
             Duration::from_millis(read_timeout_ms),
+            bind_address,
+            socket_keepalive,
         )
         .await;
         match outcome {
@@ -1095,14 +1234,19 @@ async fn memcached_exchange(
     connect_timeout: Duration,
     send_timeout: Duration,
     read_timeout: Duration,
+    bind_address: Option<IpAddr>,
+    socket_keepalive: bool,
 ) -> Result<MemcachedOutcome, ExchangeFailure> {
-    let address = resolve_target(generation, policy, metrics, target)
+    let resolved = resolve_stream_target(generation, policy, metrics, target)
         .await
         .map_err(|_| ExchangeFailure::Transport)?;
-    let mut stream = timeout(connect_timeout, TcpStream::connect(address))
-        .await
-        .map_err(|_| ExchangeFailure::Timeout)?
-        .map_err(|_| ExchangeFailure::Transport)?;
+    let mut stream = timeout(
+        connect_timeout,
+        connect_stream(&resolved, bind_address, socket_keepalive),
+    )
+    .await
+    .map_err(|_| ExchangeFailure::Timeout)?
+    .map_err(|_| ExchangeFailure::Transport)?;
     timeout(send_timeout, stream.write_all(wire))
         .await
         .map_err(|_| ExchangeFailure::Timeout)?

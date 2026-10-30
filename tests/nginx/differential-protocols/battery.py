@@ -164,6 +164,14 @@ CASES = [
         {"Content-Type": "application/grpc", "TE": "trailers"},
         grpc_frame(b"ping"),
     ),
+    # ---- Wave 7A transport: source-address binding (mock echoes the accepted
+    # peer) and `fastcgi_keep_conn` connection reuse ----
+    ("fastcgi-bind-peer", "GET", "/bind/peer", {"X-Sent": "bind"}, None),
+    ("uwsgi-bind-peer", "GET", "/bind-uwsgi/peer", {"X-Sent": "bind-uwsgi"}, None),
+    ("scgi-bind-peer", "GET", "/bind-scgi/peer", {"X-Sent": "bind-scgi"}, None),
+    ("memcached-bind-peer", "GET", "/bind-cache/bind", {}, None),
+    ("fastcgi-keepconn-reuse", "SPECIAL", "", {}, None),
+
 ]
 
 
@@ -215,8 +223,16 @@ def normalize_grpc_ports(payload: bytes, base_port: int) -> bytes:
     return payload
 
 
-def request(port: int, method: str, path: str, headers: dict, body: bytes | None, base_port: int):
-    lines = [f"{method} {path} HTTP/1.1", f"Host: {HOST}", "Connection: close"]
+def request(
+    port: int,
+    method: str,
+    path: str,
+    headers: dict,
+    body: bytes | None,
+    base_port: int,
+    host: str = HOST,
+):
+    lines = [f"{method} {path} HTTP/1.1", f"Host: {host}", "Connection: close"]
     for name, value in headers.items():
         lines.append(f"{name}: {value}")
     if body is not None:
@@ -268,20 +284,70 @@ def request(port: int, method: str, path: str, headers: dict, body: bytes | None
     }, server_line)
 
 
+# Typed-plane unix-socket transport cases. Both endpoints run the same
+# `fastcgi_pass unix:` / `uwsgi_pass unix:` pair (the oracle through nginx
+# configuration, the gateway through a typed JSON configuration confined by
+# `nginx.unixSocketRoot`). They are sent to a second listener port so the
+# single-port contract of the rest of the battery is unchanged.
+UNIX_CASES = [
+    ("unix-fastcgi", "GET", "/unix-fcgi/hello?x=1", {"X-Sent": "unix-fcgi"}, None),
+    ("unix-uwsgi", "GET", "/unix-uwsgi/hello?x=1", {"X-Sent": "unix-uwsgi"}, None),
+]
+UNIX_HOST = "unix.example.com"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--unix-port", type=int, default=None)
     parser.add_argument("--out", required=True)
     arguments = parser.parse_args()
     captured = {}
     server = None
     for name, method, path, headers, body in CASES:
+        if method == "SPECIAL":
+            # `fastcgi_keep_conn` reuse: two sequential requests must be answered
+            # on the same responder connection (the mock reports its local
+            # connection id only when the client keeps the socket open).
+            first, server_line = request(
+                arguments.port, "GET", "/keepconn/one", {"X-Sent": "keepconn-1"},
+                None, arguments.port,
+            )
+            second, _ = request(
+                arguments.port, "GET", "/keepconn/two", {"X-Sent": "keepconn-2"},
+                None, arguments.port,
+            )
+            try:
+                first_id = json.loads(first["body"]).get("connection")
+                second_id = json.loads(second["body"]).get("connection")
+            except (ValueError, AttributeError):
+                first_id = second_id = None
+            captured[name] = {
+                "status": first["status"],
+                "headers": first["headers"],
+                "trailers": {},
+                "body": "same-connection=%s" % (
+                    first_id is not None and first_id == second_id
+                ),
+            }
+            if server is None and server_line is not None:
+                server = server_line
+            continue
         result, server_line = request(
             arguments.port, method, path, headers, body, arguments.port
         )
         if server is None and server_line is not None:
             server = server_line
         captured[name] = result
+    if arguments.unix_port is not None:
+        for name, method, path, headers, body in UNIX_CASES:
+            result, server_line = request(
+                arguments.unix_port, method, path, headers, body,
+                arguments.unix_port, host=UNIX_HOST,
+            )
+            if server is None and server_line is not None:
+                server = server_line
+            captured[name] = result
     output = {"_server": server, "_cases": len(captured), "cases": captured}
     with open(arguments.out, "w", encoding="utf-8") as handle:
         json.dump(output, handle, indent=1, sort_keys=True)

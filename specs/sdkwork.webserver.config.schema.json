@@ -281,6 +281,12 @@
         },
         "unknownDirectivePolicy": {
           "const": "error"
+        },
+        "unixSocketRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Operator-configured absolute directory for unix:/... upstream socket targets (typed-plane only). A unix target is accepted only when its resolved path is a strict descendant of this root."
         }
       }
     },
@@ -1442,6 +1448,16 @@
           "type": "boolean",
           "default": false
         },
+        "bindAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "nginx *_bind: literal source IP address to bind before connecting (hostnames and transparent forms fail closed)."
+        },
+        "socketKeepalive": {
+          "type": "boolean",
+          "description": "nginx *_socket_keepalive on: enable SO_KEEPALIVE on the upstream socket."
+        },
+
         "buffering": {
           "type": "boolean",
           "default": true
@@ -1521,6 +1537,15 @@
         "passRequestHeaders": {
           "type": "boolean",
           "default": true
+        },
+        "bindAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "nginx *_bind: literal source IP address to bind before connecting (hostnames and transparent forms fail closed)."
+        },
+        "socketKeepalive": {
+          "type": "boolean",
+          "description": "nginx *_socket_keepalive on: enable SO_KEEPALIVE on the upstream socket."
         },
         "buffering": {
           "type": "boolean",
@@ -1665,6 +1690,16 @@
           "minLength": 0,
           "maxLength": 4096
         },
+        "bindAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "nginx *_bind: literal source IP address to bind before connecting (hostnames and transparent forms fail closed)."
+        },
+        "socketKeepalive": {
+          "type": "boolean",
+          "description": "nginx *_socket_keepalive on: enable SO_KEEPALIVE on the upstream socket."
+        },
+
         "buffering": {
           "type": "boolean",
           "default": true

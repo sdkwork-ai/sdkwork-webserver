@@ -134,8 +134,8 @@ pub use upstream_params::{
 };
 pub use uri::{normalize_uri_path, normalize_uri_path_with_options, UriPathNormalizationError};
 pub use validate::{
-    normalize_server_name, normalize_tls_server_name, server_name_covers,
-    wildcard_server_name_covers,
+    normalize_server_name, normalize_tls_server_name, server_name_covers, unix_path_is_confined,
+    unix_target_path, wildcard_server_name_covers,
 };
 
 pub(crate) use validate::validate_webserver_config;

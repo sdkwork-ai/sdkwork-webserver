@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, net::IpAddr};
 
 use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
@@ -635,6 +635,19 @@ pub struct NginxConfig {
     pub profile: String,
     #[serde(default = "default_unknown_directive_policy")]
     pub unknown_directive_policy: String,
+    /// Typed-TOML `[http] unixSocketRoot`: the operator-configured directory
+    /// that `unix:` upstream socket targets must live under.
+    ///
+    /// Unix-socket upstreams are deliberately typed-plane only. An
+    /// nginx-configuration `*_pass unix:/path` fails closed at import with a
+    /// diagnostic pointing here, because a stock nginx file cannot state the
+    /// confinement root the Rust data plane requires. When set, upstream target
+    /// URLs of the form `unix:/absolute/socket` are accepted only when the
+    /// resolved path is a strict descendant of this absolute directory (no
+    /// `..`, no backslashes, no NUL); everything else fails semantic
+    /// validation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unix_socket_root: Option<String>,
 }
 
 /// nginx `map` variable (`map $source $result { … }`), executed in the
@@ -869,6 +882,7 @@ impl Default for NginxConfig {
             enabled: true,
             profile: default_profile(),
             unknown_directive_policy: default_unknown_directive_policy(),
+            unix_socket_root: None,
         }
     }
 }
@@ -1469,12 +1483,20 @@ pub enum ResourceConfig {
         /// `HTTP_<name>` request-header parameters.
         #[serde(default = "default_upstream_pass_request_headers")]
         pass_request_headers: bool,
-        /// `fastcgi_keep_conn`: sent in `BEGIN_REQUEST`. Connection reuse across
-        /// requests is not implemented (the adapter closes the upstream
-        /// connection after the response), which matches nginx's default-off
-        /// behaviour and only changes connection lifetime when explicitly on.
+        /// `fastcgi_keep_conn`: sent in `BEGIN_REQUEST`. When on, a connection
+        /// that answered a request with a clean `END_REQUEST` and no trailing
+        /// bytes is returned to the bounded per-generation protocol pool
+        /// instead of being closed.
         #[serde(default)]
         keep_conn: bool,
+        /// nginx `fastcgi_bind <address>`: bind the upstream connection's
+        /// source address before connect. Only an IP literal is executable.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bind_address: Option<IpAddr>,
+        /// nginx `fastcgi_socket_keepalive on`: enable `SO_KEEPALIVE` on the
+        /// upstream socket.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        socket_keepalive: Option<bool>,
         /// `fastcgi_buffering` (materialized; the adapter always buffers the
         /// bounded response, see crate docs for the bounded-difference note).
         #[serde(default = "default_true")]
@@ -1513,6 +1535,14 @@ pub enum ResourceConfig {
         upstream_ref: String,
         /// `set $memcached_key <value>` template, expanded per request.
         key_template: String,
+        /// nginx `memcached_bind <address>`: bind the upstream connection's
+        /// source address before connect. An IP literal only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bind_address: Option<IpAddr>,
+        /// nginx `memcached_socket_keepalive on`: enable `SO_KEEPALIVE` on the
+        /// upstream socket.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        socket_keepalive: Option<bool>,
         #[serde(default = "default_true")]
         buffering: bool,
         #[serde(default = "default_fastcgi_connect_timeout_ms")]
@@ -1543,6 +1573,14 @@ pub enum ResourceConfig {
         /// `*_pass_request_headers off`: suppress automatic `HTTP_<name>` params.
         #[serde(default = "default_upstream_pass_request_headers")]
         pass_request_headers: bool,
+        /// nginx `uwsgi_bind` / `scgi_bind <address>`: bind the upstream
+        /// connection's source address before connect. An IP literal only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bind_address: Option<IpAddr>,
+        /// nginx `uwsgi_socket_keepalive` / `scgi_socket_keepalive on`:
+        /// enable `SO_KEEPALIVE` on the upstream socket.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        socket_keepalive: Option<bool>,
         /// `*_buffering` (materialized; the adapter always buffers bounded).
         #[serde(default = "default_true")]
         buffering: bool,

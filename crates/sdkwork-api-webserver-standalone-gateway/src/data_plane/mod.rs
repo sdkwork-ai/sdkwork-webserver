@@ -27,6 +27,7 @@ mod limit_req;
 mod map_variables;
 mod metrics;
 mod operations;
+mod protocol_pool;
 mod provider_resource;
 mod proxy;
 pub(crate) mod proxy_body;

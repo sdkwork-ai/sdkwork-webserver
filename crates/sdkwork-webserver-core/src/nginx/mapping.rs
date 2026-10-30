@@ -1455,7 +1455,7 @@ impl<'a> Mapper<'a> {
                     if address.starts_with("unix:") {
                         return Err(NginxConfigError::unsupported(
                             child,
-                            "unix: upstream sockets are not supported by the runtime model",
+                            "`upstream { server unix:…; }` sockets are typed-plane only: set `unixSocketRoot` under `[http]` in the typed TOML configuration and declare `unix:/absolute/path` on the typed upstream target; a stock nginx file cannot state the confinement root",
                         ));
                     }
                     let url = if address.contains("://") {
@@ -3968,7 +3968,7 @@ impl<'a> Mapper<'a> {
             if fastcgi_target.starts_with("unix:") {
                 return Err(NginxConfigError::unsupported(
                     location,
-                    "`fastcgi_pass unix:` sockets are not executable by the bounded FastCGI adapter (TCP upstreams only)",
+                    "`fastcgi_pass unix:` sockets are typed-plane only: set `unixSocketRoot` under `[http]` in the typed TOML configuration and declare the socket on a typed upstream target (`unix:/absolute/path`); a stock nginx file cannot state the confinement root, so it fails closed here",
                 ));
             }
             let (upstream_ref, upstream_target) = if fastcgi_target.contains(':') {
@@ -4083,6 +4083,8 @@ impl<'a> Mapper<'a> {
                 "documentRoot": document_root,
                 "passRequestHeaders": effective_fastcgi.pass_request_headers.unwrap_or(true),
                 "keepConn": effective_fastcgi.keep_conn.unwrap_or(false),
+                "bindAddress": effective_fastcgi.bind_address.flatten().map(|address| address.to_string()),
+                "socketKeepalive": effective_fastcgi.socket_keepalive,
                 "buffering": effective_fastcgi.buffering.unwrap_or(true),
                 "requestBuffering": effective_fastcgi.request_buffering.unwrap_or(true),
                 "connectTimeoutMs": effective_fastcgi.connect_timeout_ms.unwrap_or(60_000),
@@ -4117,7 +4119,7 @@ impl<'a> Mapper<'a> {
                 return Err(NginxConfigError::unsupported(
                     location,
                     format!(
-                        "`{prefix}_pass unix:` sockets are not executable by the bounded {prefix} adapter (TCP upstreams only)"
+                        "`{prefix}_pass unix:` sockets are typed-plane only: set `unixSocketRoot` under `[http]` in the typed TOML configuration and declare the socket on a typed upstream target (`unix:/absolute/path`); a stock nginx file cannot state the confinement root, so it fails closed here"
                     ),
                 ));
             }
@@ -4226,6 +4228,8 @@ impl<'a> Mapper<'a> {
                 "params": params,
                 "documentRoot": document_root,
                 "passRequestHeaders": effective_cgi.pass_request_headers.unwrap_or(true),
+                "bindAddress": effective_cgi.bind_address.flatten().map(|address| address.to_string()),
+                "socketKeepalive": effective_cgi.socket_keepalive,
                 "buffering": effective_cgi.buffering.unwrap_or(true),
                 "requestBuffering": effective_cgi.request_buffering.unwrap_or(true),
                 "connectTimeoutMs": effective_cgi.connect_timeout_ms.unwrap_or(60_000),
@@ -4268,7 +4272,7 @@ impl<'a> Mapper<'a> {
             if memcached_target.starts_with("unix:") {
                 return Err(NginxConfigError::unsupported(
                     location,
-                    "`memcached_pass unix:` sockets are not executable by the bounded adapter (TCP upstreams only)",
+                    "`memcached_pass unix:` sockets are typed-plane only: set `unixSocketRoot` under `[http]` in the typed TOML configuration and declare the socket on a typed upstream target (`unix:/absolute/path`); a stock nginx file cannot state the confinement root, so it fails closed here",
                 ));
             }
             let upstream_ref = if memcached_target.contains(':') {
@@ -4362,6 +4366,8 @@ impl<'a> Mapper<'a> {
                 "type": "memcached",
                 "upstreamRef": upstream_ref,
                 "keyTemplate": key_template,
+                "bindAddress": effective_memcached.bind_address.flatten().map(|address| address.to_string()),
+                "socketKeepalive": effective_memcached.socket_keepalive,
                 "buffering": effective_memcached.buffering.unwrap_or(true),
                 "connectTimeoutMs": effective_memcached.connect_timeout_ms.unwrap_or(60_000),
                 "sendTimeoutMs": effective_memcached.send_timeout_ms.unwrap_or(60_000),
@@ -7868,6 +7874,8 @@ fn parse_proxy_method(directive: &NginxDirective) -> Result<String, NginxConfigE
 /// `set $memcached_key <value>` in the location).
 #[derive(Clone, Default)]
 struct MemcachedSettings {
+    bind_address: Option<Option<std::net::IpAddr>>,
+    socket_keepalive: Option<bool>,
     buffering: Option<bool>,
     connect_timeout_ms: Option<u64>,
     send_timeout_ms: Option<u64>,
@@ -7880,6 +7888,8 @@ struct MemcachedSettings {
 impl MemcachedSettings {
     fn overlay(&self, inner: &Self) -> Self {
         Self {
+            bind_address: inner.bind_address.or(self.bind_address),
+            socket_keepalive: inner.socket_keepalive.or(self.socket_keepalive),
             buffering: inner.buffering.or(self.buffering),
             connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
             send_timeout_ms: inner.send_timeout_ms.or(self.send_timeout_ms),
@@ -7904,6 +7914,10 @@ impl MemcachedSettings {
         };
         match suffix {
             "buffering" => self.buffering = Some(parse_on_off(directive, &directive.name)?),
+            "bind" => self.bind_address = Some(parse_upstream_bind(directive)?),
+            "socket_keepalive" => {
+                self.socket_keepalive = Some(parse_on_off(directive, &directive.name)?)
+            }
             "connect_timeout" => self.connect_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
             "send_timeout" => self.send_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
             "read_timeout" => self.read_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
@@ -7929,7 +7943,7 @@ impl MemcachedSettings {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`memcached_{other}` is not executable by the bounded memcached adapter; supported: memcached_pass/memcached_connect_timeout/memcached_send_timeout/memcached_read_timeout/memcached_buffering/memcached_next_upstream/_tries/_timeout (nginx's memcached module has no hide/pass/intercept_errors directives)"
+                        "`memcached_{other}` is not executable by the bounded memcached adapter; supported: memcached_pass/memcached_bind/memcached_socket_keepalive/memcached_connect_timeout/memcached_send_timeout/memcached_read_timeout/memcached_buffering/memcached_next_upstream/_tries/_timeout (nginx's memcached module has no hide/pass/intercept_errors directives)"
                     ),
                 ))
             }
@@ -7985,6 +7999,8 @@ impl CgiKind {
 struct CgiSettings {
     params: Option<Vec<FastCgiParamSetting>>,
     pass_request_headers: Option<bool>,
+    bind_address: Option<Option<std::net::IpAddr>>,
+    socket_keepalive: Option<bool>,
     buffering: Option<bool>,
     request_buffering: Option<bool>,
     connect_timeout_ms: Option<u64>,
@@ -8006,6 +8022,8 @@ impl CgiSettings {
         Self {
             params: inner.params.clone().or_else(|| self.params.clone()),
             pass_request_headers: inner.pass_request_headers.or(self.pass_request_headers),
+            bind_address: inner.bind_address.or(self.bind_address),
+            socket_keepalive: inner.socket_keepalive.or(self.socket_keepalive),
             buffering: inner.buffering.or(self.buffering),
             request_buffering: inner.request_buffering.or(self.request_buffering),
             connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
@@ -8084,6 +8102,10 @@ impl CgiSettings {
                 self.pass_request_headers = Some(parse_on_off(directive, &directive.name)?)
             }
             "buffering" => self.buffering = Some(parse_on_off(directive, &directive.name)?),
+            "bind" => self.bind_address = Some(parse_upstream_bind(directive)?),
+            "socket_keepalive" => {
+                self.socket_keepalive = Some(parse_on_off(directive, &directive.name)?)
+            }
             "request_buffering" => {
                 self.request_buffering = Some(parse_on_off(directive, &directive.name)?)
             }
@@ -8169,7 +8191,7 @@ impl CgiSettings {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{prefix}_{other}` is not executable by the bounded {prefix} adapter; supported: {prefix}_pass/{prefix}_param/{prefix}_pass_request_headers/{prefix}_buffering/{prefix}_request_buffering/{prefix}_connect_timeout/{prefix}_send_timeout/{prefix}_read_timeout/{prefix}_hide_header/{prefix}_pass_header/{prefix}_intercept_errors/{prefix}_next_upstream/_tries/_timeout{}",
+                        "`{prefix}_{other}` is not executable by the bounded {prefix} adapter; supported: {prefix}_pass/{prefix}_param/{prefix}_pass_request_headers/{prefix}_bind/{prefix}_socket_keepalive/{prefix}_buffering/{prefix}_request_buffering/{prefix}_connect_timeout/{prefix}_send_timeout/{prefix}_read_timeout/{prefix}_hide_header/{prefix}_pass_header/{prefix}_intercept_errors/{prefix}_next_upstream/_tries/_timeout{}",
                         if kind == CgiKind::Uwsgi {
                             "/uwsgi_modifier1/uwsgi_modifier2/uwsgi_string"
                         } else {
@@ -8201,6 +8223,8 @@ struct FastCgiSettings {
     index: Option<String>,
     split_path_info: Option<String>,
     keep_conn: Option<bool>,
+    bind_address: Option<Option<std::net::IpAddr>>,
+    socket_keepalive: Option<bool>,
     buffering: Option<bool>,
     request_buffering: Option<bool>,
     pass_request_headers: Option<bool>,
@@ -8233,6 +8257,8 @@ impl FastCgiSettings {
                 .clone()
                 .or_else(|| self.split_path_info.clone()),
             keep_conn: inner.keep_conn.or(self.keep_conn),
+            bind_address: inner.bind_address.or(self.bind_address),
+            socket_keepalive: inner.socket_keepalive.or(self.socket_keepalive),
             buffering: inner.buffering.or(self.buffering),
             request_buffering: inner.request_buffering.or(self.request_buffering),
             pass_request_headers: inner.pass_request_headers.or(self.pass_request_headers),
@@ -8336,6 +8362,10 @@ impl FastCgiSettings {
                 self.split_path_info = Some(pattern.clone());
             }
             "fastcgi_keep_conn" => self.keep_conn = Some(parse_on_off(directive, "fastcgi_keep_conn")?),
+            "fastcgi_bind" => self.bind_address = Some(parse_upstream_bind(directive)?),
+            "fastcgi_socket_keepalive" => {
+                self.socket_keepalive = Some(parse_on_off(directive, "fastcgi_socket_keepalive")?)
+            }
             "fastcgi_buffering" => {
                 self.buffering = Some(parse_on_off(directive, "fastcgi_buffering")?)
             }
@@ -8402,12 +8432,45 @@ impl FastCgiSettings {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{other}` is not executable by the bounded FastCGI adapter; supported: fastcgi_pass/fastcgi_param/fastcgi_index/fastcgi_split_path_info/fastcgi_keep_conn/fastcgi_buffering/fastcgi_request_buffering/fastcgi_pass_request_headers/fastcgi_connect_timeout/fastcgi_send_timeout/fastcgi_read_timeout/fastcgi_hide_header/fastcgi_pass_header/fastcgi_intercept_errors/fastcgi_next_upstream/_tries/_timeout"
+                        "`{other}` is not executable by the bounded FastCGI adapter; supported: fastcgi_pass/fastcgi_param/fastcgi_index/fastcgi_split_path_info/fastcgi_keep_conn/fastcgi_bind/fastcgi_socket_keepalive/fastcgi_buffering/fastcgi_request_buffering/fastcgi_pass_request_headers/fastcgi_connect_timeout/fastcgi_send_timeout/fastcgi_read_timeout/fastcgi_hide_header/fastcgi_pass_header/fastcgi_intercept_errors/fastcgi_next_upstream/_tries/_timeout"
                     ),
                 ))
             }
         }
         Ok(())
+    }
+}
+
+/// Parse an nginx `*_bind` argument.
+///
+/// nginx accepts an IP literal (optionally followed by `transparent`) or
+/// `off`. Only a literal address is executable by the bounded adapters:
+/// hostnames need a resolver decision at bind time and `transparent` needs
+/// privileged socket options, so both fail closed instead of silently relaxing
+/// the source-address contract.
+fn parse_upstream_bind(
+    directive: &NginxDirective,
+) -> Result<Option<std::net::IpAddr>, NginxConfigError> {
+    match directive.args.as_slice() {
+        [value] if value.eq_ignore_ascii_case("off") => Ok(None),
+        [value] if !value.contains('$') => value.parse::<std::net::IpAddr>().map(Some).map_err(
+            |_| {
+                NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` requires an IP literal or `off`; hostnames, variables, and `transparent` binds are not executable by the bounded adapter",
+                        directive.name
+                    ),
+                )
+            },
+        ),
+        _ => Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` takes one argument: an IP literal or `off`",
+                directive.name
+            ),
+        )),
     }
 }
 
@@ -11625,6 +11688,152 @@ stream {
         .expect("OS socket listen parameters must be accepted");
         assert_eq!(config.listeners.len(), 1);
         assert_eq!(config.streams.len(), 1);
+    }
+
+    #[test]
+    fn cgi_family_bind_and_socket_keepalive_materialize_with_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    fastcgi_bind 127.0.0.2;
+    fastcgi_socket_keepalive on;
+    upstream fcgi { server 127.0.0.1:9001; }
+    upstream uwsgi { server 127.0.0.1:9002; }
+    upstream scgi { server 127.0.0.1:9003; }
+    upstream cache { server 127.0.0.1:9004; }
+    server {
+        listen 80;
+        server_name bind.example.com;
+        location /inherits { fastcgi_pass fcgi; }
+        location /unbound { fastcgi_bind off; fastcgi_pass fcgi; }
+        location /uwsgi {
+            uwsgi_bind 127.0.0.3;
+            uwsgi_socket_keepalive on;
+            uwsgi_pass uwsgi;
+        }
+        location /scgi {
+            scgi_bind off;
+            scgi_socket_keepalive off;
+            scgi_pass scgi;
+        }
+        location /cache {
+            set $memcached_key $uri;
+            memcached_bind 127.0.0.4;
+            memcached_socket_keepalive on;
+            memcached_pass cache;
+        }
+    }
+}
+"#,
+        )
+        .expect("bind and socket_keepalive directives must materialize");
+        // Resources are emitted in location order; this fixture has exactly
+        // the five CGI-family locations below.
+        assert_eq!(config.resources.len(), 5);
+        let find = |index: usize| &config.resources[index];
+        let bind = |value: &str| -> std::net::IpAddr { value.parse().expect("ip literal") };
+        let crate::config::ResourceConfig::FastCgi {
+            bind_address,
+            socket_keepalive,
+            ..
+        } = find(0)
+        else {
+            panic!("fastcgi resource");
+        };
+        assert_eq!(*bind_address, Some(bind("127.0.0.2")));
+        assert_eq!(*socket_keepalive, Some(true));
+        let crate::config::ResourceConfig::FastCgi { bind_address, .. } = find(1) else {
+            panic!("fastcgi resource");
+        };
+        assert_eq!(*bind_address, None, "`off` clears the inherited bind");
+        let crate::config::ResourceConfig::CgiUpstream {
+            bind_address,
+            socket_keepalive,
+            ..
+        } = find(2)
+        else {
+            panic!("uwsgi resource");
+        };
+        assert_eq!(*bind_address, Some(bind("127.0.0.3")));
+        assert_eq!(*socket_keepalive, Some(true));
+        let crate::config::ResourceConfig::CgiUpstream {
+            bind_address,
+            socket_keepalive,
+            ..
+        } = find(3)
+        else {
+            panic!("scgi resource");
+        };
+        assert_eq!(*bind_address, None);
+        assert_eq!(*socket_keepalive, Some(false));
+        let crate::config::ResourceConfig::Memcached {
+            bind_address,
+            socket_keepalive,
+            ..
+        } = find(4)
+        else {
+            panic!("memcached resource");
+        };
+        assert_eq!(*bind_address, Some(bind("127.0.0.4")));
+        assert_eq!(*socket_keepalive, Some(true));
+    }
+
+    #[test]
+    fn cgi_family_bind_and_socket_keepalive_reject_inexecutable_forms() {
+        for (directive, expected) in [
+            ("fastcgi_bind example.com;", "IP literal"),
+            ("fastcgi_bind 127.0.0.2 transparent;", "one argument"),
+            ("uwsgi_bind $address;", "IP literal"),
+            ("scgi_bind 127.0.0.1 transparent;", "one argument"),
+            ("memcached_bind example.com;", "IP literal"),
+            ("fastcgi_socket_keepalive maybe;", "requires on or off"),
+            ("memcached_socket_keepalive maybe;", "requires on or off"),
+        ] {
+            let error = materialize(&format!(
+                r#"
+server {{
+    listen 80;
+    server_name bind.example.com;
+    location / {{ {directive} fastcgi_pass 127.0.0.1:9001; }}
+}}
+"#
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("{directive:?} must fail closed"));
+            assert!(
+                error.to_string().contains(expected),
+                "{directive:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn unix_pass_targets_point_at_the_typed_plane_confinement_root() {
+        for (directive, expected) in [
+            ("fastcgi_pass unix:/run/php.sock;", "unixSocketRoot"),
+            ("uwsgi_pass unix:/run/uwsgi.sock;", "unixSocketRoot"),
+            ("scgi_pass unix:/run/scgi.sock;", "unixSocketRoot"),
+            (
+                "set $memcached_key $uri; memcached_pass unix:/run/mc.sock;",
+                "unixSocketRoot",
+            ),
+        ] {
+            let error = materialize(&format!(
+                r#"
+server {{
+    listen 80;
+    server_name unix.example.com;
+    location / {{ {directive} }}
+}}
+"#
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("{directive:?} must fail closed"));
+            assert!(
+                error.to_string().contains(expected),
+                "{directive:?}: {error}"
+            );
+        }
     }
 
     #[test]

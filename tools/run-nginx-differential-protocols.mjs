@@ -32,7 +32,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-protocols-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 39;
+const CASE_FLOOR = 46;
 /**
  * nginx renders its own generated error page for a memcached miss/upstream
  * failure; the status mapping is the contract under test there, while the body
@@ -51,6 +51,12 @@ const STATUS_ONLY_CASES = new Set([
 ]);
 const ORACLE_PORT = 21092;
 const GATEWAY_PORT = 21093;
+/** Second listener pair for the typed-plane unix-socket transport cases. */
+const ORACLE_UNIX_PORT = ORACLE_PORT + 30;
+const GATEWAY_UNIX_PORT = GATEWAY_PORT + 30;
+const GATEWAY_UNIX_ROOT = path.join(GATEWAY_CONF_DIR, 'unix');
+const GATEWAY_FCGI_SOCKET = path.join(GATEWAY_UNIX_ROOT, 'fcgi.sock');
+const GATEWAY_UWSGI_SOCKET = path.join(GATEWAY_UNIX_ROOT, 'uwsgi.sock');
 const ORACLE_FCGI_PORT = ORACLE_PORT + 2;
 const ORACLE_UWSGI_PORT = ORACLE_PORT + 10;
 const ORACLE_SCGI_PORT = ORACLE_PORT + 11;
@@ -113,6 +119,10 @@ function renderTemplate(ports) {
     .replaceAll('@GRPC_TLS_OK@', String(ports.grpcTlsOk))
     .replaceAll('@GRPC_TLS_UNTRUSTED@', String(ports.grpcTlsUntrusted))
     .replaceAll('@DEAD@', String(ports.dead));
+  // The `# @UNIX_SERVER_INJECT@` marker stays a comment here: the gateway
+  // serves this file through the nginx compatibility plane, which fails closed
+  // on `unix:` pass targets by design. The unix listener runs in a separate
+  // gateway process backed by a typed JSON configuration.
   for (const marker of [
     '@ROOT@', '@PORT@', '@FCGI@', '@UWSGI@', '@SCGI@', '@MEMCACHED@',
     '@GRPC@', '@GRPC_TLS_OK@', '@GRPC_TLS_UNTRUSTED@', '@DEAD@',
@@ -120,6 +130,94 @@ function renderTemplate(ports) {
     if (text.includes(marker)) throw new Error(`placeholder ${marker} left unrendered`);
   }
   return text;
+}
+
+/** nginx http-level CGI parameters mirrored into the typed unix listener. */
+const CGI_PARAMS = [
+  ['SCRIPT_FILENAME', '$document_root$fastcgi_script_name'],
+  ['SCRIPT_NAME', '$fastcgi_script_name'],
+  ['PATH_INFO', '$fastcgi_path_info'],
+  ['DOCUMENT_ROOT', '$document_root'],
+  ['REQUEST_METHOD', '$request_method'],
+  ['REQUEST_URI', '$request_uri'],
+  ['QUERY_STRING', '$query_string'],
+  ['CONTENT_LENGTH', '$content_length'],
+  ['CONTENT_TYPE', '$content_type'],
+  ['SERVER_PROTOCOL', '$server_protocol'],
+  ['HTTP_X_SENT', '$http_x_sent'],
+];
+
+function typedParams() {
+  return CGI_PARAMS.map(([name, value]) => ({ name, value, ifNotEmpty: false }));
+}
+
+function writeTypedUnixConfig(directory, port, publicRoot) {
+  const config = {
+    schemaVersion: 1,
+    kind: 'sdkwork.webserver.app',
+    appKey: 'sdkwork-differential-unix',
+    nginx: {
+      enabled: true,
+      profile: 'http-core-v1',
+      unknownDirectivePolicy: 'error',
+      unixSocketRoot: GATEWAY_UNIX_ROOT,
+    },
+    listeners: [
+      {
+        id: 'unix-http',
+        bind: '127.0.0.1',
+        port,
+        protocols: ['http1'],
+        defaultVirtualHostRef: 'unix-host',
+      },
+    ],
+    upstreams: [
+      { id: 'unix-fcgi-target', targets: [{ url: `unix:${GATEWAY_FCGI_SOCKET}` }] },
+      { id: 'unix-uwsgi-target', targets: [{ url: `unix:${GATEWAY_UWSGI_SOCKET}` }] },
+    ],
+    resources: [
+      {
+        id: 'unix-fastcgi',
+        type: 'fast-cgi',
+        upstreamRef: 'unix-fcgi-target',
+        params: typedParams(),
+        documentRoot: publicRoot,
+        passRequestHeaders: true,
+      },
+      {
+        id: 'unix-uwsgi',
+        type: 'cgi-upstream',
+        protocol: 'uwsgi',
+        upstreamRef: 'unix-uwsgi-target',
+        params: typedParams(),
+        documentRoot: publicRoot,
+        passRequestHeaders: true,
+      },
+    ],
+    virtualHosts: [
+      {
+        id: 'unix-host',
+        listenerRefs: ['unix-http'],
+        serverNames: ['unix.example.com'],
+        routes: [
+          {
+            id: 'unix-fastcgi-route',
+            match: { pathType: 'prefix', path: '/unix-fcgi/' },
+            resourceRef: 'unix-fastcgi',
+          },
+          {
+            id: 'unix-uwsgi-route',
+            match: { pathType: 'prefix', path: '/unix-uwsgi/' },
+            resourceRef: 'unix-uwsgi',
+          },
+        ],
+      },
+    ],
+    metadata: { source: 'differential-protocols typed unix listener' },
+  };
+  const typedPath = path.join(directory, 'unix-typed.json');
+  fs.writeFileSync(typedPath, JSON.stringify(config, null, 1));
+  return typedPath;
 }
 
 /** Generate the gRPC mock's CA, an unrelated CA, and the CA-signed server cert. */
@@ -220,10 +318,18 @@ function captureOracle() {
   return { status: 'captured' };
 }
 
-function runBattery(python, port) {
+function runBattery(python, port, unixPort) {
   const result = spawnSync(
     python,
-    [path.join(fixtureDir, 'battery.py'), '--port', String(port), '--out', OUR_CAPTURE],
+    [
+      path.join(fixtureDir, 'battery.py'),
+      '--port',
+      String(port),
+      '--unix-port',
+      String(unixPort),
+      '--out',
+      OUR_CAPTURE,
+    ],
     { cwd: root, encoding: 'utf8' },
   );
   process.stderr.write(`${result.stdout ?? ''}${result.stderr ?? ''}`);
@@ -323,6 +429,8 @@ async function main() {
     ['gateway gRPC TLS responder', GATEWAY_GRPC_TLS_OK_PORT],
     ['gateway gRPC TLS (untrusted) responder', GATEWAY_GRPC_TLS_UNTRUSTED_PORT],
     ['gateway dead upstream', GATEWAY_DEAD_PORT],
+    ['gateway unix listener', GATEWAY_UNIX_PORT],
+    ['oracle unix listener', ORACLE_UNIX_PORT],
   ]) {
     if (!(await portFree(port))) {
       log(`FAIL: 127.0.0.1:${port} (${label}) is already listening`);
@@ -362,6 +470,15 @@ async function main() {
     }),
   );
 
+  fs.mkdirSync(GATEWAY_UNIX_ROOT, { recursive: true });
+  fs.rmSync(GATEWAY_FCGI_SOCKET, { force: true });
+  fs.rmSync(GATEWAY_UWSGI_SOCKET, { force: true });
+  const typedUnixConfig = writeTypedUnixConfig(
+    GATEWAY_CONF_DIR,
+    GATEWAY_UNIX_PORT,
+    path.join(fixtureDir, 'public'),
+  );
+
   const mockLog = fs.openSync(path.join(root, 'tmp', 'nginx-differential-protocols-mock.log'), 'w');
   const mock = spawn(python, [path.join(fixtureDir, 'mock_fastcgi.py'), '--port', String(GATEWAY_FCGI_PORT)], {
     cwd: root,
@@ -380,12 +497,22 @@ async function main() {
     [path.join(fixtureDir, 'mock_memcached.py'), '--port', String(GATEWAY_MEMCACHED_PORT)],
     { cwd: root, stdio: ['ignore', mockLog, mockLog] },
   );
+  const mockFastcgiUnix = spawn(
+    python,
+    [path.join(fixtureDir, 'mock_fastcgi.py'), '--unix-socket', GATEWAY_FCGI_SOCKET],
+    { cwd: root, stdio: ['ignore', mockLog, mockLog] },
+  );
+  const mockUwsgiUnix = spawn(
+    python,
+    [path.join(fixtureDir, 'mock_uwsgi.py'), '--unix-socket', GATEWAY_UWSGI_SOCKET],
+    { cwd: root, stdio: ['ignore', mockLog, mockLog] },
+  );
   let grpcMockBinary;
   try {
     grpcMockBinary = grpcMockBinaryPath();
   } catch (error) {
     log(`FAIL: ${error.message}`);
-    for (const child of [mock, mockUwsgi, mockScgi, mockMemcached]) child.kill();
+    for (const child of [mock, mockUwsgi, mockScgi, mockMemcached, mockFastcgiUnix, mockUwsgiUnix]) child.kill();
     return 1;
   }
   const mockGrpc = spawn(
@@ -405,6 +532,14 @@ async function main() {
     stdio: ['ignore', gatewayLog, gatewayLog],
     env: { ...process.env, TZ: 'UTC' },
   });
+  // The typed plane carries the unix-socket transport: the nginx compatibility
+  // plane intentionally fails closed on `unix:` pass targets (decision: unix
+  // sockets are configured only through `[http] unixSocketRoot`).
+  const typedGateway = spawn(
+    binary.path,
+    ['data-plane', typedUnixConfig, '--format', 'json'],
+    { cwd: root, stdio: ['ignore', gatewayLog, gatewayLog], env: { ...process.env, TZ: 'UTC' } },
+  );
 
   try {
     if (!(await waitForPort(GATEWAY_PORT, 20_000))) {
@@ -415,7 +550,15 @@ async function main() {
       log(`FAIL: the gateway exited with ${gateway.exitCode}`);
       return 1;
     }
-    if (!runBattery(python, GATEWAY_PORT)) {
+    if (!(await waitForPort(GATEWAY_UNIX_PORT, 20_000))) {
+      log(`FAIL: the typed unix gateway never listened on ${GATEWAY_UNIX_PORT}; see tmp/nginx-differential-protocols-gateway.log`);
+      return 1;
+    }
+    if (typedGateway.exitCode !== null) {
+      log(`FAIL: the typed unix gateway exited with ${typedGateway.exitCode}`);
+      return 1;
+    }
+    if (!runBattery(python, GATEWAY_PORT, GATEWAY_UNIX_PORT)) {
       log('FAIL: the battery could not capture the gateway');
       return 1;
     }
@@ -438,11 +581,11 @@ async function main() {
     log(`PASS: ${cases} differential CGI-family cases match real nginx ${recordedServer}`);
     return 0;
   } finally {
-    for (const child of [gateway, mock, mockUwsgi, mockScgi, mockMemcached, mockGrpc]) {
+    for (const child of [gateway, typedGateway, mock, mockUwsgi, mockScgi, mockMemcached, mockFastcgiUnix, mockUwsgiUnix, mockGrpc]) {
       if (child.exitCode === null) child.kill();
     }
     await delay(500);
-    for (const child of [gateway, mock, mockUwsgi, mockScgi, mockMemcached, mockGrpc]) {
+    for (const child of [gateway, typedGateway, mock, mockUwsgi, mockScgi, mockMemcached, mockFastcgiUnix, mockUwsgiUnix, mockGrpc]) {
       if (child.exitCode === null) child.kill('SIGKILL');
     }
     fs.closeSync(mockLog);

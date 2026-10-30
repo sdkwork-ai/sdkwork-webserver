@@ -2430,10 +2430,23 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_bind` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (fastcgi_bind on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "fastcgi-bind"
+        }
+      ],
+      "knownDifferences": [
+        "only an IP literal or `off` is accepted; hostname and transparent binds fail closed"
+      ]
     },
     {
       "id": "http:fastcgi_buffer_size",
@@ -3834,10 +3847,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_socket_keepalive` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (fastcgi_socket_keepalive on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "fastcgi-bind"
+        }
+      ],
+      "knownDifferences": [
+        "SO_KEEPALIVE is applied at connect; not response-observable (unit/integration evidence)"
+      ]
     },
     {
       "id": "http:fastcgi_split_path_info",
@@ -7751,10 +7777,23 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`memcached_bind` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (memcached_bind on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "bind"
+        }
+      ],
+      "knownDifferences": [
+        "only an IP literal or `off` is accepted; hostname and transparent binds fail closed"
+      ]
     },
     {
       "id": "http:memcached_buffer_size",
@@ -8140,10 +8179,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`memcached_socket_keepalive` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (memcached_socket_keepalive on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "bind"
+        }
+      ],
+      "knownDifferences": [
+        "SO_KEEPALIVE is applied at connect; not response-observable (unit/integration evidence)"
+      ]
     },
     {
       "id": "http:merge_slashes",
@@ -10651,10 +10703,23 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_bind` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (scgi_bind on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-bind"
+        }
+      ],
+      "knownDifferences": [
+        "only an IP literal or `off` is accepted; hostname and transparent binds fail closed"
+      ]
     },
     {
       "id": "http:scgi_buffer_size",
@@ -11621,10 +11686,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_socket_keepalive` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (scgi_socket_keepalive on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "scgi-bind"
+        }
+      ],
+      "knownDifferences": [
+        "SO_KEEPALIVE is applied at connect; not response-observable (unit/integration evidence)"
+      ]
     },
     {
       "id": "http:scgi_store",
@@ -13495,10 +13573,23 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_bind` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (uwsgi_bind on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-bind"
+        }
+      ],
+      "knownDifferences": [
+        "only an IP literal or `off` is accepted; hostname and transparent binds fail closed"
+      ]
     },
     {
       "id": "http:uwsgi_buffer_size",
@@ -14547,10 +14638,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_socket_keepalive` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].bindAddress / socketKeepalive (uwsgi_socket_keepalive on the CGI-family transport)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-bind"
+        }
+      ],
+      "knownDifferences": [
+        "SO_KEEPALIVE is applied at connect; not response-observable (unit/integration evidence)"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_certificate",

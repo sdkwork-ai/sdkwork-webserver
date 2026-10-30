@@ -14,7 +14,11 @@ MEMCACHED=$((PORT + 14))
 GRPC=$((PORT + 20))
 GRPC_TLS_OK=$((PORT + 21))
 GRPC_TLS_UNTRUSTED=$((PORT + 22))
+UNIX_PORT=$((PORT + 30))
 WORK=${NGINX_DIFF_PROTOCOLS_WORK:-/tmp/ngx-differential-protocols}
+UNIX_ROOT_DIR="$WORK/unix"
+FCGI_SOCKET="$UNIX_ROOT_DIR/fcgi.sock"
+UWSGI_SOCKET="$UNIX_ROOT_DIR/uwsgi.sock"
 CONF="$WORK/nginx.conf"
 OUT=${NGINX_DIFF_PROTOCOLS_ORACLE_OUT:-$HERE/nginx-oracle.json}
 if [ -z "${NGINX_BIN:-}" ]; then
@@ -44,7 +48,8 @@ if [ ! -x "$GRPC_MOCK" ]; then
 fi
 [ -x "$GRPC_MOCK" ] || oracle_unavailable "gRPC mock responder binary is missing"
 
-mkdir -p "$WORK"
+mkdir -p "$WORK" "$UNIX_ROOT_DIR"
+rm -f "$FCGI_SOCKET" "$UWSGI_SOCKET"
 for sub in client_body proxy fastcgi uwsgi scgi; do
     mkdir -p "$WORK/tmp/$sub"
 done
@@ -65,6 +70,10 @@ printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=critical,CA:
     -extfile "$WORK/grpc-server.ext" >/dev/null 2>&1 \
     || oracle_unavailable "cannot sign the gRPC server certificate"
 sed \
+    -e "s|@UNIX_INCLUDE@|$WORK/unix-server.conf|g" \
+    -e "s|@UNIX_PORT@|$UNIX_PORT|g" \
+    -e "s|@FCGI_SOCKET@|$FCGI_SOCKET|g" \
+    -e "s|@UWSGI_SOCKET@|$UWSGI_SOCKET|g" \
     -e "s|@ROOT@|$HERE/public|g" \
     -e "s|@PORT@|$PORT|g" \
     -e "s|@FCGI@|$FCGI|g" \
@@ -76,14 +85,26 @@ sed \
     -e "s|@GRPC_TLS_UNTRUSTED@|$GRPC_TLS_UNTRUSTED|g" \
     -e "s|@DEAD@|$DEAD|g" \
     "$HERE/nginx.conf" |
-    sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF"
+    sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF.main"
+awk -v unix_file="$WORK/unix-server.conf" '
+    /# @UNIX_SERVER_INJECT@/ { while ((getline line < unix_file) > 0) print line; close(unix_file); next }
+    { print }
+' "$CONF.main" >"$CONF"
+rm -f "$CONF.main"
+
+sed \
+    -e "s|@UNIX_PORT@|$UNIX_PORT|g" \
+    -e "s|@FCGI_SOCKET@|$FCGI_SOCKET|g" \
+    -e "s|@UWSGI_SOCKET@|$UWSGI_SOCKET|g" \
+    -e "s|@ROOT@|$HERE/public|g" \
+    "$HERE/unix-server.conf" >"$WORK/unix-server.conf"
 
 probe_port() {
     "$PY" -c "import socket,sys; socket.create_connection(('127.0.0.1', $1), 1).close()" \
         2>/dev/null
 }
-if probe_port "$PORT" || probe_port "$FCGI" || probe_port "$UWSGI" || probe_port "$SCGI" || probe_port "$MEMCACHED" || probe_port "$GRPC" || probe_port "$GRPC_TLS_OK" || probe_port "$GRPC_TLS_UNTRUSTED" || probe_port "$DEAD"; then
-    oracle_unavailable "a fixture port ($PORT/$FCGI/$UWSGI/$SCGI/$MEMCACHED/$GRPC/$GRPC_TLS_OK/$GRPC_TLS_UNTRUSTED/$DEAD) is already listening"
+if probe_port "$PORT" || probe_port "$UNIX_PORT" || probe_port "$FCGI" || probe_port "$UWSGI" || probe_port "$SCGI" || probe_port "$MEMCACHED" || probe_port "$GRPC" || probe_port "$GRPC_TLS_OK" || probe_port "$GRPC_TLS_UNTRUSTED" || probe_port "$DEAD"; then
+    oracle_unavailable "a fixture port ($PORT/$UNIX_PORT/$FCGI/$UWSGI/$SCGI/$MEMCACHED/$GRPC/$GRPC_TLS_OK/$GRPC_TLS_UNTRUSTED/$DEAD) is already listening"
 fi
 
 "$PY" "$HERE/mock_fastcgi.py" --port "$FCGI" >"$WORK/mock-fastcgi.log" 2>&1 &
@@ -94,17 +115,25 @@ MOCK_UWSGI_PID=$!
 MOCK_SCGI_PID=$!
 "$PY" "$HERE/mock_memcached.py" --port "$MEMCACHED" >"$WORK/mock-memcached.log" 2>&1 &
 MOCK_MEMCACHED_PID=$!
+"$PY" "$HERE/mock_fastcgi.py" --unix-socket "$FCGI_SOCKET" >"$WORK/mock-fastcgi-unix.log" 2>&1 &
+MOCK_FCGI_UNIX_PID=$!
+"$PY" "$HERE/mock_uwsgi.py" --unix-socket "$UWSGI_SOCKET" >"$WORK/mock-uwsgi-unix.log" 2>&1 &
+MOCK_UWSGI_UNIX_PID=$!
 "$GRPC_MOCK" --plain-port "$GRPC" \
     --tls-port "$GRPC_TLS_OK" --tls-port "$GRPC_TLS_UNTRUSTED" \
     --cert "$WORK/grpc-server.pem" --key "$WORK/grpc-server.key" \
     >"$WORK/mock-grpc.log" 2>&1 &
 MOCK_GRPC_PID=$!
+for _ in $(seq 1 40); do
+    [ -S "$FCGI_SOCKET" ] && [ -S "$UWSGI_SOCKET" ] && break
+    sleep 0.1
+done
 env TZ=UTC "$NGINX_BIN" -c "$CONF" -p "$WORK/" \
     -g "pid $WORK/nginx.pid; error_log $WORK/error.log notice;" \
     >"$WORK/out.log" 2>&1 &
 NGINX_PID=$!
 # shellcheck disable=SC2064
-trap 'kill "$NGINX_PID" "$MOCK_PID" "$MOCK_UWSGI_PID" "$MOCK_SCGI_PID" "$MOCK_MEMCACHED_PID" "$MOCK_GRPC_PID" 2>/dev/null; wait "$NGINX_PID" "$MOCK_PID" "$MOCK_UWSGI_PID" "$MOCK_SCGI_PID" "$MOCK_MEMCACHED_PID" "$MOCK_GRPC_PID" 2>/dev/null' EXIT
+trap 'kill "$NGINX_PID" "$MOCK_PID" "$MOCK_UWSGI_PID" "$MOCK_SCGI_PID" "$MOCK_MEMCACHED_PID" "$MOCK_GRPC_PID" "$MOCK_FCGI_UNIX_PID" "$MOCK_UWSGI_UNIX_PID" 2>/dev/null; wait "$NGINX_PID" "$MOCK_PID" "$MOCK_UWSGI_PID" "$MOCK_SCGI_PID" "$MOCK_MEMCACHED_PID" "$MOCK_GRPC_PID" "$MOCK_FCGI_UNIX_PID" "$MOCK_UWSGI_UNIX_PID" 2>/dev/null' EXIT
 
 for _ in $(seq 1 40); do
     probe_port "$PORT" && break
@@ -117,4 +146,4 @@ if ! probe_port "$PORT"; then
 fi
 
 cd "$HERE"
-"$PY" battery.py --port "$PORT" --out "$OUT"
+"$PY" battery.py --port "$PORT" --unix-port "$UNIX_PORT" --out "$OUT"

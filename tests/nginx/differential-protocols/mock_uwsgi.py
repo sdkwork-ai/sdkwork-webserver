@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import struct
 import threading
 
+
+
+def peer_address(connection: socket.socket) -> str:
+    peer = connection.getpeername()
+    if isinstance(peer, str):
+        return "unix"
+    return peer[0]
 
 def read_exact(stream: socket.socket, length: int) -> bytes:
     data = b""
@@ -64,6 +72,7 @@ def handle(connection: socket.socket) -> None:
                 "modifier2": modifier2,
                 "extra_hex": extra.hex(),
                 "params": sorted(variables),
+                "peer": peer_address(connection),
                 "body_hex": body.hex(),
             },
             sort_keys=True,
@@ -88,11 +97,22 @@ def handle(connection: socket.socket) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--unix-socket")
     arguments = parser.parse_args()
-    listener = socket.socket()
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(("127.0.0.1", arguments.port))
+    if arguments.unix_socket:
+        try:
+            os.unlink(arguments.unix_socket)
+        except FileNotFoundError:
+            pass
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(arguments.unix_socket)
+    else:
+        if arguments.port is None:
+            raise SystemExit("--port or --unix-socket is required")
+        listener = socket.socket()
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", arguments.port))
     listener.listen(32)
     while True:
         connection, _ = listener.accept()

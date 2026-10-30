@@ -4488,7 +4488,7 @@ pub fn materialize_app(
             RETIRED_COMPATIBILITY,
         ));
     }
-    let nginx = match root.get("nginx").and_then(Value::as_object) {
+    let mut nginx = match root.get("nginx").and_then(Value::as_object) {
         Some(nginx) => {
             if nginx.get("nginxProfile").is_some() {
                 return Err(materialize_error(
@@ -4666,9 +4666,13 @@ pub fn materialize_app(
             "limitReqZone",
             "maps",
             "server",
+            "unixSocketRoot",
             "upstream",
         ],
     )?;
+    if let Some(unix_socket_root) = http.get("unixSocketRoot").and_then(Value::as_str) {
+        nginx["unixSocketRoot"] = Value::String(unix_socket_root.to_owned());
+    }
     let defaults_tls = materialize_http_defaults(http)?;
     materializer.materialize_limit_req_zones(http)?;
     materializer.materialize_limit_conn_zones(http)?;
@@ -5829,6 +5833,61 @@ tcpmux_port = 8444
     }
 
     #[test]
+    fn typed_http_unix_socket_root_materializes_and_validates() {
+        let toml_text = r#"
+[http]
+unixSocketRoot = "/var/run/sdkwork"
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["unix.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        assert_eq!(
+            config.nginx.unix_socket_root.as_deref(),
+            Some("/var/run/sdkwork"),
+            "`[http] unixSocketRoot` must reach the runtime model"
+        );
+
+        // A relative root is not a confinement root: the shared semantic
+        // validation rejects it with a located diagnostic.
+        let invalid = r#"
+[http]
+unixSocketRoot = "relative/sockets"
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["unix.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(invalid).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("relative root fails");
+        let diagnostics: Vec<String> = error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| format!("{}: {}", diagnostic.path, diagnostic.message))
+            .collect();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.contains("unixSocketRoot")),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
     fn materializes_typed_maps_into_the_executable_model() {
         // Item 12: `[[http.maps]]` is the typed plane's executable map form;
         // the migration importer can render it without creating a silent
@@ -5861,7 +5920,8 @@ serverName = ["maps.example.test"]
 
 [[http.server.location]]
 match = "/"
-proxyPass = "http://127.0.0.1:9001"
+returnStatus = 200
+returnBody = "ok"
 "#;
         let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
         let effective = serde_json::to_value(&value).expect("converts");
@@ -5956,7 +6016,8 @@ cert = "tls-site"
 
 [[http.server.location]]
 match = "/"
-proxyPass = "http://127.0.0.1:9001"
+returnStatus = 200
+returnBody = "ok"
 "#;
         let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
         let effective = serde_json::to_value(&value).expect("converts");
@@ -6038,7 +6099,8 @@ certKeyFile = "/etc/sdkwork/certs/a/privkey.pem"
 
 [[http.server.location]]
 match = "/"
-proxyPass = "http://127.0.0.1:9001"
+returnStatus = 200
+returnBody = "ok"
 "#;
         let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
         let effective: Value = serde_json::to_value(&value).expect("converts");
@@ -6091,7 +6153,8 @@ protocols = ["TLSv1.3"]
 
 [[http.server.location]]
 match = "/"
-proxyPass = "http://127.0.0.1:9001"
+returnStatus = 200
+returnBody = "ok"
 "#;
         let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
         let effective: Value = serde_json::to_value(&value).expect("converts");

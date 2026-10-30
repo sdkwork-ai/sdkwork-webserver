@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import socket
 import threading
 
+
+
+def peer_address(connection: socket.socket) -> str:
+    peer = connection.getpeername()
+    if isinstance(peer, str):
+        return "unix"
+    return peer[0]
 
 def handle(connection: socket.socket) -> None:
     try:
@@ -29,7 +37,7 @@ def handle(connection: socket.socket) -> None:
         if "large" in key:
             data = (b"cached-large-" * 683)[:8192]
         else:
-            data = f"cached-value:{key}".encode()
+            data = f"cached-value:{key}:peer={peer_address(connection)}".encode()
         connection.sendall(
             b"VALUE " + key.encode() + b" 0 " + str(len(data)).encode() + b"\r\n"
             + data
@@ -41,11 +49,22 @@ def handle(connection: socket.socket) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--unix-socket")
     arguments = parser.parse_args()
-    listener = socket.socket()
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(("127.0.0.1", arguments.port))
+    if arguments.unix_socket:
+        try:
+            os.unlink(arguments.unix_socket)
+        except FileNotFoundError:
+            pass
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(arguments.unix_socket)
+    else:
+        if arguments.port is None:
+            raise SystemExit("--port or --unix-socket is required")
+        listener = socket.socket()
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", arguments.port))
     listener.listen(32)
     while True:
         connection, _ = listener.accept()

@@ -87,6 +87,14 @@ impl SemanticValidator {
                 "only the http-core-v1 compatibility profile is supported",
             );
         }
+        if let Some(unix_socket_root) = &config.nginx.unix_socket_root {
+            if !valid_unix_socket_root(unix_socket_root) {
+                self.push(
+                    "/nginx/unixSocketRoot",
+                    "unixSocketRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
+                );
+            }
+        }
         if config.nginx.unknown_directive_policy != "error" {
             self.push(
                 "/nginx/unknownDirectivePolicy",
@@ -544,6 +552,50 @@ impl SemanticValidator {
 
         for (index, resource) in config.resources.iter().enumerate() {
             let path = format!("/resources/{index}");
+            // Unix-socket upstream targets are executable only by the CGI
+            // family/memcached adapters, and a source-address bind has no
+            // meaning on a unix socket.
+            let referenced_upstream = match resource {
+                ResourceConfig::Proxy {
+                    upstream_ref,
+                    dynamic_target,
+                    ..
+                } if dynamic_target.is_none() => Some(upstream_ref.as_str()),
+                ResourceConfig::FastCgi { upstream_ref, .. }
+                | ResourceConfig::CgiUpstream { upstream_ref, .. }
+                | ResourceConfig::Memcached { upstream_ref, .. }
+                | ResourceConfig::Grpc { upstream_ref, .. } => Some(upstream_ref.as_str()),
+                _ => None,
+            };
+            if let Some(upstream) = referenced_upstream.and_then(|id| upstreams.get(id)) {
+                let unix = upstream_has_unix_target(upstream);
+                let cgi_family = matches!(
+                    resource,
+                    ResourceConfig::FastCgi { .. }
+                        | ResourceConfig::CgiUpstream { .. }
+                        | ResourceConfig::Memcached { .. }
+                );
+                if unix && !cgi_family {
+                    self.push(
+                        format!("{path}/upstreamRef"),
+                        "upstream has unix-socket targets; only fastcgi/uwsgi/scgi/memcached resources can execute them",
+                    );
+                }
+                if unix {
+                    let bind_address = match resource {
+                        ResourceConfig::FastCgi { bind_address, .. }
+                        | ResourceConfig::CgiUpstream { bind_address, .. }
+                        | ResourceConfig::Memcached { bind_address, .. } => *bind_address,
+                        _ => None,
+                    };
+                    if bind_address.is_some() {
+                        self.push(
+                            format!("{path}/bindAddress"),
+                            "a source-address bind does not apply to a unix-socket upstream target",
+                        );
+                    }
+                }
+            }
             match resource {
                 ResourceConfig::Static {
                     root,
@@ -1020,6 +1072,9 @@ impl SemanticValidator {
         }
 
         let mut total_targets = 0usize;
+        // Upstream ids that own at least one `unix:` target; only the CGI
+        // family and memcached adapters can execute those.
+        let mut unix_upstreams: HashSet<&str> = HashSet::new();
         for (index, upstream) in config.upstreams.iter().enumerate() {
             let path = format!("/upstreams/{index}");
             if !upstream.targets.iter().any(|target| !target.backup) {
@@ -1086,6 +1141,7 @@ impl SemanticValidator {
                 .iter()
                 .any(|target| target.max_connections.is_some());
             let mut has_plaintext_target = false;
+            let mut has_unix_target = false;
             for (target_index, target) in upstream.targets.iter().enumerate() {
                 let target_path = format!("{path}/targets/{target_index}/url");
                 if target
@@ -1096,6 +1152,38 @@ impl SemanticValidator {
                         format!("{path}/targets/{target_index}/maxConnections"),
                         "target maxConnections cannot exceed upstream maxConnections",
                     );
+                }
+                if let Some(unix_path) = unix_target_path(&target.url) {
+                    // Unix-socket targets are typed-plane only and confined to
+                    // the operator-configured `nginx.unixSocketRoot`.
+                    has_unix_target = true;
+                    match &config.nginx.unix_socket_root {
+                        None => self.push(
+                            &target_path,
+                            "unix upstream sockets require `nginx.unixSocketRoot` in the typed configuration (nginx-conf `*_pass unix:` cannot state the confinement root and fails closed)",
+                        ),
+                        Some(root) => {
+                            if !unix_path_is_confined(root, &unix_path) {
+                                self.push(
+                                    &target_path,
+                                    format!(
+                                        "unix upstream socket `{unix_path}` must be a strict descendant of nginx.unixSocketRoot `{root}` without parent traversal"
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    let normalized = format!("unix:{unix_path}");
+                    if !target_urls.insert(normalized) {
+                        self.push(&target_path, "duplicate upstream target URL");
+                    }
+                    if upstream.tls.is_some() {
+                        self.push(
+                            &target_path,
+                            "unix upstream sockets cannot use an upstream TLS policy",
+                        );
+                    }
+                    continue;
                 }
                 match Url::parse(&target.url) {
                     Ok(url)
@@ -1127,12 +1215,10 @@ impl SemanticValidator {
                                 );
                             }
                         }
-                        if let Some(ip) = url.host_str().and_then(|host| host.parse::<IpAddr>().ok())
+                        if let Some(ip) =
+                            url.host_str().and_then(|host| host.parse::<IpAddr>().ok())
                         {
-                            if !upstream_ip_is_allowed(
-                                ip,
-                                &upstream.address_policy.allowed_cidrs,
-                            ) {
+                            if !upstream_ip_is_allowed(ip, &upstream.address_policy.allowed_cidrs) {
                                 self.push(
                                     &target_path,
                                     "literal upstream IP is forbidden unless its restricted range is explicitly authorized",
@@ -1140,11 +1226,29 @@ impl SemanticValidator {
                             }
                         }
                     }
-                    _ => self.push(
-                        &target_path,
-                        "upstream URL must be an http/https origin without credentials, query, or fragment",
-                    ),
+                    _ => {
+                        if target.url.starts_with("unix:") {
+                            self.push(
+                                &target_path,
+                                "invalid unix upstream target: expected `unix:/absolute/socket/path` without query or fragment",
+                            );
+                        } else {
+                            self.push(
+                                &target_path,
+                                "upstream URL must be an http/https origin without credentials, query, or fragment",
+                            );
+                        }
+                    }
                 }
+            }
+            if has_unix_target {
+                if upstream.tls.is_some() {
+                    self.push(
+                        format!("{path}/tls"),
+                        "unix upstream sockets cannot use an upstream TLS policy",
+                    );
+                }
+                unix_upstreams.insert(upstream.id.as_str());
             }
             if let Some(tls) = &upstream.tls {
                 if has_plaintext_target {
@@ -2681,6 +2785,60 @@ fn validate_error_page_target(
             ),
         );
     }
+}
+
+/// The absolute path of a `unix:/absolute/path` upstream target URL.
+pub fn unix_target_path(value: &str) -> Option<String> {
+    let path = value.strip_prefix("unix:")?;
+    if !path.starts_with('/')
+        || path.contains('?')
+        || path.contains('#')
+        || path.contains('\\')
+        || path.contains('\0')
+        || path.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+        || Path::new(path)
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+    {
+        return None;
+    }
+    Some(path.to_owned())
+}
+
+/// Whether `root` is a usable `nginx.unixSocketRoot` value.
+fn valid_unix_socket_root(root: &str) -> bool {
+    !root.is_empty()
+        && root.starts_with('/')
+        && root != "/"
+        && !root.ends_with('/')
+        && !root.contains('\\')
+        && !root.contains('\0')
+        && !root.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+        && !Path::new(root)
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+}
+
+/// Lexical confinement: the socket path must be a strict descendant of `root`.
+pub fn unix_path_is_confined(root: &str, path: &str) -> bool {
+    let Some(suffix) = path.strip_prefix(root) else {
+        return false;
+    };
+    let Some(suffix) = suffix.strip_prefix('/') else {
+        return false;
+    };
+    !suffix.is_empty()
+        && !suffix.ends_with('/')
+        && !suffix.contains("..")
+        && !suffix.contains('\\')
+        && !suffix.contains('\0')
+}
+
+fn upstream_has_unix_target(upstream: &UpstreamConfig) -> bool {
+    upstream
+        .targets
+        .iter()
+        .any(|target| unix_target_path(&target.url).is_some())
 }
 
 fn certificate_covers_any(
