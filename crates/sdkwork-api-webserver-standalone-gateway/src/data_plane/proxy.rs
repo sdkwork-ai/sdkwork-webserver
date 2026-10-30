@@ -2044,7 +2044,7 @@ fn expand_proxy_header_value(
                 // A declared nginx `map` result is expanded here exactly like a
                 // built-in request variable.
                 match maps.lookup(var) {
-                    Some(value) => out.push_str(value),
+                    Some(value) => out.push_str(&value),
                     None => return Err(()),
                 }
             }

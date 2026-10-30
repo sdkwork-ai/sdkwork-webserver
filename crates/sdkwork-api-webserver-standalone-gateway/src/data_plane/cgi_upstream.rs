@@ -252,7 +252,7 @@ impl CgiRequestFacts<'_> {
                 if let Some(cookie) = name.strip_prefix("cookie_") {
                     return Some(raw_cookie(self.headers, cookie));
                 }
-                return self.maps.lookup(name).map(str::to_owned);
+                return self.maps.lookup(name);
             }
         };
         Some(value)

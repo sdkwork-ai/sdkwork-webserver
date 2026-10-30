@@ -133,7 +133,7 @@ pub(crate) struct MapResults {
     /// access-phase subrequest, and every response layer that already holds a
     /// `&MapResults` (header expansion, rewrite-phase variables, proxy
     /// templates) must observe it without re-borrowing the whole handler state.
-    values: std::sync::Mutex<Vec<(String, String)>>,
+    values: std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
 }
 
 impl MapResults {
@@ -163,7 +163,7 @@ impl MapResults {
             }
         }
         Self {
-            values: std::sync::Mutex::new(values),
+            values: std::sync::Arc::new(std::sync::Mutex::new(values)),
         }
     }
 
@@ -171,12 +171,12 @@ impl MapResults {
     #[cfg(test)]
     pub(crate) fn from_pairs(pairs: &[(&str, &str)]) -> Self {
         Self {
-            values: std::sync::Mutex::new(
+            values: std::sync::Arc::new(std::sync::Mutex::new(
                 pairs
                     .iter()
                     .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
                     .collect(),
-            ),
+            )),
         }
     }
 
@@ -284,7 +284,7 @@ impl MapResults {
                             }
                         }
                     } else {
-                        output.push_str(value);
+                        output.push_str(&value);
                     }
                 }
                 None => {

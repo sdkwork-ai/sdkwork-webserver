@@ -49,6 +49,7 @@ mod smooth_weighted;
 pub(crate) mod static_file_response;
 pub(crate) mod static_files;
 pub(crate) mod static_path;
+mod subrequest;
 mod stream_proxy;
 mod stream_variables;
 mod sub_filter;

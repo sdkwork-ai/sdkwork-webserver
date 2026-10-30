@@ -645,7 +645,7 @@ async fn route_admitted_request(
     // Declared `map` results are variables too: seed them so `set`/`if`/
     // dynamic targets can reference them through the same lookup.
     for (name, value) in map_results.pairs() {
-        request_variables.seed(name, value.clone());
+        request_variables.seed(&name, value);
     }
     let mut phase_headers: Vec<CustomHeaderConfig> = Vec::new();
     if let Some(host_config) = generation
@@ -2895,7 +2895,7 @@ impl ResponseHeaderVariables<'_> {
                     .unwrap_or(rest.len());
                 let name = &rest[..name_end];
                 if let Some(value) = self.maps.and_then(|maps| maps.lookup(name)) {
-                    output.push_str(value);
+                    output.push_str(&value);
                     remainder = &rest[name_end..];
                     continue;
                 }
@@ -3777,7 +3777,7 @@ const EMPTY_GIF_BYTES: &[u8] = &[
     0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x4c, 0x01, 0x00, 0x3b,
 ];
 
-fn empty_gif_response(head: bool) -> Response<Body> {
+pub(crate) fn empty_gif_response(head: bool) -> Response<Body> {
     let mut response = Response::new(if head {
         Body::empty()
     } else {
