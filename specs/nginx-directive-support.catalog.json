@@ -14687,10 +14687,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_certificate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_certificate)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_certificate_cache",
@@ -14719,10 +14742,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_certificate_key` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_certificate_key)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_ciphers",
@@ -14783,10 +14829,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_name` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_name)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_password_file",
@@ -14815,10 +14884,33 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_protocols` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_protocols)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_server_name",
@@ -14831,10 +14923,33 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_server_name` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_server_name)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_session_reuse",
@@ -14863,10 +14978,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_trusted_certificate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_trusted_certificate)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_verify",
@@ -14879,10 +15017,33 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ssl_verify` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" protocol=\"uwsgi\" upstream TLS policy (uwsgi_ssl_verify)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-mtls"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "uwsgi-tls-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "uWSGI upstream TLS is always verified unless ssl_verify is explicitly off (documented dangerous verifier); untrusted anchors fail closed with 502",
+        "rustls has no OpenSSL cipher-list/CRL/session-reuse/conf-command/password-file surfaces -> those forms fail closed with located diagnostics",
+        "nginx 1.29.6 has no scgi_ssl_* directives (SCGI module has no TLS surface), so scgi_ssl_* names are rejected as non-nginx extensions"
+      ]
     },
     {
       "id": "http:uwsgi_ssl_verify_depth",

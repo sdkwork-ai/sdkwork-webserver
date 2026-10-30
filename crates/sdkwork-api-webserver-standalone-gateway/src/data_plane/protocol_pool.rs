@@ -22,7 +22,7 @@ use std::{
     collections::VecDeque,
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
     time::{Duration, Instant},
 };
@@ -31,6 +31,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::TcpStream,
 };
+use tokio_rustls::{client::TlsStream as ClientTlsStream, TlsConnector};
 
 #[cfg(unix)]
 use tokio::net::UnixStream;
@@ -43,6 +44,10 @@ pub(crate) const MAX_GENERATION_POOLED_CONNECTIONS: usize = 256;
 /// One connected upstream stream.
 pub(crate) enum ProtocolStream {
     Tcp(TcpStream),
+    /// TLS over TCP for the CGI family when the upstream target is `https://`
+    /// (`uwsgi_pass suwsgi://…` on the nginx compatibility plane, or a typed
+    /// upstream TLS policy). Boxed to keep the enum small.
+    Tls(Box<ClientTlsStream<TcpStream>>),
     #[cfg(unix)]
     Unix(UnixStream),
 }
@@ -58,6 +63,12 @@ impl ProtocolStream {
         let mut probe = [0u8; 1];
         let result = match self {
             Self::Tcp(stream) => stream.try_read(&mut probe),
+            // A TLS record stream cannot be probed for EOF without consuming
+            // handshake/record bytes, so a pooled TLS connection is assumed
+            // healthy and a stale one surfaces as a transport failure that the
+            // bounded retry policy handles (nginx reuses uWSGI/SCGI connections
+            // not at all; TLS pooling is FastCGI `keep_conn` only).
+            Self::Tls(_) => return true,
             #[cfg(unix)]
             Self::Unix(stream) => stream.try_read(&mut probe),
         };
@@ -76,6 +87,7 @@ impl AsyncRead for ProtocolStream {
     ) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             Self::Tcp(stream) => Pin::new(stream).poll_read(context, buffer),
+            Self::Tls(stream) => Pin::new(stream.as_mut()).poll_read(context, buffer),
             #[cfg(unix)]
             Self::Unix(stream) => Pin::new(stream).poll_read(context, buffer),
         }
@@ -90,6 +102,7 @@ impl AsyncWrite for ProtocolStream {
     ) -> Poll<std::io::Result<usize>> {
         match self.get_mut() {
             Self::Tcp(stream) => Pin::new(stream).poll_write(context, buffer),
+            Self::Tls(stream) => Pin::new(stream.as_mut()).poll_write(context, buffer),
             #[cfg(unix)]
             Self::Unix(stream) => Pin::new(stream).poll_write(context, buffer),
         }
@@ -98,6 +111,7 @@ impl AsyncWrite for ProtocolStream {
     fn poll_flush(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             Self::Tcp(stream) => Pin::new(stream).poll_flush(context),
+            Self::Tls(stream) => Pin::new(stream.as_mut()).poll_flush(context),
             #[cfg(unix)]
             Self::Unix(stream) => Pin::new(stream).poll_flush(context),
         }
@@ -106,6 +120,7 @@ impl AsyncWrite for ProtocolStream {
     fn poll_shutdown(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
             Self::Tcp(stream) => Pin::new(stream).poll_shutdown(context),
+            Self::Tls(stream) => Pin::new(stream.as_mut()).poll_shutdown(context),
             #[cfg(unix)]
             Self::Unix(stream) => Pin::new(stream).poll_shutdown(context),
         }
@@ -120,10 +135,12 @@ pub(crate) enum ResolvedTarget {
     Unix(std::path::PathBuf),
 }
 
-/// Pool key: the selected target URL plus the configured source bind (a bind
-/// change must never reuse a socket opened from a different source address).
+/// Pool key: the selected target URL, the upstream identity (one TLS policy per
+/// upstream), and the configured source bind (a bind change must never reuse a
+/// socket opened from a different source address).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct PoolKey {
+    pub(crate) upstream: String,
     pub(crate) target: String,
     pub(crate) bind: Option<IpAddr>,
 }
@@ -257,6 +274,38 @@ pub(crate) async fn connect_stream(
     }
 }
 
+/// Connect one upstream stream over TLS, reusing the plain transport (bind,
+/// `SO_KEEPALIVE`) and completing the rustls handshake with the policy built by
+/// `upstream_tls::build_upstream_tls_config`. ALPN is left empty (the CGI
+/// protocols have no ALPN identifier, matching nginx).
+pub(crate) async fn connect_tls_stream(
+    target: &ResolvedTarget,
+    bind: Option<IpAddr>,
+    socket_keepalive: bool,
+    client_config: Arc<rustls::ClientConfig>,
+    server_name: rustls::pki_types::ServerName<'static>,
+) -> std::io::Result<ProtocolStream> {
+    let ResolvedTarget::Tcp(_) = target else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "TLS is only supported for TCP upstream targets",
+        ));
+    };
+    let stream = connect_stream(target, bind, socket_keepalive).await?;
+    let ProtocolStream::Tcp(tcp) = stream else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "TLS is only supported for TCP upstream targets",
+        ));
+    };
+    let connector = TlsConnector::from(client_config);
+    let tls = connector
+        .connect(server_name, tcp)
+        .await
+        .map_err(std::io::Error::other)?;
+    Ok(ProtocolStream::Tls(Box::new(tls)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,6 +313,7 @@ mod tests {
 
     fn key(target: &str, bind: Option<IpAddr>) -> PoolKey {
         PoolKey {
+            upstream: "test-upstream".to_owned(),
             target: target.to_owned(),
             bind,
         }

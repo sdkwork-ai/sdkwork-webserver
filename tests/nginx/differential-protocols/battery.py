@@ -171,6 +171,15 @@ CASES = [
     ("scgi-bind-peer", "GET", "/bind-scgi/peer", {"X-Sent": "bind-scgi"}, None),
     ("memcached-bind-peer", "GET", "/bind-cache/bind", {}, None),
     ("fastcgi-keepconn-reuse", "SPECIAL", "", {}, None),
+    # ---- Wave 7B: uWSGI upstream TLS (`uwsgi_pass suwsgi://…`) ----
+    # The mock's server certificate only carries `DNS:uwsgi-tls.test`, so the
+    # trusted-CA case proves `uwsgi_ssl_name` is used for SNI/verification; the
+    # mTLS case adds the CA-signed client identity; the untrusted case uses an
+    # unrelated CA and must fail closed on both sides (status-only body
+    # allowance: nginx renders its own 502 page).
+    ("uwsgi-tls-ok", "GET", "/uwsgi-tls/hello?x=1", {"X-Sent": "tls-alpha"}, None),
+    ("uwsgi-tls-mtls", "GET", "/uwsgi-tls-mtls/hello?x=1", {"X-Sent": "tls-beta"}, None),
+    ("uwsgi-tls-untrusted", "GET", "/uwsgi-tls-untrusted/hello", {"X-Sent": "tls-gamma"}, None),
 
 ]
 

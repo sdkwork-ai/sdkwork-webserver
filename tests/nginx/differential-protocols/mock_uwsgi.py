@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import socket
+import ssl
 import struct
 import threading
 
@@ -95,11 +96,46 @@ def handle(connection: socket.socket) -> None:
         connection.close()
 
 
+def serve(listener: socket.socket, tls_context: ssl.SSLContext | None = None) -> None:
+    listener.listen(32)
+    while True:
+        connection, _ = listener.accept()
+        if tls_context is not None:
+            try:
+                connection = tls_context.wrap_socket(connection, server_side=True)
+            except (ssl.SSLError, OSError):
+                connection.close()
+                continue
+        threading.Thread(target=handle, args=(connection,), daemon=True).start()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int)
     parser.add_argument("--unix-socket")
+    parser.add_argument("--tls-port", type=int, action="append", default=[])
+    parser.add_argument("--cert")
+    parser.add_argument("--key")
+    parser.add_argument("--client-ca")
     arguments = parser.parse_args()
+    if arguments.tls_port and not (arguments.cert and arguments.key):
+        raise SystemExit("--tls-port requires --cert and --key")
+    tls_context = None
+    if arguments.tls_port:
+        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls_context.load_cert_chain(arguments.cert, arguments.key)
+        if arguments.client_ca:
+            # Optional client authentication: the mTLS differential case sends
+            # the CA-signed client identity, the plain TLS cases send none.
+            tls_context.verify_mode = ssl.CERT_OPTIONAL
+            tls_context.load_verify_locations(arguments.client_ca)
+    for tls_port in arguments.tls_port:
+        tls_listener = socket.socket()
+        tls_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        tls_listener.bind(("127.0.0.1", tls_port))
+        threading.Thread(
+            target=serve, args=(tls_listener, tls_context), daemon=True
+        ).start()
     if arguments.unix_socket:
         try:
             os.unlink(arguments.unix_socket)
@@ -107,16 +143,17 @@ def main() -> None:
             pass
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(arguments.unix_socket)
+        serve(listener)
     else:
         if arguments.port is None:
+            if arguments.tls_port:
+                threading.Event().wait()
+                return
             raise SystemExit("--port or --unix-socket is required")
         listener = socket.socket()
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind(("127.0.0.1", arguments.port))
-    listener.listen(32)
-    while True:
-        connection, _ = listener.accept()
-        threading.Thread(target=handle, args=(connection,), daemon=True).start()
+        serve(listener)
 
 
 if __name__ == "__main__":

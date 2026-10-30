@@ -1350,6 +1350,15 @@ impl SemanticValidator {
                         "maximum TLS version must not be lower than minimumVersion",
                     );
                 }
+                if tls.dangerous_accept_any_verify
+                    && (tls.trust_mode != UpstreamTlsTrustMode::System
+                        || !tls.ca_certificate_files.is_empty())
+                {
+                    self.push(
+                        format!("{path}/tls"),
+                        "dangerousAcceptAnyVerify disables peer-chain verification and cannot be combined with custom trust material (use system trust mode with no caCertificateFiles)",
+                    );
+                }
                 if let Some(server_name) = &tls.server_name {
                     if server_name.is_empty()
                         || server_name.len() > 253

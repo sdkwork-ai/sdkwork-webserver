@@ -32,7 +32,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-protocols-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 46;
+const CASE_FLOOR = 49;
 /**
  * nginx renders its own generated error page for a memcached miss/upstream
  * failure; the status mapping is the contract under test there, while the body
@@ -48,6 +48,10 @@ const STATUS_ONLY_CASES = new Set([
   'grpc-read-timeout',
   'grpc-tls-untrusted',
   'grpc-dead',
+  // Wave 7B: nginx renders its own 502 page when the uWSGI TLS chain is not
+  // trusted; both sides must fail, the status is the contract, and the exact
+  // generated body is the same documented difference as the gRPC cases.
+  'uwsgi-tls-untrusted',
 ]);
 const ORACLE_PORT = 21092;
 const GATEWAY_PORT = 21093;
@@ -60,6 +64,8 @@ const GATEWAY_UWSGI_SOCKET = path.join(GATEWAY_UNIX_ROOT, 'uwsgi.sock');
 const ORACLE_FCGI_PORT = ORACLE_PORT + 2;
 const ORACLE_UWSGI_PORT = ORACLE_PORT + 10;
 const ORACLE_SCGI_PORT = ORACLE_PORT + 11;
+const ORACLE_UWSGI_TLS_OK_PORT = ORACLE_PORT + 12;
+const ORACLE_UWSGI_TLS_UNTRUSTED_PORT = ORACLE_PORT + 13;
 const ORACLE_MEMCACHED_PORT = ORACLE_PORT + 14;
 const ORACLE_GRPC_PORT = ORACLE_PORT + 20;
 const ORACLE_GRPC_TLS_OK_PORT = ORACLE_PORT + 21;
@@ -67,6 +73,8 @@ const ORACLE_GRPC_TLS_UNTRUSTED_PORT = ORACLE_PORT + 22;
 const GATEWAY_FCGI_PORT = GATEWAY_PORT + 2;
 const GATEWAY_UWSGI_PORT = GATEWAY_PORT + 10;
 const GATEWAY_SCGI_PORT = GATEWAY_PORT + 11;
+const GATEWAY_UWSGI_TLS_OK_PORT = GATEWAY_PORT + 12;
+const GATEWAY_UWSGI_TLS_UNTRUSTED_PORT = GATEWAY_PORT + 13;
 const GATEWAY_MEMCACHED_PORT = GATEWAY_PORT + 14;
 const GATEWAY_GRPC_PORT = GATEWAY_PORT + 20;
 const GATEWAY_GRPC_TLS_OK_PORT = GATEWAY_PORT + 21;
@@ -113,6 +121,8 @@ function renderTemplate(ports) {
     .replaceAll('@PORT@', String(ports.port))
     .replaceAll('@FCGI@', String(ports.fcgi))
     .replaceAll('@UWSGI@', String(ports.uwsgi))
+    .replaceAll('@UWSGI_TLS_OK@', String(ports.uwsgiTlsOk))
+    .replaceAll('@UWSGI_TLS_UNTRUSTED@', String(ports.uwsgiTlsUntrusted))
     .replaceAll('@SCGI@', String(ports.scgi))
     .replaceAll('@MEMCACHED@', String(ports.memcached))
     .replaceAll('@GRPC@', String(ports.grpc))
@@ -124,8 +134,9 @@ function renderTemplate(ports) {
   // on `unix:` pass targets by design. The unix listener runs in a separate
   // gateway process backed by a typed JSON configuration.
   for (const marker of [
-    '@ROOT@', '@PORT@', '@FCGI@', '@UWSGI@', '@SCGI@', '@MEMCACHED@',
-    '@GRPC@', '@GRPC_TLS_OK@', '@GRPC_TLS_UNTRUSTED@', '@DEAD@',
+    '@ROOT@', '@PORT@', '@FCGI@', '@UWSGI@', '@UWSGI_TLS_OK@',
+    '@UWSGI_TLS_UNTRUSTED@', '@SCGI@', '@MEMCACHED@', '@GRPC@',
+    '@GRPC_TLS_OK@', '@GRPC_TLS_UNTRUSTED@', '@DEAD@',
   ]) {
     if (text.includes(marker)) throw new Error(`placeholder ${marker} left unrendered`);
   }
@@ -254,7 +265,40 @@ function generateGrpcCertificates(directory) {
   run('x509', '-req', '-in', request, '-CA', ca,
     '-CAkey', path.join(directory, 'grpc-ca.key'), '-CAcreateserial', '-days', '3',
     '-out', serverCert, '-extfile', extensions);
-  return { ca, otherCa, serverCert, serverKey };
+  // Wave 7B: uWSGI TLS server certificate whose only SAN is the
+  // `uwsgi_ssl_name` override, plus a CA-signed client identity for mTLS.
+  const uwsgiCert = path.join(directory, 'uwsgi-tls-server.pem');
+  const uwsgiKey = path.join(directory, 'uwsgi-tls-server.key');
+  const uwsgiExtensions = path.join(directory, 'uwsgi-tls-server.ext');
+  fs.writeFileSync(
+    uwsgiExtensions,
+    'subjectAltName=DNS:uwsgi-tls.test\n' +
+      'basicConstraints=critical,CA:FALSE\n' +
+      'keyUsage=critical,digitalSignature,keyEncipherment\n' +
+      'extendedKeyUsage=serverAuth\n',
+  );
+  const uwsgiRequest = path.join(directory, 'uwsgi-tls-server.csr');
+  run('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', uwsgiKey, '-out', uwsgiRequest,
+    '-subj', '/CN=uwsgi-tls.test');
+  run('x509', '-req', '-in', uwsgiRequest, '-CA', ca,
+    '-CAkey', path.join(directory, 'grpc-ca.key'), '-days', '3',
+    '-out', uwsgiCert, '-extfile', uwsgiExtensions);
+  const uwsgiClientCert = path.join(directory, 'uwsgi-tls-client.pem');
+  const uwsgiClientKey = path.join(directory, 'uwsgi-tls-client.key');
+  const uwsgiClientExtensions = path.join(directory, 'uwsgi-tls-client.ext');
+  fs.writeFileSync(
+    uwsgiClientExtensions,
+    'basicConstraints=critical,CA:FALSE\n' +
+      'keyUsage=critical,digitalSignature\n' +
+      'extendedKeyUsage=clientAuth\n',
+  );
+  const uwsgiClientRequest = path.join(directory, 'uwsgi-tls-client.csr');
+  run('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', uwsgiClientKey,
+    '-out', uwsgiClientRequest, '-subj', '/CN=uwsgi-tls-client');
+  run('x509', '-req', '-in', uwsgiClientRequest, '-CA', ca,
+    '-CAkey', path.join(directory, 'grpc-ca.key'), '-days', '3',
+    '-out', uwsgiClientCert, '-extfile', uwsgiClientExtensions);
+  return { ca, otherCa, serverCert, serverKey, uwsgiCert, uwsgiKey };
 }
 
 /** Build (or locate) the test-only Rust HTTP/2 gRPC responder. */
@@ -423,6 +467,8 @@ async function main() {
     ['gateway listener', GATEWAY_PORT],
     ['gateway FastCGI responder', GATEWAY_FCGI_PORT],
     ['gateway uWSGI responder', GATEWAY_UWSGI_PORT],
+    ['gateway uWSGI TLS responder', GATEWAY_UWSGI_TLS_OK_PORT],
+    ['gateway uWSGI TLS (untrusted) responder', GATEWAY_UWSGI_TLS_UNTRUSTED_PORT],
     ['gateway SCGI responder', GATEWAY_SCGI_PORT],
     ['gateway memcached responder', GATEWAY_MEMCACHED_PORT],
     ['gateway gRPC responder', GATEWAY_GRPC_PORT],
@@ -461,6 +507,8 @@ async function main() {
       port: GATEWAY_PORT,
       fcgi: GATEWAY_FCGI_PORT,
       uwsgi: GATEWAY_UWSGI_PORT,
+      uwsgiTlsOk: GATEWAY_UWSGI_TLS_OK_PORT,
+      uwsgiTlsUntrusted: GATEWAY_UWSGI_TLS_UNTRUSTED_PORT,
       scgi: GATEWAY_SCGI_PORT,
       memcached: GATEWAY_MEMCACHED_PORT,
       grpc: GATEWAY_GRPC_PORT,
@@ -484,10 +532,19 @@ async function main() {
     cwd: root,
     stdio: ['ignore', mockLog, mockLog],
   });
-  const mockUwsgi = spawn(python, [path.join(fixtureDir, 'mock_uwsgi.py'), '--port', String(GATEWAY_UWSGI_PORT)], {
-    cwd: root,
-    stdio: ['ignore', mockLog, mockLog],
-  });
+  const mockUwsgi = spawn(
+    python,
+    [
+      path.join(fixtureDir, 'mock_uwsgi.py'),
+      '--port', String(GATEWAY_UWSGI_PORT),
+      '--tls-port', String(GATEWAY_UWSGI_TLS_OK_PORT),
+      '--tls-port', String(GATEWAY_UWSGI_TLS_UNTRUSTED_PORT),
+      '--cert', grpcCertificates.uwsgiCert,
+      '--key', grpcCertificates.uwsgiKey,
+      '--client-ca', grpcCertificates.ca,
+    ],
+    { cwd: root, stdio: ['ignore', mockLog, mockLog] },
+  );
   const mockScgi = spawn(python, [path.join(fixtureDir, 'mock_scgi.py'), '--port', String(GATEWAY_SCGI_PORT)], {
     cwd: root,
     stdio: ['ignore', mockLog, mockLog],

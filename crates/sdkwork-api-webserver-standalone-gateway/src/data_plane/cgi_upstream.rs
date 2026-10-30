@@ -41,9 +41,10 @@ use axum::{
     body::Body,
     http::{header, HeaderMap, HeaderValue, Method, Response, StatusCode},
 };
+use rustls::pki_types::ServerName;
 use sdkwork_webserver_core::CgiUpstreamProtocol;
 use sdkwork_webserver_core::{
-    ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamParamConfig,
+    ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamParamConfig,
     UpstreamRetryCondition, UpstreamRetryConfig,
 };
 use sdkwork_webserver_upstream_protocol::{
@@ -68,9 +69,10 @@ use super::{
     dns::GuardedDnsResolver,
     map_variables::MapResults,
     metrics::DataPlaneMetrics,
-    protocol_pool::{connect_stream, PoolKey, ProtocolPool, ResolvedTarget},
+    protocol_pool::{connect_stream, connect_tls_stream, PoolKey, ProtocolPool, ResolvedTarget},
     proxy::text_response,
     runtime::RuntimeGeneration,
+    upstream_tls::build_upstream_tls_config,
 };
 
 /// nginx `ngx_http_fastcgi_hide_headers` default-hidden response fields (the
@@ -582,28 +584,69 @@ async fn exchange(
     let resolved = resolve_stream_target(generation, policy, metrics, target)
         .await
         .map_err(|_| ExchangeFailure::Transport)?;
+    // A CGI target is TLS when its URL uses the `https` scheme: the nginx
+    // materializer emits `https://` for `uwsgi_pass suwsgi://…` and the typed
+    // plane marks an explicitly TLS CGI target the same way. The TLS policy is
+    // the same per-upstream policy the HTTP proxy and gRPC adapters use.
+    let tls_dial = if target.scheme() == "https" {
+        let Some(upstream_config) = core_upstream(generation, upstream_id) else {
+            tracing::debug!(upstream = upstream_id, "CGI TLS upstream is not configured");
+            return Err(ExchangeFailure::Transport);
+        };
+        let config = match build_upstream_tls_config(&generation.app, &upstream_config) {
+            Ok(config) => Arc::new(config),
+            Err(error) => {
+                tracing::debug!(
+                    upstream = upstream_id,
+                    error = %error,
+                    "CGI upstream TLS policy could not be built"
+                );
+                return Err(ExchangeFailure::Transport);
+            }
+        };
+        let Some(server_name) = cgi_server_name_for(&upstream_config, target) else {
+            tracing::debug!(
+                upstream = upstream_id,
+                "CGI upstream TLS server name is invalid"
+            );
+            return Err(ExchangeFailure::Transport);
+        };
+        Some((config, server_name))
+    } else {
+        None
+    };
     let pool_key = pool.map(|_policy| PoolKey {
+        upstream: upstream_id.to_owned(),
         target: pool_target_key(target),
         bind: bind_address,
     });
+    let connect = || async {
+        match &tls_dial {
+            Some((config, server_name)) => {
+                connect_tls_stream(
+                    &resolved,
+                    bind_address,
+                    socket_keepalive,
+                    Arc::clone(config),
+                    server_name.clone(),
+                )
+                .await
+            }
+            None => connect_stream(&resolved, bind_address, socket_keepalive).await,
+        }
+    };
     let mut stream = match (pool, pool_key.as_ref()) {
         (Some(policy), Some(key)) => match policy.pool.take(key) {
             Some(stream) => stream,
-            None => timeout(
-                connect_timeout,
-                connect_stream(&resolved, bind_address, socket_keepalive),
-            )
+            None => timeout(connect_timeout, connect())
+                .await
+                .map_err(|_| ExchangeFailure::Timeout)?
+                .map_err(|_| ExchangeFailure::Transport)?,
+        },
+        _ => timeout(connect_timeout, connect())
             .await
             .map_err(|_| ExchangeFailure::Timeout)?
             .map_err(|_| ExchangeFailure::Transport)?,
-        },
-        _ => timeout(
-            connect_timeout,
-            connect_stream(&resolved, bind_address, socket_keepalive),
-        )
-        .await
-        .map_err(|_| ExchangeFailure::Timeout)?
-        .map_err(|_| ExchangeFailure::Transport)?,
     };
     timeout(send_timeout, stream.write_all(wire))
         .await
@@ -712,6 +755,27 @@ async fn exchange(
 /// of the same target share their cached connections.
 fn pool_target_key(target: &Url) -> String {
     target.as_str().trim_end_matches('/').to_owned()
+}
+
+/// TLS verification/SNI name for one CGI upstream target: the configured
+/// `*_ssl_name` override, else the target host.
+fn cgi_server_name_for(upstream: &UpstreamConfig, target: &Url) -> Option<ServerName<'static>> {
+    let name = upstream
+        .tls
+        .as_ref()
+        .and_then(|tls| tls.server_name.clone())
+        .or_else(|| target.host_str().map(str::to_owned))?;
+    ServerName::try_from(name).ok()
+}
+
+fn core_upstream(generation: &RuntimeGeneration, upstream_ref: &str) -> Option<UpstreamConfig> {
+    generation
+        .app
+        .config()
+        .upstreams
+        .iter()
+        .find(|upstream| upstream.id == upstream_ref)
+        .cloned()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

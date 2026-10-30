@@ -248,6 +248,18 @@ export const PARSER_EXECUTED = new Map([
   ['http:grpc_ssl_certificate_key', 'mapping grpc settings pipeline'],
   ['http:grpc_ssl_trusted_certificate', 'mapping grpc settings pipeline'],
   ['http:grpc_ssl_protocols', 'mapping grpc settings pipeline'],
+  // Wave 7B: `ngx_http_uwsgi_module` upstream TLS. `CgiSslSettings::apply`
+  // parses the family by suffix, so the per-context match arm only carries a
+  // prefix guard; the implemented forms are listed by catalog id. The remaining
+  // uwsgi_ssl_* forms (ciphers/crl/session_reuse/conf_command/password_file/
+  // certificate_cache/verify_depth) are fail-closed and stay unlisted.
+  ['http:uwsgi_ssl_verify', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
+  ['http:uwsgi_ssl_trusted_certificate', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
+  ['http:uwsgi_ssl_certificate', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
+  ['http:uwsgi_ssl_certificate_key', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
+  ['http:uwsgi_ssl_server_name', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
+  ['http:uwsgi_ssl_name', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
+  ['http:uwsgi_ssl_protocols', 'mapping CgiSslSettings pipeline (uWSGI upstream TLS)'],
 ]);
 
 /**

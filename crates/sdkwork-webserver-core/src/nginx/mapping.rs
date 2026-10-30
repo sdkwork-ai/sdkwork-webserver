@@ -270,7 +270,11 @@ pub(crate) fn ignored_directive_diagnostics(
     directives: &[NginxDirective],
 ) -> Vec<ConfigDiagnostic> {
     fn push(out: &mut Vec<ConfigDiagnostic>, directive: &NginxDirective) {
-        let message = if NGINX_OBSOLETE_NOOP.contains(&directive.name.as_str()) {
+        let message = if directive.name == "uwsgi_ssl_verify"
+            && directive.args.first().is_some_and(|value| value == "off")
+        {
+            "`uwsgi_ssl_verify off` creates an explicit dangerous accept-any upstream TLS verifier: the upstream certificate chain is NOT validated (nginx's default is also off, but the SDKWork runtime only disables verification when this directive is authored, never implicitly). Remove it or configure `uwsgi_ssl_verify on` with `uwsgi_ssl_trusted_certificate`".to_string()
+        } else if NGINX_OBSOLETE_NOOP.contains(&directive.name.as_str()) {
             format!(
                 "`{}` is obsolete in the pinned nginx 1.29.6 reference build (nginx accepts it as a deprecated no-op and ignores the value); the runtime likewise executes nothing for it",
                 directive.name
@@ -324,7 +328,10 @@ pub(crate) fn ignored_directive_diagnostics(
                 let _ = in_stream;
                 continue;
             }
-            if ACCEPTED_IGNORED.contains(&directive.name.as_str()) {
+            if ACCEPTED_IGNORED.contains(&directive.name.as_str())
+                || (directive.name == "uwsgi_ssl_verify"
+                    && directive.args.first().is_some_and(|value| value == "off"))
+            {
                 push(out, directive);
             }
             walk(
@@ -547,6 +554,10 @@ pub fn materialize_nginx_app(
                     ),
                 ));
             }
+            name if name.starts_with("uwsgi_ssl_") => {
+                mapper.http_cgi_ssl[CgiKind::Uwsgi.index()].apply(CgiKind::Uwsgi, directive)?;
+            }
+            name if name.starts_with("scgi_ssl_") => return Err(reject_scgi_ssl(directive)),
             name if name.starts_with("uwsgi_") || name.starts_with("scgi_") => {
                 let Some(kind) = CgiKind::from_directive(name) else {
                     unreachable!();
@@ -1173,6 +1184,12 @@ struct Mapper<'a> {
     http_grpc_ssl: GrpcSslSettings,
     /// http → server resolved `grpc_ssl_*` settings inherited by locations.
     server_grpc_ssl: GrpcSslSettings,
+    /// http-level `uwsgi_ssl_*` / `scgi_ssl_*` upstream TLS settings, indexed by
+    /// `CgiKind` (nginx has no SCGI TLS directives; the slot stays empty and
+    /// `scgi_ssl_*` fails closed with a precise diagnostic).
+    http_cgi_ssl: [CgiSslSettings; 2],
+    /// http → server resolved CGI-family upstream TLS settings.
+    server_cgi_ssl: [CgiSslSettings; 2],
     /// http-level `map` declarations collected in a pre-scan so their result
     /// variables are known before any `add_header`/`proxy_set_header` value is
     /// validated (nginx resolves the variable at configuration init, so
@@ -1335,6 +1352,8 @@ impl<'a> Mapper<'a> {
             server_grpc: GrpcSettings::default(),
             http_grpc_ssl: GrpcSslSettings::default(),
             server_grpc_ssl: GrpcSslSettings::default(),
+            http_cgi_ssl: [CgiSslSettings::default(), CgiSslSettings::default()],
+            server_cgi_ssl: [CgiSslSettings::default(), CgiSslSettings::default()],
             maps: Vec::new(),
             geo: Vec::new(),
             split_clients: Vec::new(),
@@ -1862,6 +1881,7 @@ impl<'a> Mapper<'a> {
         let mut server_proxy_response = ProxyResponseDirectives::default();
         let mut server_fastcgi_local = FastCgiSettings::default();
         let mut server_cgi_local = [CgiSettings::default(), CgiSettings::default()];
+        let mut server_cgi_ssl_local = [CgiSslSettings::default(), CgiSslSettings::default()];
         let mut server_memcached_local = MemcachedSettings::default();
         let mut server_grpc_local = GrpcSettings::default();
         let mut server_grpc_ssl_local = GrpcSslSettings::default();
@@ -2228,6 +2248,10 @@ impl<'a> Mapper<'a> {
                         format!("`{}` is only allowed inside a `location` block", child.name),
                     ));
                 }
+                name if name.starts_with("uwsgi_ssl_") => {
+                    server_cgi_ssl_local[CgiKind::Uwsgi.index()].apply(CgiKind::Uwsgi, child)?;
+                }
+                name if name.starts_with("scgi_ssl_") => return Err(reject_scgi_ssl(child)),
                 name if name.starts_with("uwsgi_") || name.starts_with("scgi_") => {
                     let Some(kind) = CgiKind::from_directive(name) else {
                         unreachable!();
@@ -2537,6 +2561,10 @@ impl<'a> Mapper<'a> {
         self.server_memcached = self.http_memcached.overlay(&server_memcached_local);
         self.server_grpc = self.http_grpc.overlay(&server_grpc_local);
         self.server_grpc_ssl = server_grpc_ssl_local.merge(&self.http_grpc_ssl);
+        self.server_cgi_ssl = [
+            server_cgi_ssl_local[0].merge(&self.http_cgi_ssl[0]),
+            server_cgi_ssl_local[1].merge(&self.http_cgi_ssl[1]),
+        ];
         let effective_merge_slashes =
             server_merge_slashes.unwrap_or(self.http_merge_slashes.unwrap_or(true));
         let effective_underscores_in_headers = server_underscores_in_headers
@@ -3231,6 +3259,7 @@ impl<'a> Mapper<'a> {
         let mut location_fastcgi = FastCgiSettings::default();
         let mut fastcgi_pass: Option<String> = None;
         let mut location_cgi = [CgiSettings::default(), CgiSettings::default()];
+        let mut location_cgi_ssl = [CgiSslSettings::default(), CgiSslSettings::default()];
         let mut cgi_pass: [Option<String>; 2] = [None, None];
         let mut location_memcached = MemcachedSettings::default();
         let mut memcached_pass: Option<String> = None;
@@ -3270,6 +3299,10 @@ impl<'a> Mapper<'a> {
                     };
                     cgi_pass[kind.index()] = Some(child.args[0].clone());
                 }
+                name if name.starts_with("uwsgi_ssl_") => {
+                    location_cgi_ssl[CgiKind::Uwsgi.index()].apply(CgiKind::Uwsgi, child)?;
+                }
+                name if name.starts_with("scgi_ssl_") => return Err(reject_scgi_ssl(child)),
                 name if name.starts_with("uwsgi_") || name.starts_with("scgi_") => {
                     let Some(kind) = CgiKind::from_directive(name) else {
                         unreachable!();
@@ -4340,6 +4373,8 @@ impl<'a> Mapper<'a> {
             let prefix = cgi_kind.prefix();
             let effective_cgi =
                 self.server_cgi[cgi_kind.index()].overlay(&location_cgi[cgi_kind.index()]);
+            let effective_cgi_ssl =
+                location_cgi_ssl[cgi_kind.index()].merge(&self.server_cgi_ssl[cgi_kind.index()]);
             if cgi_target.contains('$') {
                 return Err(NginxConfigError::unsupported(
                     location,
@@ -4348,7 +4383,8 @@ impl<'a> Mapper<'a> {
                     ),
                 ));
             }
-            if cgi_target.starts_with("unix:") {
+            let (dial_target, tls_target) = split_cgi_pass_target(location, cgi_kind, &cgi_target)?;
+            if dial_target.starts_with("unix:") {
                 return Err(NginxConfigError::unsupported(
                     location,
                     format!(
@@ -4356,20 +4392,33 @@ impl<'a> Mapper<'a> {
                     ),
                 ));
             }
-            let upstream_ref = if cgi_target.contains(':') {
-                let Some((host, port)) = cgi_target.rsplit_once(':') else {
+            let tls_policy =
+                materialize_cgi_tls(location, &effective_cgi_ssl, tls_target, self.base_dir)?;
+            let target_scheme = if tls_target { "https" } else { "http" };
+            let upstream_ref = if dial_target.contains(':') {
+                let Some((host, port)) = dial_target.rsplit_once(':') else {
                     return Err(NginxConfigError::unsupported(
                         location,
-                        format!("{prefix}_pass `{cgi_target}` must be host:port"),
+                        format!("{prefix}_pass `{dial_target}` must be host:port"),
                     ));
                 };
                 if host.is_empty() || port.parse::<u16>().map(|port| port == 0).unwrap_or(true) {
                     return Err(NginxConfigError::unsupported(
                         location,
-                        format!("{prefix}_pass `{cgi_target}` must be a valid host:port"),
+                        format!("{prefix}_pass `{dial_target}` must be a valid host:port"),
                     ));
                 }
-                let literal_id = format!("literal-{}", sanitize_id(&cgi_target));
+                let literal_base = format!("literal-{}", sanitize_id(&dial_target));
+                // One TLS policy per upstream: a literal target used with
+                // different policies becomes a policy-scoped upstream id, as
+                // the gRPC adapter does for `grpcs://`.
+                let literal_id = match (&tls_policy, tls_target) {
+                    (Some(tls), _) => {
+                        format!("{literal_base}-tls-{:016x}", policy_hash(tls))
+                    }
+                    (None, true) => format!("{literal_base}-tls"),
+                    (None, false) => literal_base,
+                };
                 if !self.upstream_names.contains(&literal_id) {
                     let allowed_cidrs: Vec<String> = match host.parse::<std::net::IpAddr>() {
                         Ok(std::net::IpAddr::V4(ip)) => vec![format!("{ip}/32")],
@@ -4381,19 +4430,98 @@ impl<'a> Mapper<'a> {
                     };
                     let mut literal_upstream = json!({
                         "id": literal_id,
-                        "targets": [{"url": format!("http://{cgi_target}")}],
+                        "targets": [{"url": format!("{target_scheme}://{dial_target}")}],
                         "loadBalancing": "round-robin",
                     });
                     if !allowed_cidrs.is_empty() {
                         literal_upstream["addressPolicy"] =
                             json!({ "allowedCidrs": allowed_cidrs });
                     }
+                    if let Some(tls) = &tls_policy {
+                        literal_upstream["tls"] = tls.clone();
+                    }
                     self.upstreams.push(literal_upstream);
                     self.upstream_names.push(literal_id.clone());
                 }
                 literal_id
-            } else if self.upstream_names.contains(&cgi_target) {
-                cgi_target.clone()
+            } else if self.upstream_names.contains(&dial_target) {
+                if !tls_target {
+                    dial_target.clone()
+                } else {
+                    // A declared upstream is shared with plain HTTP/plain CGI
+                    // locations, while nginx enables TLS per location. The
+                    // TLS-scoped copy keeps that semantics instead of turning
+                    // every user of the upstream into a TLS client.
+                    let scoped_id = match &tls_policy {
+                        Some(tls) => format!("{dial_target}-cgi-tls-{:016x}", policy_hash(tls)),
+                        None => format!("{dial_target}-cgi-tls"),
+                    };
+                    if !self.upstream_names.contains(&scoped_id) {
+                        let Some(source) = self
+                            .upstreams
+                            .iter()
+                            .find(|upstream| {
+                                upstream.get("id").and_then(Value::as_str)
+                                    == Some(dial_target.as_str())
+                            })
+                            .cloned()
+                        else {
+                            return Err(NginxConfigError::unsupported(
+                                location,
+                                format!(
+                                    "{prefix}_pass references undefined upstream `{dial_target}`"
+                                ),
+                            ));
+                        };
+                        let mut scoped = source;
+                        scoped["id"] = Value::String(scoped_id.clone());
+                        if let Some(targets) =
+                            scoped.get_mut("targets").and_then(Value::as_array_mut)
+                        {
+                            for target in targets.iter_mut() {
+                                let Some(url) = target.get("url").and_then(Value::as_str) else {
+                                    continue;
+                                };
+                                if url.starts_with("http://") {
+                                    target["url"] = Value::String(format!(
+                                        "https://{}",
+                                        url.trim_start_matches("http://")
+                                    ));
+                                } else if url.starts_with("unix:") {
+                                    return Err(NginxConfigError::unsupported(
+                                        location,
+                                        format!(
+                                            "{prefix}_pass on a declared upstream with a `unix:` target cannot use TLS"
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                        if let Some(tls) = &tls_policy {
+                            scoped["tls"] = tls.clone();
+                        }
+                        self.upstreams.push(scoped);
+                        self.upstream_names.push(scoped_id.clone());
+                    } else if let Some(tls) = &tls_policy {
+                        let existing = self
+                            .upstreams
+                            .iter()
+                            .find(|upstream| {
+                                upstream.get("id").and_then(Value::as_str)
+                                    == Some(scoped_id.as_str())
+                            })
+                            .and_then(|upstream| upstream.get("tls"));
+                        if existing != Some(tls) {
+                            return Err(NginxConfigError::unsupported(
+                                location,
+                                format!(
+                                    "conflicting `{prefix}_ssl_*` settings for upstream `{dial_target}`; the runtime model owns one TLS policy per upstream"
+                                ),
+                            ));
+                        }
+                    }
+                    scoped_id
+                }
             } else {
                 return Err(NginxConfigError::unsupported(
                     location,
@@ -6596,6 +6724,338 @@ impl GrpcSslSettings {
         }
         Ok(())
     }
+}
+
+/// nginx `uwsgi_ssl_*` upstream TLS settings.
+///
+/// nginx's `ngx_http_uwsgi_module` accepts this family at http/server/location
+/// and enables the TLS transport only for a `suwsgi://` (or variable) pass
+/// target. `ngx_http_scgi_module` has **no** TLS directives at all in nginx
+/// 1.29.6, so `scgi_ssl_*` is rejected with a precise diagnostic instead of
+/// inventing a non-nginx surface.
+#[derive(Clone, Default, PartialEq)]
+struct CgiSslSettings {
+    verify: Option<bool>,
+    trusted_certificate: Option<String>,
+    certificate: Option<String>,
+    certificate_key: Option<String>,
+    server_name: Option<bool>,
+    name: Option<String>,
+    protocols: Option<SslProtocolRange>,
+}
+
+impl CgiSslSettings {
+    fn merge(&self, lower: &CgiSslSettings) -> CgiSslSettings {
+        CgiSslSettings {
+            verify: self.verify.or(lower.verify),
+            trusted_certificate: self
+                .trusted_certificate
+                .clone()
+                .or_else(|| lower.trusted_certificate.clone()),
+            certificate: self
+                .certificate
+                .clone()
+                .or_else(|| lower.certificate.clone()),
+            certificate_key: self
+                .certificate_key
+                .clone()
+                .or_else(|| lower.certificate_key.clone()),
+            server_name: self.server_name.or(lower.server_name),
+            name: self.name.clone().or_else(|| lower.name.clone()),
+            protocols: self.protocols.or(lower.protocols),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self == &CgiSslSettings::default()
+    }
+
+    fn apply(&mut self, kind: CgiKind, directive: &NginxDirective) -> Result<(), NginxConfigError> {
+        if kind != CgiKind::Uwsgi {
+            return Err(reject_scgi_ssl(directive));
+        }
+        let Some(suffix) = directive.name.strip_prefix("uwsgi_ssl_") else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("`{}` is not a `uwsgi_ssl_*` directive", directive.name),
+            ));
+        };
+        let Some(value) = directive.args.first() else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{} requires an argument", directive.name),
+            ));
+        };
+        let resolve = |directive: &NginxDirective| -> Result<String, NginxConfigError> {
+            let value = directive.args.first().expect("checked argument presence");
+            if value.starts_with('/') || value.contains('\\') {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` file `{value}` must be relative to the loaded configuration directory: the runtime sandboxes upstream TLS material to the config directory",
+                        directive.name
+                    ),
+                ));
+            }
+            Ok(value.clone())
+        };
+        match suffix {
+            "verify" => match value.as_str() {
+                "on" => self.verify = Some(true),
+                "off" => self.verify = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("uwsgi_ssl_verify accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "trusted_certificate" => self.trusted_certificate = Some(resolve(directive)?),
+            "certificate" => self.certificate = Some(resolve(directive)?),
+            "certificate_key" => self.certificate_key = Some(resolve(directive)?),
+            "server_name" => match value.as_str() {
+                "on" => self.server_name = Some(true),
+                "off" => self.server_name = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("uwsgi_ssl_server_name accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "name" => {
+                if value.is_empty()
+                    || value.len() > 253
+                    || value
+                        .bytes()
+                        .any(|byte| byte.is_ascii_control() || byte == b' ' || byte == b'/')
+                {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "uwsgi_ssl_name must be a host name without controls, spaces or `/`",
+                    ));
+                }
+                self.name = Some(value.clone());
+            }
+            "protocols" => self.protocols = Some(parse_ssl_protocols(directive)?),
+            "ciphers" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_ciphers` cannot be honored: nginx cipher strings are OpenSSL-specific, while the runtime TLS stack selects policy-safe suites from its own provider; remove the directive or accept the runtime TLS policy for this upstream (the bounded difference is documented)",
+                ))
+            }
+            "crl" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_crl` cannot be honored: the pinned rustls/webpki stack does not consume certificate revocation lists for client verification",
+                ))
+            }
+            "session_reuse" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_session_reuse` cannot be honored: upstream TLS session resumption is owned by the runtime TLS stack and is not configurable per upstream",
+                ))
+            }
+            "conf_command" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_conf_command` cannot be honored: it is an OpenSSL configuration command with no equivalent in the rustls-based runtime TLS stack",
+                ))
+            }
+            "password_file" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_password_file` cannot be honored: encrypted client private keys are not read by the runtime; provide an unencrypted PEM key file",
+                ))
+            }
+            "certificate_cache" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_certificate_cache` cannot be honored: dynamic client-certificate caching is a typed-plane/ACME concern, not an upstream client-identity setting the runtime adapter implements",
+                ))
+            }
+            "verify_depth" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`uwsgi_ssl_verify_depth` cannot be honored: webpki verifies the complete presented chain, so a custom chain-depth limit cannot be enforced; remove the directive or accept full-chain verification",
+                ))
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`uwsgi_ssl_{other}` is not executable by the bounded uWSGI TLS client; implemented: uwsgi_ssl_verify/uwsgi_ssl_trusted_certificate/uwsgi_ssl_certificate/uwsgi_ssl_certificate_key/uwsgi_ssl_server_name/uwsgi_ssl_name/uwsgi_ssl_protocols; fail-closed with a documented reason: uwsgi_ssl_ciphers/uwsgi_ssl_crl/uwsgi_ssl_session_reuse/uwsgi_ssl_conf_command/uwsgi_ssl_password_file/uwsgi_ssl_certificate_cache/uwsgi_ssl_verify_depth"
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `scgi_ssl_*` is not an nginx directive family: `ngx_http_scgi_module` in
+/// nginx 1.29.6 declares no TLS commands (the upstream TLS surface exists only
+/// in the uWSGI and gRPC modules).
+fn reject_scgi_ssl(directive: &NginxDirective) -> NginxConfigError {
+    NginxConfigError::unsupported(
+        directive,
+        format!(
+            "`{}` is not an nginx directive: ngx_http_scgi_module in nginx 1.29.6 has no `scgi_ssl_*` commands (only ngx_http_uwsgi_module exposes upstream TLS); stock nginx rejects it as an unknown directive, so there is no compatible behavior to implement. SCGI over TLS is available only through the typed SDKWork configuration, not the nginx compatibility plane",
+            directive.name
+        ),
+    )
+}
+
+/// Split a CGI-family pass target into the dial target and whether TLS is
+/// required. nginx accepts `uwsgi://host:port` (plain) and
+/// `suwsgi://host:port` (TLS) for `uwsgi_pass`; `scgi_pass` accepts only a bare
+/// `host:port` or a declared upstream name (no scheme prefix in nginx 1.29.6).
+fn split_cgi_pass_target(
+    location: &NginxDirective,
+    kind: CgiKind,
+    target: &str,
+) -> Result<(String, bool), NginxConfigError> {
+    let prefix = kind.prefix();
+    if let Some(rest) = target.strip_prefix("suwsgi://") {
+        if kind != CgiKind::Uwsgi {
+            return Err(NginxConfigError::unsupported(
+                location,
+                format!(
+                    "`{prefix}_pass suwsgi://…` is only valid for uwsgi_pass (nginx has no SCGI TLS scheme)"
+                ),
+            ));
+        }
+        return Ok((rest.to_owned(), true));
+    }
+    if let Some(rest) = target.strip_prefix("uwsgi://") {
+        if kind != CgiKind::Uwsgi {
+            return Err(NginxConfigError::unsupported(
+                location,
+                format!("`{prefix}_pass uwsgi://…` is only a uwsgi_pass form"),
+            ));
+        }
+        return Ok((rest.to_owned(), false));
+    }
+    if target.contains("://") {
+        return Err(NginxConfigError::unsupported(
+            location,
+            format!(
+                "`{prefix}_pass {target}` uses an unsupported scheme; use host:port, a declared upstream{}",
+                if kind == CgiKind::Uwsgi {
+                    ", uwsgi://host:port or suwsgi://host:port"
+                } else {
+                    ""
+                }
+            ),
+        ));
+    }
+    Ok((target.to_owned(), false))
+}
+
+/// Materialize the resolved `uwsgi_ssl_*` settings into the runtime upstream
+/// TLS policy.
+///
+/// `verify off` is an explicit dangerous accept-any verifier here: the runtime
+/// never skips verification implicitly, so the flag is only emitted for an
+/// explicit `off` (and the loader warns about it). A TLS target with no
+/// `uwsgi_ssl_*` directives keeps the runtime default (system-root
+/// verification), a documented safety difference from nginx's default-off
+/// verification; a plain target with TLS directives fails closed because nginx
+/// would parse and then ignore them.
+fn materialize_cgi_tls(
+    location: &NginxDirective,
+    settings: &CgiSslSettings,
+    tls_target: bool,
+    base_dir: &std::path::Path,
+) -> Result<Option<Value>, NginxConfigError> {
+    if settings.is_empty() {
+        return Ok(None);
+    }
+    if !tls_target {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`uwsgi_ssl_*` requires a `suwsgi://` uwsgi_pass target: nginx parses these directives but only enables upstream TLS for `suwsgi://` (or a variable URL); the runtime refuses an ambiguous configuration instead of silently ignoring them",
+        ));
+    }
+    if settings.verify == Some(false) && settings.trusted_certificate.is_some() {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`uwsgi_ssl_verify off` disables peer-chain verification, so `uwsgi_ssl_trusted_certificate` would have no effect; remove one of the two directives",
+        ));
+    }
+    if settings.trusted_certificate.is_some() && settings.verify != Some(true) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`uwsgi_ssl_trusted_certificate` requires `uwsgi_ssl_verify on`; the runtime enables verification by default and only uses a custom CA bundle for an explicit verifying policy",
+        ));
+    }
+    match (&settings.certificate, &settings.certificate_key) {
+        (Some(_), None) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`uwsgi_ssl_certificate` requires `uwsgi_ssl_certificate_key`",
+            ));
+        }
+        (None, Some(_)) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`uwsgi_ssl_certificate_key` requires `uwsgi_ssl_certificate`",
+            ));
+        }
+        _ => {}
+    }
+    let mut tls = serde_json::Map::new();
+    if let Some(ca_file) = &settings.trusted_certificate {
+        tls.insert("trustMode".to_owned(), Value::String("custom".to_owned()));
+        tls.insert(
+            "caCertificateFiles".to_owned(),
+            Value::Array(vec![Value::String(resolve_upstream_tls_file(
+                base_dir, ca_file,
+            ))]),
+        );
+    } else {
+        tls.insert("trustMode".to_owned(), Value::String("system".to_owned()));
+    }
+    if let (Some(certificate), Some(key)) = (&settings.certificate, &settings.certificate_key) {
+        tls.insert(
+            "clientCertificateFile".to_owned(),
+            Value::String(resolve_upstream_tls_file(base_dir, certificate)),
+        );
+        tls.insert(
+            "clientPrivateKeyFile".to_owned(),
+            Value::String(resolve_upstream_tls_file(base_dir, key)),
+        );
+    }
+    if let Some(protocols) = settings.protocols {
+        tls.insert(
+            "minimumVersion".to_owned(),
+            Value::String(protocols.minimum.wire().to_owned()),
+        );
+        tls.insert(
+            "maximumVersion".to_owned(),
+            Value::String(protocols.maximum.wire().to_owned()),
+        );
+    }
+    if let Some(name) = &settings.name {
+        tls.insert("serverName".to_owned(), Value::String(name.clone()));
+    }
+    if settings.server_name == Some(false) {
+        tls.insert("sendSni".to_owned(), Value::Bool(false));
+    }
+    if settings.verify == Some(false) {
+        tls.insert("dangerousAcceptAnyVerify".to_owned(), Value::Bool(true));
+    }
+    Ok(Some(Value::Object(tls)))
+}
+
+/// Stable hash of a materialized upstream TLS policy, used to give a literal
+/// or declared upstream a policy-scoped id (one TLS policy per upstream in the
+/// runtime model, while nginx applies the policies per location).
+fn policy_hash(value: &Value) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    value.to_string().hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Server/http-level `set_real_ip_from` / `real_ip_header` /
@@ -16273,5 +16733,304 @@ server {
             error.to_string().contains("rewrite-phase instructions"),
             "{error}"
         );
+    }
+
+    // ---------------------------------------------------------------------
+    // Wave 7B: uWSGI upstream TLS (`uwsgi_ssl_*`, `suwsgi://`)
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn suwsgi_materializes_verified_upstream_tls_with_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    uwsgi_ssl_verify on;
+    uwsgi_ssl_trusted_certificate uwsgi-ca.pem;
+    server {
+        listen 80;
+        server_name tls.example.com;
+        location /a/ {
+            uwsgi_pass suwsgi://127.0.0.1:9443;
+            uwsgi_ssl_server_name on;
+            uwsgi_ssl_name mock-uwsgi.test;
+            uwsgi_ssl_protocols TLSv1.3;
+        }
+    }
+}
+"#,
+        )
+        .expect("suwsgi location materializes");
+        let resource = config
+            .resources
+            .iter()
+            .find(|resource| matches!(resource, crate::config::ResourceConfig::CgiUpstream { .. }))
+            .expect("uwsgi resource");
+        let crate::config::ResourceConfig::CgiUpstream {
+            upstream_ref,
+            protocol,
+            ..
+        } = resource
+        else {
+            unreachable!()
+        };
+        assert_eq!(*protocol, crate::config::CgiUpstreamProtocol::Uwsgi);
+        let upstream = config
+            .upstreams
+            .iter()
+            .find(|upstream| &upstream.id == upstream_ref)
+            .expect("policy-scoped upstream");
+        assert!(
+            upstream.id.contains("-tls-"),
+            "a TLS policy scopes the literal upstream id: {}",
+            upstream.id
+        );
+        assert_eq!(upstream.targets.len(), 1);
+        assert!(
+            upstream.targets[0].url.starts_with("https://"),
+            "suwsgi target must dial TLS: {}",
+            upstream.targets[0].url
+        );
+        let tls = upstream.tls.as_ref().expect("upstream TLS policy");
+        assert_eq!(tls.trust_mode, crate::config::UpstreamTlsTrustMode::Custom);
+        assert_eq!(tls.ca_certificate_files.len(), 1);
+        assert!(tls.ca_certificate_files[0].ends_with("uwsgi-ca.pem"));
+        assert_eq!(tls.server_name.as_deref(), Some("mock-uwsgi.test"));
+        assert!(tls.send_sni);
+        assert!(!tls.dangerous_accept_any_verify);
+        assert_eq!(tls.minimum_version, TlsVersion::Tls13);
+        assert_eq!(tls.maximum_version, TlsVersion::Tls13);
+    }
+
+    #[test]
+    fn uwsgi_ssl_verify_off_materializes_the_explicit_dangerous_verifier() {
+        let text = r#"
+server {
+    listen 80;
+    server_name tls.example.com;
+    location /a/ {
+        uwsgi_pass suwsgi://127.0.0.1:9443;
+        uwsgi_ssl_verify off;
+    }
+}
+"#;
+        let config = materialize(text).expect("explicit verify off materializes");
+        let resource = config
+            .resources
+            .iter()
+            .find(|resource| matches!(resource, crate::config::ResourceConfig::CgiUpstream { .. }))
+            .expect("uwsgi resource");
+        let crate::config::ResourceConfig::CgiUpstream { upstream_ref, .. } = resource else {
+            unreachable!()
+        };
+        let upstream = config
+            .upstreams
+            .iter()
+            .find(|upstream| &upstream.id == upstream_ref)
+            .expect("upstream");
+        let tls = upstream.tls.as_ref().expect("tls");
+        assert!(tls.dangerous_accept_any_verify);
+        assert_eq!(tls.trust_mode, crate::config::UpstreamTlsTrustMode::System);
+        assert!(tls.ca_certificate_files.is_empty());
+
+        // The loader surfaces an explicit warning: verification is never
+        // skipped silently.
+        let parsed = parse_nginx_config(text, std::path::Path::new("site.conf")).expect("parse");
+        let diagnostics = ignored_directive_diagnostics(&parsed);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("dangerous accept-any")),
+            "expected an explicit dangerous-verifier diagnostic: {diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn uwsgi_ssl_server_name_off_disables_sni_but_keeps_the_name() {
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name tls.example.com;
+    location /a/ {
+        uwsgi_pass suwsgi://127.0.0.1:9443;
+        uwsgi_ssl_verify on;
+        uwsgi_ssl_server_name off;
+        uwsgi_ssl_name verify.example.com;
+    }
+}
+"#,
+        )
+        .expect("server_name off materializes");
+        let resource = config
+            .resources
+            .iter()
+            .find(|resource| matches!(resource, crate::config::ResourceConfig::CgiUpstream { .. }))
+            .expect("uwsgi resource");
+        let crate::config::ResourceConfig::CgiUpstream { upstream_ref, .. } = resource else {
+            unreachable!()
+        };
+        let upstream = config
+            .upstreams
+            .iter()
+            .find(|upstream| &upstream.id == upstream_ref)
+            .expect("upstream");
+        let tls = upstream.tls.as_ref().expect("tls");
+        assert!(!tls.send_sni);
+        assert_eq!(tls.server_name.as_deref(), Some("verify.example.com"));
+    }
+
+    #[test]
+    fn uwsgi_ssl_on_a_plain_target_fails_closed() {
+        let error = materialize(
+            r#"
+server {
+    listen 80;
+    server_name tls.example.com;
+    location /a/ {
+        uwsgi_pass 127.0.0.1:9100;
+        uwsgi_ssl_verify on;
+    }
+}
+"#,
+        )
+        .expect_err("TLS directives without a TLS target must fail closed");
+        assert!(error.to_string().contains("suwsgi://"), "{error}");
+    }
+
+    #[test]
+    fn uwsgi_ssl_unsupported_knobs_fail_closed_with_precise_reasons() {
+        let cases = [
+            ("uwsgi_ssl_ciphers HIGH", "OpenSSL-specific"),
+            ("uwsgi_ssl_crl crl.pem", "revocation lists"),
+            ("uwsgi_ssl_session_reuse on", "session resumption"),
+            (
+                "uwsgi_ssl_conf_command Options",
+                "OpenSSL configuration command",
+            ),
+            (
+                "uwsgi_ssl_password_file pass.txt",
+                "encrypted client private keys",
+            ),
+            (
+                "uwsgi_ssl_certificate_cache max=1",
+                "dynamic client-certificate caching",
+            ),
+            ("uwsgi_ssl_verify_depth 2", "complete presented chain"),
+        ];
+        for (directive, expected) in cases {
+            let text = format!(
+                "server {{\n    listen 80;\n    server_name tls.example.com;\n    location /a/ {{\n        uwsgi_pass suwsgi://127.0.0.1:9443;\n        {directive};\n    }}\n}}\n"
+            );
+            let error = materialize(&text).expect_err("unhonoured uwsgi_ssl form must fail closed");
+            assert!(
+                error.to_string().contains(expected),
+                "`{directive}` diagnostic should mention `{expected}`: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn uwsgi_ssl_client_identity_and_trust_combinations_fail_closed() {
+        for (directives, expected) in [
+            (
+                "uwsgi_ssl_certificate c.pem;",
+                "requires `uwsgi_ssl_certificate_key`",
+            ),
+            (
+                "uwsgi_ssl_certificate_key k.pem;",
+                "requires `uwsgi_ssl_certificate`",
+            ),
+            (
+                "uwsgi_ssl_trusted_certificate ca.pem;",
+                "requires `uwsgi_ssl_verify on`",
+            ),
+            (
+                "uwsgi_ssl_verify off;\n        uwsgi_ssl_trusted_certificate ca.pem;",
+                "would have no effect",
+            ),
+        ] {
+            let text = format!(
+                "server {{\n    listen 80;\n    server_name tls.example.com;\n    location /a/ {{\n        uwsgi_pass suwsgi://127.0.0.1:9443;\n        {directives}\n    }}\n}}\n"
+            );
+            let error = materialize(&text).expect_err("invalid TLS combination fails closed");
+            assert!(
+                error.to_string().contains(expected),
+                "diagnostic should mention `{expected}`: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn scgi_ssl_is_rejected_as_a_non_nginx_directive() {
+        let error = materialize(
+            r#"
+server {
+    listen 80;
+    server_name tls.example.com;
+    location /s/ {
+        scgi_pass 127.0.0.1:9200;
+        scgi_ssl_verify on;
+    }
+}
+"#,
+        )
+        .expect_err("scgi_ssl_* is not an nginx directive");
+        let message = error.to_string();
+        assert!(message.contains("scgi_ssl_verify"), "{message}");
+        assert!(message.contains("no `scgi_ssl_*` commands"), "{message}");
+    }
+
+    #[test]
+    fn declared_upstream_tls_location_scopes_a_copy_and_leaves_the_plain_upstream() {
+        let config = materialize(
+            r#"
+upstream cgi_pool {
+    server 127.0.0.1:9100;
+}
+server {
+    listen 80;
+    server_name tls.example.com;
+    location /plain/ {
+        uwsgi_pass cgi_pool;
+    }
+    location /tls/ {
+        uwsgi_pass suwsgi://cgi_pool;
+        uwsgi_ssl_verify off;
+    }
+}
+"#,
+        )
+        .expect("declared upstream with a TLS-scoped location materializes");
+        let plain = config
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.id == "cgi_pool")
+            .expect("the plain upstream stays untouched");
+        assert!(plain.tls.is_none());
+        assert!(plain.targets[0].url.starts_with("http://"));
+        let scoped = config
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.id.starts_with("cgi_pool-cgi-tls"))
+            .expect("a TLS-scoped copy exists");
+        assert!(scoped
+            .tls
+            .as_ref()
+            .is_some_and(|tls| tls.dangerous_accept_any_verify));
+        assert!(
+            scoped
+                .targets
+                .iter()
+                .all(|target| target.url.starts_with("https://")),
+            "the scoped copy rewrites every target to https"
+        );
+        let tls_resources = config
+            .resources
+            .iter()
+            .filter(|resource| {
+                matches!(resource, crate::config::ResourceConfig::CgiUpstream { .. })
+            })
+            .count();
+        assert_eq!(tls_resources, 2);
     }
 }

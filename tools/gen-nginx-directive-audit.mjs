@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = 'ff3ea103';
+const AUDIT_HEAD = '23bcf739';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10) and the mail waves (9A/9B) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B) and the uWSGI upstream-TLS wave (wave 7B) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -337,6 +337,20 @@ const COMPLETED_WAVES = [
       'mail:xclient',
     ],
   },
+  {
+    key: 'wave 7B (uWSGI upstream TLS)',
+    summary:
+      'uwsgi_ssl_* upstream TLS identity/verification at http/server/location through the CGI transport seam (tokio-rustls, always-verified unless ssl_verify is explicitly off)',
+    ids: [
+      'http:uwsgi_ssl_verify',
+      'http:uwsgi_ssl_trusted_certificate',
+      'http:uwsgi_ssl_certificate',
+      'http:uwsgi_ssl_certificate_key',
+      'http:uwsgi_ssl_server_name',
+      'http:uwsgi_ssl_name',
+      'http:uwsgi_ssl_protocols',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -585,19 +599,12 @@ const REMAINING_GAP_CATEGORIES = [
       'http:uwsgi_max_temp_file_size',
       'http:uwsgi_no_cache',
       'http:uwsgi_pass_request_body',
-      'http:uwsgi_ssl_certificate',
       'http:uwsgi_ssl_certificate_cache',
-      'http:uwsgi_ssl_certificate_key',
       'http:uwsgi_ssl_ciphers',
       'http:uwsgi_ssl_conf_command',
       'http:uwsgi_ssl_crl',
-      'http:uwsgi_ssl_name',
       'http:uwsgi_ssl_password_file',
-      'http:uwsgi_ssl_protocols',
-      'http:uwsgi_ssl_server_name',
       'http:uwsgi_ssl_session_reuse',
-      'http:uwsgi_ssl_trusted_certificate',
-      'http:uwsgi_ssl_verify',
       'http:uwsgi_ssl_verify_depth',
       'http:uwsgi_store',
       'http:uwsgi_store_access',
@@ -606,7 +613,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this uWSGI sub-family fails to activate.',
-    why: 'the implemented uWSGI request/response and transport forms (IP-literal bind, SO_KEEPALIVE) now execute end-to-end; the residual cache/buffer/store/SSL sub-families, unix/variable targets, hostname/transparent binds and uWSGI keep-conn reuse are unimplemented and are backlog, not profile exclusions.',
+    why: 'the implemented uWSGI request/response and transport forms (IP-literal bind, SO_KEEPALIVE) plus uWSGI upstream TLS identity/verification now execute end-to-end; the residual cache/buffer/store sub-families, unix/variable targets, hostname/transparent binds, uWSGI keep-conn reuse and the rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth) are unimplemented backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/uwsgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
@@ -1739,6 +1746,20 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the STARTTLS case compares greeting, EHLO capabilities, the 220 upgrade, decrypted application bytes and the post-upgrade AUTH exchange against nginx 1.29.6',
   },
+  {
+    id: 'http:uwsgi_ssl_verify',
+    evidence: 'tests/nginx/differential-protocols/battery.py::uwsgi-tls-ok',
+    claim: 'uwsgi_ssl_verify verifies the upstream TLS peer against the trusted CA',
+    proves:
+      'the uWSGI TLS differential cases authenticate the mock responder with a trusted CA (success), an unrelated CA (fail closed with a status-only 502), and mTLS client identity, against nginx 1.29.6',
+  },
+  {
+    id: 'http:uwsgi_ssl_certificate',
+    evidence: 'tests/nginx/differential-protocols/battery.py::uwsgi-tls-mtls',
+    claim: 'uwsgi_ssl_certificate/_key present the client identity to the upstream',
+    proves:
+      'the mTLS differential case completes the upstream handshake with the configured client certificate/key and matches nginx 1.29.6 behaviour',
+  },
 ];
 
 /**
@@ -2031,7 +2052,7 @@ function renderHeader(inventory, catalog) {
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
   stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
-  wave (wave 10) and the mail waves (9A/9B).** The code, tests, generated operator matrix and the re-synced directive
+  wave (wave 10), the mail waves (9A/9B) and the uWSGI upstream-TLS wave (wave 7B).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2049,8 +2070,9 @@ function renderHeader(inventory, catalog) {
   CGI-transport wave (IP-literal *_bind and *_socket_keepalive) and the
   rewrite/variable-engine wave (\`if\` conditions over the bounded variable engine) and
   the mail waves (POP3/IMAP/SMTP proxy end-to-end after the PRD section 4 mail-module
-  amendment) are recorded as completed in section 3, and every one of them is asserted
-  executable by \`--verify-evidence\`.
+  amendment) and the uWSGI upstream-TLS wave (uwsgi_ssl_* identity/verification through
+  the CGI transport seam) are recorded as completed in section 3, and every one of them
+  is asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2155,7 +2177,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave and the mail waves landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves and the uWSGI upstream-TLS wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2190,7 +2212,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-mail-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-uWSGI-upstream-TLS-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2264,7 +2286,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2287,7 +2309,8 @@ wire-proven); the CGI-transport wave added IP-literal *_bind and *_socket_keepal
 the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance); and the
 rewrite/variable-engine wave made server/location \`if\` conditions executable; and the
 mail waves brought the POP3/IMAP/SMTP mail proxy in profile (PRD section 4 amendment) with
-the 27 implemented mail-module directives executing end-to-end.
+the 27 implemented mail-module directives executing end-to-end; and the uWSGI
+upstream-TLS wave made the seven uwsgi_ssl_* identity/verification directives executable.
 
 ${completedTable}
 ${completedRows}
@@ -2313,6 +2336,16 @@ typed-plane extension (nginx mail has no proxy_ssl), proven by integration tests
 the audit does not claim nginx parity for backend TLS, and client-certificate verification
 is absent.
 
+Wave 7B acceptance evidence: uWSGI upstream TLS is dialed through the committed CGI
+transport seam with tokio-rustls and proven by three new real-nginx differential cases
+(trusted CA, mTLS client identity, untrusted CA -> 502 status-only), taking
+differential-protocols from 46 to 49 (it remains the second aggregate differential
+slice). TLS is always verified unless uwsgi_ssl_verify is explicitly off (a documented
+dangerous verifier). Rustls-unsupported OpenSSL forms stay fail-closed. Factual note:
+nginx 1.29.6 has **no** scgi_ssl_* and **no** fastcgi_ssl_* directives (inventory: 14
+uwsgi_ssl, 0 scgi_ssl), so those names are rejected as non-nginx extensions and are not
+counted as nginx gaps.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
@@ -2324,7 +2357,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the mail waves (9A/9B). An accepted-unenforced row is silently ignored today; a rejected row fails
+the uWSGI upstream-TLS wave (7B). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2372,6 +2405,14 @@ resolver/resolver_timeout and set_real_ip_from. Client-certificate verification 
 absent, and backend TLS stays a typed-plane extension rather than a claimed nginx parity
 surface.
 
+Wave 7B note: uWSGI upstream TLS identity/verification now executes (trusted CA, client
+certificate/key, SNI/name override, TLS1.2/1.3 window) with inheritance at
+http/server/location; the seven rustls-unsupported uWSGI SSL forms (ciphers, CRL, session
+reuse, conf_command, password_file, certificate_cache, verify_depth) stay fail-closed
+backlog. nginx 1.29.6 defines no scgi_ssl_* or fastcgi_ssl_* directives, so those names
+are non-nginx extensions rather than missing nginx features and are deliberately not
+listed as gaps.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2418,7 +2459,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave and the mail waves**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves and the uWSGI upstream-TLS wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2545,9 +2586,12 @@ and \`tests/nginx/differential-protocols\` (39 cases, byte-identical against ngi
 Implemented forms execute, including Wave 7A's typed \`[http] unixSocketRoot\` with
 strict-descendant confinement for \`unix:/absolute\` upstream targets (nginx-conf
 \`unix:\` pass targets intentionally fail closed) and the bounded per-generation FastCGI
-keep_conn pool with the pooled-socket framing fix. The residual cache/buffer/store/SSL,
-unix/variable-target, hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library
-knobs are backlog rows, not profile exclusions.
+keep_conn pool with the pooled-socket framing fix. Wave 7B added uWSGI upstream TLS
+identity/verification through the same transport seam (always verified unless
+uwsgi_ssl_verify is off), and nginx 1.29.6 defines no scgi_ssl_* or fastcgi_ssl_*
+directives. The residual cache/buffer/store/SSL, unix/variable-target,
+hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library knobs are backlog rows,
+not profile exclusions.
 
 Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
 \`crates/sdkwork-webserver-mail-protocol\` crate (POP3/IMAP/SMTP state machines) and the
@@ -2631,8 +2675,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the mail waves (9A/9B) landed and the Lead re-synced
-the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the uWSGI upstream-TLS wave (7B) landed and the Lead
+re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

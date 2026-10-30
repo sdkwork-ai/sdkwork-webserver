@@ -10,6 +10,8 @@ FCGI=$((PORT + 2))
 DEAD=$((PORT + 5))
 UWSGI=$((PORT + 10))
 SCGI=$((PORT + 11))
+UWSGI_TLS_OK=$((PORT + 12))
+UWSGI_TLS_UNTRUSTED=$((PORT + 13))
 MEMCACHED=$((PORT + 14))
 GRPC=$((PORT + 20))
 GRPC_TLS_OK=$((PORT + 21))
@@ -69,6 +71,32 @@ printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=critical,CA:
     -CAkey "$WORK/grpc-ca.key" -CAcreateserial -days 3 -out "$WORK/grpc-server.pem" \
     -extfile "$WORK/grpc-server.ext" >/dev/null 2>&1 \
     || oracle_unavailable "cannot sign the gRPC server certificate"
+
+# Wave 7B uWSGI TLS material: a server certificate whose only SAN is the
+# `uwsgi_ssl_name` override, and a CA-signed client identity for mTLS.
+printf 'subjectAltName=DNS:uwsgi-tls.test\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n' >"$WORK/uwsgi-tls.ext"
+"$OPENSSL" req -newkey rsa:2048 -nodes -keyout "$WORK/uwsgi-tls-server.key" \
+    -out "$WORK/uwsgi-tls-server.csr" -subj "/CN=uwsgi-tls.test" >/dev/null 2>&1 \
+    || oracle_unavailable "cannot generate the uWSGI TLS server key"
+"$OPENSSL" x509 -req -in "$WORK/uwsgi-tls-server.csr" -CA "$WORK/grpc-ca.pem" \
+    -CAkey "$WORK/grpc-ca.key" -days 3 -out "$WORK/uwsgi-tls-server.pem" \
+    -extfile "$WORK/uwsgi-tls.ext" >/dev/null 2>&1 \
+    || oracle_unavailable "cannot sign the uWSGI TLS server certificate"
+printf 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\n' >"$WORK/uwsgi-tls-client.ext"
+"$OPENSSL" req -newkey rsa:2048 -nodes -keyout "$WORK/uwsgi-tls-client.key" \
+    -out "$WORK/uwsgi-tls-client.csr" -subj "/CN=uwsgi-tls-client" >/dev/null 2>&1 \
+    || oracle_unavailable "cannot generate the uWSGI TLS client key"
+"$OPENSSL" x509 -req -in "$WORK/uwsgi-tls-client.csr" -CA "$WORK/grpc-ca.pem" \
+    -CAkey "$WORK/grpc-ca.key" -days 3 -out "$WORK/uwsgi-tls-client.pem" \
+    -extfile "$WORK/uwsgi-tls-client.ext" >/dev/null 2>&1 \
+    || oracle_unavailable "cannot sign the uWSGI TLS client certificate"
+sed \
+    -e "s|@UNIX_PORT@|$UNIX_PORT|g" \
+    -e "s|@FCGI_SOCKET@|$FCGI_SOCKET|g" \
+    -e "s|@UWSGI_SOCKET@|$UWSGI_SOCKET|g" \
+    -e "s|@ROOT@|$HERE/public|g" \
+    "$HERE/unix-server.conf" >"$WORK/unix-server.conf"
+
 sed \
     -e "s|@UNIX_INCLUDE@|$WORK/unix-server.conf|g" \
     -e "s|@UNIX_PORT@|$UNIX_PORT|g" \
@@ -78,6 +106,8 @@ sed \
     -e "s|@PORT@|$PORT|g" \
     -e "s|@FCGI@|$FCGI|g" \
     -e "s|@UWSGI@|$UWSGI|g" \
+    -e "s|@UWSGI_TLS_OK@|$UWSGI_TLS_OK|g" \
+    -e "s|@UWSGI_TLS_UNTRUSTED@|$UWSGI_TLS_UNTRUSTED|g" \
     -e "s|@SCGI@|$SCGI|g" \
     -e "s|@MEMCACHED@|$MEMCACHED|g" \
     -e "s|@GRPC@|$GRPC|g" \
@@ -92,24 +122,21 @@ awk -v unix_file="$WORK/unix-server.conf" '
 ' "$CONF.main" >"$CONF"
 rm -f "$CONF.main"
 
-sed \
-    -e "s|@UNIX_PORT@|$UNIX_PORT|g" \
-    -e "s|@FCGI_SOCKET@|$FCGI_SOCKET|g" \
-    -e "s|@UWSGI_SOCKET@|$UWSGI_SOCKET|g" \
-    -e "s|@ROOT@|$HERE/public|g" \
-    "$HERE/unix-server.conf" >"$WORK/unix-server.conf"
-
 probe_port() {
     "$PY" -c "import socket,sys; socket.create_connection(('127.0.0.1', $1), 1).close()" \
         2>/dev/null
 }
-if probe_port "$PORT" || probe_port "$UNIX_PORT" || probe_port "$FCGI" || probe_port "$UWSGI" || probe_port "$SCGI" || probe_port "$MEMCACHED" || probe_port "$GRPC" || probe_port "$GRPC_TLS_OK" || probe_port "$GRPC_TLS_UNTRUSTED" || probe_port "$DEAD"; then
-    oracle_unavailable "a fixture port ($PORT/$UNIX_PORT/$FCGI/$UWSGI/$SCGI/$MEMCACHED/$GRPC/$GRPC_TLS_OK/$GRPC_TLS_UNTRUSTED/$DEAD) is already listening"
+if probe_port "$PORT" || probe_port "$UNIX_PORT" || probe_port "$FCGI" || probe_port "$UWSGI" || probe_port "$SCGI" || probe_port "$UWSGI_TLS_OK" || probe_port "$UWSGI_TLS_UNTRUSTED" || probe_port "$MEMCACHED" || probe_port "$GRPC" || probe_port "$GRPC_TLS_OK" || probe_port "$GRPC_TLS_UNTRUSTED" || probe_port "$DEAD"; then
+    oracle_unavailable "a fixture port ($PORT/$UNIX_PORT/$FCGI/$UWSGI/$SCGI/$UWSGI_TLS_OK/$UWSGI_TLS_UNTRUSTED/$MEMCACHED/$GRPC/$GRPC_TLS_OK/$GRPC_TLS_UNTRUSTED/$DEAD) is already listening"
 fi
 
 "$PY" "$HERE/mock_fastcgi.py" --port "$FCGI" >"$WORK/mock-fastcgi.log" 2>&1 &
 MOCK_PID=$!
-"$PY" "$HERE/mock_uwsgi.py" --port "$UWSGI" >"$WORK/mock-uwsgi.log" 2>&1 &
+"$PY" "$HERE/mock_uwsgi.py" --port "$UWSGI" \
+    --tls-port "$UWSGI_TLS_OK" --tls-port "$UWSGI_TLS_UNTRUSTED" \
+    --cert "$WORK/uwsgi-tls-server.pem" --key "$WORK/uwsgi-tls-server.key" \
+    --client-ca "$WORK/grpc-ca.pem" \
+    >"$WORK/mock-uwsgi.log" 2>&1 &
 MOCK_UWSGI_PID=$!
 "$PY" "$HERE/mock_scgi.py" --port "$SCGI" >"$WORK/mock-scgi.log" 2>&1 &
 MOCK_SCGI_PID=$!

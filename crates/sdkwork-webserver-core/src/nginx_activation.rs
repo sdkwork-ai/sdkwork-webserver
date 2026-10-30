@@ -157,6 +157,8 @@ fn split_url_literals(value: &str) -> Vec<&str> {
         if candidate.starts_with("http://")
             || candidate.starts_with("https://")
             || candidate.starts_with("grpc://")
+            || candidate.starts_with("uwsgi://")
+            || candidate.starts_with("suwsgi://")
         {
             candidates.push(candidate);
         }
@@ -165,7 +167,7 @@ fn split_url_literals(value: &str) -> Vec<&str> {
     candidates
 }
 
-/// Classifies a proxy-family argument. Literal http/https/grpc URLs are
+/// Classifies a proxy-family argument. Literal http/https/grpc/uwsgi/suwsgi URLs are
 /// checked for forbidden hosts; scheme-less `host:port` forms (used by
 /// fastcgi_pass/uwsgi_pass/...) are checked when the host is an IP literal;
 /// variable targets are always rejected because they cannot be statically
@@ -187,6 +189,8 @@ fn proxy_pass_risk(argument: &str) -> Option<String> {
         .strip_prefix("http://")
         .or_else(|| argument.strip_prefix("https://"))
         .or_else(|| argument.strip_prefix("grpc://"))
+        .or_else(|| argument.strip_prefix("uwsgi://"))
+        .or_else(|| argument.strip_prefix("suwsgi://"))
         // Scheme-less `host:port` form used by fastcgi_pass/uwsgi_pass/...
         .unwrap_or(argument);
     let host = target
@@ -231,6 +235,13 @@ mod tests {
         let risks = scan_nginx_directive_risks("server { location /s { alias /etc; } }");
         assert!(risks.iter().any(|risk| risk.contains("alias")));
 
+        let risks = scan_nginx_directive_risks(
+            "server { location / { uwsgi_pass suwsgi://127.0.0.1:9443; } }",
+        );
+        assert!(
+            risks.iter().any(|risk| risk.contains("127.0.0.1")),
+            "{risks:?}"
+        );
         let risks = scan_nginx_directive_risks(
             "server { location / { proxy_pass http://169.254.169.254/; } }",
         );

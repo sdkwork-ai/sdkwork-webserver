@@ -2505,6 +2505,20 @@ pub struct UpstreamTlsConfig {
     pub minimum_version: TlsVersion,
     #[serde(default = "default_tls_maximum")]
     pub maximum_version: TlsVersion,
+    /// Whether the TLS handshake sends a TLS SNI extension. nginx
+    /// `uwsgi_ssl_server_name off` disables it; the default keeps the runtime's
+    /// established behavior (SNI enabled) for every other upstream protocol.
+    #[serde(default = "default_true")]
+    pub send_sni: bool,
+    /// Explicit, documented "dangerous accept any server certificate" mode.
+    ///
+    /// nginx `uwsgi_ssl_verify off` (and the typed-plane equivalent) means the
+    /// handshake must succeed without validating the peer chain. The runtime
+    /// never weakens verification implicitly: this flag is only set when the
+    /// operator writes an explicit `off`, and the nginx loader emits a warning
+    /// diagnostic for it. It must not be combined with custom trust material.
+    #[serde(default)]
+    pub dangerous_accept_any_verify: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

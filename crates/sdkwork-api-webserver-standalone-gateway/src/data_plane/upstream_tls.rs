@@ -92,6 +92,10 @@ fn upstream_tls_policy_key(
         _ => 2_u8,
     };
     hasher.update([versions_key]);
+    hasher.update([
+        u8::from(policy.is_some_and(|policy| policy.send_sni)),
+        u8::from(policy.is_some_and(|policy| policy.dangerous_accept_any_verify)),
+    ]);
     for path in app
         .upstream_tls_ca_certificate_paths(&upstream.id)
         .unwrap_or_default()
@@ -120,16 +124,30 @@ fn build_upstream_tls_config_uncached(
     upstream: &UpstreamConfig,
 ) -> Result<ClientConfig, DataPlaneError> {
     let policy = upstream.tls.as_ref();
+    // nginx `uwsgi_ssl_verify off` is an explicit dangerous accept-any mode:
+    // the runtime never weakens verification implicitly, so this branch is only
+    // reached through the documented flag (the loader emits a warning for it).
+    let dangerous_accept_any = policy.is_some_and(|policy| policy.dangerous_accept_any_verify);
     let mut roots = RootCertStore::empty();
-    if policy.is_none_or(|policy| {
-        matches!(
-            policy.trust_mode,
-            UpstreamTlsTrustMode::System | UpstreamTlsTrustMode::SystemAndCustom
-        )
-    }) {
+    if !dangerous_accept_any
+        && policy.is_none_or(|policy| {
+            matches!(
+                policy.trust_mode,
+                UpstreamTlsTrustMode::System | UpstreamTlsTrustMode::SystemAndCustom
+            )
+        })
+    {
         roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     }
-    add_custom_roots(&mut roots, app, upstream)?;
+    if !dangerous_accept_any {
+        add_custom_roots(&mut roots, app, upstream)?;
+    } else if policy.is_some_and(|policy| !policy.ca_certificate_files.is_empty()) {
+        return Err(DataPlaneError::UpstreamTls {
+            upstream_id: upstream.id.clone(),
+            material: "dangerous accept-any policy",
+            source: "custom CA files cannot be combined with dangerousAcceptAnyVerify".into(),
+        });
+    }
 
     let versions = match policy.map(|policy| (policy.minimum_version, policy.maximum_version)) {
         Some((TlsVersion::Tls12, TlsVersion::Tls12)) => vec![&TLS12],
@@ -137,13 +155,19 @@ fn build_upstream_tls_config_uncached(
         _ => vec![&TLS13, &TLS12],
     };
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-    let builder = ClientConfig::builder_with_provider(provider)
+    let builder = ClientConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(&versions)
         .map_err(|source| DataPlaneError::UpstreamClient {
             upstream_id: upstream.id.clone(),
             source: Box::new(source),
-        })?
-        .with_root_certificates(roots);
+        })?;
+    let builder = if dangerous_accept_any {
+        builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(DangerousAcceptAnyVerifier::new(provider)?))
+    } else {
+        builder.with_root_certificates(roots)
+    };
     let mut config = if let Some((certificate_path, private_key_path)) =
         app.upstream_tls_client_identity_paths(&upstream.id)
     {
@@ -169,8 +193,64 @@ fn build_upstream_tls_config_uncached(
     } else {
         builder.with_no_client_auth()
     };
-    config.enable_sni = true;
+    // nginx `uwsgi_ssl_server_name off` disables the SNI extension while the
+    // certificate is still verified against the configured/target name.
+    config.enable_sni = policy.is_none_or(|policy| policy.send_sni);
+    config.alpn_protocols.clear();
     Ok(config)
+}
+
+/// Explicit dangerous accept-any certificate verifier.
+///
+/// Only reachable through `dangerousAcceptAnyVerify` (nginx explicit
+/// `uwsgi_ssl_verify off`); the handshake-signature checks still run so a
+/// non-TLS peer cannot claim a handshake proof.
+#[derive(Debug)]
+struct DangerousAcceptAnyVerifier {
+    algorithms: rustls::crypto::WebPkiSupportedAlgorithms,
+}
+
+impl DangerousAcceptAnyVerifier {
+    fn new(provider: Arc<rustls::crypto::CryptoProvider>) -> Result<Self, DataPlaneError> {
+        Ok(Self {
+            algorithms: provider.signature_verification_algorithms,
+        })
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for DangerousAcceptAnyVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        certificate: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(message, certificate, dss, &self.algorithms)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        certificate: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(message, certificate, dss, &self.algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.algorithms.supported_schemes()
+    }
 }
 
 fn add_custom_roots(

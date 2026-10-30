@@ -2227,6 +2227,16 @@
             "tls1.3"
           ],
           "default": "tls1.3"
+        },
+        "sendSni": {
+          "type": "boolean",
+          "default": true,
+          "description": "Send the TLS SNI extension. nginx uwsgi_ssl_server_name off disables it; the verification name is still serverName (or the target host)."
+        },
+        "dangerousAcceptAnyVerify": {
+          "type": "boolean",
+          "default": false,
+          "description": "Explicit dangerous accept-any server-certificate verifier (nginx uwsgi_ssl_verify off). Never enable implicitly; it disables peer-chain validation for this upstream and must not be combined with caCertificateFiles or a custom trustMode."
         }
       }
     },
