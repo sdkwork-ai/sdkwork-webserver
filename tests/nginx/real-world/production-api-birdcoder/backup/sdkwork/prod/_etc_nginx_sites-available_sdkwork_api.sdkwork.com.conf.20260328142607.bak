@@ -1,0 +1,87 @@
+# Managed by spring-ai-plus nginx plugin
+# Deploy env: prod
+# Domain: api.sdkwork.com
+# Site type: api
+# Target: http://127.0.0.1:8080
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.sdkwork.com;
+    access_log /var/log/nginx/api.sdkwork.com.access.log;
+    error_log /var/log/nginx/api.sdkwork.com.error.log;
+    client_max_body_size 100m;
+    location ~ ^/([a-zA-Z0-9_-]+)\.txt$ {
+        set $filename $1.txt;
+        set $host_name $host;
+        set $proxy_url http://127.0.0.1:8080/backend/v3/api/net/dns/record/verify?filename=$filename&host=$host_name;
+        proxy_pass $proxy_url;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 10s;
+        proxy_read_timeout 10s;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name api.sdkwork.com;
+    access_log /var/log/nginx/api.sdkwork.com.access.log;
+    error_log /var/log/nginx/api.sdkwork.com.error.log;
+    ssl_certificate /opt/certs/letsencrypt/live/sdkwork.com/fullchain.pem;
+    ssl_certificate_key /opt/certs/letsencrypt/live/sdkwork.com/privkey.pem;
+    ssl_session_timeout 5m;
+    ssl_protocols TLSv1.2 TLSv1.1 TLSv1;
+    ssl_ciphers ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv2:+EXP;
+    ssl_prefer_server_ciphers on;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    client_max_body_size 100m;
+    location ~ ^/([a-zA-Z0-9_-]+)\.txt$ {
+        set $filename $1.txt;
+        set $host_name $host;
+        set $proxy_url http://127.0.0.1:8080/backend/v3/api/net/dns/record/verify?filename=$filename&host=$host_name;
+        proxy_pass $proxy_url;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 10s;
+        proxy_read_timeout 10s;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}

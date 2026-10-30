@@ -255,15 +255,15 @@ http {
   server {
     listen 80;
     server_name excluded.local;
-    location / { fastcgi_pass 127.0.0.1:9000; }
+    location / { perl_set $x 'sub { 1 }'; }
   }
 }
 `;
   const classified = classify(scanDirectives(source));
   assert.equal(classified.blocked.length, 1);
-  assert.equal(classified.blocked[0].name, 'fastcgi_pass');
+  assert.equal(classified.blocked[0].name, 'perl_set');
   assert.equal(classified.blocked[0].reason, 'notExecutableByRust');
-  assert.match(classified.blocked[0].catalog, /fastcgi/);
+  assert.match(classified.blocked[0].catalog, /perl/);
   assert.equal(classified.unsupported.length, 0);
 });
 

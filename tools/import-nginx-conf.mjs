@@ -158,7 +158,7 @@ class NginxLexer {
     }
   }
 
-  parseDirectives(closing) {
+  parseDirectives(closing, allowEmptyName = false) {
     const directives = [];
     for (;;) {
       this.skipWhitespaceAndComments();
@@ -172,13 +172,17 @@ class NginxLexer {
         this.pos += 1;
         return directives;
       }
-      directives.push(this.parseDirective());
+      directives.push(this.parseDirective(allowEmptyName));
     }
   }
 
-  parseDirective() {
+  parseDirective(allowEmptyName = false) {
     const name = this.parseToken();
-    if (name === '') throw new Error(`${this.source}:${this.line}: expected a directive name`);
+    // `map` bodies may use the empty quoted string as a key (`'' default;`).
+    // nginx only accepts that inside a data block, so the caller opts in.
+    if (name === '' && !allowEmptyName) {
+      throw new Error(`${this.source}:${this.line}: expected a directive name`);
+    }
     const line = this.line;
     const args = [];
     let children = [];
@@ -194,7 +198,7 @@ class NginxLexer {
       }
       if (next === '{') {
         this.pos += 1;
-        children = this.parseDirectives('}');
+        children = this.parseDirectives('}', DATA_BLOCKS.has(name));
         break;
       }
       if (next === '}') {
