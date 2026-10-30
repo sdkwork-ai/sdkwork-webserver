@@ -2129,8 +2129,8 @@ fn grpc_unsupported_forms_fail_closed_with_located_diagnostics() {
             "grpc_buffering",
         ),
         (
-            "grpc_pass grpc://127.0.0.1:9100; grpc_ignore_headers X-Accel-Expires;",
-            "grpc_ignore_headers",
+            "grpc_pass grpc://127.0.0.1:9100; grpc_ssl_conf_command Options;",
+            "grpc_ssl_conf_command",
         ),
         (
             "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive on;",
@@ -2407,5 +2407,263 @@ fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
         ),
     ] {
         materialize_err(nginx, expected);
+    }
+}
+
+// ---- Wave 7D: CGI-family buffering / store / rate / ranges / ignore headers ----
+
+#[test]
+fn fastcgi_wave_7d_buffering_store_rate_and_ranges_materialize() {
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+  fastcgi_param SCRIPT_NAME $fastcgi_script_name;
+  server {
+    listen 8080;
+    server_name example.com;
+    location /fcgi {
+      fastcgi_pass 127.0.0.1:9100;
+      fastcgi_buffer_size 8k;
+      fastcgi_buffers 16 8k;
+      fastcgi_busy_buffers_size 32k;
+      fastcgi_store /tmp/sdkwork-store$uri;
+      fastcgi_store_access user:rw group:rw all:r;
+      fastcgi_limit_rate 10k;
+      fastcgi_force_ranges on;
+      fastcgi_ignore_headers X-Accel-Redirect Cache-Control;
+      fastcgi_pass_request_body off;
+    }
+  }
+}
+"#,
+    );
+    let resource = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::FastCgi { .. }))
+        .expect("FastCGI resource");
+    match resource {
+        ResourceConfig::FastCgi {
+            buffer_policy,
+            store,
+            limit_rate_bytes_per_second,
+            force_ranges,
+            ignore_headers,
+            pass_request_body,
+            ..
+        } => {
+            let policy = buffer_policy.expect("buffer policy");
+            assert_eq!(policy.header_bytes, 8 * 1024);
+            assert_eq!(policy.chunks, 16);
+            assert_eq!(policy.chunk_bytes, 8 * 1024);
+            assert_eq!(policy.busy_bytes, 32 * 1024);
+            let store = store.as_ref().expect("store policy");
+            assert_eq!(store.path, "/tmp/sdkwork-store$uri");
+            assert_eq!(store.access_mode, 0o664);
+            assert_eq!(*limit_rate_bytes_per_second, Some(10 * 1024));
+            assert!(*force_ranges);
+            assert!(!*pass_request_body);
+            assert_eq!(
+                ignore_headers,
+                &vec!["X-Accel-Redirect".to_owned(), "Cache-Control".to_owned()]
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn uwsgi_scgi_wave_7d_forms_materialize_per_prefix() {
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+  server {
+    listen 8080;
+    server_name example.com;
+    location /u {
+      uwsgi_pass 127.0.0.1:9101;
+      uwsgi_buffer_size 4k;
+      uwsgi_buffers 8 4k;
+      uwsgi_busy_buffers_size 8k;
+      uwsgi_store /tmp/sdkwork-uwsgi$uri;
+      uwsgi_store_access user:rw;
+      uwsgi_limit_rate 4k;
+      uwsgi_force_ranges on;
+      uwsgi_ignore_headers Expires;
+      uwsgi_pass_request_body off;
+    }
+    location /s {
+      scgi_pass 127.0.0.1:9102;
+      scgi_buffer_size 4k;
+      scgi_buffers 8 4k;
+      scgi_busy_buffers_size 8k;
+      scgi_store /tmp/sdkwork-scgi$uri;
+      scgi_store_access user:rw group:r;
+      scgi_limit_rate 2k;
+      scgi_force_ranges on;
+      scgi_ignore_headers Vary;
+      scgi_pass_request_body off;
+    }
+  }
+}
+"#,
+    );
+    let cgi_resources: Vec<_> = config
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::CgiUpstream { protocol, .. } => Some((*protocol, resource)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cgi_resources.len(), 2);
+    for (protocol, resource) in cgi_resources {
+        match resource {
+            ResourceConfig::CgiUpstream {
+                buffer_policy,
+                store,
+                limit_rate_bytes_per_second,
+                force_ranges,
+                ignore_headers,
+                pass_request_body,
+                ..
+            } => {
+                assert!(buffer_policy.is_some(), "{protocol:?} buffer policy");
+                assert!(store.is_some(), "{protocol:?} store policy");
+                assert!(limit_rate_bytes_per_second.is_some());
+                assert!(*force_ranges);
+                assert_eq!(ignore_headers.len(), 1);
+                assert!(!*pass_request_body);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn memcached_and_grpc_wave_7d_forms_materialize() {
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+  server {
+    listen 8080;
+    server_name example.com;
+    location /m {
+      set $memcached_key $uri;
+      memcached_pass 127.0.0.1:9103;
+      memcached_buffer_size 8k;
+      memcached_gzip_flag 2;
+    }
+    location /g {
+      grpc_pass grpc://127.0.0.1:9104;
+      grpc_ignore_headers X-Accel-Expires Expires;
+    }
+  }
+}
+"#,
+    );
+    let memcached = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::Memcached { .. }))
+        .expect("memcached resource");
+    match memcached {
+        ResourceConfig::Memcached {
+            buffer_bytes,
+            gzip_flag,
+            ..
+        } => {
+            assert_eq!(*buffer_bytes, Some(8 * 1024));
+            assert_eq!(*gzip_flag, Some(2));
+        }
+        _ => unreachable!(),
+    }
+    let grpc = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::Grpc { .. }))
+        .expect("gRPC resource");
+    match grpc {
+        ResourceConfig::Grpc { ignore_headers, .. } => {
+            assert_eq!(ignore_headers.len(), 2);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn cgi_wave_7d_temp_spool_and_abort_forms_fail_closed_with_exact_blockers() {
+    for (body, expected) in [
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_max_temp_file_size 1m;",
+            "temp-file spool",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path /tmp/fcgi;",
+            "temp-file spool",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_file_write_size 8k;",
+            "temp-file spool",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_ignore_client_abort on;",
+            "client-disconnect signal",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_catch_stderr ERROR;",
+            "stderr stream",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_send_lowat 12000;",
+            "send low-water mark",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_store store$uri;",
+            "must be absolute",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_store on;",
+            "fastcgi_store on",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_limit_rate $limit_rate;",
+            "variable rate",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_store /tmp/store$unknown;",
+            "not executable",
+        ),
+        (
+            "uwsgi_pass 127.0.0.1:9101; uwsgi_busy_buffers_size 256;",
+            "outside the executable",
+        ),
+        (
+            "scgi_pass 127.0.0.1:9102; scgi_max_temp_file_size 1m;",
+            "temp-file spool",
+        ),
+        (
+            "memcached_pass 127.0.0.1:9103; memcached_gzip_flag 0;",
+            "can never match",
+        ),
+        (
+            "memcached_pass 127.0.0.1:9103; memcached_buffer_size 100;",
+            "outside the executable",
+        ),
+    ] {
+        let prefix = if body.starts_with("memcached_pass") {
+            "set $memcached_key $uri; "
+        } else {
+            ""
+        };
+        materialize_err(
+            &format!(
+                "events {{}} http {{ fastcgi_param SCRIPT_NAME $fastcgi_script_name; server {{ listen 8080; server_name example.com; location /x {{ {prefix}{body} }} }} }}"
+            ),
+            expected,
+        );
     }
 }

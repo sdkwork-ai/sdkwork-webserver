@@ -26,6 +26,197 @@ const MAX_TOTAL_ROUTES: usize = 10_000;
 /// location/rewrite pattern.
 const MAX_REGEX_PATTERN_BYTES: usize = 1_024;
 
+/// Bounds and confinement checks for the Wave 7D CGI-family response
+/// buffering/store/rate directives. The nginx materializer applies the same
+/// ranges while parsing; this pass also covers typed TOML/JSON resources that
+/// do not pass through the nginx parser.
+fn validate_upstream_buffering_store(
+    validator: &mut SemanticValidator,
+    path: &str,
+    resource: &ResourceConfig,
+    store_root: Option<&str>,
+) {
+    let (buffering, store, limit_rate, ignore_headers) = match resource {
+        ResourceConfig::FastCgi {
+            buffer_policy,
+            store,
+            limit_rate_bytes_per_second,
+            ignore_headers,
+            ..
+        }
+        | ResourceConfig::CgiUpstream {
+            buffer_policy,
+            store,
+            limit_rate_bytes_per_second,
+            ignore_headers,
+            ..
+        } => (
+            *buffer_policy,
+            store.as_ref(),
+            *limit_rate_bytes_per_second,
+            ignore_headers.as_slice(),
+        ),
+        ResourceConfig::Grpc { ignore_headers, .. } => {
+            (None, None, None, ignore_headers.as_slice())
+        }
+        ResourceConfig::Memcached {
+            buffer_bytes,
+            gzip_flag,
+            ..
+        } => {
+            if let Some(bytes) = buffer_bytes {
+                if !(512..=1024 * 1024).contains(bytes) {
+                    validator.push(
+                        format!("{path}/bufferBytes"),
+                        "memcached bufferBytes must be in 512..=1048576 bytes",
+                    );
+                }
+            }
+            if let Some(flag) = gzip_flag {
+                if *flag == 0 {
+                    validator.push(
+                        format!("{path}/gzipFlag"),
+                        "memcached gzipFlag 0 can never match a flag bit",
+                    );
+                }
+            }
+            return;
+        }
+        _ => return,
+    };
+
+    if let Some(policy) = buffering {
+        if !(512..=1024 * 1024).contains(&policy.header_bytes) {
+            validator.push(
+                format!("{path}/bufferPolicy/headerBytes"),
+                "buffer headerBytes must be in 512..=1048576 bytes",
+            );
+        }
+        if !(512..=1024 * 1024).contains(&policy.chunk_bytes) {
+            validator.push(
+                format!("{path}/bufferPolicy/chunkBytes"),
+                "buffer chunkBytes must be in 512..=1048576 bytes",
+            );
+        }
+        if !(1..=64).contains(&policy.chunks) {
+            validator.push(
+                format!("{path}/bufferPolicy/chunks"),
+                "buffer chunks must be in 1..=64",
+            );
+        }
+        let total = policy.chunk_bytes.saturating_mul(u64::from(policy.chunks));
+        if total > 16 * 1024 * 1024 {
+            validator.push(
+                format!("{path}/bufferPolicy/chunkBytes"),
+                "buffer bank (chunks * chunkBytes) must not exceed 16 MiB",
+            );
+        }
+        if !(512..=8 * 1024 * 1024).contains(&policy.busy_bytes) {
+            validator.push(
+                format!("{path}/bufferPolicy/busyBytes"),
+                "busyBytes must be in 512..=8388608 bytes",
+            );
+        } else if policy.busy_bytes > total.saturating_mul(2) {
+            // nginx allows a `busy_buffers_size` smaller than one body buffer
+            // (the 1k `buffer_size` + default 4k `buffers` combination is
+            // accepted by nginx 1.29.6), so only the upper relationship is a
+            // validation error.
+            validator.push(
+                format!("{path}/bufferPolicy/busyBytes"),
+                "busyBytes must not exceed two buffer banks (2 * chunks * chunkBytes)",
+            );
+        }
+    }
+
+    if let Some(store) = store {
+        if !store.path.starts_with('/') {
+            validator.push(
+                format!("{path}/store/path"),
+                "store path template must be absolute",
+            );
+        }
+        if store
+            .path
+            .bytes()
+            .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+        {
+            validator.push(
+                format!("{path}/store/path"),
+                "store path template must not contain NUL or line breaks",
+            );
+        } else if store.path.split('/').any(|component| component == "..") {
+            validator.push(
+                format!("{path}/store/path"),
+                "store path template must not contain `..` segments",
+            );
+        }
+        if let Some(root) = store_root {
+            if !root.starts_with('/') {
+                validator.push("/nginx/storeRoot", "storeRoot must be an absolute path");
+            } else {
+                // The template's leading literal prefix must stay inside the
+                // configured root; the per-request expansion re-checks the
+                // final path at write time.
+                let literal_prefix = store
+                    .path
+                    .split('$')
+                    .next()
+                    .unwrap_or_default()
+                    .trim_end_matches('/');
+                let root = root.trim_end_matches('/');
+                if !(literal_prefix == root || literal_prefix.starts_with(&format!("{root}/"))) {
+                    validator.push(
+                        format!("{path}/store/path"),
+                        format!(
+                            "store path template must be a descendant of nginx.storeRoot `{root}`"
+                        ),
+                    );
+                }
+            }
+        }
+        if store.access_mode == 0 || store.access_mode > 0o7777 {
+            validator.push(
+                format!("{path}/store/accessMode"),
+                "store accessMode must be a unix permission mode in 1..=4095",
+            );
+        }
+    }
+
+    if let Some(rate) = limit_rate {
+        if rate > 1024 * 1024 * 1024 {
+            validator.push(
+                format!("{path}/limitRateBytesPerSecond"),
+                "limit rate must not exceed 1 GiB/s",
+            );
+        }
+    }
+
+    for (index, field) in ignore_headers.iter().enumerate() {
+        let recognized = [
+            "x-accel-redirect",
+            "x-accel-expires",
+            "x-accel-limit-rate",
+            "x-accel-buffering",
+            "x-accel-charset",
+            "expires",
+            "cache-control",
+            "set-cookie",
+            "vary",
+        ];
+        if !recognized
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(field))
+        {
+            validator.push(
+                format!("{path}/ignoreHeaders/{index}"),
+                format!(
+                    "`{field}` is not a header nginx's *_ignore_headers directive recognises (X-Accel-Redirect, X-Accel-Expires, X-Accel-Limit-Rate, X-Accel-Buffering, X-Accel-Charset, Expires, Cache-Control, Set-Cookie, Vary)"
+                ),
+            );
+        }
+    }
+}
+
 fn validate_regex_pattern(validator: &mut SemanticValidator, path: String, pattern: &str) {
     if pattern.len() > MAX_REGEX_PATTERN_BYTES {
         validator.push(
@@ -628,6 +819,12 @@ impl SemanticValidator {
                     }
                 }
             }
+            validate_upstream_buffering_store(
+                self,
+                &path,
+                resource,
+                config.nginx.store_root.as_deref(),
+            );
             match resource {
                 ResourceConfig::Static {
                     root,

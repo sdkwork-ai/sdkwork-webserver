@@ -1,5 +1,5 @@
 {
- "_cases": 65,
+ "_cases": 77,
  "_server": "nginx/1.29.6",
  "cases": {
   "args-get": {
@@ -298,6 +298,201 @@
     ],
     "x-mock-fcgi": [
      "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-bufsize": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502,
+   "trailers": {}
+  },
+  "d7-ignore": {
+   "body": "normal-body",
+   "headers": {
+    "content-length": [
+     "11"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-memcached-gzip-off": {
+   "body": "cached-value:/d7/gz-off/plain-key:peer=127.0.0.1",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "48"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-memcached-gzip-on": {
+   "body": "cached-value:/d7/gz-on/gzip-key:peer=127.0.0.1",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-encoding": [
+     "gzip"
+    ],
+    "content-length": [
+     "46"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-passbody": {
+   "body": "{\"body_hex\":\"\",\"connection\":<id>,\"params\":[[\"CONTENT_LENGTH\",\"18\"],[\"CONTENT_TYPE\",\"text/plain\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_CONTENT_LENGTH\",\"18\"],[\"HTTP_CONTENT_TYPE\",\"text/plain\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"POST\"],[\"REQUEST_URI\",\"/echo-noreq/upload\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo-noreq/upload\"],[\"SCRIPT_NAME\",\"/echo-noreq/upload\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"POST\",\"script_name\":\"/echo-noreq/upload\"}",
+   "headers": {
+    "content-length": [
+     "733"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-range-invalid": {
+   "body": "<html>\r\n<head><title>416 Requested Range Not Satisfiable</title></head>\r\n<body>\r\n<center><h1>416 Requested Range Not Satisfiable</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "197"
+    ],
+    "content-range": [
+     "bytes */16"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 416,
+   "trailers": {}
+  },
+  "d7-range-multipart": {
+   "body": "0123456789abcdef",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "16"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-range-off": {
+   "body": "{\"body_hex\":\"\",\"connection\":<id>,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_RANGE\",\"bytes=0-3\"],[\"HTTP_X_SENT\",\"\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/range-off\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/range-off\"],[\"SCRIPT_NAME\",\"/echo/range-off\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/echo/range-off\"}",
+   "headers": {
+    "content-length": [
+     "670"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-range-single": {
+   "body": "2345",
+   "headers": {
+    "content-length": [
+     "4"
+    ],
+    "content-range": [
+     "bytes 2-5/16"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 206,
+   "trailers": {}
+  },
+  "d7-range-suffix": {
+   "body": "cdef",
+   "headers": {
+    "content-length": [
+     "4"
+    ],
+    "content-range": [
+     "bytes 12-15/16"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 206,
+   "trailers": {}
+  },
+  "d7-rate": {
+   "body": "bytes=20000 rate-window=ok",
+   "headers": {
+    "content-length": [
+     "20000"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-store": {
+   "body": "stored-content-123\nstored=d7/store/f1|644|stored-content-123",
+   "headers": {
+    "content-length": [
+     "18"
+    ],
+    "content-type": [
+     "text/plain"
     ]
    },
    "status": 200,

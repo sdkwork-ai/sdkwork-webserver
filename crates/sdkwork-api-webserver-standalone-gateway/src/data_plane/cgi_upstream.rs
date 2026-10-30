@@ -26,9 +26,33 @@
 //!
 //! Bounded differences (documented, not silent): uWSGI/SCGI responses have no
 //! protocol-level end marker (nginx never reuses those connections either), so
-//! they are never pooled; a response body is still fully buffered within the
-//! configured byte limits (`*_buffering`/`*_request_buffering` are materialized
-//! but not streamed).
+//! they are never pooled.
+//!
+//! Wave 7D response policy (executed, nginx-oracle differential):
+//! `*_buffer_size`/`*_buffers`/`*_busy_buffers_size` bound the response header
+//! block and read chunks; `*_store`/`*_store_access` write the upstream body
+//! through a bounded temp file and an atomic rename (confinement re-checked at
+//! write time, `nginx.storeRoot` for the typed plane);
+//! `*_limit_rate` paces the relay through a token-bucket body stream;
+//! `*_force_ranges` (plus an upstream `Accept-Ranges: bytes`) enables nginx's
+//! single/suffix range semantics (multi-range declines to the full
+//! representation with `Accept-Ranges`, exactly like the FastCGI path of nginx
+//! 1.29.6); `*_ignore_headers` is accepted for nginx's recognised field set
+//! (the runtime never processes those upstream-driven subsystems, which is the
+//! ignored state the directive requests); `*_pass_request_body off` suppresses
+//! the request body; `memcached_gzip_flag` derives `Content-Encoding` from the
+//! `VALUE` flags field.
+//!
+//! Carried-forward bounded differences (explicit, not fake):
+//! `*_buffering off` and `*_request_buffering off` are materialized but the
+//! adapter still buffers the bounded response and request body before the
+//! exchange completes. Honouring them needs a body-streaming seam in the
+//! handler + exchange (response chunks forwarded as they arrive with
+//! backpressure, FastCGI `STDIN` streamed from the client body); the rest of
+//! Wave 7D (store/rate/range/pass_request_body) does not depend on it. The
+//! temp-file spool family (`*_temp_path`/`*_max_temp_file_size`/
+//! `*_temp_file_write_size`) stays fail-closed because no bounded temp-spool
+//! subsystem exists.
 
 use std::{
     collections::HashSet,
@@ -41,11 +65,13 @@ use axum::{
     body::Body,
     http::{header, HeaderMap, HeaderValue, Method, Response, StatusCode},
 };
+use bytes::Bytes;
 use rustls::pki_types::ServerName;
 use sdkwork_webserver_core::CgiUpstreamProtocol;
 use sdkwork_webserver_core::{
-    ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamParamConfig,
-    UpstreamRetryCondition, UpstreamRetryConfig,
+    ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamBufferingConfig,
+    UpstreamConfig, UpstreamParamConfig, UpstreamRetryCondition, UpstreamRetryConfig,
+    UpstreamStoreConfig,
 };
 use sdkwork_webserver_upstream_protocol::{
     fastcgi::{
@@ -61,7 +87,7 @@ use sdkwork_webserver_upstream_protocol::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    time::timeout,
+    time::{timeout, Instant},
 };
 use url::Url;
 
@@ -606,6 +632,7 @@ async fn exchange(
     bind_address: Option<IpAddr>,
     socket_keepalive: bool,
     pool: Option<&PoolPolicy<'_>>,
+    limits: &Limits,
 ) -> Result<(StatusCode, HeaderMap, Vec<u8>), ExchangeFailure> {
     let resolved = resolve_stream_target(generation, policy, metrics, target)
         .await
@@ -684,7 +711,7 @@ async fn exchange(
         .map_err(|_| ExchangeFailure::Transport)?;
 
     let maximum_body = generation.app.config().limits.max_response_body_bytes;
-    let mut parser = ResponseParser::new(protocol, Limits::default());
+    let mut parser = ResponseParser::new(protocol, *limits);
     let mut head: Option<sdkwork_webserver_upstream_protocol::HttpResponseHead> = None;
     let mut body: Vec<u8> = Vec::new();
     let mut errors: Vec<u8> = Vec::new();
@@ -828,6 +855,7 @@ pub(crate) async fn serve_fastcgi(
     read_timeout_ms: u64,
     response_policy: Option<&ProxyResponsePolicyConfig>,
     retry: Option<&UpstreamRetryConfig>,
+    policy: &CgiResponsePolicy,
     facts: CgiRequestFacts<'_>,
     request_body: &[u8],
     metrics: &Arc<DataPlaneMetrics>,
@@ -881,8 +909,12 @@ pub(crate) async fn serve_fastcgi(
         request_id,
         keep_conn,
         &parameters,
-        request_body,
-        &Limits::default(),
+        if policy.pass_request_body {
+            request_body
+        } else {
+            &[]
+        },
+        &policy.limits,
     ) else {
         return text_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -936,6 +968,7 @@ pub(crate) async fn serve_fastcgi(
             bind_address,
             socket_keepalive,
             pool.as_ref(),
+            &policy.limits,
         )
         .await;
         match outcome {
@@ -956,7 +989,16 @@ pub(crate) async fn serve_fastcgi(
                     last_failure = ExchangeFailure::Transport;
                     continue;
                 }
-                return build_response(status, headers, body, facts.method, response_policy);
+                store_upstream_body(policy, &facts, status, &body).await;
+                let (status, headers, body) = apply_ranges(&facts, policy, status, headers, body);
+                return build_response(
+                    status,
+                    headers,
+                    body,
+                    facts.method,
+                    response_policy,
+                    Some(policy),
+                );
             }
             Err(failure) => {
                 last_failure = failure;
@@ -998,6 +1040,7 @@ pub(crate) async fn serve_cgi(
     read_timeout_ms: u64,
     response_policy: Option<&ProxyResponsePolicyConfig>,
     retry: Option<&UpstreamRetryConfig>,
+    policy: &CgiResponsePolicy,
     modifier1: Option<u8>,
     modifier2: Option<u8>,
     extra_string: Option<&str>,
@@ -1109,6 +1152,7 @@ pub(crate) async fn serve_cgi(
             bind_address,
             socket_keepalive,
             None,
+            &policy.limits,
         )
         .await;
         match outcome {
@@ -1129,7 +1173,16 @@ pub(crate) async fn serve_cgi(
                     last_failure = ExchangeFailure::Transport;
                     continue;
                 }
-                return build_response(status, headers, body, facts.method, response_policy);
+                store_upstream_body(policy, &facts, status, &body).await;
+                let (status, headers, body) = apply_ranges(&facts, policy, status, headers, body);
+                return build_response(
+                    status,
+                    headers,
+                    body,
+                    facts.method,
+                    response_policy,
+                    Some(policy),
+                );
             }
             Err(failure) => {
                 last_failure = failure;
@@ -1168,6 +1221,7 @@ pub(crate) async fn serve_memcached(
     send_timeout_ms: u64,
     read_timeout_ms: u64,
     retry: Option<&UpstreamRetryConfig>,
+    policy: &CgiResponsePolicy,
     facts: CgiRequestFacts<'_>,
     facts_method: &Method,
     metrics: &Arc<DataPlaneMetrics>,
@@ -1186,7 +1240,7 @@ pub(crate) async fn serve_memcached(
         );
     };
     let key = facts.expand(key_template);
-    let Ok(wire) = encode_memcached_get(&key, &Limits::default()) else {
+    let Ok(wire) = encode_memcached_get(&key, &policy.limits) else {
         return text_response(StatusCode::BAD_REQUEST, "invalid memcached key\n");
     };
     let Ok(_permit) = upstream.try_admit() else {
@@ -1222,7 +1276,7 @@ pub(crate) async fn serve_memcached(
         };
         let target = selected.url().clone();
         attempted.mark(selected.index());
-        let Some(policy) = generation
+        let Some(address_policy) = generation
             .app
             .config()
             .upstreams
@@ -1235,7 +1289,7 @@ pub(crate) async fn serve_memcached(
         let outcome = memcached_exchange(
             generation,
             upstream_ref,
-            &policy,
+            &address_policy,
             metrics,
             &target,
             &key,
@@ -1245,10 +1299,11 @@ pub(crate) async fn serve_memcached(
             Duration::from_millis(read_timeout_ms),
             bind_address,
             socket_keepalive,
+            &policy.limits,
         )
         .await;
         match outcome {
-            Ok(MemcachedOutcome::Hit(value)) => {
+            Ok(MemcachedOutcome::Hit { value, flags }) => {
                 upstream.record_success(selected);
                 let content_type = generation
                     .app
@@ -1256,24 +1311,33 @@ pub(crate) async fn serve_memcached(
                     .default_type
                     .clone()
                     .unwrap_or_else(|| "text/plain".to_owned());
+                let mut headers = HeaderMap::new();
+                if let Ok(value) = HeaderValue::from_str(&content_type) {
+                    headers.insert(header::CONTENT_TYPE, value);
+                }
+                // nginx's memcached handler advertises byte ranges on a hit,
+                // which makes the range filter honour client ranges.
+                headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+                if let Some(flag) = policy.gzip_flag {
+                    if flags & flag != 0 {
+                        headers.insert(header::CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+                    }
+                }
+                let (status, headers, body) =
+                    apply_ranges(&facts, policy, StatusCode::OK, headers, value);
                 let mut response = Response::new(if *facts_method == Method::HEAD {
                     Body::empty()
                 } else {
-                    Body::from(value.clone())
+                    policy.paced_body(body.clone())
                 });
-                *response.status_mut() = StatusCode::OK;
-                if let Ok(value) = HeaderValue::from_str(&content_type) {
-                    response.headers_mut().insert(header::CONTENT_TYPE, value);
-                }
-                if let Ok(length) = HeaderValue::from_str(&value.len().to_string()) {
+                *response.status_mut() = status;
+                *response.headers_mut() = headers;
+                let declared = body.len() as u64;
+                if let Ok(length) = HeaderValue::from_str(&declared.to_string()) {
                     response
                         .headers_mut()
                         .insert(header::CONTENT_LENGTH, length);
                 }
-                // nginx's memcached handler advertises byte ranges on a hit.
-                response
-                    .headers_mut()
-                    .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
                 return response;
             }
             Ok(MemcachedOutcome::Miss) => {
@@ -1305,10 +1369,391 @@ pub(crate) async fn serve_memcached(
     }
 }
 
+/// Wave 7D response policy for one CGI-family/memcached resource: the bounded
+/// buffering sizes, request-body forwarding, atomic `*_store` write,
+/// `*_limit_rate` pacing and `*_force_ranges`/Accept-Ranges handling.
+pub(crate) struct CgiResponsePolicy {
+    pub limits: Limits,
+    pub pass_request_body: bool,
+    pub store: Option<UpstreamStoreConfig>,
+    pub store_root: Option<String>,
+    pub limit_rate_bytes_per_second: Option<u64>,
+    pub force_ranges: bool,
+    /// `memcached_gzip_flag`: `Content-Encoding` is derived from the flags
+    /// field of a memcached hit when any of these bits is set.
+    pub gzip_flag: Option<u32>,
+}
+
+impl Default for CgiResponsePolicy {
+    fn default() -> Self {
+        Self {
+            limits: Limits::default(),
+            pass_request_body: true,
+            store: None,
+            store_root: None,
+            limit_rate_bytes_per_second: None,
+            force_ranges: false,
+            gzip_flag: None,
+        }
+    }
+}
+
+impl CgiResponsePolicy {
+    /// Build the policy for one resource.
+    pub(crate) fn new(
+        buffering: Option<&UpstreamBufferingConfig>,
+        pass_request_body: bool,
+        store: Option<&UpstreamStoreConfig>,
+        store_root: Option<&str>,
+        limit_rate_bytes_per_second: Option<u64>,
+        force_ranges: bool,
+        gzip_flag: Option<u32>,
+    ) -> Self {
+        let mut limits = Limits::default();
+        if let Some(policy) = buffering {
+            // `*_buffer_size` is nginx's maximum upstream header block; the
+            // runtime applies it to the response-header parser. `*_buffers`
+            // sizes the response read chunk (never below the protocol's
+            // built-in protocol frame bounds).
+            if let Ok(header_bytes) = usize::try_from(policy.header_bytes) {
+                limits.max_header_block_bytes = header_bytes;
+            }
+            if let Ok(chunk_bytes) = usize::try_from(policy.chunk_bytes) {
+                limits.max_stdin_chunk_bytes = chunk_bytes;
+                limits.max_header_line_bytes =
+                    limits.max_header_line_bytes.min(chunk_bytes.max(512));
+            }
+        }
+        Self {
+            limits,
+            pass_request_body,
+            store: store.cloned(),
+            store_root: store_root.map(str::to_owned),
+            limit_rate_bytes_per_second,
+            force_ranges,
+            gzip_flag,
+        }
+    }
+
+    /// Apply `*_limit_rate` pacing to a fully buffered response body.
+    fn paced_body(&self, body: Vec<u8>) -> Body {
+        let Some(rate) = self.limit_rate_bytes_per_second.filter(|rate| *rate > 0) else {
+            return Body::from(body);
+        };
+        // ~10 pacing steps per second, bounded by the response chunk window.
+        let chunk = usize::try_from((rate / 10).clamp(1024, 64 * 1024)).unwrap_or(1024);
+        let length = body.len();
+        let stream = futures_util::stream::unfold(
+            (body, 0usize, Instant::now(), rate, chunk),
+            move |(body, offset, started, rate, chunk)| async move {
+                if offset >= body.len() {
+                    return None;
+                }
+                let end = (offset + chunk).min(length);
+                let target = started + Duration::from_secs_f64(end as f64 / rate as f64);
+                let now = Instant::now();
+                if target > now {
+                    tokio::time::sleep(target - now).await;
+                }
+                let piece = Bytes::copy_from_slice(&body[offset..end]);
+                Some((
+                    Ok::<Bytes, std::io::Error>(piece),
+                    (body, end, started, rate, chunk),
+                ))
+            },
+        );
+        Body::from_stream(stream)
+    }
+}
+
+/// Expand an nginx `*_store` path template with the values the materializer
+/// proved executable, then apply the confinement rules again at write time.
+fn expand_store_path(
+    template: &str,
+    facts: &CgiRequestFacts<'_>,
+    store_root: Option<&str>,
+) -> Option<std::path::PathBuf> {
+    let document_root = facts.document_root.unwrap_or("");
+    let mut expanded = String::with_capacity(template.len() + facts.path.len());
+    let mut rest = template;
+    while let Some(index) = rest.find('$') {
+        expanded.push_str(&rest[..index]);
+        let name: String = rest[index + 1..]
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+            .collect();
+        let replacement = match name.as_str() {
+            "uri" => facts.path,
+            "request_uri" => facts.raw_request_uri,
+            "document_root" => document_root,
+            "fastcgi_script_name" | "uwsgi_script_name" | "scgi_script_name" => {
+                facts.script_name.as_str()
+            }
+            _ => return None,
+        };
+        expanded.push_str(replacement);
+        rest = &rest[index + 1 + name.len()..];
+    }
+    expanded.push_str(rest);
+    if !expanded.starts_with('/')
+        || expanded
+            .bytes()
+            .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+        || expanded.split('/').any(|component| component == "..")
+    {
+        return None;
+    }
+    if let Some(root) = store_root {
+        let root = root.trim_end_matches('/');
+        if !(expanded == root || expanded.starts_with(&format!("{root}/"))) {
+            return None;
+        }
+    }
+    Some(std::path::PathBuf::from(expanded))
+}
+
+/// Atomically write the upstream response body to the configured `*_store`
+/// path (bounded temp file in the destination directory + rename), preserving
+/// the client response. Only `200 OK` responses are stored, matching nginx.
+async fn store_upstream_body(
+    policy: &CgiResponsePolicy,
+    facts: &CgiRequestFacts<'_>,
+    status: StatusCode,
+    body: &[u8],
+) {
+    let Some(store) = policy.store.as_ref() else {
+        return;
+    };
+    if status != StatusCode::OK || body.is_empty() {
+        return;
+    }
+    let Some(path) = expand_store_path(&store.path, facts, policy.store_root.as_deref()) else {
+        tracing::debug!(
+            template = %store.path,
+            "CGI store path template could not be expanded safely"
+        );
+        return;
+    };
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if let Err(error) = tokio::fs::create_dir_all(parent).await {
+        tracing::debug!(path = %path.display(), error = %error, "CGI store directory could not be created");
+        return;
+    }
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "stored".to_owned());
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let temp = parent.join(format!(".{file_name}.{unique}.tmp"));
+    if let Err(error) = tokio::fs::write(&temp, body).await {
+        tracing::debug!(path = %temp.display(), error = %error, "CGI store temp file could not be written");
+        let _ = tokio::fs::remove_file(&temp).await;
+        return;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = store.access_mode & 0o7777;
+        if let Err(error) =
+            tokio::fs::set_permissions(&temp, std::fs::Permissions::from_mode(mode)).await
+        {
+            tracing::debug!(path = %temp.display(), error = %error, "CGI store mode could not be applied");
+        }
+    }
+    if let Err(error) = tokio::fs::rename(&temp, &path).await {
+        tracing::debug!(path = %path.display(), error = %error, "CGI store rename failed");
+        let _ = tokio::fs::remove_file(&temp).await;
+    }
+}
+
+/// One parsed byte range, `end` exclusive.
+#[derive(Clone, Copy)]
+struct ByteRange {
+    start: u64,
+    end: u64,
+}
+
+/// Parse an nginx-compatible `Range: bytes=…` header against `total`.
+///
+/// Returns `None` when the request must be answered with the full
+/// representation (non-`bytes` unit, malformed header, `If-Range` mismatch or a
+/// zero-length representation); `Some(Err(()))` when nginx answers 416.
+fn parse_byte_ranges(
+    headers: &HeaderMap,
+    total: u64,
+    if_range: Option<&HeaderValue>,
+) -> Option<Result<Vec<ByteRange>, ()>> {
+    if total == 0 {
+        return None;
+    }
+    if let Some(if_range) = if_range {
+        let matches = |name: header::HeaderName| {
+            headers
+                .get(name)
+                .map(|value| value.as_bytes() == if_range.as_bytes())
+                .unwrap_or(false)
+        };
+        let date_matches = headers
+            .get(header::LAST_MODIFIED)
+            .map(|value| value.as_bytes() == if_range.as_bytes())
+            .unwrap_or(false);
+        if !(matches(header::ETAG) || date_matches) {
+            return None;
+        }
+    }
+    let value = headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok())?;
+    let list = value.strip_prefix("bytes=")?;
+    let mut ranges = Vec::new();
+    for entry in list.split(',') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        let (start_text, end_text) = entry.split_once('-')?;
+        let (start, end) = if start_text.trim().is_empty() {
+            let Ok(suffix) = end_text.trim().parse::<u64>() else {
+                return Some(Err(()));
+            };
+            if suffix == 0 {
+                return Some(Err(()));
+            }
+            (total.saturating_sub(suffix), total)
+        } else {
+            let Ok(start) = start_text.trim().parse::<u64>() else {
+                return Some(Err(()));
+            };
+            let end = if end_text.trim().is_empty() {
+                total
+            } else {
+                let Ok(end) = end_text.trim().parse::<u64>() else {
+                    return Some(Err(()));
+                };
+                end.saturating_add(1).min(total)
+            };
+            (start, end)
+        };
+        if start >= total {
+            continue;
+        }
+        if start < end {
+            ranges.push(ByteRange { start, end });
+        }
+    }
+    if ranges.is_empty() {
+        return Some(Err(()));
+    }
+    if ranges.iter().any(|range| range.end > total) {
+        return Some(Err(()));
+    }
+    Some(Ok(ranges))
+}
+
+/// Apply nginx range semantics to a fully buffered CGI-family response.
+///
+/// Ranges are honoured when the resource sets `*_force_ranges on` or when the
+/// upstream response itself declared `Accept-Ranges: bytes` (nginx's
+/// `r->allow_ranges`); a response with unknown length never gets ranges.
+fn apply_ranges(
+    facts: &CgiRequestFacts<'_>,
+    policy: &CgiResponsePolicy,
+    status: StatusCode,
+    mut headers: HeaderMap,
+    body: Vec<u8>,
+) -> (StatusCode, HeaderMap, Vec<u8>) {
+    if status != StatusCode::OK || facts.method != Method::GET {
+        return (status, headers, body);
+    }
+    let upstream_allows = headers
+        .get(header::ACCEPT_RANGES)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("bytes"));
+    if !policy.force_ranges && !upstream_allows {
+        return (status, headers, body);
+    }
+    let if_range = facts.headers.get(header::IF_RANGE);
+    let total = body.len() as u64;
+    let Some(parsed) = parse_byte_ranges(facts.headers, total, if_range) else {
+        return (status, headers, body);
+    };
+    let ranges = match parsed {
+        Ok(ranges) => ranges,
+        Err(()) => {
+            headers.remove(header::CONTENT_LENGTH);
+            headers.insert(
+                header::CONTENT_RANGE,
+                HeaderValue::from_str(&format!("bytes */{total}"))
+                    .unwrap_or_else(|_| HeaderValue::from_static("bytes */*0")),
+            );
+            return (StatusCode::RANGE_NOT_SATISFIABLE, headers, Vec::new());
+        }
+    };
+    headers.remove(header::CONTENT_LENGTH);
+    if ranges.len() > 1 {
+        // nginx's multipart range path requires the whole representation in a
+        // single buffer; the CGI-family upstream path declines a multi-range
+        // request and answers the full representation with `Accept-Ranges`
+        // (differential-confirmed against nginx 1.29.6), so the bounded adapter
+        // mirrors that instead of inventing a multipart body.
+        headers
+            .entry(header::ACCEPT_RANGES)
+            .or_insert_with(|| HeaderValue::from_static("bytes"));
+        return (StatusCode::OK, headers, body);
+    }
+    if ranges.len() == 1 {
+        let range = ranges[0];
+        headers.insert(
+            header::CONTENT_RANGE,
+            HeaderValue::from_str(&format!(
+                "bytes {}-{}/{}",
+                range.start,
+                range.end - 1,
+                total
+            ))
+            .unwrap_or_else(|_| HeaderValue::from_static("bytes 0-0/0")),
+        );
+        let slice = body[range.start as usize..range.end as usize].to_vec();
+        return (StatusCode::PARTIAL_CONTENT, headers, slice);
+    }
+    // nginx multipart/byteranges with a fixed bounded boundary so the body is
+    // reproducible; clients treat the boundary as opaque.
+    const BOUNDARY: &str = "sdkwork7d";
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("text/plain")
+        .to_owned();
+    let mut multipart = Vec::new();
+    for range in &ranges {
+        multipart.extend_from_slice(
+            format!(
+                "\r\n--{BOUNDARY}\r\nContent-Type: {content_type}\r\nContent-Range: bytes {}-{}/{total}\r\n\r\n",
+                range.start,
+                range.end - 1
+            )
+            .as_bytes(),
+        );
+        multipart.extend_from_slice(&body[range.start as usize..range.end as usize]);
+    }
+    multipart.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(&format!("multipart/byteranges; boundary={BOUNDARY}"))
+            .unwrap_or_else(|_| HeaderValue::from_static("multipart/byteranges")),
+    );
+    (StatusCode::PARTIAL_CONTENT, headers, multipart)
+}
+
 /// Why `memcached_exchange` is written separately from the CGI-family exchange:
 /// the memcached text protocol has no header block, only a terminator.
 enum MemcachedOutcome {
-    Hit(Vec<u8>),
+    Hit { value: Vec<u8>, flags: u32 },
     Miss,
 }
 
@@ -1326,6 +1771,7 @@ async fn memcached_exchange(
     read_timeout: Duration,
     bind_address: Option<IpAddr>,
     socket_keepalive: bool,
+    limits: &Limits,
 ) -> Result<MemcachedOutcome, ExchangeFailure> {
     let resolved = resolve_stream_target(generation, policy, metrics, target)
         .await
@@ -1345,7 +1791,7 @@ async fn memcached_exchange(
         .await
         .map_err(|_| ExchangeFailure::Timeout)?
         .map_err(|_| ExchangeFailure::Transport)?;
-    let mut parser = MemcachedResponseParser::new(Limits::default());
+    let mut parser = MemcachedResponseParser::new(*limits);
     let mut outcome = None;
     let mut buffer = [0u8; 16 * 1024];
     loop {
@@ -1365,7 +1811,10 @@ async fn memcached_exchange(
                     if value.key != requested_key {
                         return Err(ExchangeFailure::Protocol);
                     }
-                    outcome = Some(MemcachedOutcome::Hit(value.data));
+                    outcome = Some(MemcachedOutcome::Hit {
+                        value: value.data,
+                        flags: value.flags,
+                    });
                 }
                 MemcachedResponseEvent::Miss => outcome = Some(MemcachedOutcome::Miss),
                 MemcachedResponseEvent::Stored | MemcachedResponseEvent::NotStored => {
@@ -1387,6 +1836,7 @@ fn build_response(
     body: Vec<u8>,
     method: &Method,
     response_policy: Option<&ProxyResponsePolicyConfig>,
+    pacing: Option<&CgiResponsePolicy>,
 ) -> Response<Body> {
     // FastCGI default-hidden fields plus the resource's hide/pass policy.
     let mut hidden: Vec<String> = DEFAULT_HIDDEN_RESPONSE_HEADERS
@@ -1443,7 +1893,10 @@ fn build_response(
         Some(body.len() as u64)
     };
     let response_body = if bodyless { Vec::new() } else { body };
-    let mut response = Response::new(Body::from(response_body));
+    let mut response = Response::new(match pacing {
+        Some(policy) if !bodyless => policy.paced_body(response_body),
+        _ => Body::from(response_body),
+    });
     *response.status_mut() = status;
     *response.headers_mut() = headers;
     if let Some(length) = declared_length {

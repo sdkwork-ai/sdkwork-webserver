@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '91ad3e2e';
+const AUDIT_HEAD = 'ed74ed90';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the CGI cache-family wave (wave 7C) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C) and the protocol response-policy wave (wave 7D) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -403,6 +403,43 @@ const COMPLETED_WAVES = [
       'http:uwsgi_no_cache',
     ],
   },
+  {
+    key: 'wave 7D (protocol response policy)',
+    summary:
+      'CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body plus memcached buffer/gzip-flag and gRPC ignore_headers',
+    ids: [
+      'http:fastcgi_buffer_size',
+      'http:fastcgi_buffers',
+      'http:fastcgi_busy_buffers_size',
+      'http:fastcgi_force_ranges',
+      'http:fastcgi_ignore_headers',
+      'http:fastcgi_limit_rate',
+      'http:fastcgi_pass_request_body',
+      'http:fastcgi_store',
+      'http:fastcgi_store_access',
+      'http:grpc_ignore_headers',
+      'http:memcached_buffer_size',
+      'http:memcached_gzip_flag',
+      'http:scgi_buffer_size',
+      'http:scgi_buffers',
+      'http:scgi_busy_buffers_size',
+      'http:scgi_force_ranges',
+      'http:scgi_ignore_headers',
+      'http:scgi_limit_rate',
+      'http:scgi_pass_request_body',
+      'http:scgi_store',
+      'http:scgi_store_access',
+      'http:uwsgi_buffer_size',
+      'http:uwsgi_buffers',
+      'http:uwsgi_busy_buffers_size',
+      'http:uwsgi_force_ranges',
+      'http:uwsgi_ignore_headers',
+      'http:uwsgi_limit_rate',
+      'http:uwsgi_pass_request_body',
+      'http:uwsgi_store',
+      'http:uwsgi_store_access',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -563,7 +600,6 @@ const REMAINING_GAP_CATEGORIES = [
     priority: 'low',
     ids: [
       'http:grpc_bind',
-      'http:grpc_ignore_headers',
       'http:grpc_socket_keepalive',
       'http:grpc_ssl_certificate_cache',
       'http:grpc_ssl_ciphers',
@@ -574,7 +610,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate.',
-    why: 'the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; gRPC bind and socket_keepalive remain wave-7A blockers, and the residual ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented backlog, not profile exclusions.',
+    why: 'the gRPC h2 client now executes the request/response, header (including ignore_headers), timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind and socket_keepalive blockers plus the rustls-unsupported TLS knobs (certificate_cache, ciphers, conf_command, crl, password_file, session_reuse) are unimplemented backlog.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them',
@@ -584,25 +620,16 @@ const REMAINING_GAP_CATEGORIES = [
     label: 'FastCGI residual forms',
     priority: 'medium',
     ids: [
-      'http:fastcgi_buffer_size',
-      'http:fastcgi_buffers',
-      'http:fastcgi_busy_buffers_size',
       'http:fastcgi_catch_stderr',
-      'http:fastcgi_force_ranges',
       'http:fastcgi_ignore_client_abort',
-      'http:fastcgi_ignore_headers',
-      'http:fastcgi_limit_rate',
       'http:fastcgi_max_temp_file_size',
-      'http:fastcgi_pass_request_body',
       'http:fastcgi_send_lowat',
-      'http:fastcgi_store',
-      'http:fastcgi_store_access',
       'http:fastcgi_temp_file_write_size',
       'http:fastcgi_temp_path',
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this FastCGI sub-family fails to activate.',
-    why: 'the implemented FastCGI request/response, transport and response-cache forms now execute end-to-end; the residual buffer/store/temp path sub-families, unix/variable targets and hostname/transparent binds are unimplemented backlog, not profile exclusions.',
+    why: 'the implemented FastCGI request/response, transport, cache and response-policy forms now execute end-to-end; the residual fail-closed forms are the temp-spool family (no bounded temp-spool subsystem), ignore_client_abort, catch_stderr and send_lowat.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/fastcgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
@@ -612,15 +639,8 @@ const REMAINING_GAP_CATEGORIES = [
     label: 'uWSGI residual forms',
     priority: 'medium',
     ids: [
-      'http:uwsgi_buffer_size',
-      'http:uwsgi_buffers',
-      'http:uwsgi_busy_buffers_size',
-      'http:uwsgi_force_ranges',
       'http:uwsgi_ignore_client_abort',
-      'http:uwsgi_ignore_headers',
-      'http:uwsgi_limit_rate',
       'http:uwsgi_max_temp_file_size',
-      'http:uwsgi_pass_request_body',
       'http:uwsgi_ssl_certificate_cache',
       'http:uwsgi_ssl_ciphers',
       'http:uwsgi_ssl_conf_command',
@@ -628,14 +648,12 @@ const REMAINING_GAP_CATEGORIES = [
       'http:uwsgi_ssl_password_file',
       'http:uwsgi_ssl_session_reuse',
       'http:uwsgi_ssl_verify_depth',
-      'http:uwsgi_store',
-      'http:uwsgi_store_access',
       'http:uwsgi_temp_file_write_size',
       'http:uwsgi_temp_path',
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this uWSGI sub-family fails to activate.',
-    why: 'the implemented uWSGI request/response, transport, response-cache and upstream TLS identity/verification forms now execute end-to-end; the residual buffer/store/temp path sub-families, unix/variable targets, hostname/transparent binds, uWSGI keep-conn reuse and the rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth) are unimplemented backlog, not profile exclusions.',
+    why: 'the implemented uWSGI request/response, transport, cache, response-policy and upstream TLS identity/verification forms now execute end-to-end; the residual fail-closed forms are the temp-spool family, ignore_client_abort and the rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth).',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/uwsgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
@@ -645,41 +663,17 @@ const REMAINING_GAP_CATEGORIES = [
     label: 'SCGI residual forms',
     priority: 'medium',
     ids: [
-      'http:scgi_buffer_size',
-      'http:scgi_buffers',
-      'http:scgi_busy_buffers_size',
-      'http:scgi_force_ranges',
       'http:scgi_ignore_client_abort',
-      'http:scgi_ignore_headers',
-      'http:scgi_limit_rate',
       'http:scgi_max_temp_file_size',
-      'http:scgi_pass_request_body',
-      'http:scgi_store',
-      'http:scgi_store_access',
       'http:scgi_temp_file_write_size',
       'http:scgi_temp_path',
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this SCGI sub-family fails to activate.',
-    why: 'the implemented SCGI request/response, transport and response-cache forms now execute end-to-end; the residual buffer/store/temp path sub-families, unix/variable targets, hostname/transparent binds and SCGI keep-conn reuse are unimplemented backlog, not profile exclusions.',
+    why: 'the implemented SCGI request/response, transport, cache and response-policy forms now execute end-to-end; the residual fail-closed forms are the temp-spool family and ignore_client_abort.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/scgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
-  },
-  {
-    key: 'memcached-residual',
-    label: 'memcached residual forms',
-    priority: 'low',
-    ids: [
-      'http:memcached_buffer_size',
-      'http:memcached_gzip_flag',
-    ],
-    rejectedLoss:
-      'a stock nginx.conf that uses this memcached sub-family fails to activate.',
-    why: 'the implemented memcached request/response and transport forms (IP-literal bind, SO_KEEPALIVE) now execute end-to-end; the residual buffer/socket-pool, gzip-flag and connection-reuse knobs are unimplemented and are backlog, not profile exclusions.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/memcached.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'extend tests/nginx/differential-protocols with buffer/socket/gzip-flag cases',
   },
   {
     key: 'mail-residual',
@@ -1788,6 +1782,27 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the custom-key case proves two requests with different keys are cached separately and match nginx 1.29.6',
   },
+  {
+    id: 'http:fastcgi_store',
+    evidence: 'tests/nginx/differential-protocols/battery.py::d7-store',
+    claim: 'fastcgi_store atomically writes the upstream response to the nginx path template',
+    proves:
+      'the d7-store case compares the stored path, content and file mode (644) byte-for-byte against nginx 1.29.6, with the store root confined by the typed storeRoot allowlist',
+  },
+  {
+    id: 'http:fastcgi_limit_rate',
+    evidence: 'tests/nginx/differential-protocols/battery.py::d7-rate',
+    claim: 'fastcgi_limit_rate applies a bounded token-bucket read rate',
+    proves:
+      'the d7-rate case compares the throttled transfer profile (20KB body at a 20k window) against nginx 1.29.6',
+  },
+  {
+    id: 'http:fastcgi_force_ranges',
+    evidence: 'tests/nginx/differential-protocols/battery.py::d7-range-multipart',
+    claim: 'fastcgi_force_ranges enables single/suffix/multipart range handling with nginx decline semantics',
+    proves:
+      'the d7-range-single/suffix/multipart/invalid cases compare 206/416 and multi-range decline decisions against nginx 1.29.6',
+  },
 ];
 
 /**
@@ -2081,7 +2096,7 @@ function renderHeader(inventory, catalog) {
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
   stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
   wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
-  CGI cache-family wave (wave 7C).** The code, tests, generated operator matrix and the re-synced directive
+  CGI cache-family wave (wave 7C) and the protocol response-policy wave (wave 7D).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2100,9 +2115,10 @@ function renderHeader(inventory, catalog) {
   rewrite/variable-engine wave (\`if\` conditions over the bounded variable engine) and
   the mail waves (POP3/IMAP/SMTP proxy end-to-end after the PRD section 4 mail-module
   amendment) and the uWSGI upstream-TLS wave (uwsgi_ssl_* identity/verification through
-  the CGI transport seam) and the CGI cache-family wave (shared HTTP cache store with a
-  CGI key/policy layer) are recorded as completed in section 3, and every one of them is
-  asserted executable by \`--verify-evidence\`.
+  the CGI transport seam), the CGI cache-family wave (shared HTTP cache store with a
+  CGI key/policy layer) and the protocol response-policy wave (buffers, store, limit_rate,
+  force_ranges, ignore_headers, pass_request_body) are recorded as completed in section 3,
+  and every one of them is asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2207,7 +2223,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave and the CGI cache-family wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave and the protocol response-policy wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2242,7 +2258,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-CGI-cache-family-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-protocol-response-policy-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2316,7 +2332,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2342,7 +2358,9 @@ mail waves brought the POP3/IMAP/SMTP mail proxy in profile (PRD section 4 amend
 the 27 implemented mail-module directives executing end-to-end; and the uWSGI
 upstream-TLS wave made the seven uwsgi_ssl_* identity/verification directives executable;
 and the CGI cache-family wave made 45 fastcgi/uwsgi/scgi response-cache directives
-executable on the shared HTTP cache store.
+executable on the shared HTTP cache store; and the protocol response-policy wave added the
+CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body forms, memcached
+buffer/gzip-flag and gRPC ignore_headers.
 
 ${completedTable}
 ${completedRows}
@@ -2389,6 +2407,15 @@ time**: the task brief's "10m/1h defaults" are not nginx defaults, and the
 differential \`cache-default\` case proves nginx caches nothing until
 \`*_cache_valid\`/\`Cache-Control\`/\`Expires\` says so.
 
+Wave 7D acceptance evidence: 30 protocol response-policy directives execute, proven by 12
+new differential-protocols cases (65 -> 77; floor/manifest 77, still the second aggregate
+slice): atomic store with nginx path templates and \`[http] storeRoot\` confinement (stored
+path/content/mode 644 compared byte-for-byte), token-bucket \`limit_rate\` (20KB at a 20k
+window), \`force_ranges\` 206/416/multi-range-decline semantics, the recognised
+\`ignore_headers\` set (X-Accel-Redirect), \`pass_request_body off\` suppressing STDIN/body
+while preserving CONTENT_LENGTH, memcached gzip-flag bitwise Content-Encoding, gRPC
+ignore_headers, and oversized-header-block -> 502 (bounded adapter buffer like nginx).
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
@@ -2400,7 +2427,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the CGI cache-family wave (7C). An accepted-unenforced row is silently ignored today; a rejected row fails
+the protocol response-policy wave (7D). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2466,6 +2493,15 @@ only the first zone provides a disk tier; (f) a CGI cache may reference a
 \`proxy_cache_path\` zone, a documented superset of nginx. nginx has no default caching
 time, and the runtime matches that (no implicit TTL).
 
+Wave 7D note: the 30 response-policy directives now execute and the remaining fail-closed
+protocol residuals are reported as behavior-gap with concrete blockers: the temp-spool
+family (\`*_max_temp_file_size\`/\`*_temp_file_write_size\`/\`*_temp_path\`, no bounded
+temp-spool subsystem), \`*_ignore_client_abort\`, \`fastcgi_catch_stderr\`,
+\`fastcgi_send_lowat\`, the \`*_store on\` value form, the seven uWSGI TLS leftovers and the
+gRPC bind/keepalive/TLS leftovers. Carried bounded difference: \`*_buffering off\` /
+\`*_request_buffering off\` still buffer (a body-streaming seam is required), documented in
+the catalog knownDifferences rather than as a directive-level exclusion.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2512,7 +2548,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave and the CGI cache-family wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave and the protocol response-policy wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2643,9 +2679,12 @@ keep_conn pool with the pooled-socket framing fix. Wave 7B added uWSGI upstream 
 identity/verification through the same transport seam (always verified unless
 uwsgi_ssl_verify is off), and nginx 1.29.6 defines no scgi_ssl_* or fastcgi_ssl_*
 directives. Wave 7C executes the fastcgi/uwsgi/scgi response-cache family on the shared
-HTTP cache store (nginx has no default caching time). The residual buffer/store/SSL,
-unix/variable-target, hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library
-knobs are backlog rows, not profile exclusions.
+HTTP cache store (nginx has no default caching time). Wave 7D executes the protocol
+response policy (header-block/read-chunk buffers, store with path templates, limit_rate,
+force_ranges, ignore_headers, pass_request_body, memcached gzip-flag and gRPC
+ignore_headers). The residual temp-spool, ignore_client_abort, catch_stderr, send_lowat,
+store-on, uWSGI TLS and gRPC bind/keepalive/TLS-library forms are backlog rows, not
+profile exclusions.
 
 Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
 \`crates/sdkwork-webserver-mail-protocol\` crate (POP3/IMAP/SMTP state machines) and the
@@ -2729,8 +2768,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the CGI cache-family wave (7C) landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the protocol response-policy wave (7D) landed and the
+Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

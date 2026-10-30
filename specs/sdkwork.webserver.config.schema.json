@@ -470,6 +470,10 @@
           "pattern": "^/",
           "maxLength": 4096,
           "description": "Operator-configured absolute directory for unix:/... upstream socket targets (typed-plane only). A unix target is accepted only when its resolved path is a strict descendant of this root."
+        },
+        "storeRoot": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -1694,6 +1698,30 @@
         },
         "cache": {
           "$ref": "#/$defs/cgiCacheConfig"
+        },
+        "bufferPolicy": {
+          "$ref": "#/$defs/upstreamBuffering"
+        },
+        "passRequestBody": {
+          "type": "boolean"
+        },
+        "store": {
+          "$ref": "#/$defs/upstreamStore"
+        },
+        "limitRateBytesPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        },
+        "forceRanges": {
+          "type": "boolean"
+        },
+        "ignoreHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
         }
       }
     },
@@ -1800,6 +1828,30 @@
         },
         "cache": {
           "$ref": "#/$defs/cgiCacheConfig"
+        },
+        "bufferPolicy": {
+          "$ref": "#/$defs/upstreamBuffering"
+        },
+        "passRequestBody": {
+          "type": "boolean"
+        },
+        "store": {
+          "$ref": "#/$defs/upstreamStore"
+        },
+        "limitRateBytesPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        },
+        "forceRanges": {
+          "type": "boolean"
+        },
+        "ignoreHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
         }
       }
     },
@@ -1866,6 +1918,13 @@
         },
         "retry": {
           "$ref": "#/$defs/upstreamRetry"
+        },
+        "ignoreHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
         }
       }
     },
@@ -1927,6 +1986,16 @@
         },
         "retry": {
           "$ref": "#/$defs/upstreamRetry"
+        },
+        "bufferBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576
+        },
+        "gzipFlag": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
         }
       }
     },
@@ -4676,6 +4745,57 @@
         "maxRangeOffset": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "upstreamBuffering": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headerBytes",
+        "chunkBytes",
+        "chunks",
+        "busyBytes"
+      ],
+      "properties": {
+        "headerBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576
+        },
+        "chunkBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576
+        },
+        "chunks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "busyBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 8388608
+        }
+      }
+    },
+    "upstreamStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "accessMode"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessMode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4095
         }
       }
     }

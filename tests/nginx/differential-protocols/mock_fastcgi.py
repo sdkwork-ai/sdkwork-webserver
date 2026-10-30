@@ -178,6 +178,61 @@ def handle(connection: socket.socket, connection_id: int) -> None:
                     if not keep_conn:
                         return
                     continue
+            if request_uri.startswith("/d7/"):
+                mode = request_uri.split("?")[0].split("/")[2]
+                if mode == "store":
+                    payload = b"stored-content-123"
+                    head = (
+                        b"Status: 200 OK\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 18\r\n\r\n"
+                    )
+                elif mode == "rate":
+                    payload = b"R" * 20000
+                    head = (
+                        b"Status: 200 OK\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 20000\r\n\r\n"
+                    )
+                elif mode == "range":
+                    payload = b"0123456789abcdef"
+                    head = (
+                        b"Status: 200 OK\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 16\r\n\r\n"
+                    )
+                elif mode == "bufsize":
+                    payload = b"ok"
+                    head = (
+                        b"Status: 200 OK\r\n"
+                        + b"".join(
+                            b"X-Pad-%d: %s\r\n" % (index, b"p" * 100)
+                            for index in range(30)
+                        )
+                        + b"Content-Type: text/plain\r\n"
+                        + b"Content-Length: 2\r\n\r\n"
+                    )
+                elif mode == "ignore":
+                    payload = b"normal-body"
+                    head = (
+                        b"Status: 200 OK\r\n"
+                        b"X-Accel-Redirect: /sdkwork-accel-target\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 11\r\n\r\n"
+                    )
+                else:
+                    payload = b"d7-unknown"
+                    head = (
+                        b"Status: 200 OK\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 10\r\n\r\n"
+                    )
+                connection.sendall(record(6, head + payload))
+                connection.sendall(record(6, b""))
+                connection.sendall(record(3, struct.pack("!IB3x", 0, 0)))
+                if not keep_conn:
+                    return
+                continue
             status = 200
             if request_uri.startswith("/errors/"):
                 status = 404

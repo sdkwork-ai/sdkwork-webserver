@@ -4362,6 +4362,8 @@ impl<'a> Mapper<'a> {
                 "socketKeepalive": effective_fastcgi.socket_keepalive,
                 "buffering": effective_fastcgi.buffering.unwrap_or(true),
                 "requestBuffering": effective_fastcgi.request_buffering.unwrap_or(true),
+                "passRequestBody": effective_fastcgi.pass_request_body.unwrap_or(true),
+                "forceRanges": effective_fastcgi.force_ranges.unwrap_or(false),
                 "connectTimeoutMs": effective_fastcgi.connect_timeout_ms.unwrap_or(60_000),
                 "sendTimeoutMs": effective_fastcgi.send_timeout_ms.unwrap_or(60_000),
                 "readTimeoutMs": effective_fastcgi.read_timeout_ms.unwrap_or(60_000),
@@ -4373,6 +4375,26 @@ impl<'a> Mapper<'a> {
                     "retryOn": retry_condition_names,
                 }),
             });
+            if let Some(policy) = effective_fastcgi.buffering_policy.resolve() {
+                resource["bufferPolicy"] = serde_json::to_value(policy).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(store) = effective_fastcgi.store.resolve() {
+                resource["store"] = serde_json::to_value(store).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(rate) = effective_fastcgi.limit_rate_bytes_per_second.flatten() {
+                resource["limitRateBytesPerSecond"] = json!(rate);
+            }
+            if let Some(ignore_headers) = &effective_fastcgi.ignore_headers {
+                resource["ignoreHeaders"] = json!(ignore_headers);
+            }
             if let Some(cache) = cache_policy {
                 resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
                     NginxConfigError::ValidationFailed(format!(
@@ -4615,6 +4637,8 @@ impl<'a> Mapper<'a> {
                 "socketKeepalive": effective_cgi.socket_keepalive,
                 "buffering": effective_cgi.buffering.unwrap_or(true),
                 "requestBuffering": effective_cgi.request_buffering.unwrap_or(true),
+                "passRequestBody": effective_cgi.pass_request_body.unwrap_or(true),
+                "forceRanges": effective_cgi.force_ranges.unwrap_or(false),
                 "connectTimeoutMs": effective_cgi.connect_timeout_ms.unwrap_or(60_000),
                 "sendTimeoutMs": effective_cgi.send_timeout_ms.unwrap_or(60_000),
                 "readTimeoutMs": effective_cgi.read_timeout_ms.unwrap_or(60_000),
@@ -4636,6 +4660,26 @@ impl<'a> Mapper<'a> {
                 if let Some(extra) = &effective_cgi.extra_string {
                     resource["extraString"] = Value::String(extra.clone());
                 }
+            }
+            if let Some(policy) = effective_cgi.buffering_policy.resolve() {
+                resource["bufferPolicy"] = serde_json::to_value(policy).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(store) = effective_cgi.store.resolve() {
+                resource["store"] = serde_json::to_value(store).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(rate) = effective_cgi.limit_rate_bytes_per_second.flatten() {
+                resource["limitRateBytesPerSecond"] = json!(rate);
+            }
+            if let Some(ignore_headers) = &effective_cgi.ignore_headers {
+                resource["ignoreHeaders"] = json!(ignore_headers);
             }
             if let Some(cache) = cache_policy {
                 resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
@@ -4762,6 +4806,8 @@ impl<'a> Mapper<'a> {
                 "connectTimeoutMs": effective_memcached.connect_timeout_ms.unwrap_or(60_000),
                 "sendTimeoutMs": effective_memcached.send_timeout_ms.unwrap_or(60_000),
                 "readTimeoutMs": effective_memcached.read_timeout_ms.unwrap_or(60_000),
+                "bufferBytes": effective_memcached.buffer_bytes,
+                "gzipFlag": effective_memcached.gzip_flag,
                 "retry": json!({
                     "maxAttempts": retry.max_attempts,
                     "timeoutMs": retry.timeout_ms,
@@ -4899,6 +4945,7 @@ impl<'a> Mapper<'a> {
                 "sendTimeoutMs": effective_grpc.send_timeout_ms.unwrap_or(60_000),
                 "readTimeoutMs": effective_grpc.read_timeout_ms.unwrap_or(60_000),
                 "bufferSize": effective_grpc.buffer_size.unwrap_or(4096),
+                "ignoreHeaders": effective_grpc.ignore_headers.clone().unwrap_or_default(),
                 "responsePolicy": proxy_response_policy_json(&response_policy)?,
                 "interceptErrors": effective_grpc.intercept_errors.unwrap_or(false),
                 "retry": json!({
@@ -6583,6 +6630,7 @@ struct GrpcSettings {
     next_upstream: Option<Vec<UpstreamRetryCondition>>,
     next_upstream_tries: Option<u8>,
     next_upstream_timeout_ms: Option<u64>,
+    ignore_headers: Option<Vec<String>>,
 }
 
 impl GrpcSettings {
@@ -6613,6 +6661,10 @@ impl GrpcSettings {
             next_upstream_timeout_ms: inner
                 .next_upstream_timeout_ms
                 .or(self.next_upstream_timeout_ms),
+            ignore_headers: inner
+                .ignore_headers
+                .clone()
+                .or_else(|| self.ignore_headers.clone()),
         }
     }
 
@@ -6653,6 +6705,9 @@ impl GrpcSettings {
                     ));
                 }
                 self.buffer_size = Some(bytes);
+            }
+            "grpc_ignore_headers" => {
+                self.ignore_headers = Some(parse_ignore_headers(directive)?)
             }
             "grpc_intercept_errors" => {
                 self.intercept_errors = Some(parse_on_off(directive, "grpc_intercept_errors")?)
@@ -6705,7 +6760,7 @@ impl GrpcSettings {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_ssl_*"
+                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_ignore_headers/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_ssl_*"
                     ),
                 ))
             }
@@ -10203,6 +10258,8 @@ struct MemcachedSettings {
     next_upstream: Option<Vec<UpstreamRetryCondition>>,
     next_upstream_tries: Option<u8>,
     next_upstream_timeout_ms: Option<u64>,
+    buffer_bytes: Option<u64>,
+    gzip_flag: Option<u32>,
 }
 
 impl MemcachedSettings {
@@ -10222,6 +10279,8 @@ impl MemcachedSettings {
             next_upstream_timeout_ms: inner
                 .next_upstream_timeout_ms
                 .or(self.next_upstream_timeout_ms),
+            buffer_bytes: inner.buffer_bytes.or(self.buffer_bytes),
+            gzip_flag: inner.gzip_flag.or(self.gzip_flag),
         }
     }
 
@@ -10259,11 +10318,55 @@ impl MemcachedSettings {
             "next_upstream_timeout" => {
                 self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
             }
+            "buffer_size" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "memcached_buffer_size requires a size",
+                    ));
+                };
+                let Some(size) = parse_size_bytes(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid memcached_buffer_size `{value}`"),
+                    ));
+                };
+                if !(512..=1024 * 1024).contains(&size) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "memcached_buffer_size `{value}` is outside the executable 512 bytes .. 1 MiB window"
+                        ),
+                    ));
+                }
+                self.buffer_bytes = Some(size);
+            }
+            "gzip_flag" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "memcached_gzip_flag requires a flag value",
+                    ));
+                };
+                let flag = value.parse::<u32>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid memcached_gzip_flag `{value}` (expected 0..=4294967295)"),
+                    )
+                })?;
+                if flag == 0 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "memcached_gzip_flag 0 can never match a flag bit; use the bit to test (for example 1 or 2)",
+                    ));
+                }
+                self.gzip_flag = Some(flag);
+            }
             other => {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`memcached_{other}` is not executable by the bounded memcached adapter; supported: memcached_pass/memcached_bind/memcached_socket_keepalive/memcached_connect_timeout/memcached_send_timeout/memcached_read_timeout/memcached_buffering/memcached_next_upstream/_tries/_timeout (nginx's memcached module has no hide/pass/intercept_errors directives)"
+                        "`memcached_{other}` is not executable by the bounded memcached adapter; supported: memcached_pass/memcached_bind/memcached_socket_keepalive/memcached_connect_timeout/memcached_send_timeout/memcached_read_timeout/memcached_buffering/memcached_buffer_size/memcached_gzip_flag/memcached_next_upstream/_tries/_timeout (nginx's memcached module has no hide/pass/intercept_errors directives)"
                     ),
                 ))
             }
@@ -10336,6 +10439,12 @@ struct CgiSettings {
     modifier2: Option<u8>,
     extra_string: Option<String>,
     cache: CgiCacheSettings,
+    buffering_policy: BufferingSettings,
+    store: StoreSettings,
+    pass_request_body: Option<bool>,
+    limit_rate_bytes_per_second: Option<Option<u64>>,
+    force_ranges: Option<bool>,
+    ignore_headers: Option<Vec<String>>,
 }
 
 impl CgiSettings {
@@ -10374,6 +10483,17 @@ impl CgiSettings {
                 .clone()
                 .or_else(|| self.extra_string.clone()),
             cache: self.cache.overlay(&inner.cache),
+            buffering_policy: self.buffering_policy.overlay(&inner.buffering_policy),
+            store: self.store.overlay(&inner.store),
+            pass_request_body: inner.pass_request_body.or(self.pass_request_body),
+            limit_rate_bytes_per_second: inner
+                .limit_rate_bytes_per_second
+                .or(self.limit_rate_bytes_per_second),
+            force_ranges: inner.force_ranges.or(self.force_ranges),
+            ignore_headers: inner
+                .ignore_headers
+                .clone()
+                .or_else(|| self.ignore_headers.clone()),
         }
     }
 
@@ -10479,6 +10599,38 @@ impl CgiSettings {
             "next_upstream_timeout" => {
                 self.next_upstream_timeout_ms = Some(parse_cgi_timeout(directive)?)
             }
+            "pass_request_body" => {
+                self.pass_request_body = Some(parse_on_off(directive, &directive.name)?)
+            }
+            "limit_rate" => {
+                self.limit_rate_bytes_per_second = Some(parse_upstream_limit_rate(directive)?)
+            }
+            "force_ranges" => self.force_ranges = Some(parse_on_off(directive, &directive.name)?),
+            "ignore_headers" => self.ignore_headers = Some(parse_ignore_headers(directive)?),
+            "store" | "store_access" => {
+                self.store.apply(prefix, suffix, directive)?;
+            }
+            "buffer_size" | "buffers" | "busy_buffers_size" => {
+                self.buffering_policy.apply(suffix, directive)?;
+            }
+            "max_temp_file_size" | "temp_path" | "temp_file_write_size" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` requires nginx's temp-file spool: oversized upstream responses are written to the configured temp path. The bounded runtime has no temp-spool subsystem (every response is buffered in bounded memory or streamed), so the directive fails closed instead of silently disabling the spill",
+                        directive.name
+                    ),
+                ))
+            }
+            "ignore_client_abort" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` needs a client-disconnect signal delivered while the upstream exchange is in flight; the bounded adapter buffers the upstream response before replying, so it cannot observe a mid-exchange abort and fails closed instead of silently applying the wrong lifetime",
+                        directive.name
+                    ),
+                ))
+            }
             "modifier1" | "modifier2" if kind == CgiKind::Uwsgi => {
                 let Some(value) = directive.args.first() else {
                     return Err(NginxConfigError::unsupported(
@@ -10517,7 +10669,7 @@ impl CgiSettings {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{prefix}_{other}` is not executable by the bounded {prefix} adapter; supported: {prefix}_pass/{prefix}_param/{prefix}_pass_request_headers/{prefix}_bind/{prefix}_socket_keepalive/{prefix}_buffering/{prefix}_request_buffering/{prefix}_connect_timeout/{prefix}_send_timeout/{prefix}_read_timeout/{prefix}_hide_header/{prefix}_pass_header/{prefix}_intercept_errors/{prefix}_next_upstream/_tries/_timeout{}",
+                        "`{prefix}_{other}` is not executable by the bounded {prefix} adapter; supported: {prefix}_pass/{prefix}_param/{prefix}_pass_request_headers/{prefix}_pass_request_body/{prefix}_bind/{prefix}_socket_keepalive/{prefix}_buffering/{prefix}_request_buffering/{prefix}_buffer_size/{prefix}_buffers/{prefix}_busy_buffers_size/{prefix}_store/{prefix}_store_access/{prefix}_limit_rate/{prefix}_force_ranges/{prefix}_ignore_headers/{prefix}_connect_timeout/{prefix}_send_timeout/{prefix}_read_timeout/{prefix}_hide_header/{prefix}_pass_header/{prefix}_intercept_errors/{prefix}_next_upstream/_tries/_timeout{}",
                         if kind == CgiKind::Uwsgi {
                             "/uwsgi_modifier1/uwsgi_modifier2/uwsgi_string"
                         } else {
@@ -10993,6 +11145,365 @@ fn validate_cgi_cache_condition_variable(
     Ok(())
 }
 
+/// nginx `*_buffer_size` / `*_buffers` / `*_busy_buffers_size` accumulated over
+/// the inheritance chain. The runtime maps these onto the adapter's bounded
+/// in-memory response buffering (header block bound + read chunk sizing); the
+/// temp-file spool family is a separate, fail-closed group.
+#[derive(Clone, Default)]
+struct BufferingSettings {
+    header_bytes: Option<u64>,
+    buffers: Option<(u32, u64)>,
+    busy_bytes: Option<u64>,
+}
+
+impl BufferingSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            header_bytes: inner.header_bytes.or(self.header_bytes),
+            buffers: inner.buffers.or(self.buffers),
+            busy_bytes: inner.busy_bytes.or(self.busy_bytes),
+        }
+    }
+
+    /// Apply one of the three size directives; returns `false` when the suffix
+    /// is not part of this group.
+    fn apply(
+        &mut self,
+        suffix: &str,
+        directive: &NginxDirective,
+    ) -> Result<bool, NginxConfigError> {
+        match suffix {
+            "buffer_size" => {
+                self.header_bytes = Some(parse_upstream_buffer_size(directive)?);
+            }
+            "buffers" => {
+                let [count, size] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires `<count> <size>`", directive.name),
+                    ));
+                };
+                let count = count.parse::<u32>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} buffer count `{count}`", directive.name),
+                    )
+                })?;
+                let Some(size) = parse_size_bytes(size) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} buffer size `{size}`", directive.name),
+                    ));
+                };
+                self.buffers = Some((count, size));
+            }
+            "busy_buffers_size" => {
+                self.busy_bytes = Some(parse_upstream_buffer_size(directive)?);
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    fn resolve(&self) -> Option<crate::config::UpstreamBufferingConfig> {
+        if self.header_bytes.is_none() && self.buffers.is_none() && self.busy_bytes.is_none() {
+            return None;
+        }
+        let (chunks, chunk_bytes) = self.buffers.unwrap_or((8, 4096));
+        let header_bytes = self.header_bytes.unwrap_or(4096);
+        Some(crate::config::UpstreamBufferingConfig {
+            header_bytes,
+            chunk_bytes,
+            chunks,
+            busy_bytes: self
+                .busy_bytes
+                .unwrap_or_else(|| header_bytes.saturating_mul(2)),
+        })
+    }
+}
+
+/// nginx `*_store` / `*_store_access` accumulated over the inheritance chain.
+#[derive(Clone, Default)]
+struct StoreSettings {
+    path: Option<String>,
+    access_mode: Option<u32>,
+}
+
+impl StoreSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            path: inner.path.clone().or_else(|| self.path.clone()),
+            access_mode: inner.access_mode.or(self.access_mode),
+        }
+    }
+
+    fn apply(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        directive: &NginxDirective,
+    ) -> Result<bool, NginxConfigError> {
+        match suffix {
+            "store" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_store requires a path, `on` or `off`"),
+                    ));
+                };
+                if value.eq_ignore_ascii_case("off") {
+                    self.path = None;
+                    return Ok(true);
+                }
+                if value.eq_ignore_ascii_case("on") {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{prefix}_store on` derives the path from `root`, which the bounded runtime cannot map to one store root; declare an absolute path template instead (for example `{prefix}_store /var/lib/sdkwork/store$uri`)"
+                        ),
+                    ));
+                }
+                validate_store_path_template(prefix, directive, value)?;
+                self.path = Some(value.clone());
+            }
+            "store_access" => {
+                self.access_mode = Some(parse_store_access(directive)?);
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    fn resolve(&self) -> Option<crate::config::UpstreamStoreConfig> {
+        self.path
+            .as_ref()
+            .map(|path| crate::config::UpstreamStoreConfig {
+                path: path.clone(),
+                access_mode: self.access_mode.unwrap_or(0o600),
+            })
+    }
+}
+
+/// nginx `*_ignore_headers` field names that the directive recognises. The
+/// runtime never processes any of these upstream-driven subsystems, which is
+/// exactly the state the directive requests, so accepting the recognised set
+/// is faithful; unknown entries are silently ignored like nginx.
+const IGNORED_UPSTREAM_HEADERS: &[&str] = &[
+    "X-Accel-Redirect",
+    "X-Accel-Expires",
+    "X-Accel-Limit-Rate",
+    "X-Accel-Buffering",
+    "X-Accel-Charset",
+    "Expires",
+    "Cache-Control",
+    "Set-Cookie",
+    "Vary",
+];
+
+fn parse_ignore_headers(directive: &NginxDirective) -> Result<Vec<String>, NginxConfigError> {
+    let mut recognized = Vec::new();
+    for name in &directive.args {
+        if let Some(canonical) = IGNORED_UPSTREAM_HEADERS
+            .iter()
+            .find(|candidate| candidate.eq_ignore_ascii_case(name))
+        {
+            if !recognized.iter().any(|existing| existing == canonical) {
+                recognized.push((*canonical).to_owned());
+            }
+        }
+    }
+    Ok(recognized)
+}
+
+/// Parse a `*_buffer_size` / `*_busy_buffers_size` size with nginx bounds.
+fn parse_upstream_buffer_size(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} requires a size", directive.name),
+        ));
+    };
+    let Some(size) = parse_size_bytes(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid {} size `{value}`", directive.name),
+        ));
+    };
+    if !(512..=1024 * 1024).contains(&size) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} size `{value}` is outside the executable 512 bytes .. 1 MiB window",
+                directive.name
+            ),
+        ));
+    }
+    Ok(size)
+}
+
+/// Parse an nginx `*_store_access` mode list (`user:rw group:rw all:r`) into a
+/// unix permission mode. nginx's default when the directive is absent is
+/// `user:rw` (`0600`).
+fn parse_store_access(directive: &NginxDirective) -> Result<u32, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} requires at least one `class:permissions` entry",
+                directive.name
+            ),
+        ));
+    }
+    let mut mode = 0u32;
+    for entry in &directive.args {
+        let Some((class, permissions)) = entry.split_once(':') else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "{} entry `{entry}` is not `class:permissions`",
+                    directive.name
+                ),
+            ));
+        };
+        let shift = match class.to_ascii_lowercase().as_str() {
+            "user" => 6,
+            "group" => 3,
+            "all" => 0,
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "{} class `{other}` is not one of user/group/all",
+                        directive.name
+                    ),
+                ))
+            }
+        };
+        let mut bits = 0u32;
+        for flag in permissions.chars() {
+            let bit = match flag.to_ascii_lowercase() {
+                'r' => 0o4,
+                'w' => 0o2,
+                'x' => 0o1,
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "{} permission `{other}` is not one of r/w/x",
+                            directive.name
+                        ),
+                    ))
+                }
+            };
+            bits |= bit << shift;
+        }
+        mode |= bits;
+    }
+    if mode == 0 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} must grant at least one permission", directive.name),
+        ));
+    }
+    Ok(mode)
+}
+
+/// Validate an nginx `*_store` path template: it must be absolute and may only
+/// use the variable tokens the runtime can expand deterministically.
+fn validate_store_path_template(
+    prefix: &str,
+    directive: &NginxDirective,
+    template: &str,
+) -> Result<(), NginxConfigError> {
+    if !template.starts_with('/') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{prefix}_store path template must be absolute so it cannot resolve outside the configured store root"
+            ),
+        ));
+    }
+    if template
+        .bytes()
+        .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{prefix}_store path template must not contain NUL or line breaks"),
+        ));
+    }
+    let mut rest = template;
+    while let Some(index) = rest.find('$') {
+        let name: String = rest[index + 1..]
+            .chars()
+            .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+            .collect();
+        if name.is_empty() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{prefix}_store path template has a bare `$`"),
+            ));
+        }
+        if !matches!(
+            name.as_str(),
+            "uri"
+                | "request_uri"
+                | "document_root"
+                | "fastcgi_script_name"
+                | "uwsgi_script_name"
+                | "scgi_script_name"
+        ) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "{prefix}_store path template variable `${name}` is not executable; use $uri, $request_uri, $document_root or $<protocol>_script_name"
+                ),
+            ));
+        }
+        rest = &rest[index + 1 + name.len()..];
+    }
+    Ok(())
+}
+
+/// Parse `*_limit_rate`: a literal size in bytes per second; `0` disables the
+/// limit. Variable rates (`$limit_rate`) are not executable.
+fn parse_upstream_limit_rate(directive: &NginxDirective) -> Result<Option<u64>, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} requires a rate", directive.name),
+        ));
+    };
+    if value.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} variable rate `{value}` is not executable; declare a literal rate",
+                directive.name
+            ),
+        ));
+    }
+    let Some(rate) = parse_size_bytes(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid {} rate `{value}`", directive.name),
+        ));
+    };
+    if rate == 0 {
+        return Ok(None);
+    }
+    if rate > 1024 * 1024 * 1024 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} rate `{value}` is outside the executable 0 .. 1 GiB/s window",
+                directive.name
+            ),
+        ));
+    }
+    Ok(Some(rate))
+}
+
 /// nginx `fastcgi_*` settings accumulated over the http → server → location
 /// inheritance chain.
 ///
@@ -11020,6 +11531,12 @@ struct FastCgiSettings {
     next_upstream_tries: Option<u8>,
     next_upstream_timeout_ms: Option<u64>,
     cache: CgiCacheSettings,
+    buffering_policy: BufferingSettings,
+    store: StoreSettings,
+    pass_request_body: Option<bool>,
+    limit_rate_bytes_per_second: Option<Option<u64>>,
+    force_ranges: Option<bool>,
+    ignore_headers: Option<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -11066,6 +11583,17 @@ impl FastCgiSettings {
                 .next_upstream_timeout_ms
                 .or(self.next_upstream_timeout_ms),
             cache: self.cache.overlay(&inner.cache),
+            buffering_policy: self.buffering_policy.overlay(&inner.buffering_policy),
+            store: self.store.overlay(&inner.store),
+            pass_request_body: inner.pass_request_body.or(self.pass_request_body),
+            limit_rate_bytes_per_second: inner
+                .limit_rate_bytes_per_second
+                .or(self.limit_rate_bytes_per_second),
+            force_ranges: inner.force_ranges.or(self.force_ranges),
+            ignore_headers: inner
+                .ignore_headers
+                .clone()
+                .or_else(|| self.ignore_headers.clone()),
         }
     }
 
@@ -11218,11 +11746,66 @@ impl FastCgiSettings {
             "fastcgi_next_upstream_timeout" => {
                 self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
             }
+            "fastcgi_pass_request_body" => {
+                self.pass_request_body = Some(parse_on_off(directive, "fastcgi_pass_request_body")?)
+            }
+            "fastcgi_limit_rate" => {
+                self.limit_rate_bytes_per_second = Some(parse_upstream_limit_rate(directive)?)
+            }
+            "fastcgi_force_ranges" => {
+                self.force_ranges = Some(parse_on_off(directive, "fastcgi_force_ranges")?)
+            }
+            "fastcgi_ignore_headers" => {
+                self.ignore_headers = Some(parse_ignore_headers(directive)?)
+            }
+            "fastcgi_store" | "fastcgi_store_access" => {
+                let suffix = directive
+                    .name
+                    .strip_prefix("fastcgi_")
+                    .unwrap_or_default();
+                self.store.apply("fastcgi", suffix, directive)?;
+            }
+            "fastcgi_buffer_size" | "fastcgi_buffers" | "fastcgi_busy_buffers_size" => {
+                let suffix = directive
+                    .name
+                    .strip_prefix("fastcgi_")
+                    .unwrap_or_default();
+                self.buffering_policy.apply(suffix, directive)?;
+            }
+            "fastcgi_max_temp_file_size"
+            | "fastcgi_temp_path"
+            | "fastcgi_temp_file_write_size" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` requires nginx's temp-file spool: oversized upstream responses are written to the configured temp path. The bounded runtime has no temp-spool subsystem (every response is buffered in bounded memory or streamed), so the directive fails closed instead of silently disabling the spill",
+                        directive.name
+                    ),
+                ))
+            }
+            "fastcgi_ignore_client_abort" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`fastcgi_ignore_client_abort` needs a client-disconnect signal delivered while the upstream exchange is in flight; the bounded adapter buffers the upstream response before replying, so it cannot observe a mid-exchange abort and fails closed instead of silently applying the wrong lifetime",
+                ))
+            }
+            "fastcgi_catch_stderr" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`fastcgi_catch_stderr` scans the FastCGI stderr stream for error signatures; the bounded adapter parses `FCGI_STDERR` but has no error-log channel to evaluate the string against",
+                ))
+            }
+            "fastcgi_send_lowat" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`fastcgi_send_lowat` tunes the socket send low-water mark, which is not settable through the runtime's socket seam (and is ignored by Linux); the directive fails closed",
+                ))
+            }
             other => {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{other}` is not executable by the bounded FastCGI adapter; supported: fastcgi_pass/fastcgi_param/fastcgi_index/fastcgi_split_path_info/fastcgi_keep_conn/fastcgi_bind/fastcgi_socket_keepalive/fastcgi_buffering/fastcgi_request_buffering/fastcgi_pass_request_headers/fastcgi_connect_timeout/fastcgi_send_timeout/fastcgi_read_timeout/fastcgi_hide_header/fastcgi_pass_header/fastcgi_intercept_errors/fastcgi_next_upstream/_tries/_timeout"
+                        "`{other}` is not executable by the bounded FastCGI adapter; supported: fastcgi_pass/fastcgi_param/fastcgi_index/fastcgi_split_path_info/fastcgi_keep_conn/fastcgi_bind/fastcgi_socket_keepalive/fastcgi_buffering/fastcgi_request_buffering/fastcgi_buffer_size/fastcgi_buffers/fastcgi_busy_buffers_size/fastcgi_pass_request_headers/fastcgi_pass_request_body/fastcgi_store/fastcgi_store_access/fastcgi_limit_rate/fastcgi_force_ranges/fastcgi_ignore_headers/fastcgi_connect_timeout/fastcgi_send_timeout/fastcgi_read_timeout/fastcgi_hide_header/fastcgi_pass_header/fastcgi_intercept_errors/fastcgi_next_upstream/_tries/_timeout"
                     ),
                 ))
             }

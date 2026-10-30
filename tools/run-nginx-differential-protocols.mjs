@@ -32,7 +32,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-protocols-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 65;
+const CASE_FLOOR = 77;
 /**
  * nginx renders its own generated error page for a memcached miss/upstream
  * failure; the status mapping is the contract under test there, while the body
@@ -52,6 +52,13 @@ const STATUS_ONLY_CASES = new Set([
   // trusted; both sides must fail, the status is the contract, and the exact
   // generated body is the same documented difference as the gRPC cases.
   'uwsgi-tls-untrusted',
+  // Wave 7D: an upstream header block larger than `fastcgi_buffer_size` is a
+  // 502 on both sides; nginx's generated page body is the same documented
+  // deployment difference as the other upstream-failure cases.
+  'd7-bufsize',
+  // nginx renders its generated 416 page body; status and Content-Range are
+  // the contract, the generated HTML body is the documented difference.
+  'd7-range-invalid',
 ]);
 const ORACLE_PORT = 21092;
 const GATEWAY_PORT = 21093;
@@ -79,6 +86,9 @@ const GATEWAY_MEMCACHED_PORT = GATEWAY_PORT + 14;
 const GATEWAY_GRPC_PORT = GATEWAY_PORT + 20;
 const GATEWAY_GRPC_TLS_OK_PORT = GATEWAY_PORT + 21;
 const GATEWAY_GRPC_TLS_UNTRUSTED_PORT = GATEWAY_PORT + 22;
+/** Fresh per-run `*_store` roots so a rerun never reads a stale file. */
+const ORACLE_STORE_DIR = fs.mkdtempSync(path.join(root, 'tmp', 'protocols-store-oracle-'));
+const GATEWAY_STORE_DIR = fs.mkdtempSync(path.join(root, 'tmp', 'protocols-store-gateway-'));
 const GRPC_MOCK_BINARY = 'sdkwork-webserver-grpc-mock';
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
@@ -129,7 +139,8 @@ function renderTemplate(ports) {
     .replaceAll('@GRPC_TLS_OK@', String(ports.grpcTlsOk))
     .replaceAll('@GRPC_TLS_UNTRUSTED@', String(ports.grpcTlsUntrusted))
     .replaceAll('@DEAD@', String(ports.dead))
-    .replaceAll('@CACHE_ROOT@', ports.cacheRoot);
+    .replaceAll('@CACHE_ROOT@', ports.cacheRoot)
+    .replaceAll('@STORE@', ports.storeRoot);
   // The `# @UNIX_SERVER_INJECT@` marker stays a comment here: the gateway
   // serves this file through the nginx compatibility plane, which fails closed
   // on `unix:` pass targets by design. The unix listener runs in a separate
@@ -355,6 +366,7 @@ function captureOracle() {
       ...process.env,
       NGINX_DIFF_PROTOCOLS_ORACLE_PORT: String(ORACLE_PORT),
       NGINX_DIFF_PROTOCOLS_WORK: path.join(root, 'tmp', 'nginx-differential-protocols-oracle'),
+      NGINX_DIFF_PROTOCOLS_STORE_DIR: ORACLE_STORE_DIR,
     },
   });
   if (result.error) return { status: 'unavailable', reason: result.error.message };
@@ -363,7 +375,7 @@ function captureOracle() {
   return { status: 'captured' };
 }
 
-function runBattery(python, port, unixPort) {
+function runBattery(python, port, unixPort, storeDir) {
   const result = spawnSync(
     python,
     [
@@ -372,6 +384,8 @@ function runBattery(python, port, unixPort) {
       String(port),
       '--unix-port',
       String(unixPort),
+      '--store-dir',
+      storeDir,
       '--out',
       OUR_CAPTURE,
     ],
@@ -517,6 +531,7 @@ async function main() {
       grpcTlsUntrusted: GATEWAY_GRPC_TLS_UNTRUSTED_PORT,
       dead: GATEWAY_DEAD_PORT,
       cacheRoot: path.join(GATEWAY_CONF_DIR, 'cache'),
+      storeRoot: GATEWAY_STORE_DIR,
     }),
   );
 
@@ -623,7 +638,7 @@ async function main() {
       log(`FAIL: the typed unix gateway exited with ${typedGateway.exitCode}`);
       return 1;
     }
-    if (!runBattery(python, GATEWAY_PORT, GATEWAY_UNIX_PORT)) {
+    if (!runBattery(python, GATEWAY_PORT, GATEWAY_UNIX_PORT, GATEWAY_STORE_DIR)) {
       log('FAIL: the battery could not capture the gateway');
       return 1;
     }

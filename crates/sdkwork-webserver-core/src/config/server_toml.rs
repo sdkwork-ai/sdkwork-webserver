@@ -5205,11 +5205,18 @@ pub fn materialize_app(
             "maps",
             "server",
             "unixSocketRoot",
+            "storeRoot",
             "upstream",
         ],
     )?;
     if let Some(unix_socket_root) = http.get("unixSocketRoot").and_then(Value::as_str) {
         nginx["unixSocketRoot"] = Value::String(unix_socket_root.to_owned());
+    }
+    // Wave 7D: `[http] storeRoot` confines CGI-family `*_store` path templates
+    // in the typed plane (the nginx plane uses the declared absolute path
+    // exactly like stock nginx).
+    if let Some(store_root) = http.get("storeRoot").and_then(Value::as_str) {
+        nginx["storeRoot"] = Value::String(store_root.to_owned());
     }
     let defaults_tls = materialize_http_defaults(http)?;
     materializer.materialize_limit_req_zones(http)?;

@@ -34,12 +34,13 @@ def handle(connection: socket.socket) -> None:
         if "error" in key:
             connection.sendall(b"ERROR\r\n")
             return
+        flags = 2 if "gzip" in key else 0
         if "large" in key:
             data = (b"cached-large-" * 683)[:8192]
         else:
             data = f"cached-value:{key}:peer={peer_address(connection)}".encode()
         connection.sendall(
-            b"VALUE " + key.encode() + b" 0 " + str(len(data)).encode() + b"\r\n"
+            b"VALUE " + key.encode() + b" " + str(flags).encode() + b" " + str(len(data)).encode() + b"\r\n"
             + data
             + b"\r\nEND\r\n"
         )

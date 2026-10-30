@@ -1520,8 +1520,22 @@ async fn route_admitted_request(
             intercept_errors,
             retry,
             cache,
+            buffer_policy,
+            pass_request_body,
+            store,
+            limit_rate_bytes_per_second,
+            force_ranges,
             ..
         } => {
+            let fastcgi_policy = super::cgi_upstream::CgiResponsePolicy::new(
+                buffer_policy.as_ref(),
+                *pass_request_body,
+                store.as_ref(),
+                generation.app.config().nginx.store_root.as_deref(),
+                *limit_rate_bytes_per_second,
+                *force_ranges,
+                None,
+            );
             let fastcgi_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -1591,6 +1605,7 @@ async fn route_admitted_request(
                                 *read_timeout_ms,
                                 response_policy.as_ref(),
                                 retry.as_ref(),
+                                &fastcgi_policy,
                                 response_variables,
                                 &request_body,
                                 &state.runtime.metrics,
@@ -1619,6 +1634,7 @@ async fn route_admitted_request(
                                 *read_timeout_ms,
                                 response_policy.as_ref(),
                                 retry.as_ref(),
+                                &fastcgi_policy,
                                 effective_facts,
                                 &request_body,
                                 &state.runtime.metrics,
@@ -1680,8 +1696,22 @@ async fn route_admitted_request(
             modifier2,
             extra_string,
             cache,
+            buffer_policy,
+            pass_request_body,
+            store,
+            limit_rate_bytes_per_second,
+            force_ranges,
             ..
         } => {
+            let cgi_policy = super::cgi_upstream::CgiResponsePolicy::new(
+                buffer_policy.as_ref(),
+                *pass_request_body,
+                store.as_ref(),
+                generation.app.config().nginx.store_root.as_deref(),
+                *limit_rate_bytes_per_second,
+                *force_ranges,
+                None,
+            );
             let cgi_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -1749,6 +1779,7 @@ async fn route_admitted_request(
                                 *read_timeout_ms,
                                 response_policy.as_ref(),
                                 retry.as_ref(),
+                                &cgi_policy,
                                 *modifier1,
                                 *modifier2,
                                 extra_string.as_deref(),
@@ -1778,6 +1809,7 @@ async fn route_admitted_request(
                                 *read_timeout_ms,
                                 response_policy.as_ref(),
                                 retry.as_ref(),
+                                &cgi_policy,
                                 *modifier1,
                                 *modifier2,
                                 extra_string.as_deref(),
@@ -1917,10 +1949,20 @@ async fn route_admitted_request(
             send_timeout_ms,
             read_timeout_ms,
             retry,
+            buffer_bytes,
+            gzip_flag,
             ..
         } => {
             // The upstream exchange is GET/HEAD only; the bounded adapter
             // answers other methods with 405 before touching the network.
+            let mut memcached_policy = super::cgi_upstream::CgiResponsePolicy::new(
+                None, true, None, None, None, false, *gzip_flag,
+            );
+            if let Some(bytes) = buffer_bytes {
+                if let Ok(bytes) = usize::try_from(*bytes) {
+                    memcached_policy.limits.max_header_block_bytes = bytes;
+                }
+            }
             let memcached_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -1975,6 +2017,7 @@ async fn route_admitted_request(
                         *send_timeout_ms,
                         *read_timeout_ms,
                         retry.as_ref(),
+                        &memcached_policy,
                         response_variables,
                         &method,
                         &state.runtime.metrics,

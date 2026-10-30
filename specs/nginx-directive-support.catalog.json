@@ -2459,10 +2459,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_buffer_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].response header-block buffer bound (oversized header block -> 502 like nginx)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-bufsize"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_buffering",
@@ -2536,10 +2550,32 @@
         "http-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_buffers` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].response read chunk bank sizing",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-bufsize"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_busy_buffers_size",
@@ -2552,10 +2588,32 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_busy_buffers_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].busy-buffer bound carried with nginx relationship validation",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-bufsize"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_cache",
@@ -3908,10 +3966,36 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_force_ranges` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].single/suffix ranges -> 206 + Content-Range, unsatisfiable -> 416, multi-range declines to full 200 + Accept-Ranges like nginx",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-single"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-suffix"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-multipart"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-invalid"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_hide_header",
@@ -4001,10 +4085,24 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_ignore_headers` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].recognised upstream ignore-header set accepted (runtime never processes those subsystems, which is the ignored state requested)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-ignore"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_index",
@@ -4200,10 +4298,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_limit_rate` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].token-bucket response pacing",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_max_temp_file_size",
@@ -4686,10 +4798,24 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_pass_request_body` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].request-body forwarding gate (off suppresses STDIN/body while preserving CONTENT_LENGTH)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-passbody"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_pass_request_headers",
@@ -5052,10 +5178,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_store` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].atomic upstream response body store (nginx path templates, temp-file+rename, absolute paths, no ..; typed [http] storeRoot for typed plane)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_store_access",
@@ -5068,10 +5208,24 @@
         "http-server"
       ],
       "grammar": "1|2|3",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_store_access` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].stored file mode from nginx user:rw group:r all:r form (default 0600)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:fastcgi_temp_file_write_size",
@@ -5491,10 +5645,24 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "resources[].type=\"grpc\" ignoreHeaders",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-ignore"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:grpc_intercept_errors",
@@ -8941,10 +9109,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`memcached_buffer_size` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].type=\"memcached\" bufferBytes",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:memcached_connect_timeout",
@@ -9006,10 +9188,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`memcached_gzip_flag` belongs to the nginx memcached module; this form is not implemented by the SDKWork memcached adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].type=\"memcached\" gzipFlag",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-memcached-gzip-on"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-memcached-gzip-off"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:memcached_next_upstream",
@@ -11867,10 +12067,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_buffer_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].response header-block buffer bound (oversized header block -> 502 like nginx)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_buffering",
@@ -11924,10 +12142,28 @@
         "http-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_buffers` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].response read chunk bank sizing",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_busy_buffers_size",
@@ -11940,10 +12176,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_busy_buffers_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].busy-buffer bound carried with nginx relationship validation",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_cache",
@@ -13260,10 +13514,36 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_force_ranges` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].single/suffix ranges -> 206 + Content-Range, unsatisfiable -> 416, multi-range declines to full 200 + Accept-Ranges like nginx",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-single"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-suffix"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-multipart"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-invalid"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_hide_header",
@@ -13333,10 +13613,24 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_ignore_headers` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].recognised upstream ignore-header set accepted (runtime never processes those subsystems, which is the ignored state requested)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-ignore"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_intercept_errors",
@@ -13390,10 +13684,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_limit_rate` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].token-bucket response pacing",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_max_temp_file_size",
@@ -13756,10 +14064,24 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_pass_request_body` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].request-body forwarding gate (off suppresses STDIN/body while preserving CONTENT_LENGTH)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-passbody"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_pass_request_headers",
@@ -13965,10 +14287,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_store` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].atomic upstream response body store (nginx path templates, temp-file+rename, absolute paths, no ..; typed [http] storeRoot for typed plane)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_store_access",
@@ -13981,10 +14317,24 @@
         "http-server"
       ],
       "grammar": "1|2|3",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`scgi_store_access` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].stored file mode from nginx user:rw group:r all:r form (default 0600)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:scgi_temp_file_write_size",
@@ -15852,10 +16202,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_buffer_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].response header-block buffer bound (oversized header block -> 502 like nginx)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_buffering",
@@ -15909,10 +16277,28 @@
         "http-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_buffers` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].response read chunk bank sizing",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_busy_buffers_size",
@@ -15925,10 +16311,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_busy_buffers_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].busy-buffer bound carried with nginx relationship validation",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_cache",
@@ -17245,10 +17649,36 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_force_ranges` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].single/suffix ranges -> 206 + Content-Range, unsatisfiable -> 416, multi-range declines to full 200 + Accept-Ranges like nginx",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-single"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-suffix"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-multipart"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-range-invalid"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_hide_header",
@@ -17318,10 +17748,24 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_ignore_headers` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].recognised upstream ignore-header set accepted (runtime never processes those subsystems, which is the ignored state requested)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-ignore"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_intercept_errors",
@@ -17375,10 +17819,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_limit_rate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].token-bucket response pacing",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-rate"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_max_temp_file_size",
@@ -17823,10 +18281,24 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_pass_request_body` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].request-body forwarding gate (off suppresses STDIN/body while preserving CONTENT_LENGTH)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-passbody"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_pass_request_headers",
@@ -18417,10 +18889,24 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_store` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].atomic upstream response body store (nginx path templates, temp-file+rename, absolute paths, no ..; typed [http] storeRoot for typed plane)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_store_access",
@@ -18433,10 +18919,24 @@
         "http-server"
       ],
       "grammar": "1|2|3",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`uwsgi_store_access` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].stored file mode from nginx user:rw group:r all:r form (default 0600)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "d7-store"
+        }
+      ],
+      "knownDifferences": [
+        "response/request bodies stay bounded-buffered even with *_buffering off / *_request_buffering off (carried bounded difference; needs a body-streaming seam)",
+        "temp-spool forms (*_max_temp_file_size/*_temp_path/*_temp_file_write_size) fail closed (no bounded temp-spool subsystem)"
+      ]
     },
     {
       "id": "http:uwsgi_string",

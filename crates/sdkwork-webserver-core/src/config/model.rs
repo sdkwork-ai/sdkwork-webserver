@@ -662,6 +662,16 @@ pub struct NginxConfig {
     /// validation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unix_socket_root: Option<String>,
+    /// Typed-TOML `[http] storeRoot`: the operator-configured directory that
+    /// `*_store <path>` expansions must resolve under.
+    ///
+    /// The nginx plane accepts an absolute `*_store` path template exactly like
+    /// stock nginx (the configuration file is operator-owned); the typed plane
+    /// additionally requires this root so a relative path can never escape the
+    /// declared deployment root. When present, every executed store path must
+    /// be a strict descendant of this absolute directory (no `..`, no NUL).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store_root: Option<String>,
     /// Typed `[http] documentRootAllowlist`: absolute directory prefixes a
     /// request-time `root $variable;` / `alias $variable;` may resolve to.
     ///
@@ -912,10 +922,47 @@ impl Default for NginxConfig {
             profile: default_profile(),
             unknown_directive_policy: default_unknown_directive_policy(),
             unix_socket_root: None,
+            store_root: None,
             document_root_allowlist: Vec::new(),
             native_compatibility: false,
         }
     }
+}
+
+/// Bounded nginx `*_buffer_size` / `*_buffers` / `*_busy_buffers_size`
+/// response-buffering policy for one CGI-family resource.
+///
+/// The runtime never spools upstream responses to disk (the `*_temp_path` /
+/// `*_max_temp_file_size` family fails closed), so the policy sizes the
+/// adapter's in-memory response header block and body chunks instead of
+/// selecting a storage tier. `busy_bytes` is carried as a validation bound so
+/// the nginx relationship (`busy_buffers_size` ≥ two header buffers and room
+/// for a body chunk) is checked instead of silently discarded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpstreamBufferingConfig {
+    /// Maximum upstream response header block (`*_buffer_size`).
+    pub header_bytes: u64,
+    /// Response body read-chunk size (`*_buffers <count> <size>` size).
+    pub chunk_bytes: u64,
+    /// Response body buffer count (`*_buffers <count> <size>` count).
+    pub chunks: u32,
+    /// Busy-buffer bound (`*_busy_buffers_size`).
+    pub busy_bytes: u64,
+}
+
+/// Executed nginx `*_store <path>` + `*_store_access <mode>` policy.
+///
+/// `path` is the nginx path template (absolute; `$uri`, `$request_uri`,
+/// `$document_root` and `$fastcgi_script_name`/`$uwsgi_script_name`/`$scgi_script_name`
+/// are executable tokens). The body is written through a sibling temp file and
+/// an atomic rename; `access_mode` is the unix mode derived from
+/// `*_store_access` (nginx default `user:rw` = `0600`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpstreamStoreConfig {
+    pub path: String,
+    pub access_mode: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1391,6 +1438,10 @@ fn default_fastcgi_io_timeout_ms() -> u64 {
     60_000
 }
 
+fn default_upstream_pass_request_body() -> bool {
+    true
+}
+
 fn default_upstream_pass_request_headers() -> bool {
     true
 }
@@ -1569,6 +1620,28 @@ pub enum ResourceConfig {
         /// Resolved `fastcgi_cache*` policy; `None` disables response caching.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cache: Option<CgiCacheConfig>,
+        /// `fastcgi_buffer_size` / `fastcgi_buffers` / `fastcgi_busy_buffers_size`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        buffer_policy: Option<UpstreamBufferingConfig>,
+        /// `fastcgi_pass_request_body off`: do not stream the client request
+        /// body to the FastCGI `STDIN` stream.
+        #[serde(default = "default_upstream_pass_request_body")]
+        pass_request_body: bool,
+        /// `fastcgi_store` / `fastcgi_store_access`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        store: Option<UpstreamStoreConfig>,
+        /// `fastcgi_limit_rate` in bytes per second (`None`/`0` disables).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit_rate_bytes_per_second: Option<u64>,
+        /// `fastcgi_force_ranges on`: byte ranges are served even when the
+        /// upstream response did not declare `Accept-Ranges`.
+        #[serde(default)]
+        force_ranges: bool,
+        /// `fastcgi_ignore_headers` resolved field list (nginx's recognised
+        /// set only; the runtime never processes those upstream headers, which
+        /// is exactly the ignored state the directive requests).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ignore_headers: Vec<String>,
     },
     /// nginx `memcached_pass` location handler: bounded text-protocol GET/HEAD
     /// against one memcached upstream. The request key is the expansion of the
@@ -1599,6 +1672,15 @@ pub enum ResourceConfig {
         read_timeout_ms: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry: Option<UpstreamRetryConfig>,
+        /// `memcached_buffer_size`: bound on the adapter's response read buffer
+        /// (authored request key and value framing are bounded separately).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        buffer_bytes: Option<u64>,
+        /// `memcached_gzip_flag <flag>`: when the memcached `VALUE` flags field
+        /// has any of these bits set, add `Content-Encoding: gzip` to the
+        /// client response (nginx behaviour, differential-confirmed).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gzip_flag: Option<u32>,
     },
     /// nginx `uwsgi_pass` / `scgi_pass` location handler: the uWSGI and SCGI
     /// CGI-family adapters share the FastCGI parameter pipeline and a raw HTTP
@@ -1659,6 +1741,24 @@ pub enum ResourceConfig {
         /// response caching.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cache: Option<CgiCacheConfig>,
+        /// `*_buffer_size` / `*_buffers` / `*_busy_buffers_size`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        buffer_policy: Option<UpstreamBufferingConfig>,
+        /// `*_pass_request_body off`: omit the client request body.
+        #[serde(default = "default_upstream_pass_request_body")]
+        pass_request_body: bool,
+        /// `*_store` / `*_store_access`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        store: Option<UpstreamStoreConfig>,
+        /// `*_limit_rate` in bytes per second (`None`/`0` disables).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit_rate_bytes_per_second: Option<u64>,
+        /// `*_force_ranges on`.
+        #[serde(default)]
+        force_ranges: bool,
+        /// `*_ignore_headers` resolved field list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ignore_headers: Vec<String>,
     },
     /// nginx `grpc_pass` location handler: gRPC over HTTP/2. The transport is
     /// cleartext h2c for `grpc://` targets and TLS for `grpcs://` targets (the
@@ -1699,6 +1799,9 @@ pub enum ResourceConfig {
         /// `grpc_next_upstream_timeout` as the runtime retry policy.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry: Option<UpstreamRetryConfig>,
+        /// `grpc_ignore_headers` resolved field list.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ignore_headers: Vec<String>,
     },
     Redirect {
         id: String,

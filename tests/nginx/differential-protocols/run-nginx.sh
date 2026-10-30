@@ -23,6 +23,8 @@ UNIX_ROOT_DIR="$WORK/unix"
 FCGI_SOCKET="$UNIX_ROOT_DIR/fcgi.sock"
 UWSGI_SOCKET="$UNIX_ROOT_DIR/uwsgi.sock"
 CACHE_ROOT="$WORK/cache"
+STORE_ROOT=${NGINX_DIFF_PROTOCOLS_STORE_DIR:-"$WORK/store"}
+mkdir -p "$STORE_ROOT"
 CONF="$WORK/nginx.conf"
 OUT=${NGINX_DIFF_PROTOCOLS_ORACLE_OUT:-$HERE/nginx-oracle.json}
 if [ -z "${NGINX_BIN:-}" ]; then
@@ -120,6 +122,7 @@ sed \
     -e "s|@GRPC_TLS_UNTRUSTED@|$GRPC_TLS_UNTRUSTED|g" \
     -e "s|@DEAD@|$DEAD|g" \
     -e "s|@CACHE_ROOT@|$CACHE_ROOT|g" \
+    -e "s|@STORE@|$STORE_ROOT|g" \
     "$HERE/nginx.conf" |
     sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF.main"
 awk -v unix_file="$WORK/unix-server.conf" '
@@ -179,4 +182,4 @@ if ! probe_port "$PORT"; then
 fi
 
 cd "$HERE"
-"$PY" battery.py --port "$PORT" --unix-port "$UNIX_PORT" --out "$OUT"
+"$PY" battery.py --port "$PORT" --unix-port "$UNIX_PORT" --store-dir "$STORE_ROOT" --out "$OUT"

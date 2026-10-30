@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import socket
+import stat
 import threading
 import time
 
@@ -200,6 +203,23 @@ CASES = [
     ("cache-range-beyond", "SPECIAL", "", {}, None),
     ("cache-uwsgi-hit", "SPECIAL", "", {}, None),
     ("cache-scgi-hit", "SPECIAL", "", {}, None),
+
+    # ---- Wave 7D: response buffering policy, atomic store, limit_rate,
+    # force_ranges, ignore_headers and memcached flag handling. Each SPECIAL
+    # row records the client contract plus the side effects that only the
+    # battery can observe (stored files, pacing window, multipart boundary). ----
+    ("d7-store", "SPECIAL", "", {}, None),
+    ("d7-rate", "SPECIAL", "", {}, None),
+    ("d7-range-single", "SPECIAL", "", {}, None),
+    ("d7-range-suffix", "SPECIAL", "", {}, None),
+    ("d7-range-multipart", "SPECIAL", "", {}, None),
+    ("d7-range-invalid", "SPECIAL", "", {}, None),
+    ("d7-range-off", "SPECIAL", "", {}, None),
+    ("d7-bufsize", "SPECIAL", "", {}, None),
+    ("d7-ignore", "SPECIAL", "", {}, None),
+    ("d7-passbody", "SPECIAL", "", {}, None),
+    ("d7-memcached-gzip-on", "SPECIAL", "", {}, None),
+    ("d7-memcached-gzip-off", "SPECIAL", "", {}, None),
 ]
 
 
@@ -322,6 +342,102 @@ UNIX_CASES = [
     ("unix-uwsgi", "GET", "/unix-uwsgi/hello?x=1", {"X-Sent": "unix-uwsgi"}, None),
 ]
 UNIX_HOST = "unix.example.com"
+
+
+def normalize_multipart_boundaries(result: dict) -> dict:
+    """Replace nginx's random multipart boundary with a token in both the
+    `Content-Type` header and the body so two independent 206 responses stay
+    comparable (the boundary is opaque to clients)."""
+    body = result.get("body", "")
+    boundaries = []
+    for values in result.get("headers", {}).values():
+        for value in values:
+            match = re.search(r"boundary=([A-Za-z0-9]+)", value)
+            if match:
+                boundaries.append(match.group(1))
+    for boundary in boundaries:
+        body = body.replace(boundary, "<boundary>")
+    if boundaries:
+        for name, values in result.get("headers", {}).items():
+            if name == "content-type":
+                result["headers"][name] = [
+                    re.sub(r"boundary=[A-Za-z0-9]+", "boundary=<boundary>", value)
+                    for value in values
+                ]
+    result["body"] = body
+    return result
+
+
+def stored_files(store_dir: str) -> str:
+    """Deterministic listing of the files a `*_store` directive created."""
+    if not store_dir or not os.path.isdir(store_dir):
+        return "stored=none"
+    entries = []
+    for root, _directories, files in os.walk(store_dir):
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            relative = os.path.relpath(path, store_dir).replace(os.sep, "/")
+            try:
+                with open(path, "rb") as handle:
+                    content = handle.read()
+                mode = stat.S_IMODE(os.stat(path).st_mode)
+            except OSError as error:
+                entries.append(f"{relative}=error:{error}")
+                continue
+            entries.append(f"{relative}|{mode:o}|{content.decode('utf-8', 'replace')}")
+    return "stored=" + (";".join(entries) if entries else "none")
+
+
+def wave7d_case(name: str, port: int, store_dir: str) -> dict:
+    def get(path: str, headers: dict | None = None, method: str = "GET", body=None):
+        result, _server = request(port, method, path, headers or {}, body, port)
+        # The mock FastCGI responder reports its own per-side connection id in
+        # the echoed body. The two sides run against independent responders, so
+        # the absolute id is not part of the contract (existing cases rely on
+        # the two responders accepting connections in the same order; the new
+        # cases intentionally compare only the request contract).
+        result["body"] = re.sub(r'"connection":\d+', '"connection":<id>', result["body"])
+        return result
+
+    if name == "d7-store":
+        result = get("/d7/store/f1")
+        result["body"] = result["body"] + "\n" + stored_files(store_dir)
+        return result
+    if name == "d7-rate":
+        started = time.monotonic()
+        result = get("/d7/rate/")
+        elapsed = time.monotonic() - started
+        # 20 000 bytes at `fastcgi_limit_rate 20k` must take about one second on
+        # both sides; the coarse window tolerates scheduler jitter while still
+        # proving the pacing happened (unthrottled delivery is milliseconds).
+        window_ok = 0.45 <= elapsed <= 4.0
+        result["body"] = (
+            f"bytes={len(result['body'])} rate-window={'ok' if window_ok else 'miss'}"
+        )
+        return result
+    if name == "d7-range-single":
+        return normalize_multipart_boundaries(get("/d7/range/", {"Range": "bytes=2-5"}))
+    if name == "d7-range-suffix":
+        return normalize_multipart_boundaries(get("/d7/range/", {"Range": "bytes=-4"}))
+    if name == "d7-range-multipart":
+        return normalize_multipart_boundaries(
+            get("/d7/range/", {"Range": "bytes=0-1,8-9"})
+        )
+    if name == "d7-range-invalid":
+        return get("/d7/range/", {"Range": "bytes=100-200"})
+    if name == "d7-range-off":
+        return get("/echo/range-off", {"Range": "bytes=0-3"})
+    if name == "d7-bufsize":
+        return get("/d7/bufsize/")
+    if name == "d7-ignore":
+        return get("/d7/ignore/")
+    if name == "d7-passbody":
+        return get("/echo-noreq/upload", {"Content-Type": "text/plain"}, "POST", b"should-not-forward")
+    if name == "d7-memcached-gzip-on":
+        return get("/d7/gz-on/gzip-key")
+    if name == "d7-memcached-gzip-off":
+        return get("/d7/gz-off/plain-key")
+    raise AssertionError(f"unknown wave-7d case {name}")
 
 
 def cache_case(name: str, port: int) -> dict:
@@ -531,11 +647,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--unix-port", type=int, default=None)
+    parser.add_argument("--store-dir", default="")
     parser.add_argument("--out", required=True)
     arguments = parser.parse_args()
     captured = {}
     server = None
     for name, method, path, headers, body in CASES:
+        if method == "SPECIAL" and name.startswith("d7-"):
+            captured[name] = wave7d_case(
+                name, arguments.port, arguments.store_dir
+            )
+            continue
         if method == "SPECIAL" and name.startswith("cache-"):
             captured[name] = cache_case(name, arguments.port)
             continue
