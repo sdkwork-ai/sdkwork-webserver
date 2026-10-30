@@ -430,7 +430,7 @@ const REMAINING_GAP_CATEGORIES = [
       'stream:proxy_ssl_trusted_certificate',
     ],
     rejectedLoss:
-      'the directive is rejected at load, so a stock stream sidecar that uses this stream-plane feature fails to activate.',
+      'a stock stream sidecar that uses this stream-plane feature fails to activate.',
     why: 'the stream plane now executes access, limit_conn, variable map/set/return, limit and preread tuning, but still lacks an upstream TLS client (proxy_ssl identity/verification), half-close/rate/counting/retry controls, proxy_bind/new-connection selection, pass/SNI routing (pass, server_name) and the PROXY-protocol timeout; the HTTP plane executes the analogous policies.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs',
