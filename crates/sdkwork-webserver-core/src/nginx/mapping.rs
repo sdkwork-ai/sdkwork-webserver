@@ -392,6 +392,7 @@ pub fn materialize_nginx_app(
 ) -> Result<WebServerAppConfig, NginxConfigError> {
     let http_directives = extract_http_context(directives)?;
     let stream_directives = extract_stream_context(directives)?;
+    let mail_directives = extract_mail_context(directives)?;
     let mut mapper = Mapper::new(app_key, base_dir);
     // nginx `map` declarations register their result variables at
     // configuration init, so a value template may reference one declared later
@@ -720,7 +721,7 @@ pub fn materialize_nginx_app(
             "autoindex_format" => {
                 mapper.http_autoindex.format = Some(parse_autoindex_format(directive)?);
             }
-            "stream" | "events" | "http" => {}
+            "stream" | "events" | "http" | "mail" => {}
             name if ACCEPTED_IGNORED.contains(&name) => {}
             name if UNSUPPORTED_SECURITY.contains(&name) => {
                 return Err(NginxConfigError::unsupported(
@@ -737,7 +738,11 @@ pub fn materialize_nginx_app(
         }
     }
     mapper.materialize_stream_context(&stream_directives)?;
-    if mapper.virtual_hosts.is_empty() && mapper.streams.is_empty() {
+    mapper.materialize_mail_context(&mail_directives)?;
+    if mapper.virtual_hosts.is_empty()
+        && mapper.streams.is_empty()
+        && mapper.mail_servers.is_empty()
+    {
         return Err(NginxConfigError::unsupported(
             &NginxDirective {
                 name: "server".to_owned(),
@@ -746,7 +751,7 @@ pub fn materialize_nginx_app(
                 line: 0,
                 source: base_dir.to_path_buf(),
             },
-            "no `server` or `stream` blocks were materialized",
+            "no `server`, `stream`, or `mail` blocks were materialized",
         ));
     }
     mapper.finish()
@@ -771,10 +776,11 @@ fn extract_http_context(
         ));
     }
     // Fail closed on top-level directives outside `http {}` that the
-    // runtime does not consume (mail, load_module, ...): silently dropping
-    // them would hide configuration that is not executed.
+    // runtime does not consume (load_module, ...): silently dropping them
+    // would hide configuration that is not executed. `stream {}` and `mail {}`
+    // are extracted by their own context wrappers.
     for directive in directives {
-        if directive.name == "http" || directive.name == "stream" {
+        if directive.name == "http" || directive.name == "stream" || directive.name == "mail" {
             continue;
         }
         if ACCEPTED_IGNORED.contains(&directive.name.as_str()) {
@@ -789,6 +795,28 @@ fn extract_http_context(
         ));
     }
     Ok(http_blocks[0].children.clone())
+}
+
+/// When the input is a full `nginx.conf`, unwrap the `mail { }` block.
+/// Site directories (`sites-enabled`) have no mail wrapper, so the list is
+/// empty.
+fn extract_mail_context(
+    directives: &[NginxDirective],
+) -> Result<Vec<NginxDirective>, NginxConfigError> {
+    let mail_blocks = directives
+        .iter()
+        .filter(|directive| directive.name == "mail")
+        .collect::<Vec<_>>();
+    if mail_blocks.is_empty() {
+        return Ok(Vec::new());
+    }
+    if mail_blocks.len() > 1 {
+        return Err(NginxConfigError::unsupported(
+            mail_blocks[1],
+            "multiple `mail` blocks are not supported",
+        ));
+    }
+    Ok(mail_blocks[0].children.clone())
 }
 
 /// When the input is a full `nginx.conf`, unwrap the `stream { }` block.
@@ -1195,6 +1223,8 @@ struct Mapper<'a> {
     upstream_names: Vec<String>,
     virtual_hosts: Vec<Value>,
     streams: Vec<Value>,
+    /// `mail { server { … } }` listeners materialized into the mail plane.
+    mail_servers: Vec<Value>,
     limit_req_zones: Vec<Value>,
     limit_req_zone_names: Vec<String>,
     limit_conn_zones: Vec<Value>,
@@ -1303,6 +1333,7 @@ impl<'a> Mapper<'a> {
             upstream_names: Vec::new(),
             virtual_hosts: Vec::new(),
             streams: Vec::new(),
+            mail_servers: Vec::new(),
             limit_req_zones: Vec::new(),
             limit_req_zone_names: Vec::new(),
             limit_conn_zones: Vec::new(),
@@ -5695,6 +5726,336 @@ impl<'a> Mapper<'a> {
         Ok(())
     }
 
+    /// Materialize the nginx `mail {}` context (mail proxy plane, Wave 9A).
+    ///
+    /// Executed: `mail { server { listen, protocol, server_name, timeout,
+    /// so_keepalive, proxy_protocol, smtp_client_buffer, imap_client_buffer,
+    /// pop3_auth, imap_auth, smtp_auth, smtp_greeting_delay } }`.
+    ///
+    /// Everything that belongs to Wave 9B fails closed with a located
+    /// diagnostic naming that wave instead of being accepted and ignored:
+    /// `auth_http*` (the authentication service), every `ssl_*` /
+    /// `starttls` form (frontend implicit TLS + STARTTLS), `xclient` (backend
+    /// client identity), the `proxy_*` backend-relay family, `resolver` /
+    /// `resolver_timeout` (auth_http backend resolution), `set_real_ip_from`
+    /// (mail realip), and `max_errors`.
+    fn materialize_mail_context(
+        &mut self,
+        directives: &[NginxDirective],
+    ) -> Result<(), NginxConfigError> {
+        let mut mail_index = 0usize;
+        for directive in directives {
+            match directive.name.as_str() {
+                "server" => {
+                    self.materialize_mail_server(directive, mail_index)?;
+                    mail_index += 1;
+                }
+                "error_log" | "access_log" | "include" => {}
+                name if name.starts_with("auth_http") => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{name}` (mail authentication service) is Wave 9B; Wave 9A serves the plaintext greeting/auth dialog and closes with the auth-service-unavailable response because the auth_http exchange is not implemented yet"
+                        ),
+                    ))
+                }
+                name if name.starts_with("ssl_") => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{name}` (mail TLS) is Wave 9B; Wave 9A has no mail TLS termination or STARTTLS"
+                        ),
+                    ))
+                }
+                "starttls" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail `starttls` (STARTTLS enablement) is Wave 9B; Wave 9A has no mail TLS",
+                    ))
+                }
+                "xclient" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail `xclient` (backend client identity relay) is Wave 9B; Wave 9A has no backend relay",
+                    ))
+                }
+                name if name.starts_with("proxy_") => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{name}` (mail backend relay) is Wave 9B; Wave 9A does not relay to a backend"
+                        ),
+                    ))
+                }
+                "resolver" | "resolver_timeout" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "mail `{}` (auth_http backend name resolution) is Wave 9B; Wave 9A has no auth_http exchange",
+                            directive.name
+                        ),
+                    ))
+                }
+                "set_real_ip_from" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail `set_real_ip_from` (mail realip module) is Wave 9B",
+                    ))
+                }
+                "max_errors" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail `max_errors` (auth/session error budget) is Wave 9B; Wave 9A closes on the first failed auth attempt",
+                    ))
+                }
+                name if ACCEPTED_IGNORED.contains(&name) => {}
+                name => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("unsupported mail directive `{name}`"),
+                    ))
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Materialize one `mail { server { … } }` block.
+    fn materialize_mail_server(
+        &mut self,
+        directive: &NginxDirective,
+        index: usize,
+    ) -> Result<(), NginxConfigError> {
+        let mut listen_specs: Vec<MailListenSpec> = Vec::new();
+        let mut protocol: Option<&'static str> = None;
+        let mut server_name: Option<String> = None;
+        let mut timeout_ms: Option<u64> = None;
+        let mut so_keepalive: Option<bool> = None;
+        let mut proxy_protocol = false;
+        let mut smtp_client_buffer: Option<usize> = None;
+        let mut imap_client_buffer: Option<usize> = None;
+        let mut pop3_auth: Option<Vec<String>> = None;
+        let mut imap_auth: Option<Vec<String>> = None;
+        let mut smtp_auth: Option<Vec<String>> = None;
+        let mut smtp_greeting_delay_ms = 0_u64;
+        for child in &directive.children {
+            match child.name.as_str() {
+                "listen" => listen_specs.push(parse_mail_listen_spec(child)?),
+                "protocol" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "mail `protocol` requires pop3|imap|smtp",
+                        ));
+                    };
+                    protocol = Some(match value.as_str() {
+                        "pop3" => "pop3",
+                        "imap" => "imap",
+                        "smtp" => "smtp",
+                        other => {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("mail `protocol` accepts pop3|imap|smtp, found `{other}`"),
+                            ))
+                        }
+                    });
+                }
+                "server_name" => {
+                    let [name] = child.args.as_slice() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "mail `server_name` takes exactly one name in Wave 9A",
+                        ));
+                    };
+                    server_name = Some(name.clone());
+                }
+                "timeout" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "mail `timeout` requires a time value",
+                        ));
+                    };
+                    let Some(seconds) = parse_nginx_time_seconds(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid mail timeout `{value}`"),
+                        ));
+                    };
+                    let millis = seconds.saturating_mul(1_000);
+                    if !(1..=86_400_000).contains(&millis) {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("mail timeout `{value}` is outside 1ms..=24h"),
+                        ));
+                    }
+                    timeout_ms = Some(millis);
+                }
+                "so_keepalive" => {
+                    so_keepalive = Some(parse_mail_so_keepalive(child)?);
+                }
+                "proxy_protocol" => {
+                    proxy_protocol = parse_on_off(child, "proxy_protocol")?;
+                }
+                "smtp_client_buffer" => {
+                    smtp_client_buffer = Some(parse_mail_client_buffer(child)?);
+                }
+                "imap_client_buffer" => {
+                    imap_client_buffer = Some(parse_mail_client_buffer(child)?);
+                }
+                "pop3_auth" => pop3_auth = Some(require_mail_auth_args(child)?),
+                "imap_auth" => imap_auth = Some(require_mail_auth_args(child)?),
+                "smtp_auth" => smtp_auth = Some(require_mail_auth_args(child)?),
+                "pop3_capabilities" | "imap_capabilities" | "smtp_capabilities" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!(
+                            "mail `{}` (custom capability advertisement) is not part of Wave 9A; the runtime advertises nginx's default capability set and backend capability passthrough lands with the Wave 9B relay",
+                            child.name
+                        ),
+                    ))
+                }
+                "smtp_greeting_delay" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "mail `smtp_greeting_delay` requires a time value",
+                        ));
+                    };
+                    let Some(millis) = parse_mail_delay_millis(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid smtp_greeting_delay `{value}`"),
+                        ));
+                    };
+                    if millis > 60_000 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "smtp_greeting_delay must not exceed 60s",
+                        ));
+                    }
+                    smtp_greeting_delay_ms = millis;
+                }
+                name if name.starts_with("auth_http") => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!(
+                            "`{name}` (mail authentication service) is Wave 9B; Wave 9A serves the plaintext greeting/auth dialog and closes with the auth-service-unavailable response because the auth_http exchange is not implemented yet"
+                        ),
+                    ))
+                }
+                name if name.starts_with("ssl_") => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!(
+                            "`{name}` (mail TLS) is Wave 9B; Wave 9A has no mail TLS termination or STARTTLS"
+                        ),
+                    ))
+                }
+                "starttls" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "mail `starttls` (STARTTLS enablement) is Wave 9B; Wave 9A has no mail TLS",
+                    ))
+                }
+                "xclient" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "mail `xclient` (backend client identity relay) is Wave 9B; Wave 9A has no backend relay",
+                    ))
+                }
+                name if name.starts_with("proxy_") => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!(
+                            "`{name}` (mail backend relay) is Wave 9B; Wave 9A does not relay to a backend"
+                        ),
+                    ))
+                }
+                "resolver" | "resolver_timeout" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!(
+                            "mail `{}` (auth_http backend name resolution) is Wave 9B; Wave 9A has no auth_http exchange",
+                            child.name
+                        ),
+                    ))
+                }
+                "set_real_ip_from" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "mail `set_real_ip_from` (mail realip module) is Wave 9B",
+                    ))
+                }
+                "max_errors" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "mail `max_errors` (auth/session error budget) is Wave 9B; Wave 9A closes on the first failed auth attempt",
+                    ))
+                }
+                name if ACCEPTED_IGNORED.contains(&name) => {}
+                name => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!("unsupported mail server directive `{name}`"),
+                    ))
+                }
+            }
+        }
+        if listen_specs.is_empty() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "mail server requires listen",
+            ));
+        }
+        // nginx allows several `listen` directives in one mail server block;
+        // the runtime materializes one mail listener per listen.
+        let protocol = protocol.unwrap_or("imap");
+        let pop3_auth = normalize_mail_auth_mechanisms(directive, protocol, pop3_auth)?;
+        let imap_auth = normalize_mail_auth_mechanisms(directive, protocol, imap_auth)?;
+        let smtp_auth = normalize_mail_auth_mechanisms(directive, protocol, smtp_auth)?;
+        for (listen_index, listen) in listen_specs.iter().enumerate() {
+            let effective_proxy_protocol = proxy_protocol || listen.proxy_protocol;
+            let effective_so_keepalive = listen.so_keepalive.or(so_keepalive).unwrap_or(false);
+            let mut entry = json!({
+                "id": format!("mail-{index}-{listen_index}-{}", listen.port),
+                "bind": listen.bind,
+                "port": listen.port,
+                "protocol": protocol,
+                "timeoutMs": timeout_ms.unwrap_or(60_000),
+                "soKeepalive": effective_so_keepalive,
+                "proxyProtocol": effective_proxy_protocol,
+                "smtpClientBuffer": smtp_client_buffer.unwrap_or(4 * 1024),
+                "imapClientBuffer": imap_client_buffer.unwrap_or(4 * 1024),
+                "smtpGreetingDelayMs": smtp_greeting_delay_ms,
+            });
+            if let Some(server_name) = &server_name {
+                entry["serverName"] = Value::String(server_name.clone());
+            }
+            for (key, mechanisms) in [
+                ("pop3Auth", &pop3_auth),
+                ("imapAuth", &imap_auth),
+                ("smtpAuth", &smtp_auth),
+            ] {
+                if let Some(mechanisms) = mechanisms {
+                    entry[key] = Value::Array(mechanisms.clone());
+                }
+            }
+            // Type-check against the runtime model early for clearer
+            // diagnostics (deny_unknown_fields catches an unmodeled key here
+            // rather than in the final app materialization).
+            let _: crate::config::MailServerConfig = serde_json::from_value(entry.clone())
+                .map_err(|error| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("mail server materialization failed: {error}"),
+                    )
+                })?;
+            self.mail_servers.push(entry);
+        }
+        Ok(())
+    }
+
     fn finish(self) -> Result<WebServerAppConfig, NginxConfigError> {
         let mut proxy_cache = json!({
             "enabled": self.proxy_cache_enabled,
@@ -5736,6 +6097,7 @@ impl<'a> Mapper<'a> {
             "upstreams": self.upstreams,
             "virtualHosts": self.virtual_hosts,
             "streams": self.streams,
+            "mail": { "servers": self.mail_servers },
             "streamLimitConnZones": self.stream_limit_conn_zones,
             "streamMaps": self.stream_maps,
             "proxyCache": proxy_cache,
@@ -6258,6 +6620,255 @@ fn parse_listen_address(address: &str, spec: &str) -> Result<(String, u16), Stri
     }
     // A bare address without a port (nginx http default: port 80).
     Ok((address.to_owned(), 80))
+}
+
+/// One parsed mail `listen` entry.
+#[derive(Debug, Clone)]
+struct MailListenSpec {
+    bind: String,
+    port: u16,
+    proxy_protocol: bool,
+    so_keepalive: Option<bool>,
+}
+
+/// Parse `listen <address:port> [proxy_protocol] [so_keepalive=on|off]
+/// [reuseport] [backlog=…]` in the nginx mail module.
+///
+/// nginx mail binds an ephemeral port when `listen` has no explicit port
+/// (verified against nginx 1.29.6: `listen 127.0.0.1;` binds a random high
+/// port). The runtime listener model requires a concrete port, so that form
+/// fails closed with a located diagnostic instead of silently choosing a port.
+fn parse_mail_listen_spec(directive: &NginxDirective) -> Result<MailListenSpec, NginxConfigError> {
+    let mut parts = directive.args.iter();
+    let address = parts.next().ok_or_else(|| {
+        NginxConfigError::unsupported(directive, "mail listen requires an address")
+    })?;
+    let mut proxy_protocol = false;
+    let mut so_keepalive = None;
+    for part in parts {
+        match part.as_str() {
+            "ssl" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "mail `listen … ssl` (implicit TLS) is Wave 9B; Wave 9A has no mail TLS",
+                ))
+            }
+            "proxy_protocol" => proxy_protocol = true,
+            "so_keepalive=on" => so_keepalive = Some(true),
+            "so_keepalive=off" => so_keepalive = Some(false),
+            "reuseport" | "bind" | "deferred" => {}
+            other
+                if other.starts_with("backlog=")
+                    || other.starts_with("ipv6only=")
+                    || other.starts_with("fastopen=")
+                    || other.starts_with("so_keepalive=") =>
+            {
+                if other.starts_with("so_keepalive=") {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "mail listen parameter `{other}` (keepalive timers) is not modeled; use `so_keepalive=on|off`"
+                        ),
+                    ));
+                }
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("unsupported mail listen parameter `{other}`"),
+                ))
+            }
+        }
+    }
+    let spec = directive.args.join(" ");
+    let (bind, port) = parse_mail_listen_address(address, &spec)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(MailListenSpec {
+        bind,
+        port,
+        proxy_protocol,
+        so_keepalive,
+    })
+}
+
+/// Parse a mail listen address, requiring an explicit port.
+fn parse_mail_listen_address(address: &str, spec: &str) -> Result<(String, u16), String> {
+    if let Ok(port) = address.parse::<u16>() {
+        return Ok(("0.0.0.0".to_owned(), port));
+    }
+    if let Some(rest) = address.strip_prefix('[') {
+        let (host, port) = rest
+            .split_once(']')
+            .ok_or_else(|| format!("invalid mail listen address `{spec}`"))?;
+        let Some(port_text) = port.strip_prefix(':') else {
+            return Err(format!(
+                "mail listen `{spec}` requires an explicit port; nginx binds an ephemeral port when it is omitted, which the runtime listener model does not support"
+            ));
+        };
+        let port = port_text
+            .parse::<u16>()
+            .map_err(|_| format!("invalid mail listen port in `{spec}`"))?;
+        return Ok((host.to_owned(), port));
+    }
+    if address == "::" {
+        return Err(format!(
+            "mail listen `{spec}` requires an explicit port; nginx binds an ephemeral port when it is omitted, which the runtime listener model does not support"
+        ));
+    }
+    if let Some((host, port_text)) = address.rsplit_once(':') {
+        let port = port_text
+            .parse::<u16>()
+            .map_err(|_| format!("invalid mail listen port in `{spec}`"))?;
+        let normalized = match host {
+            "" | "0.0.0.0" | "*" => "0.0.0.0".to_owned(),
+            other => other.to_owned(),
+        };
+        return Ok((normalized, port));
+    }
+    Err(format!(
+        "mail listen `{spec}` requires an explicit port; nginx binds an ephemeral port when it is omitted, which the runtime listener model does not support"
+    ))
+}
+
+/// Parse mail `so_keepalive on|off`.
+fn parse_mail_so_keepalive(directive: &NginxDirective) -> Result<bool, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail so_keepalive requires on|off",
+        ));
+    };
+    match value.as_str() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        other if other.contains(':') => Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `so_keepalive {other}` (keepidle:keepintvl:keepcnt) is not modeled; use `on`/`off`"
+            ),
+        )),
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail so_keepalive accepts on|off, found `{other}`"),
+        )),
+    }
+}
+
+/// Parse `smtp_client_buffer` / `imap_client_buffer` (bounded 512 B..1 MiB).
+fn parse_mail_client_buffer(directive: &NginxDirective) -> Result<usize, NginxConfigError> {
+    let Some(bytes) = parse_body_size(directive)? else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid {} size", directive.name),
+        ));
+    };
+    if !(512..=1024 * 1024).contains(&bytes) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} must be between 512 bytes and 1 MiB", directive.name),
+        ));
+    }
+    Ok(bytes as usize)
+}
+
+/// Collect the raw arguments of a mail `*_auth` directive.
+fn require_mail_auth_args(directive: &NginxDirective) -> Result<Vec<String>, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} requires at least one mechanism", directive.name),
+        ));
+    }
+    Ok(directive.args.clone())
+}
+
+/// Normalize a declared mail `pop3_auth` / `imap_auth` / `smtp_auth` list into
+/// the bounded runtime vocabulary (JSON mechanism strings).
+///
+/// The per-protocol grammar is nginx's: `pop3_auth` accepts
+/// `plain|apop|cram-md5|external` (LOGIN is not configurable — nginx advertises
+/// it implicitly alongside PLAIN, verified against nginx 1.29.6), while
+/// `imap_auth`/`smtp_auth` accept `plain|login|cram-md5|external`.
+///
+/// `apop`/`cram-md5`/`external` need the `auth_http` credential exchange
+/// (Wave 9B) and fail closed here instead of advertising a mechanism the 9A
+/// frontend cannot complete.
+fn normalize_mail_auth_mechanisms(
+    directive: &NginxDirective,
+    protocol: &'static str,
+    declared: Option<Vec<String>>,
+) -> Result<Option<Vec<Value>>, NginxConfigError> {
+    let Some(declared) = declared else {
+        return Ok(None);
+    };
+    let directive_name = match protocol {
+        "pop3" => "pop3_auth",
+        "smtp" => "smtp_auth",
+        _ => "imap_auth",
+    };
+    let mut mechanisms: Vec<Value> = Vec::new();
+    for token in declared {
+        let lower = token.to_ascii_lowercase();
+        match lower.as_str() {
+            "plain" => {
+                if !mechanisms.iter().any(|value| value == "plain") {
+                    mechanisms.push(Value::String("plain".to_owned()));
+                }
+                // nginx advertises AUTH LOGIN for POP3 whenever PLAIN is
+                // enabled; LOGIN is not a configurable pop3_auth token.
+                if protocol == "pop3" && !mechanisms.iter().any(|value| value == "login") {
+                    mechanisms.push(Value::String("login".to_owned()));
+                }
+            }
+            "login" if protocol != "pop3" => {
+                if !mechanisms.iter().any(|value| value == "login") {
+                    mechanisms.push(Value::String("login".to_owned()));
+                }
+            }
+            "login" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`pop3_auth` accepts plain|apop|cram-md5|external; nginx advertises AUTH LOGIN implicitly for POP3 and does not accept `login` as a pop3_auth value",
+                ))
+            }
+            "apop" | "cram-md5" | "external" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{directive_name}` mechanism `{token}` requires the auth_http credential exchange (Wave 9B); Wave 9A parses PLAIN and LOGIN only"
+                    ),
+                ))
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("`{directive_name}` accepts plain|login in Wave 9A, found `{other}`"),
+                ))
+            }
+        }
+    }
+    Ok(Some(mechanisms))
+}
+
+/// Parse `smtp_greeting_delay` with nginx's millisecond-defaulted time grammar
+/// (a bare number is milliseconds; `ms`/`s`/`m`/`h` suffixes are accepted).
+fn parse_mail_delay_millis(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let (number, multiplier) = if let Some(rest) = trimmed.strip_suffix("ms") {
+        (rest, 1u64)
+    } else if let Some(rest) = trimmed.strip_suffix('s') {
+        (rest, 1_000)
+    } else if let Some(rest) = trimmed.strip_suffix('m') {
+        (rest, 60_000)
+    } else if let Some(rest) = trimmed.strip_suffix('h') {
+        (rest, 3_600_000)
+    } else {
+        (trimmed, 1)
+    };
+    number.trim().parse::<u64>().ok()?.checked_mul(multiplier)
 }
 
 /// Validate `server_name` names against the nginx host-selection forms the

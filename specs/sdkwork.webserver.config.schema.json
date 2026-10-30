@@ -191,6 +191,9 @@
         "$ref": "#/$defs/streamServer"
       }
     },
+    "mail": {
+      "$ref": "#/$defs/mail"
+    },
     "limitConnZones": {
       "type": "array",
       "maxItems": 32,
@@ -3037,6 +3040,148 @@
           "default": 1000
         }
       }
+    },
+    "mail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "servers"
+      ],
+      "properties": {
+        "servers": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/mailServer"
+          }
+        }
+      }
+    },
+    "mailServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "bind",
+        "port"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "bind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "description": "nginx mail `protocol pop3|imap|smtp`; nginx defaults to imap.",
+          "type": "string",
+          "enum": [
+            "pop3",
+            "imap",
+            "smtp"
+          ],
+          "default": "imap"
+        },
+        "serverName": {
+          "description": "nginx mail `server_name`: the name used in the SMTP greeting. Absent means the runtime resolves the host name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "timeoutMs": {
+          "description": "nginx mail `timeout`: idle timeout for the whole session.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "soKeepalive": {
+          "description": "nginx mail `so_keepalive on|off` on the listener socket.",
+          "type": "boolean",
+          "default": false
+        },
+        "proxyProtocol": {
+          "description": "nginx mail `proxy_protocol on|off`: accept a PROXY protocol v1 header from the mail client.",
+          "type": "boolean",
+          "default": false
+        },
+        "smtpClientBuffer": {
+          "description": "nginx `smtp_client_buffer`: SMTP client command line bound.",
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "imapClientBuffer": {
+          "description": "nginx `imap_client_buffer`: IMAP client command line bound.",
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "pop3Auth": {
+          "description": "nginx `pop3_auth`: enabled POP3 auth mechanisms (Wave 9A parses PLAIN/LOGIN only).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/mailAuthMechanism"
+          },
+          "default": [
+            "plain",
+            "login"
+          ]
+        },
+        "imapAuth": {
+          "description": "nginx `imap_auth`: enabled IMAP auth mechanisms (Wave 9A parses PLAIN/LOGIN only).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/mailAuthMechanism"
+          },
+          "default": [
+            "plain"
+          ]
+        },
+        "smtpAuth": {
+          "description": "nginx `smtp_auth`: enabled SMTP auth mechanisms (Wave 9A parses PLAIN/LOGIN only).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/mailAuthMechanism"
+          },
+          "default": [
+            "plain",
+            "login"
+          ]
+        },
+        "smtpGreetingDelayMs": {
+          "description": "nginx `smtp_greeting_delay`: delay before the SMTP 220 greeting.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000,
+          "default": 0
+        }
+      }
+    },
+    "mailAuthMechanism": {
+      "description": "Bounded mail auth mechanism vocabulary for Wave 9A (apop/cram-md5/external need the auth_http exchange and fail closed).",
+      "type": "string",
+      "enum": [
+        "plain",
+        "login"
+      ]
     },
     "streamServer": {
       "type": "object",

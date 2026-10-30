@@ -2942,3 +2942,133 @@ fn grpc_resource_materializes_from_typed_config() {
         "schema must reject the unknown gRPC field: {error}"
     );
 }
+
+#[test]
+fn mail_only_application_compiles_through_the_json_schema_and_validator() {
+    let directory = TempDir::new().expect("temp dir");
+    let config = json!({
+        "schemaVersion": 1,
+        "kind": "sdkwork.webserver.app",
+        "appKey": "mail-only-test",
+        "listeners": [],
+        "resources": [],
+        "virtualHosts": [],
+        "mail": {
+            "servers": [
+                {
+                    "id": "pop3",
+                    "bind": "127.0.0.1",
+                    "port": 2525,
+                    "protocol": "pop3",
+                    "serverName": "pop.example.com",
+                    "timeoutMs": 30000,
+                    "soKeepalive": true,
+                    "proxyProtocol": true,
+                    "pop3Auth": ["plain"]
+                },
+                {
+                    "id": "smtp",
+                    "bind": "127.0.0.1",
+                    "port": 2993,
+                    "protocol": "smtp",
+                    "smtpClientBuffer": 8192,
+                    "smtpGreetingDelayMs": 500,
+                    "smtpAuth": ["plain", "login"]
+                }
+            ]
+        }
+    });
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("mail-only config compiles");
+    assert!(compiled.listeners().next().is_none());
+    assert!(compiled.streams().is_empty());
+    assert_eq!(compiled.mail_servers().len(), 2);
+    assert_eq!(
+        compiled.mail_servers()[0].protocol,
+        sdkwork_webserver_core::config::MailServerProtocol::Pop3
+    );
+    assert_eq!(compiled.mail_servers()[1].smtp_greeting_delay_ms, 500);
+}
+
+#[test]
+fn mail_servers_enforce_listener_uniqueness_and_bounded_knobs() {
+    let directory = TempDir::new().expect("temp dir");
+    let mail_config = |server: Value| {
+        json!({
+            "schemaVersion": 1,
+            "kind": "sdkwork.webserver.app",
+            "appKey": "mail-only-test",
+            "listeners": [],
+            "resources": [],
+            "virtualHosts": [],
+            "mail": { "servers": [server] }
+        })
+    };
+
+    // Duplicate bind:port among mail servers.
+    let mut duplicate = mail_config(json!({
+        "id": "first",
+        "bind": "127.0.0.1",
+        "port": 2525,
+        "protocol": "pop3"
+    }));
+    duplicate["mail"]["servers"] = json!([
+        {"id": "first", "bind": "127.0.0.1", "port": 2525, "protocol": "pop3"},
+        {"id": "second", "bind": "127.0.0.1", "port": 2525, "protocol": "imap"}
+    ]);
+    let path = write_config(directory.path(), &duplicate);
+    let error = load_and_compile_webserver_config(path).expect_err("duplicate mail port must fail");
+    assert!(
+        error.diagnostics().iter().any(|diagnostic| diagnostic
+            .message
+            .contains("another mail server already owns this bind and port")),
+        "expected the duplicate-listener diagnostic: {error:?}"
+    );
+
+    // A mail listener cannot collide with an HTTP listener either.
+    let mut collision = base_config();
+    collision["mail"] = json!({
+        "servers": [{
+            "id": "mail",
+            "bind": "127.0.0.1",
+            "port": collision["listeners"][0]["port"].clone(),
+            "protocol": "pop3"
+        }]
+    });
+    let path = write_config(directory.path(), &collision);
+    let error = load_and_compile_webserver_config(path).expect_err("mail/http collapse must fail");
+    assert!(
+        error.diagnostics().iter().any(|diagnostic| diagnostic
+            .message
+            .contains("an http listener already owns this bind and port")),
+        "expected the mail/http listener-collision diagnostic: {error:?}"
+    );
+
+    // Out-of-bounds client buffer and empty auth list.
+    for invalid in [
+        mail_config(json!({
+            "id": "small",
+            "bind": "127.0.0.1",
+            "port": 2525,
+            "protocol": "smtp",
+            "smtpClientBuffer": 128
+        })),
+        mail_config(json!({
+            "id": "noauth",
+            "bind": "127.0.0.1",
+            "port": 2525,
+            "protocol": "imap",
+            "imapAuth": []
+        })),
+        mail_config(json!({
+            "id": "badname",
+            "bind": "127.0.0.1",
+            "port": 2525,
+            "protocol": "smtp",
+            "serverName": "bad name"
+        })),
+    ] {
+        let path = write_config(directory.path(), &invalid);
+        load_and_compile_webserver_config(path).expect_err("invalid mail server must fail");
+    }
+}

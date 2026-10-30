@@ -24,6 +24,7 @@ mod io_timeout;
 mod keep_alive_timeout;
 mod limit_conn;
 mod limit_req;
+mod mail_frontend;
 mod map_variables;
 mod metrics;
 mod operations;

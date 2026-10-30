@@ -14,8 +14,9 @@
 use std::path::Path;
 
 use sdkwork_webserver_core::config::{
-    ConfigFormat, ConfigLoadOptions, ListenerProtocol, ResourceConfig, RoutePathType,
-    StreamTlsMode, UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
+    ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailServerProtocol,
+    ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
+    WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
     expand_includes, load_nginx_compat, materialize_nginx_app, merge_nginx_apps,
@@ -1438,13 +1439,18 @@ const FAIL_CLOSED_TOP: &[(&str, &str, &str)] = &[
     ),
     (
         "top-level unknown directive",
+        "load_module modules/ngx_http_foo_module.so;",
+        "unsupported directive `load_module`",
+    ),
+    (
+        "empty mail context",
         "mail { }",
-        "unsupported directive `mail`",
+        "no `server`, `stream`, or `mail` blocks",
     ),
     (
         "no server blocks",
         "http { limit_req_zone $binary_remote_addr zone=z:1m rate=1r/s; }",
-        "no `server` or `stream` blocks",
+        "no `server`, `stream`, or `mail` blocks",
     ),
     (
         "server without location",
@@ -2207,5 +2213,124 @@ fn grpc_unsupported_forms_fail_closed_with_located_diagnostics() {
     materialize_err(
         "server { listen 80; server_name grpc.example.com; grpc_pass grpc://127.0.0.1:9100; }",
         "only allowed inside a `location` block",
+    );
+}
+
+/// The nginx `mail {}` context executes the Wave 9A listener plane: listeners,
+/// protocol, server_name, timeout/so_keepalive/proxy_protocol, bounded client
+/// buffers, the bounded auth-mechanism vocabulary, and smtp greeting delay.
+#[test]
+fn mail_listeners_materialize_with_nginx_defaults_and_protocol_knobs() {
+    let config = materialize_ok(
+        r#"
+mail {
+    server {
+        listen 127.0.0.1:2525 proxy_protocol;
+        protocol pop3;
+        server_name pop.example.com;
+        timeout 30s;
+        so_keepalive on;
+        pop3_auth plain;
+    }
+    server {
+        listen 127.0.0.1:2993;
+        protocol smtp;
+        server_name smtp.example.com;
+        smtp_client_buffer 8k;
+        smtp_greeting_delay 500ms;
+        smtp_auth plain login;
+    }
+}
+"#,
+    );
+    assert_eq!(config.mail.servers.len(), 2);
+    let pop3 = &config.mail.servers[0];
+    assert_eq!(pop3.protocol, MailServerProtocol::Pop3);
+    assert_eq!(pop3.bind, "127.0.0.1");
+    assert_eq!(pop3.port, 2525);
+    assert_eq!(pop3.server_name.as_deref(), Some("pop.example.com"));
+    assert_eq!(pop3.timeout_ms, 30_000);
+    assert!(pop3.so_keepalive);
+    assert!(pop3.proxy_protocol);
+    // nginx advertises AUTH LOGIN implicitly for POP3 whenever PLAIN is
+    // enabled; `login` is not a configurable pop3_auth token.
+    assert_eq!(
+        pop3.pop3_auth,
+        vec![MailAuthMechanism::Plain, MailAuthMechanism::Login]
+    );
+    assert_eq!(pop3.client_buffer_bytes(), 4 * 1024);
+
+    let smtp = &config.mail.servers[1];
+    assert_eq!(smtp.protocol, MailServerProtocol::Smtp);
+    assert_eq!(smtp.port, 2993);
+    assert_eq!(smtp.timeout_ms, 60_000, "nginx mail timeout default");
+    assert!(!smtp.so_keepalive);
+    assert!(!smtp.proxy_protocol);
+    assert_eq!(smtp.smtp_client_buffer, 8 * 1024);
+    assert_eq!(smtp.smtp_greeting_delay_ms, 500);
+    assert_eq!(
+        smtp.smtp_auth,
+        vec![MailAuthMechanism::Plain, MailAuthMechanism::Login]
+    );
+}
+
+/// Wave 9B mail features fail closed with a located diagnostic naming that
+/// wave; they are never accepted and silently ignored.
+#[test]
+fn mail_wave_9b_features_fail_closed_with_located_diagnostics() {
+    for (nginx, expected) in [
+        (
+            "mail { auth_http 127.0.0.1:9000/auth; server { listen 127.0.0.1:2525; protocol pop3; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol imap; ssl_certificate cert.pem; ssl_certificate_key key.pem; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol imap; starttls on; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; xclient on; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; proxy_timeout 30s; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol pop3; pop3_auth apop; } }",
+            "Wave 9B",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol imap; imap_capabilities IMAP4rev1 IDLE; } }",
+            "not part of Wave 9A",
+        ),
+        (
+            "mail { server { listen 127.0.0.1; protocol imap; } }",
+            "explicit port",
+        ),
+        (
+            "mail { server { protocol imap; } }",
+            "requires listen",
+        ),
+    ] {
+        materialize_err(nginx, expected);
+    }
+    // `pop3_auth login` is invalid nginx (LOGIN is implicit); the importer
+    // reports nginx's grammar instead of accepting a form nginx rejects.
+    materialize_err(
+        "mail { server { listen 127.0.0.1:2993; protocol pop3; pop3_auth login; } }",
+        "does not accept `login`",
+    );
+    // A second `mail {}` block is an nginx duplicate-context error.
+    materialize_err(
+        "mail { server { listen 127.0.0.1:2993; protocol imap; } } mail { server { listen 127.0.0.1:2994; protocol pop3; } }",
+        "multiple `mail` blocks",
     );
 }

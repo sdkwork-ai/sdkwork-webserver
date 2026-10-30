@@ -731,6 +731,7 @@ mod tests {
             upstreams: Vec::new(),
             virtual_hosts,
             streams: Vec::new(),
+            mail: Default::default(),
             proxy_cache: Default::default(),
             app_domain_fallback: None,
             usage_metering: None,

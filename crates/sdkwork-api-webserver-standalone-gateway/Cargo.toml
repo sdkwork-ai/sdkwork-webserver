@@ -109,6 +109,7 @@ psl = { workspace = true, optional = true }
 sdkwork_deploy_contract = { workspace = true }
 sdkwork_deploy_core = { workspace = true }
 sdkwork-webserver-core.workspace = true
+sdkwork-webserver-mail-protocol.workspace = true
 sdkwork-webserver-upstream-protocol.workspace = true
 regex.workspace = true
 sdkwork-webserver-tunnel.workspace = true

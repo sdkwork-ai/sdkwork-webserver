@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Mail listener plane (Wave 9A, 2026-10-30): mail config plane + nginx mail{} materialization + gateway mail listener with plaintext POP3/IMAP/SMTP dialog and PROXY v1 landed (10 integration tests, aggregate gate green). The nginx mail module remains out-of-profile until Wave 9B (auth_http, frontend/backend TLS, XCLIENT, relay, real-nginx differential). Also: a real production nginx snapshot (Ubuntu nginx/1.28.0, 3692-line resolved config, 30 files) was pulled from api.birdcoder.com for compatibility work; it fails materialization on server/location `set` and uses 75 `if` blocks, 324 `set` statements, 53 variable proxy_pass targets and variable root — the rewrite/variable engine wave is queued as the top compatibility priority.",
     "CGI transport wave (2026-10-30, REQ-2026-0073 wave 7A): *_bind, *_socket_keepalive, typed unixSocketRoot with confined unix targets and a bounded FastCGI keep_conn pool are executable; differential-protocols grew 39->46 and the aggregate gate now runs 5 slices. Catalog: 211 executable / 170 accepted-unenforced / 299 fail-closed / 64 excluded. Still open: gRPC bind/keepalive, hostname/transparent binds, uWSGI/SCGI/memcached reuse, TLS-over-unix (7B), nginx-plane unix targets (typed-only by design).",
     "Stream & OCSP wave (2026-10-30, REQ-2026-0073 wave 4b): stream limit_conn/zone/dry_run, bounded stream map/set/variable-return, preread_timeout/buffer_size and static OCSP stapling (ssl_stapling_file via rustls CertifiedKey.ocsp) moved to executable; new differential-stream slice 9/9 vs nginx 1.29.6 wired into the aggregate gate (5 slices). Mail-proxy substrate crate landed (45 tests) for the next wave. Still open in the stream plane: upstream TLS client, half-close, rate limits, request/response counting, retry budget, proxy_bind, pass/SNI routing. Catalog: 203 executable / 171 accepted-unenforced / 306 fail-closed / 64 excluded.",
     "gRPC wiring (2026-10-30, REQ-2026-0073 wave 6): grpc_pass/h2 client landed end-to-end with 13 differential cases against nginx 1.29.6 (protocol slice 26 -> 39, byte-identical where the contract allows); upstream TLS is always verified and non-zero grpc-status follows nginx (forwarded, not 502). The conditional-cache differential was hardened against daily `expires @<time>` midnight rollover so the committed oracle no longer depends on capture time. Catalog: 195 executable / 171 accepted-unenforced / 314 fail-closed / 64 excluded. Remaining: stream advanced gaps, subrequest filters, module-sized modules, OCSP (rustls), chunked/http2_chunk (hyper), open_file_cache, mail/geoip/Perl/dynamic modules.",
@@ -569,6 +570,12 @@
       "group": "upstreams",
       "status": "implemented",
       "summary": "CGI-family transport completeness (Wave 7A): per-resource *_bind (IP literal or off) and *_socket_keepalive, typed [http] unixSocketRoot with strict-descendant confinement for unix:/absolute targets (nginx-conf unix targets fail closed with a located diagnostic by design), ProtocolStream{Tcp,Unix} connect seam, and a bounded per-generation FastCGI keep_conn connection pool (one in-flight, idle caps/deadline, dead-socket probe) with a framing fix that keeps pooled sockets aligned; differential-protocols 46/46 vs nginx 1.29.6 (bind peer echo, keep-conn reuse, typed-plane unix cases) (REQ-2026-0073 wave 7A)"
+    },
+    {
+      "id": "mail.listener-plane",
+      "group": "mail",
+      "status": "partial",
+      "summary": "mail listener plane (Wave 9A): top-level mail config (servers, listen, protocol pop3|imap|smtp, server_name, timeout, so_keepalive, proxy_protocol, bounded buffers), JSON schema/validation, typed TOML materialization, nginx mail{} context materialization, gateway mail listener driving the sdkwork-webserver-mail-protocol FrontendSession plaintext greeting/auth dialog with timeout/PROXY v1 and explicit no-auth_http behavior; auth_http, TLS (frontend implicit/STARTTLS, backend proxy_ssl), XCLIENT, backend relay and the real-nginx mail differential are Wave 9B. mail module still out-of-profile until 9B (REQ-2026-0073)"
     }
   ]
 }

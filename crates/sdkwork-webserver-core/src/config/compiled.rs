@@ -10,9 +10,10 @@ use super::{
     acme_webroot::{AcmeWebrootNotice, AcmeWebrootReport},
     parse_server_name,
     validate::normalize_server_name,
-    CertificateConfig, CertificateSource, ConfigDiagnostic, ListenerConfig, ResourceConfig,
-    RouteConfig, RoutePathType, ServerNameForm, StreamServerConfig, TlsPolicyConfig,
-    UpstreamConfig, VirtualHostConfig, WebServerAppConfig, WebServerConfigError,
+    CertificateConfig, CertificateSource, ConfigDiagnostic, ListenerConfig, MailConfig,
+    MailServerConfig, ResourceConfig, RouteConfig, RoutePathType, ServerNameForm,
+    StreamServerConfig, TlsPolicyConfig, UpstreamConfig, VirtualHostConfig, WebServerAppConfig,
+    WebServerConfigError,
 };
 
 #[derive(Debug)]
@@ -457,6 +458,16 @@ impl CompiledWebServerApp {
 
     pub fn streams(&self) -> &[StreamServerConfig] {
         &self.config.streams
+    }
+
+    /// The mail proxy plane (`nginx mail {}` listeners).
+    pub fn mail(&self) -> &MailConfig {
+        &self.config.mail
+    }
+
+    /// Configured mail listeners in authored order.
+    pub fn mail_servers(&self) -> &[MailServerConfig] {
+        &self.config.mail.servers
     }
 
     pub fn listener(&self, id: &str) -> Option<&ListenerConfig> {

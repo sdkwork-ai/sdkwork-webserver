@@ -522,6 +522,10 @@ pub struct WebServerAppConfig {
     /// `host:port` or a declared upstream.
     #[serde(default)]
     pub streams: Vec<StreamServerConfig>,
+    /// Mail proxy plane (`nginx mail {}`): POP3/IMAP/SMTP frontend listeners.
+    /// Absent or empty keeps the mail plane idle.
+    #[serde(default, skip_serializing_if = "MailConfig::is_empty")]
+    pub mail: MailConfig,
     /// Shared HTTP response cache for proxied surfaces.
     #[serde(default)]
     pub proxy_cache: ProxyCacheConfig,
@@ -1998,6 +2002,197 @@ impl StreamServerConfig {
     pub fn socket_key(&self) -> String {
         format!("{}:{}", self.bind.to_ascii_lowercase(), self.port)
     }
+}
+
+/// The nginx `mail {}` proxy plane (POP3/IMAP/SMTP frontend listeners).
+///
+/// Wave 9A models the listener plane and the plaintext greeting/auth dialog.
+/// `auth_http`, mail TLS (`ssl_*`, STARTTLS/implicit-TLS listeners), `xclient`
+/// and the backend relay are Wave 9B: they are absent from this model and the
+/// nginx materializer fails closed with a located diagnostic instead of
+/// accepting them silently.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub servers: Vec<MailServerConfig>,
+}
+
+impl MailConfig {
+    /// Whether no mail listener is configured (the mail plane stays idle).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.servers.is_empty()
+    }
+}
+
+/// One `mail { server { … } }` listener.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MailServerConfig {
+    pub id: String,
+    pub bind: String,
+    pub port: u16,
+    /// nginx mail `protocol pop3|imap|smtp` (nginx defaults to `imap`).
+    #[serde(default)]
+    pub protocol: MailServerProtocol,
+    /// nginx mail `server_name`: the name used in the SMTP greeting. Absent
+    /// means the runtime resolves the host name (`HOSTNAME`/`COMPUTERNAME`,
+    /// then `localhost`), matching nginx's `gethostname()` default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+    /// nginx mail `timeout`: idle timeout for the whole session.
+    #[serde(default = "default_mail_timeout_ms")]
+    pub timeout_ms: u64,
+    /// nginx mail `so_keepalive on|off` (listener socket keepalive).
+    #[serde(default)]
+    pub so_keepalive: bool,
+    /// nginx mail `proxy_protocol on|off`: accept a PROXY protocol v1 header
+    /// from the connecting mail client (outbound PROXY emission to a backend
+    /// is Wave 9B's relay concern).
+    #[serde(default)]
+    pub proxy_protocol: bool,
+    /// nginx `smtp_client_buffer`: the SMTP client command line bound.
+    #[serde(default = "default_mail_client_buffer_bytes")]
+    pub smtp_client_buffer: usize,
+    /// nginx `imap_client_buffer`: the IMAP client command line bound.
+    #[serde(default = "default_mail_client_buffer_bytes")]
+    pub imap_client_buffer: usize,
+    /// nginx `pop3_auth` mechanisms enabled for this POP3 listener.
+    #[serde(default = "default_pop3_auth")]
+    pub pop3_auth: Vec<MailAuthMechanism>,
+    /// nginx `imap_auth` mechanisms enabled for this IMAP listener.
+    #[serde(default = "default_imap_auth")]
+    pub imap_auth: Vec<MailAuthMechanism>,
+    /// nginx `smtp_auth` mechanisms enabled for this SMTP listener.
+    #[serde(default = "default_smtp_auth")]
+    pub smtp_auth: Vec<MailAuthMechanism>,
+    /// nginx `smtp_greeting_delay`: delay before the SMTP `220` greeting.
+    #[serde(default)]
+    pub smtp_greeting_delay_ms: u64,
+}
+
+impl MailServerConfig {
+    /// `bind:port` identity shared with the HTTP listener and stream planes.
+    #[must_use]
+    pub fn socket_key(&self) -> String {
+        format!("{}:{}", self.bind.to_ascii_lowercase(), self.port)
+    }
+
+    /// The `SASL`/`AUTH` mechanism subset enabled for this listener's
+    /// protocol, in configured order.
+    #[must_use]
+    pub fn auth_mechanisms(&self) -> &[MailAuthMechanism] {
+        match self.protocol {
+            MailServerProtocol::Pop3 => &self.pop3_auth,
+            MailServerProtocol::Imap => &self.imap_auth,
+            MailServerProtocol::Smtp => &self.smtp_auth,
+        }
+    }
+
+    /// nginx `smtp_client_buffer` / `imap_client_buffer` for this listener's
+    /// protocol (POP3 has no configurable client buffer in nginx).
+    #[must_use]
+    pub fn client_buffer_bytes(&self) -> usize {
+        match self.protocol {
+            MailServerProtocol::Pop3 => default_mail_client_buffer_bytes(),
+            MailServerProtocol::Imap => self.imap_client_buffer,
+            MailServerProtocol::Smtp => self.smtp_client_buffer,
+        }
+    }
+
+    /// The resolved greeting/diagnostic server name. nginx uses the declared
+    /// `server_name`, otherwise the process host name.
+    #[must_use]
+    pub fn effective_server_name(&self) -> String {
+        self.server_name
+            .clone()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or_else(default_mail_server_name)
+    }
+}
+
+/// nginx mail `protocol` (`pop3` | `imap` | `smtp`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MailServerProtocol {
+    Pop3,
+    #[default]
+    Imap,
+    Smtp,
+}
+
+impl MailServerProtocol {
+    /// Lowercase protocol label used in diagnostics and logs.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pop3 => "pop3",
+            Self::Imap => "imap",
+            Self::Smtp => "smtp",
+        }
+    }
+}
+
+/// Auth mechanism the mail frontend can parse in Wave 9A.
+///
+/// nginx also accepts `apop`, `cram-md5`, and `external`; those need the
+/// `auth_http` credential exchange (Wave 9B) and are refused by the
+/// materializer with a located diagnostic rather than silently downgraded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MailAuthMechanism {
+    Plain,
+    Login,
+}
+
+impl MailAuthMechanism {
+    /// Uppercase SASL token (`PLAIN` / `LOGIN`).
+    #[must_use]
+    pub fn as_token(self) -> &'static str {
+        match self {
+            Self::Plain => "PLAIN",
+            Self::Login => "LOGIN",
+        }
+    }
+}
+
+fn default_mail_timeout_ms() -> u64 {
+    60 * 1000
+}
+
+/// nginx `smtp_client_buffer` / `imap_client_buffer` default (`4k|8k`, the
+/// page-size dependent default; 4 KiB on the supported Linux page size).
+fn default_mail_client_buffer_bytes() -> usize {
+    4096
+}
+
+fn default_pop3_auth() -> Vec<MailAuthMechanism> {
+    vec![MailAuthMechanism::Plain, MailAuthMechanism::Login]
+}
+
+fn default_imap_auth() -> Vec<MailAuthMechanism> {
+    vec![MailAuthMechanism::Plain]
+}
+
+fn default_smtp_auth() -> Vec<MailAuthMechanism> {
+    vec![MailAuthMechanism::Plain, MailAuthMechanism::Login]
+}
+
+/// Host name used when `server_name` is absent (nginx calls `gethostname()` at
+/// startup; the runtime reads the standard environment variable first and
+/// falls back to the loopback name).
+fn default_mail_server_name() -> String {
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("COMPUTERNAME"))
+        .ok()
+        .map(|name| name.trim().to_owned())
+        .filter(|name| {
+            !name.is_empty()
+                && !name
+                    .contains(|character: char| character.is_whitespace() || character.is_control())
+        })
+        .unwrap_or_else(|| "localhost".to_owned())
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -35,6 +35,7 @@ fn identity_key(path: &str) -> Option<&'static str> {
         "http.upstream" => Some("name"),
         "http.server.location" => Some("match"),
         "stream.server" => Some("listen"),
+        "mail.server" => Some("listen"),
         _ => None,
     }
 }
@@ -734,6 +735,81 @@ fn validate_proxy_set_header_entry(path: &str, entry: &str) -> Result<(), WebSer
         .map_err(|message| materialize_error(path, message))
 }
 
+/// Parse a mail client buffer size (`"4k"`, `"8k"`, or a byte count).
+fn materialize_mail_buffer(value: &Value, path: &str) -> Result<usize, WebServerConfigError> {
+    let bytes = match value {
+        Value::Number(number) => number
+            .as_u64()
+            .ok_or_else(|| materialize_error(path, "buffer size must be a positive byte count"))?,
+        Value::String(text) => materialize_size_bytes(text),
+        _ => {
+            return Err(materialize_error(
+                path,
+                "buffer size must be a size string (e.g. \"4k\") or a byte count",
+            ))
+        }
+    };
+    if !(512..=1024 * 1024).contains(&bytes) {
+        return Err(materialize_error(
+            path,
+            "buffer size must be between 512 bytes and 1 MiB",
+        ));
+    }
+    Ok(bytes as usize)
+}
+
+/// Parse a `pop3Auth` / `imapAuth` / `smtpAuth` mechanism list.
+///
+/// Wave 9A parses PLAIN and LOGIN only. nginx also accepts `apop`,
+/// `cram-md5`, and `external`; those need the `auth_http` credential exchange
+/// (Wave 9B) and are refused with a located diagnostic instead of a silent
+/// downgrade.
+fn materialize_mail_auth(
+    server: &Map<String, Value>,
+    path: &str,
+    key: &str,
+) -> Result<Option<Vec<crate::config::model::MailAuthMechanism>>, WebServerConfigError> {
+    let Some(list) = server.get(key) else {
+        return Ok(None);
+    };
+    let path = format!("{path}.{key}");
+    let entries = list
+        .as_array()
+        .ok_or_else(|| materialize_error(&path, "auth mechanisms must be an array"))?;
+    if entries.is_empty() {
+        return Err(materialize_error(
+            &path,
+            "at least one auth mechanism must be enabled",
+        ));
+    }
+    let mut mechanisms = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let token = entry
+            .as_str()
+            .ok_or_else(|| materialize_error(&path, "auth mechanisms must be strings"))?;
+        let mechanism = match token.to_ascii_lowercase().as_str() {
+            "plain" => crate::config::model::MailAuthMechanism::Plain,
+            "login" => crate::config::model::MailAuthMechanism::Login,
+            "apop" | "cram-md5" | "external" => {
+                return Err(materialize_error(
+                    &path,
+                    format!(
+                        "auth mechanism `{token}` requires the auth_http credential exchange (Wave 9B); Wave 9A parses PLAIN and LOGIN only"
+                    ),
+                ))
+            }
+            other => {
+                return Err(materialize_error(
+                    &path,
+                    format!("unknown auth mechanism `{other}`; expected plain|login"),
+                ))
+            }
+        };
+        mechanisms.push(mechanism);
+    }
+    Ok(Some(mechanisms))
+}
+
 fn materialize_size_bytes(value: &str) -> u64 {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -1324,6 +1400,8 @@ struct Materializer<'a> {
     upstream_names: Vec<String>,
     virtual_hosts: Vec<Value>,
     streams: Vec<Value>,
+    /// `[[mail.server]]` listeners materialized into the mail proxy plane.
+    mail_servers: Vec<Value>,
     limit_req_zones: Vec<Value>,
     limit_req_zone_names: Vec<String>,
     limit_conn_zones: Vec<Value>,
@@ -1349,6 +1427,7 @@ impl<'a> Materializer<'a> {
             upstream_names: Vec::new(),
             virtual_hosts: Vec::new(),
             streams: Vec::new(),
+            mail_servers: Vec::new(),
             limit_req_zones: Vec::new(),
             limit_req_zone_names: Vec::new(),
             limit_conn_zones: Vec::new(),
@@ -2938,6 +3017,163 @@ impl<'a> Materializer<'a> {
         Ok(())
     }
 
+    /// Materialize the optional `[mail]` section: `[[mail.server]]` entries
+    /// into the mail proxy plane (`MailConfig.servers`).
+    ///
+    /// Wave 9A keys only: `listen`, `protocol`, `serverName`, `timeout`,
+    /// `soKeepalive`, `proxyProtocol`, `smtpClientBuffer`, `imapClientBuffer`,
+    /// `pop3Auth`, `imapAuth`, `smtpAuth`, `smtpGreetingDelay`. `auth_http`,
+    /// mail TLS and the backend relay keys are rejected by
+    /// `check_supported_keys` with a located diagnostic (Wave 9B).
+    fn materialize_mail(&mut self, root: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+        let Some(mail) = root.get("mail").and_then(Value::as_object) else {
+            return Ok(());
+        };
+        let Some(servers) = mail.get("server").and_then(Value::as_array) else {
+            return Ok(());
+        };
+        let mut mail_servers = Vec::new();
+        for (index, server) in servers.iter().enumerate() {
+            let path = format!("mail.server[{index}]");
+            let server = server
+                .as_object()
+                .ok_or_else(|| materialize_error(&path, "mail server entries must be tables"))?;
+            check_supported_keys(
+                server,
+                &path,
+                &[
+                    "listen",
+                    "protocol",
+                    "serverName",
+                    "timeout",
+                    "soKeepalive",
+                    "proxyProtocol",
+                    "smtpClientBuffer",
+                    "imapClientBuffer",
+                    "pop3Auth",
+                    "imapAuth",
+                    "smtpAuth",
+                    "smtpGreetingDelay",
+                ],
+            )?;
+            let listen = as_array(server, &path, "listen")?;
+            let first = listen.first().and_then(Value::as_str).ok_or_else(|| {
+                materialize_error(&path, "listen must be a non-empty array of bindings")
+            })?;
+            if listen.len() != 1 {
+                return Err(materialize_error(
+                    &path,
+                    "each mail server declares exactly one listen binding in Wave 9A",
+                ));
+            }
+            let (bind, port, ssl, _) = parse_listen(first, &path)?;
+            if ssl {
+                return Err(materialize_error(
+                    &path,
+                    "mail `listen … ssl` (implicit TLS) is Wave 9B; the runtime cannot terminate mail TLS yet",
+                ));
+            }
+            let protocol = match server.get("protocol").and_then(Value::as_str) {
+                None | Some("imap") => crate::config::model::MailServerProtocol::Imap,
+                Some("pop3") => crate::config::model::MailServerProtocol::Pop3,
+                Some("smtp") => crate::config::model::MailServerProtocol::Smtp,
+                Some(other) => {
+                    return Err(materialize_error(
+                        &format!("{path}.protocol"),
+                        format!("`protocol` accepts pop3|imap|smtp, found `{other}`"),
+                    ))
+                }
+            };
+            let server_name = match server.get("serverName") {
+                Some(value) => Some(
+                    value
+                        .as_str()
+                        .ok_or_else(|| {
+                            materialize_error(&format!("{path}.serverName"), "must be a string")
+                        })?
+                        .to_owned(),
+                ),
+                None => None,
+            };
+            let timeout_ms = match server.get("timeout").and_then(Value::as_str) {
+                Some(value) => materialize_duration_ms(value)
+                    .filter(|millis| (1..=86_400_000).contains(millis))
+                    .ok_or_else(|| {
+                        materialize_error(
+                            &format!("{path}.timeout"),
+                            format!("invalid timeout `{value}` (expected e.g. 60s, 10m, 1h)"),
+                        )
+                    })?,
+                None => 60_000,
+            };
+            let smtp_greeting_delay_ms =
+                match server.get("smtpGreetingDelay").and_then(Value::as_str) {
+                    Some(value) => materialize_duration_ms(value)
+                        .filter(|millis| *millis <= 60_000)
+                        .ok_or_else(|| {
+                            materialize_error(
+                                &format!("{path}.smtpGreetingDelay"),
+                                format!("invalid smtpGreetingDelay `{value}` (maximum 60s)"),
+                            )
+                        })?,
+                    None => 0,
+                };
+            let so_keepalive = server
+                .get("soKeepalive")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let proxy_protocol = server
+                .get("proxyProtocol")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let smtp_client_buffer = match server.get("smtpClientBuffer") {
+                Some(value) => materialize_mail_buffer(value, &format!("{path}.smtpClientBuffer"))?,
+                None => 4 * 1024,
+            };
+            let imap_client_buffer = match server.get("imapClientBuffer") {
+                Some(value) => materialize_mail_buffer(value, &format!("{path}.imapClientBuffer"))?,
+                None => 4 * 1024,
+            };
+            let mut entry = json!({
+                "id": format!("mail-{index}-{port}"),
+                "bind": bind,
+                "port": port,
+                "protocol": protocol.as_str(),
+                "timeoutMs": timeout_ms,
+                "soKeepalive": so_keepalive,
+                "proxyProtocol": proxy_protocol,
+                "smtpClientBuffer": smtp_client_buffer,
+                "imapClientBuffer": imap_client_buffer,
+                "smtpGreetingDelayMs": smtp_greeting_delay_ms,
+            });
+            if let Some(server_name) = server_name {
+                entry["serverName"] = Value::String(server_name);
+            }
+            for (key, mechanisms) in [
+                (
+                    "pop3Auth",
+                    materialize_mail_auth(server, &path, "pop3Auth")?,
+                ),
+                (
+                    "imapAuth",
+                    materialize_mail_auth(server, &path, "imapAuth")?,
+                ),
+                (
+                    "smtpAuth",
+                    materialize_mail_auth(server, &path, "smtpAuth")?,
+                ),
+            ] {
+                if let Some(mechanisms) = mechanisms {
+                    entry[key] = serde_json::to_value(mechanisms)
+                        .map_err(|source| materialize_error("mail.server", source))?;
+                }
+            }
+            mail_servers.push(entry);
+        }
+        self.mail_servers = mail_servers;
+        Ok(())
+    }
+
     /// Materializes the optional `[tunnel]` section (SDKWORK WebServer
     /// Tunnel PRD SS38/SS39). Accepts snake_case aliases for the network
     /// fields so the TOML surface reads naturally, and emits the camelCase
@@ -3869,6 +4105,7 @@ impl<'a> Materializer<'a> {
             "upstreams": self.upstreams,
             "virtualHosts": self.virtual_hosts,
             "streams": self.streams,
+            "mail": { "servers": self.mail_servers },
             "proxyCache": proxy_cache,
             "tunnel": tunnel,
             "metadata": { "source": "deployments/webserver/server.toml" },
@@ -4474,6 +4711,7 @@ pub fn materialize_app(
             "main",
             "http",
             "stream",
+            "mail",
             "proxyCache",
             "tunnel",
         ],
@@ -4642,13 +4880,23 @@ pub fn materialize_app(
             ],
         )?;
     }
+    if let Some(mail) = root.get("mail").and_then(Value::as_object) {
+        check_supported_keys(mail, "server.toml.mail", &["server"])?;
+    }
     let mut materializer = Materializer::new(app_key);
-    let http = root.get("http").and_then(Value::as_object).ok_or_else(|| {
-        materialize_error(
-            "server.toml",
-            "http table is required for an enabled configuration",
-        )
-    })?;
+    // A mail-only application (Wave 9A mail listener plane) has no HTTP
+    // surface at all, so `[http]` is required only when `[mail]` is absent.
+    let empty_http = Map::new();
+    let http = match root.get("http").and_then(Value::as_object) {
+        Some(http) => http,
+        None if root.get("mail").and_then(Value::as_object).is_some() => &empty_http,
+        None => {
+            return Err(materialize_error(
+                "server.toml",
+                "http table is required for an enabled configuration",
+            ))
+        }
+    };
     check_supported_keys(
         http,
         "server.toml.http",
@@ -4691,9 +4939,11 @@ pub fn materialize_app(
     // Stream servers resolve upstream references against the materialized
     // upstream set, so they are materialized after http.upstream.
     materializer.materialize_streams(root)?;
-    if materializer.virtual_hosts.is_empty() {
+    // Mail listeners are independent of the HTTP surface.
+    materializer.materialize_mail(root)?;
+    if materializer.virtual_hosts.is_empty() && materializer.mail_servers.is_empty() {
         return Err(WebServerConfigError::Materialize(
-            "no [[http.server]] virtual hosts are declared in the effective configuration"
+            "no [[http.server]] virtual hosts and no [[mail.server]] listeners are declared in the effective configuration"
                 .to_owned(),
         ));
     }
@@ -7235,5 +7485,98 @@ authBasicUserFile = "{htpasswd_path}"
                 .map(|diagnostic| diagnostic.path.clone())
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn typed_mail_only_application_materializes() {
+        let toml_text = r#"
+[mail]
+
+[[mail.server]]
+listen = ["127.0.0.1:2525"]
+protocol = "pop3"
+serverName = "pop.example.com"
+timeout = "30s"
+soKeepalive = true
+proxyProtocol = true
+pop3Auth = ["plain"]
+smtpClientBuffer = "8k"
+imapClientBuffer = "8k"
+smtpGreetingDelay = "500ms"
+
+[[mail.server]]
+listen = ["127.0.0.1:2993"]
+protocol = "smtp"
+smtpAuth = ["plain", "login"]
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "mail-only").expect("materialize");
+        assert!(
+            config.listeners.is_empty() && config.virtual_hosts.is_empty(),
+            "a mail-only application has no HTTP surface"
+        );
+        assert_eq!(config.mail.servers.len(), 2);
+        let pop3 = &config.mail.servers[0];
+        assert_eq!(pop3.protocol, crate::config::MailServerProtocol::Pop3);
+        assert_eq!(pop3.bind, "127.0.0.1");
+        assert_eq!(pop3.port, 2525);
+        assert_eq!(pop3.server_name.as_deref(), Some("pop.example.com"));
+        assert_eq!(pop3.timeout_ms, 30_000);
+        assert!(pop3.so_keepalive);
+        assert!(pop3.proxy_protocol);
+        assert_eq!(
+            pop3.pop3_auth,
+            vec![crate::config::MailAuthMechanism::Plain]
+        );
+        assert_eq!(pop3.smtp_client_buffer, 8 * 1024);
+        assert_eq!(pop3.imap_client_buffer, 8 * 1024);
+        assert_eq!(pop3.smtp_greeting_delay_ms, 500);
+        let smtp = &config.mail.servers[1];
+        assert_eq!(smtp.protocol, crate::config::MailServerProtocol::Smtp);
+        assert_eq!(smtp.timeout_ms, 60_000);
+        assert_eq!(
+            smtp.smtp_auth,
+            vec![
+                crate::config::MailAuthMechanism::Plain,
+                crate::config::MailAuthMechanism::Login
+            ]
+        );
+    }
+
+    #[test]
+    fn typed_mail_section_rejects_wave_9b_mechanisms_and_unbounded_values() {
+        for (mail_section, expected) in [
+            (
+                "[[mail.server]]\nlisten = [\"127.0.0.1:2525\"]\nprotocol = \"pop3\"\npop3Auth = [\"apop\"]\n",
+                "Wave 9B",
+            ),
+            (
+                "[[mail.server]]\nlisten = [\"127.0.0.1:2525\"]\nprotocol = \"imap\"\nimapAuth = []\n",
+                "at least one auth mechanism",
+            ),
+            (
+                "[[mail.server]]\nlisten = [\"127.0.0.1:2525\"]\nprotocol = \"smtp\"\nsmtpClientBuffer = \"128\"\n",
+                "between 512 bytes and 1 MiB",
+            ),
+            (
+                "[[mail.server]]\nlisten = [\"127.0.0.1:2525 ssl\"]\nprotocol = \"imap\"\n",
+                "Wave 9B",
+            ),
+            (
+                "[[mail.server]]\nlisten = [\"127.0.0.1:2525\"]\nprotocol = \"imap\"\nunknownKey = 1\n",
+                "unknown or unsupported key",
+            ),
+        ] {
+            let toml_text = format!("[mail]\n{mail_section}");
+            let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+            let effective = serde_json::to_value(&value).expect("converts");
+            let error = materialize_app(&effective, "mail-only").expect_err("must fail closed");
+            let message = error.to_string();
+            assert!(
+                message.contains(expected),
+                "expected `{expected}` in diagnostic, got: {message}"
+            );
+        }
     }
 }

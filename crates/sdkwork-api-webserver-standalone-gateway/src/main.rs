@@ -260,6 +260,7 @@ async fn run_nginx_compat_until(
         virtual_hosts = loaded.app.virtual_hosts.len(),
         upstreams = loaded.app.upstreams.len(),
         streams = loaded.app.streams.len(),
+        mail_servers = loaded.app.mail.servers.len(),
         skipped = loaded.skipped.len(),
         ignored_directives = loaded.compatibility.len(),
         "nginx compatibility configuration materialized"
@@ -300,13 +301,14 @@ fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
     })?;
     let compiled_app = compiled.config();
     println!(
-        "validated nginx compatibility: appKey={} virtualHosts={} listeners={} resources={} upstreams={} streams={} skipped={}",
+        "validated nginx compatibility: appKey={} virtualHosts={} listeners={} resources={} upstreams={} streams={} mailServers={} skipped={}",
         compiled_app.app_key,
         compiled_app.virtual_hosts.len(),
         compiled_app.listeners.len(),
         compiled_app.resources.len(),
         compiled_app.upstreams.len(),
         compiled_app.streams.len(),
+        compiled_app.mail.servers.len(),
         loaded.skipped.len(),
     );
     Ok(())

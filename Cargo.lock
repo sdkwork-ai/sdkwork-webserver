@@ -4152,6 +4152,7 @@ dependencies = [
  "sdkwork-webserver-http-host",
  "sdkwork-webserver-internal-sdk-generated-rust",
  "sdkwork-webserver-knowledgebase-provider",
+ "sdkwork-webserver-mail-protocol",
  "sdkwork-webserver-resolver-cache",
  "sdkwork-webserver-tunnel",
  "sdkwork-webserver-tunnel-core",

@@ -67,10 +67,10 @@ impl SemanticValidator {
         if config.kind != "sdkwork.webserver.app" {
             self.push("/kind", "kind must be sdkwork.webserver.app");
         }
-        if config.listeners.is_empty() && config.streams.is_empty() {
+        if config.listeners.is_empty() && config.streams.is_empty() && config.mail.is_empty() {
             self.push(
                 "",
-                "at least one HTTP listener or one stream server is required",
+                "at least one HTTP listener, one stream server, or one mail server is required",
             );
         }
         if !config.listeners.is_empty()
@@ -176,6 +176,16 @@ impl SemanticValidator {
                     &path,
                     "an http stream server already owns this bind and port",
                 );
+            }
+            // The mail proxy plane binds real TCP sockets on the same host, so
+            // its listeners share the HTTP/stream bind:port namespace.
+            if config
+                .mail
+                .servers
+                .iter()
+                .any(|mail| mail.socket_key() == socket_key)
+            {
+                self.push(&path, "a mail server already owns this bind and port");
             }
             if listener.protocols.contains(&ListenerProtocol::Http2)
                 && listener.tls_policy_ref.is_none()
@@ -420,6 +430,7 @@ impl SemanticValidator {
         }
 
         self.validate_streams(config, &upstreams);
+        self.validate_mail(config);
 
         for (index, certificate) in config.certificates.iter().enumerate() {
             let path = format!("/certificates/{index}");
@@ -2341,6 +2352,14 @@ impl SemanticValidator {
             }) {
                 self.push(&path, "an http listener already owns this bind and port");
             }
+            if config
+                .mail
+                .servers
+                .iter()
+                .any(|mail| mail.socket_key() == socket_key)
+            {
+                self.push(&path, "a mail server already owns this bind and port");
+            }
             if !(1..=3_600_000).contains(&stream.preread_timeout_ms) {
                 self.push(
                     format!("{path}/prereadTimeoutMs"),
@@ -2481,6 +2500,104 @@ impl SemanticValidator {
         }
     }
 
+    /// Validate the nginx `mail {}` listener plane (Wave 9A): a real TCP
+    /// listener on the shared bind:port namespace, bounded session/buffer
+    /// knobs, and the bounded plaintext auth-mechanism vocabulary.
+    fn validate_mail(&mut self, config: &WebServerAppConfig) {
+        let mut sockets = HashSet::new();
+        for (index, server) in config.mail.servers.iter().enumerate() {
+            let path = format!("/mail/servers/{index}");
+            if server.id.is_empty() || server.id.len() > 128 {
+                self.push(format!("{path}/id"), "mail server id must be 1..=128 bytes");
+            }
+            if server.bind.parse::<IpAddr>().is_err() {
+                self.push(
+                    format!("{path}/bind"),
+                    "bind must be an explicit IPv4 or IPv6 address",
+                );
+            }
+            if server.port == 0 {
+                self.push(format!("{path}/port"), "port must be 1..=65535");
+            }
+            let socket_key = server.socket_key();
+            if !sockets.insert(socket_key.clone()) {
+                self.push(&path, "another mail server already owns this bind and port");
+            }
+            if config.listeners.iter().any(|listener| {
+                format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port) == socket_key
+            }) {
+                self.push(&path, "an http listener already owns this bind and port");
+            }
+            if config
+                .streams
+                .iter()
+                .any(|stream| stream.socket_key() == socket_key)
+            {
+                self.push(
+                    &path,
+                    "an http stream server already owns this bind and port",
+                );
+            }
+            if !(1..=86_400_000).contains(&server.timeout_ms) {
+                self.push(
+                    format!("{path}/timeoutMs"),
+                    "mail timeout must be between 1 ms and 24 hours",
+                );
+            }
+            for (field, value) in [
+                ("smtpClientBuffer", server.smtp_client_buffer),
+                ("imapClientBuffer", server.imap_client_buffer),
+            ] {
+                if !(512..=1024 * 1024).contains(&value) {
+                    self.push(
+                        format!("{path}/{field}"),
+                        "mail client buffer must be between 512 bytes and 1 MiB",
+                    );
+                }
+            }
+            if server.smtp_greeting_delay_ms > 60_000 {
+                self.push(
+                    format!("{path}/smtpGreetingDelayMs"),
+                    "smtp_greeting_delay must not exceed 60 seconds",
+                );
+            }
+            if let Some(server_name) = &server.server_name {
+                let valid = !server_name.is_empty()
+                    && server_name.len() <= 253
+                    && server_name.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_')
+                    });
+                if !valid {
+                    self.push(
+                        format!("{path}/serverName"),
+                        "mail server_name must be a 1..=253 byte host name of letters, digits, `.`, `-`, or `_`",
+                    );
+                }
+            }
+            for (field, mechanisms) in [
+                ("pop3Auth", &server.pop3_auth),
+                ("imapAuth", &server.imap_auth),
+                ("smtpAuth", &server.smtp_auth),
+            ] {
+                if mechanisms.is_empty() {
+                    self.push(
+                        format!("{path}/{field}"),
+                        "at least one auth mechanism must be enabled",
+                    );
+                }
+                let mut seen = HashSet::new();
+                for (mechanism_index, mechanism) in mechanisms.iter().enumerate() {
+                    if !seen.insert(*mechanism) {
+                        self.push(
+                            format!("{path}/{field}/{mechanism_index}"),
+                            format!("duplicate auth mechanism `{}`", mechanism.as_token()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn register_ids(&mut self, config: &WebServerAppConfig) {
         for (index, listener) in config.listeners.iter().enumerate() {
             self.register_id(&listener.id, format!("/listeners/{index}/id"));
@@ -2527,6 +2644,9 @@ impl SemanticValidator {
         }
         for (index, stream) in config.streams.iter().enumerate() {
             self.register_id(&stream.id, format!("/streams/{index}/id"));
+        }
+        for (index, server) in config.mail.servers.iter().enumerate() {
+            self.register_id(&server.id, format!("/mail/servers/{index}/id"));
         }
     }
 
