@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "CGI cache family (Wave 7C, 2026-10-30): fastcgi/uwsgi/scgi *_cache* directives execute on the shared HTTP cache store with a CGI key/policy layer; differential-protocols grew 49->65 with 16 cache cases against nginx 1.29.6 (hit, no-default-caching, bypass, no_cache, valid-by-status, custom key, min_uses, lock coalescing, use_stale, conditional revalidate, convert_head, range/max_range_offset, uWSGI/SCGI hits). Bounded differences recorded: cache_lock_age cannot preempt an in-flight fill; background_update serves stale instead of a detached task; X-Accel-Expires not consulted; one process store backs all zones. Catalog: 291 executable / 171 accepted-unenforced / 269 fail-closed / 13 excluded.",
     "uWSGI upstream TLS (Wave 7B, 2026-10-30): uwsgi_ssl_* executes end-to-end with 3 new real-nginx differential cases (trusted CA, mTLS, untrusted CA -> 502); differential-protocols now 49/49. FastCGI and SCGI have no *_ssl_* directives in nginx 1.29.6 (verified from the committed inventory), so scgi_ssl_* names stay rejected as non-nginx extensions. Catalog: 246 executable / 171 accepted-unenforced / 314 fail-closed / 13 excluded.",
     "Mail module end-to-end (Waves 9A/9B, 2026-10-30): the POP3/IMAP/SMTP mail proxy is in profile with 9/9 real-nginx mail differential (auth_http exchange, login/relay, AUTH failures, SMTP AUTH+XCLIENT, implicit TLS, STARTTLS). Catalog: 239 executable / 171 accepted-unenforced / 321 fail-closed / 13 excluded (perl 4, geoip 8, load_module 1). HTTP/3 remains excluded pending a QUIC/h3 listener plane; rustls-unsupported mail ssl_* knobs and client-certificate flows fail closed.",
     "Rewrite/variable engine wave (Wave 10, 2026-10-30): the REAL production nginx snapshot from api.birdcoder.com (nginx/1.28.0, 33 config files) now materializes cleanly (virtualHosts=41, listeners=4, resources=150, upstreams=88, skipped=0) through the new bounded rewrite/variable engine and a new aggregate-gate step tools/check-nginx-real-world.mjs. differential-http 259->265 (6 rewrite-engine cases, 265/265). Bounded gaps recorded: if-body proxy_pass/root/error_page fail closed; multiple matched if add_header approximated by last applied set; dynamic-proxy retries rebuild a static target (expanded path not preserved); per-route client_max_body_size on Content-Length only; regex SNI needs its own differential slice. Catalog: 212 executable / 170 accepted-unenforced / 298 fail-closed / 64 excluded.",
@@ -597,6 +598,12 @@
       "group": "upstreams",
       "status": "implemented",
       "summary": "uWSGI upstream TLS (Wave 7B): uwsgi_ssl_verify/trusted_certificate/certificate/_key/server_name/name/protocols materialized at http/server/location with inheritance and dialed through the CGI transport seam (tokio-rustls, ALPN none, SNI/verification override, client certs); always-verified unless explicit verify off (dangerous verifier with diagnostic); rustls-unsupported ciphers/crl/session_reuse/conf_command/password_file/certificate_cache/verify_depth fail closed; differential-protocols 46->49 (uWSGI TLS trusted, mTLS, untrusted 502) (REQ-2026-0073 wave 7B)"
+    },
+    {
+      "id": "cache.cgi-family",
+      "group": "cache",
+      "status": "implemented",
+      "summary": "CGI cache family (Wave 7C): fastcgi/uwsgi/scgi *_cache, *_cache_path (shared cacheZoneNames registry incl. proxy_cache_path zones), *_cache_key (default $scheme$request_method$host$request_uri), *_cache_valid rules (nginx has no default caching time), *_cache_bypass (skips lookup and store), *_no_cache, *_cache_revalidate (conditional upstream validation + 304 refresh), *_cache_use_stale, *_cache_methods, *_cache_min_uses, *_cache_lock/_timeout/_age, *_cache_background_update, *_cache_convert_head, *_cache_max_range_offset — executing on the shared HttpResponseCache store with Vary-aware refinement, single-flight fill and bounded counters; differential-protocols 49->65 (16 cache cases vs nginx 1.29.6) (REQ-2026-0073 wave 7C)"
     }
   ]
 }

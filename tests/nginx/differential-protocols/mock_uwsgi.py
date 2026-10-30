@@ -9,7 +9,21 @@ import socket
 import ssl
 import struct
 import threading
+import time
 
+
+_CACHE_GENERATION = 0
+_CACHE_GENERATION_LOCK = threading.Lock()
+
+
+def cache_response(by_name: dict):
+    """Wave 7C: cacheable `gen=<n>` response for the uWSGI cache cases."""
+    global _CACHE_GENERATION
+    with _CACHE_GENERATION_LOCK:
+        _CACHE_GENERATION += 1
+        generation = _CACHE_GENERATION
+    body = f"gen={generation}".encode()
+    return body
 
 
 def peer_address(connection: socket.socket) -> str:
@@ -64,6 +78,18 @@ def handle(connection: socket.socket) -> None:
         if content_length > 0:
             body = read_exact(connection, content_length)
         request_uri = by_name.get("REQUEST_URI", "")
+        if request_uri.startswith("/cache-uwsgi/"):
+            payload = cache_response(by_name)
+            head = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "X-Mock-Uwsgi: yes\r\n"
+                f"Content-Length: {len(payload)}\r\n"
+                "\r\n"
+            ).encode()
+            method = by_name.get("REQUEST_METHOD", "GET")
+            connection.sendall(head + (payload if method != "HEAD" else b""))
+            return
         status = 404 if "errors" in request_uri else 200
         reason = "Not Found" if status == 404 else "OK"
         response = json.dumps(

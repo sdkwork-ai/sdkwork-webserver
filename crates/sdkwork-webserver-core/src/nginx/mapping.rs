@@ -530,6 +530,9 @@ pub fn materialize_nginx_app(
                 mapper.http_gzip_refinements.proxied = Some(parse_gzip_proxied(directive)?);
             }
             "proxy_cache_path" => mapper.materialize_proxy_cache_path(directive)?,
+            "fastcgi_cache_path" => mapper.materialize_cgi_cache_path("fastcgi", directive)?,
+            "uwsgi_cache_path" => mapper.materialize_cgi_cache_path("uwsgi", directive)?,
+            "scgi_cache_path" => mapper.materialize_cgi_cache_path("scgi", directive)?,
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
             "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
             // Collected by the order-independent pre-scan above.
@@ -4339,7 +4342,13 @@ impl<'a> Mapper<'a> {
                 timeout_ms: effective_fastcgi.next_upstream_timeout_ms.unwrap_or(30_000),
                 retry_on: retry_conditions,
             };
-            let resource = json!({
+            let cache_policy = effective_fastcgi
+                .cache
+                .resolve(location, &self.proxy_cache_zone_names)?;
+            if cache_policy.is_some() {
+                self.proxy_cache_enabled = true;
+            }
+            let mut resource = json!({
                 "id": resource_id,
                 "type": "fast-cgi",
                 "upstreamRef": upstream_ref,
@@ -4364,6 +4373,13 @@ impl<'a> Mapper<'a> {
                     "retryOn": retry_condition_names,
                 }),
             });
+            if let Some(cache) = cache_policy {
+                resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
             self.resources.push(resource);
         } else if let Some((cgi_kind, cgi_target)) = cgi_pass[0]
             .clone()
@@ -4581,6 +4597,12 @@ impl<'a> Mapper<'a> {
                 timeout_ms: effective_cgi.next_upstream_timeout_ms.unwrap_or(30_000),
                 retry_on: retry_conditions,
             };
+            let cache_policy = effective_cgi
+                .cache
+                .resolve(location, &self.proxy_cache_zone_names)?;
+            if cache_policy.is_some() {
+                self.proxy_cache_enabled = true;
+            }
             let mut resource = json!({
                 "id": resource_id,
                 "type": "cgi-upstream",
@@ -4614,6 +4636,13 @@ impl<'a> Mapper<'a> {
                 if let Some(extra) = &effective_cgi.extra_string {
                     resource["extraString"] = Value::String(extra.clone());
                 }
+            }
+            if let Some(cache) = cache_policy {
+                resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
             }
             self.resources.push(resource);
         } else if let Some(memcached_target) = memcached_pass {
@@ -5391,8 +5420,14 @@ impl<'a> Mapper<'a> {
         self.proxy_cache_enabled = true;
         for argument in directive.args.iter().skip(1) {
             if let Some(rest) = argument.strip_prefix("inactive=") {
+                // nginx evicts entries inactive for this long; the shared store
+                // uses LRU + object caps instead (bounded difference), so the
+                // parameter is accepted and recorded as the stale window when
+                // it is larger than the default.
                 if let Some(seconds) = parse_nginx_time_seconds(rest) {
-                    self.proxy_cache_ttl_seconds = seconds;
+                    if seconds > self.proxy_cache_stale_ttl_seconds {
+                        self.proxy_cache_stale_ttl_seconds = seconds;
+                    }
                 }
             } else if let Some(rest) = argument.strip_prefix("keys_zone=") {
                 // keys_zone=name:size — approximate shared-memory capacity as
@@ -5421,6 +5456,74 @@ impl<'a> Mapper<'a> {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!("unsupported proxy_cache_path parameter `{argument}`"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// nginx `fastcgi_cache_path` / `uwsgi_cache_path` / `scgi_cache_path`
+    /// (http context): one shared process store holds every declared zone
+    /// (bounded difference: nginx allocates per-zone capacity from
+    /// `keys_zone`; the runtime maps the union onto the shared store limits).
+    fn materialize_cgi_cache_path(
+        &mut self,
+        prefix: &str,
+        directive: &NginxDirective,
+    ) -> Result<(), NginxConfigError> {
+        let Some(path) = directive.args.first() else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{prefix}_cache_path requires a directory"),
+            ));
+        };
+        let resolved = if path.starts_with('/') || path.starts_with('\\') {
+            path.clone()
+        } else {
+            self.base_dir.join(path).to_string_lossy().into_owned()
+        };
+        // The runtime owns one process cache store for every declared zone
+        // (bounded difference: nginx allocates a separate cache object and
+        // directory per `*_cache_path`). The first directory becomes the store's
+        // disk tier; additional directories are accepted as zone declarations
+        // only.
+        if self.proxy_cache_disk_path.is_none() {
+            self.proxy_cache_disk_path = Some(resolved);
+        }
+        self.proxy_cache_enabled = true;
+        for argument in directive.args.iter().skip(1) {
+            if let Some(rest) = argument.strip_prefix("inactive=") {
+                if let Some(seconds) = parse_nginx_time_seconds(rest) {
+                    self.proxy_cache_ttl_seconds = seconds;
+                }
+            } else if let Some(rest) = argument.strip_prefix("keys_zone=") {
+                if let Some((name, size)) = rest.split_once(':') {
+                    if name.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid {prefix}_cache_path keys_zone `{rest}`"),
+                        ));
+                    }
+                    if !self.proxy_cache_zone_names.contains(&name.to_owned()) {
+                        self.proxy_cache_zone_names.push(name.to_owned());
+                    }
+                    if let Some(bytes) = parse_size_bytes(size) {
+                        let entries = (bytes / 256).clamp(64, 1_048_576) as usize;
+                        self.proxy_cache_max_entries = entries;
+                    }
+                }
+            } else if argument.starts_with("levels=")
+                || argument.starts_with("max_size=")
+                || argument.starts_with("use_temp_path=")
+                || argument.starts_with("manager_")
+                || argument.starts_with("loader_")
+                || argument.starts_with("min_free=")
+            {
+                // Accepted for nginx compatibility; runtime owns eviction.
+            } else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("unsupported {prefix}_cache_path parameter `{argument}`"),
                 ));
             }
         }
@@ -6319,6 +6422,7 @@ impl<'a> Mapper<'a> {
             "mail": { "servers": self.mail_servers },
             "streamLimitConnZones": self.stream_limit_conn_zones,
             "streamMaps": self.stream_maps,
+            "cacheZoneNames": self.proxy_cache_zone_names,
             "proxyCache": proxy_cache,
             "metadata": { "source": "nginx configuration" },
         });
@@ -10231,6 +10335,7 @@ struct CgiSettings {
     modifier1: Option<u8>,
     modifier2: Option<u8>,
     extra_string: Option<String>,
+    cache: CgiCacheSettings,
 }
 
 impl CgiSettings {
@@ -10268,6 +10373,7 @@ impl CgiSettings {
                 .extra_string
                 .clone()
                 .or_else(|| self.extra_string.clone()),
+            cache: self.cache.overlay(&inner.cache),
         }
     }
 
@@ -10288,6 +10394,10 @@ impl CgiSettings {
                 format!("`{}` is not a `{prefix}_*` directive", directive.name),
             ));
         };
+        if suffix == "cache" || suffix == "no_cache" || suffix.starts_with("cache_") {
+            self.cache.apply(directive, prefix, suffix)?;
+            return Ok(());
+        }
         match suffix {
             "param" => {
                 let (name, value, if_not_empty) = match directive.args.as_slice() {
@@ -10427,6 +10537,462 @@ fn parse_cgi_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError
 
 /// nginx proxy response-header directives (`proxy_hide_header`,
 /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
+/// nginx CGI-family response-cache declarations accumulated over the
+/// http → server → location inheritance chain. One shape serves
+/// `fastcgi_*`, `uwsgi_*` and `scgi_*`.
+#[derive(Clone, Default)]
+struct CgiCacheSettings {
+    /// `Some(None)` is an explicit `*_cache off` (clears the inherited zone);
+    /// `None` inherits from the enclosing level.
+    zone: Option<Option<String>>,
+    key: Option<String>,
+    valid: Option<Vec<crate::config::CgiCacheValidRule>>,
+    bypass: Option<Vec<String>>,
+    no_cache: Option<Vec<String>>,
+    revalidate: Option<bool>,
+    use_stale: Option<Vec<String>>,
+    methods: Option<Vec<String>>,
+    min_uses: Option<u32>,
+    lock: Option<bool>,
+    lock_timeout_ms: Option<u64>,
+    lock_age_ms: Option<u64>,
+    background_update: Option<bool>,
+    convert_head: Option<bool>,
+    max_range_offset: Option<u64>,
+}
+
+impl CgiCacheSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            zone: inner.zone.clone().or_else(|| self.zone.clone()),
+            key: inner.key.clone().or_else(|| self.key.clone()),
+            valid: inner.valid.clone().or_else(|| self.valid.clone()),
+            bypass: inner.bypass.clone().or_else(|| self.bypass.clone()),
+            no_cache: inner.no_cache.clone().or_else(|| self.no_cache.clone()),
+            revalidate: inner.revalidate.or(self.revalidate),
+            use_stale: inner.use_stale.clone().or_else(|| self.use_stale.clone()),
+            methods: inner.methods.clone().or_else(|| self.methods.clone()),
+            min_uses: inner.min_uses.or(self.min_uses),
+            lock: inner.lock.or(self.lock),
+            lock_timeout_ms: inner.lock_timeout_ms.or(self.lock_timeout_ms),
+            lock_age_ms: inner.lock_age_ms.or(self.lock_age_ms),
+            background_update: inner.background_update.or(self.background_update),
+            convert_head: inner.convert_head.or(self.convert_head),
+            max_range_offset: inner.max_range_offset.or(self.max_range_offset),
+        }
+    }
+
+    /// Resolve the effective cache policy for one location. `zones` is the
+    /// shared zone registry (`proxy_cache_path` + CGI `*_cache_path`).
+    fn resolve(
+        &self,
+        directive: &NginxDirective,
+        zones: &[String],
+    ) -> Result<Option<crate::config::CgiCacheConfig>, NginxConfigError> {
+        let Some(zone) = self.zone.clone() else {
+            return Ok(None);
+        };
+        let Some(zone) = zone else {
+            // Explicit `*_cache off`: caching is disabled at this level.
+            return Ok(None);
+        };
+        if !zones.iter().any(|candidate| candidate == &zone) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "cache zone `{zone}` is not declared; declare it with `<module>_cache_path … keys_zone={zone}:<size>` (or `proxy_cache_path … keys_zone={zone}:<size>`; zones are shared by name)"
+                ),
+            ));
+        }
+        let key = self
+            .key
+            .clone()
+            .unwrap_or_else(|| "$scheme$request_method$host$request_uri".to_owned());
+        validate_cgi_cache_template(directive, &key)?;
+        // nginx `*_cache_valid` has no default (docs: Default: —): without a
+        // rule the response is only cached when it carries an explicit
+        // upstream freshness header, which the runtime reads per response.
+        let valid = self.valid.clone().unwrap_or_default();
+        let bypass = self.bypass.clone().unwrap_or_default();
+        let no_cache = self.no_cache.clone().unwrap_or_default();
+        for entry in bypass.iter().chain(no_cache.iter()) {
+            validate_cgi_cache_condition_variable(directive, entry)?;
+        }
+        // nginx `*_cache_use_stale` default is `off` (no stale serving).
+        let use_stale = self.use_stale.clone().unwrap_or_default();
+        for condition in &use_stale {
+            if condition == "off" {
+                continue;
+            }
+            if !CGI_CACHE_USE_STALE_CONDITIONS.contains(&condition.as_str()) {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "unsupported cache_use_stale condition `{condition}`; supported: {}",
+                        CGI_CACHE_USE_STALE_CONDITIONS.join(" ")
+                    ),
+                ));
+            }
+        }
+        let methods = self
+            .methods
+            .clone()
+            .filter(|methods| !methods.is_empty())
+            .unwrap_or_else(|| vec!["GET".to_owned(), "HEAD".to_owned()]);
+        for method in &methods {
+            if method.is_empty()
+                || !method
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+            {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("invalid cache_methods entry `{method}`"),
+                ));
+            }
+        }
+        Ok(Some(crate::config::CgiCacheConfig {
+            zone,
+            key,
+            valid,
+            bypass,
+            no_cache,
+            revalidate: self.revalidate.unwrap_or(false),
+            use_stale,
+            methods,
+            min_uses: self.min_uses.unwrap_or(1).max(1),
+            lock: self.lock.unwrap_or(true),
+            lock_timeout_ms: self.lock_timeout_ms.unwrap_or(5_000),
+            lock_age_ms: self.lock_age_ms.unwrap_or(5_000),
+            background_update: self.background_update.unwrap_or(false),
+            convert_head: self.convert_head.unwrap_or(true),
+            max_range_offset: self.max_range_offset,
+        }))
+    }
+
+    fn apply(
+        &mut self,
+        directive: &NginxDirective,
+        prefix: &str,
+        suffix: &str,
+    ) -> Result<(), NginxConfigError> {
+        match suffix {
+            "cache" => {
+                let [zone] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache takes exactly one zone name"),
+                    ));
+                };
+                if zone == "off" {
+                    self.zone = Some(None);
+                    return Ok(());
+                }
+                if zone.is_empty() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache requires a non-empty zone name"),
+                    ));
+                }
+                self.zone = Some(Some(zone.clone()));
+            }
+            "cache_key" => {
+                let [key] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_key takes exactly one template"),
+                    ));
+                };
+                validate_cgi_cache_template(directive, key)?;
+                self.key = Some(key.clone());
+            }
+            "cache_valid" => {
+                let Some(duration) = directive.args.last() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_valid requires a duration"),
+                    ));
+                };
+                let Some(seconds) = parse_nginx_time_seconds(duration) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {prefix}_cache_valid duration `{duration}`"),
+                    ));
+                };
+                let mut statuses = Vec::new();
+                for status in &directive.args[..directive.args.len() - 1] {
+                    let Ok(code) = status.parse::<u16>() else {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid {prefix}_cache_valid status code `{status}`"),
+                        ));
+                    };
+                    if !(100..=599).contains(&code) {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid {prefix}_cache_valid status code `{status}`"),
+                        ));
+                    }
+                    statuses.push(code);
+                }
+                self.valid
+                    .get_or_insert_with(Vec::new)
+                    .push(crate::config::CgiCacheValidRule { statuses, seconds });
+            }
+            "cache_bypass" | "no_cache" => {
+                if directive.args.is_empty() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_{suffix} requires at least one variable"),
+                    ));
+                }
+                let mut entries = Vec::new();
+                for argument in &directive.args {
+                    validate_cgi_cache_condition_variable(directive, argument)?;
+                    entries.push(argument.clone());
+                }
+                if suffix == "cache_bypass" {
+                    self.bypass = Some(entries);
+                } else {
+                    self.no_cache = Some(entries);
+                }
+            }
+            "cache_revalidate" => {
+                self.revalidate = Some(parse_on_off(directive, &directive.name)?);
+            }
+            "cache_use_stale" => {
+                if directive.args.is_empty() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_use_stale requires conditions"),
+                    ));
+                }
+                let mut conditions = Vec::new();
+                for condition in &directive.args {
+                    let condition = condition.to_ascii_lowercase();
+                    if condition == "off" {
+                        conditions.clear();
+                        continue;
+                    }
+                    if !CGI_CACHE_USE_STALE_CONDITIONS.contains(&condition.as_str()) {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!(
+                                "unsupported {prefix}_cache_use_stale condition `{condition}`; supported: {}",
+                                CGI_CACHE_USE_STALE_CONDITIONS.join(" ")
+                            ),
+                        ));
+                    }
+                    conditions.push(condition);
+                }
+                self.use_stale = Some(conditions);
+            }
+            "cache_methods" => {
+                if directive.args.is_empty() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_methods requires methods"),
+                    ));
+                }
+                self.methods = Some(directive.args.clone());
+            }
+            "cache_min_uses" => {
+                let [value] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_min_uses takes exactly one number"),
+                    ));
+                };
+                let Ok(min_uses) = value.parse::<u32>() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {prefix}_cache_min_uses `{value}`"),
+                    ));
+                };
+                if min_uses == 0 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_min_uses must be at least 1"),
+                    ));
+                }
+                self.min_uses = Some(min_uses);
+            }
+            "cache_lock" => {
+                self.lock = Some(parse_on_off(directive, &directive.name)?);
+            }
+            "cache_lock_timeout" | "cache_lock_age" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_{suffix} requires a time value"),
+                    ));
+                };
+                let Some(seconds) = parse_nginx_time_seconds(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {prefix}_{suffix} `{value}`"),
+                    ));
+                };
+                if suffix == "cache_lock_timeout" {
+                    self.lock_timeout_ms = Some(seconds.saturating_mul(1000));
+                } else {
+                    self.lock_age_ms = Some(seconds.saturating_mul(1000));
+                }
+            }
+            "cache_background_update" => {
+                self.background_update = Some(parse_on_off(directive, &directive.name)?);
+            }
+            "cache_convert_head" => {
+                self.convert_head = Some(parse_on_off(directive, &directive.name)?);
+            }
+            "cache_max_range_offset" => {
+                let Some(bytes) = parse_body_size(directive)? else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{prefix}_cache_max_range_offset requires a size"),
+                    ));
+                };
+                self.max_range_offset = Some(bytes);
+            }
+            "cache_path" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{prefix}_cache_path` is only allowed in the http context; move it out of this server/location block"
+                    ),
+                ));
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("unsupported `{prefix}_{other}` directive"),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// nginx `*_cache_use_stale` conditions the bounded CGI cache can honour.
+const CGI_CACHE_USE_STALE_CONDITIONS: &[&str] = &[
+    "error",
+    "timeout",
+    "invalid_header",
+    "updating",
+    "http_403",
+    "http_404",
+    "http_500",
+    "http_502",
+    "http_503",
+    "http_504",
+];
+
+/// Variables a CGI cache-key template may reference (resolved by
+/// `CgiRequestFacts`, the `$http_`/`$arg_`/`$cookie_` families, and declared map
+/// results).
+const CGI_CACHE_TEMPLATE_VARIABLES: &[&str] = &[
+    "host",
+    "scheme",
+    "remote_addr",
+    "server_port",
+    "request_method",
+    "server_name",
+    "server_protocol",
+    "request_uri",
+    "uri",
+    "document_uri",
+    "args",
+    "query_string",
+    "is_args",
+    "content_type",
+    "content_length",
+    "document_root",
+    "request_filename",
+    "fastcgi_script_name",
+    "fastcgi_path_info",
+    "https",
+];
+
+fn validate_cgi_cache_template(
+    directive: &NginxDirective,
+    template: &str,
+) -> Result<(), NginxConfigError> {
+    if template.is_empty() || template.len() > 4096 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "cache key template must be 1..4096 bytes",
+        ));
+    }
+    let mut rest = template;
+    while let Some(index) = rest.find('$') {
+        let after = &rest[index + 1..];
+        if let Some(literal) = after.strip_prefix('$') {
+            rest = literal;
+            continue;
+        }
+        let end = after
+            .find(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+            .unwrap_or(after.len());
+        if end == 0 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "cache key template contains a lone `$`",
+            ));
+        }
+        let name = &after[..end];
+        if !cgi_cache_variable_supported(name) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "cache key template uses `${name}`, which the CGI cache layer does not expand; supported: ${} plus $http_/$arg_/$cookie_ variables",
+                    CGI_CACHE_TEMPLATE_VARIABLES.join(" $")
+                ),
+            ));
+        }
+        rest = &after[end..];
+    }
+    Ok(())
+}
+
+fn cgi_cache_variable_supported(name: &str) -> bool {
+    CGI_CACHE_TEMPLATE_VARIABLES.contains(&name)
+        || name.starts_with("http_")
+        || name.starts_with("arg_")
+        || name.starts_with("cookie_")
+}
+
+fn validate_cgi_cache_condition_variable(
+    directive: &NginxDirective,
+    entry: &str,
+) -> Result<(), NginxConfigError> {
+    let Some(name) = entry.strip_prefix('$') else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("cache condition `{entry}` must be a `$variable`"),
+        ));
+    };
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("cache condition `{entry}` is not a valid variable reference"),
+        ));
+    }
+    if !cgi_cache_variable_supported(name) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "cache condition `${name}` is not known by the CGI cache layer; supported: ${} plus $http_/$arg_/$cookie_ variables",
+                CGI_CACHE_TEMPLATE_VARIABLES.join(" $")
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// nginx `fastcgi_*` settings accumulated over the http → server → location
 /// inheritance chain.
 ///
@@ -10453,6 +11019,7 @@ struct FastCgiSettings {
     next_upstream: Option<Vec<UpstreamRetryCondition>>,
     next_upstream_tries: Option<u8>,
     next_upstream_timeout_ms: Option<u64>,
+    cache: CgiCacheSettings,
 }
 
 #[derive(Clone)]
@@ -10498,6 +11065,7 @@ impl FastCgiSettings {
             next_upstream_timeout_ms: inner
                 .next_upstream_timeout_ms
                 .or(self.next_upstream_timeout_ms),
+            cache: self.cache.overlay(&inner.cache),
         }
     }
 
@@ -10510,6 +11078,12 @@ impl FastCgiSettings {
         directive: &NginxDirective,
         map_variables: &[&str],
     ) -> Result<(), NginxConfigError> {
+        if let Some(suffix) = directive.name.strip_prefix("fastcgi_") {
+            if suffix == "cache" || suffix == "no_cache" || suffix.starts_with("cache_") {
+                self.cache.apply(directive, "fastcgi", suffix)?;
+                return Ok(());
+            }
+        }
         match directive.name.as_str() {
             "fastcgi_param" => {
                 let (name, value, if_not_empty) = match directive.args.as_slice() {
@@ -16406,7 +16980,7 @@ http {
     #[test]
     fn fastcgi_unsupported_directives_fail_closed_with_located_diagnostics() {
         for (directive, needle) in [
-            ("fastcgi_cache off;", "fastcgi_cache"),
+            ("fastcgi_cache_use_stale bogus;", "unsupported"),
             ("fastcgi_pass unix:/run/php.sock;", "unix:"),
             ("fastcgi_param BAD $upstream_addr;", "$upstream_addr"),
             ("fastcgi_next_upstream http_500;", "http_500"),
@@ -16427,6 +17001,145 @@ http {
     }
 
     #[test]
+    #[test]
+    fn materializes_cgi_cache_family_with_inheritance_and_defaults() {
+        let config = materialize(
+            r#"
+http {
+    fastcgi_cache_path /var/cache/nginx/fcgi levels=1:2 keys_zone=shared:1m inactive=60s;
+    uwsgi_cache_path /var/cache/nginx/uw levels=1:2 keys_zone=uw:1m;
+    fastcgi_cache shared;
+    fastcgi_cache_valid 200 5m;
+    server {
+        listen 80;
+        server_name cache.example.com;
+        location /plain/ {
+            fastcgi_pass 127.0.0.1:9000;
+        }
+        location /off/ {
+            fastcgi_cache off;
+            fastcgi_pass 127.0.0.1:9000;
+        }
+        location /full/ {
+            fastcgi_cache shared;
+            fastcgi_cache_bypass $arg_bypass;
+            fastcgi_no_cache $arg_nocache;
+            fastcgi_cache_revalidate on;
+            fastcgi_cache_use_stale error timeout http_500;
+            fastcgi_cache_methods GET HEAD POST;
+            fastcgi_cache_min_uses 2;
+            fastcgi_cache_lock off;
+            fastcgi_cache_lock_timeout 2s;
+            fastcgi_cache_lock_age 3s;
+            fastcgi_cache_background_update on;
+            fastcgi_cache_convert_head off;
+            fastcgi_cache_max_range_offset 64;
+            fastcgi_pass 127.0.0.1:9000;
+        }
+        location /uw/ {
+            uwsgi_cache uw;
+            uwsgi_cache_valid 200 1h;
+            uwsgi_pass 127.0.0.1:9001;
+        }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        assert_eq!(
+            config.cache_zone_names,
+            vec!["shared".to_owned(), "uw".to_owned()]
+        );
+        // Locations materialize in declaration order: /plain/, /off/, /full/
+        // are FastCGI resources and /uw/ is the uWSGI one.
+        let fastcgi_caches: Vec<Option<crate::config::CgiCacheConfig>> = config
+            .resources
+            .iter()
+            .filter_map(|resource| match resource {
+                crate::config::ResourceConfig::FastCgi { cache, .. } => Some(cache.clone()),
+                _ => None,
+            })
+            .collect();
+        let uwsgi_caches: Vec<Option<crate::config::CgiCacheConfig>> = config
+            .resources
+            .iter()
+            .filter_map(|resource| match resource {
+                crate::config::ResourceConfig::CgiUpstream { cache, .. } => Some(cache.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fastcgi_caches.len(), 3);
+        assert_eq!(uwsgi_caches.len(), 1);
+        // http-level `fastcgi_cache shared` is inherited, as is cache_valid.
+        let plain = fastcgi_caches[0].clone().expect("inherited cache policy");
+        assert_eq!(plain.zone, "shared");
+        assert_eq!(plain.key, "$scheme$request_method$host$request_uri");
+        assert_eq!(
+            plain.valid,
+            vec![crate::config::CgiCacheValidRule {
+                statuses: vec![200],
+                seconds: 300,
+            }]
+        );
+        assert_eq!(plain.methods, vec!["GET".to_owned(), "HEAD".to_owned()]);
+        assert!(plain.lock && plain.convert_head && plain.min_uses == 1);
+        assert!(plain.bypass.is_empty() && plain.use_stale.is_empty());
+        // `fastcgi_cache off` clears the inherited zone.
+        assert!(fastcgi_caches[1].is_none());
+        let full = fastcgi_caches[2].clone().expect("full policy");
+        assert_eq!(full.bypass, vec!["$arg_bypass".to_owned()]);
+        assert_eq!(full.no_cache, vec!["$arg_nocache".to_owned()]);
+        assert!(full.revalidate && full.background_update && !full.lock && !full.convert_head);
+        assert_eq!(full.use_stale, vec!["error", "timeout", "http_500"]);
+        assert_eq!(full.methods, vec!["GET", "HEAD", "POST"]);
+        assert_eq!(full.min_uses, 2);
+        assert_eq!(full.lock_timeout_ms, 2_000);
+        assert_eq!(full.lock_age_ms, 3_000);
+        assert_eq!(full.max_range_offset, Some(64));
+        // uWSGI has its own zone/settings family.
+        let uw = uwsgi_caches[0].clone().expect("uwsgi policy");
+        assert_eq!(uw.zone, "uw");
+        assert_eq!(uw.valid[0].seconds, 3_600);
+    }
+
+    #[test]
+    fn cgi_cache_unsupported_forms_fail_closed_with_located_diagnostics() {
+        for (directive, needle) in [
+            (
+                "fastcgi_cache shared; fastcgi_cache_key $nope;",
+                "cache key template uses `$nope`",
+            ),
+            ("fastcgi_cache nope;", "is not declared"),
+            (
+                "fastcgi_cache shared; fastcgi_cache_min_uses 0;",
+                "at least 1",
+            ),
+            (
+                "fastcgi_cache shared; fastcgi_cache_lock maybe;",
+                "on or off",
+            ),
+        ] {
+            let text = format!(
+                "http {{ fastcgi_cache_path /var/cache/x keys_zone=shared:1m; server {{ listen 80; server_name a.test; location / {{ fastcgi_pass 127.0.0.1:9000; {directive} }} }} }}"
+            );
+            let error = materialize(&text).expect_err("must fail closed");
+            assert!(
+                error.to_string().contains(needle),
+                "expected `{needle}` in: {error}"
+            );
+        }
+        let error = materialize(
+            "http { server { listen 80; server_name a.test; fastcgi_cache_path /var/cache/x keys_zone=z:1m; location / { fastcgi_pass 127.0.0.1:9000; } } }",
+        )
+        .expect_err("cache_path outside http must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("only allowed in the http context"),
+            "{error}"
+        );
+    }
+
     fn materializes_uwsgi_and_scgi_locations_with_shared_param_pipeline() {
         let config = materialize(
             r#"
@@ -16502,7 +17215,7 @@ http {
     #[test]
     fn uwsgi_and_scgi_unsupported_directives_fail_closed() {
         for (directive, needle) in [
-            ("uwsgi_cache off;", "uwsgi_cache"),
+            ("uwsgi_cache_use_stale bogus;", "unsupported"),
             ("uwsgi_pass unix:/run/uwsgi.sock;", "unix:"),
             ("uwsgi_ssl_certificate /tmp/c.pem;", "uwsgi_ssl_certificate"),
             ("scgi_param BAD $upstream_addr;", "$upstream_addr"),

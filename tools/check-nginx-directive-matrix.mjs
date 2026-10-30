@@ -193,6 +193,54 @@ export const PARSER_EXECUTED = new Map([
   ['http:memcached_next_upstream_tries', 'mapping memcached settings pipeline'],
   ['http:memcached_next_upstream_timeout', 'mapping memcached settings pipeline'],
   ['http:set', 'mapping materialize_location bounded set arm'],
+  ['http:fastcgi_cache', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_path', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_key', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_valid', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_bypass', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_no_cache', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_revalidate', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_use_stale', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_methods', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_min_uses', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_lock', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_lock_timeout', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_lock_age', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_background_update', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_convert_head', 'mapping cgi cache settings pipeline'],
+  ['http:fastcgi_cache_max_range_offset', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_path', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_key', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_valid', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_bypass', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_no_cache', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_revalidate', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_use_stale', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_methods', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_min_uses', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_lock', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_lock_timeout', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_lock_age', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_background_update', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_convert_head', 'mapping cgi cache settings pipeline'],
+  ['http:uwsgi_cache_max_range_offset', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_path', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_key', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_valid', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_bypass', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_no_cache', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_revalidate', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_use_stale', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_methods', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_min_uses', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_lock', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_lock_timeout', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_lock_age', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_background_update', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_convert_head', 'mapping cgi cache settings pipeline'],
+  ['http:scgi_cache_max_range_offset', 'mapping cgi cache settings pipeline'],
   ['mail:mail', 'extract_mail_context mail block wrapper'],
   ['mail:server', 'materialize_mail_context server blocks'],
   ['mail:listen', 'mapping mail settings pipeline'],
@@ -556,8 +604,12 @@ export function deriveUnenforcedTypedKeys(catalog, facts) {
  * rather than naming a directive; those prefix markers are not directives and
  * must not become catalog extensions or classification evidence.
  */
+const BARE_MODULE_TOKENS = new Set([
+  'fastcgi', 'uwsgi', 'scgi', 'grpc', 'memcached', 'proxy', 'http', 'stream', 'mail', 'core',
+]);
+
 function directiveNames(names) {
-  return names.filter((name) => !name.endsWith('_'));
+  return names.filter((name) => !name.endsWith('_') && !BARE_MODULE_TOKENS.has(name));
 }
 
 /**

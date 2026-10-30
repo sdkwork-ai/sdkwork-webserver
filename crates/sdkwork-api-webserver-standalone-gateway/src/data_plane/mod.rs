@@ -5,6 +5,7 @@ mod autoindex;
 pub(crate) mod cache;
 mod cache_policy;
 pub(crate) mod certificates_metrics;
+mod cgi_cache;
 mod cgi_upstream;
 mod charset_policy;
 mod connection_limit;

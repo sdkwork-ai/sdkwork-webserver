@@ -32,7 +32,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-protocols-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 49;
+const CASE_FLOOR = 65;
 /**
  * nginx renders its own generated error page for a memcached miss/upstream
  * failure; the status mapping is the contract under test there, while the body
@@ -128,7 +128,8 @@ function renderTemplate(ports) {
     .replaceAll('@GRPC@', String(ports.grpc))
     .replaceAll('@GRPC_TLS_OK@', String(ports.grpcTlsOk))
     .replaceAll('@GRPC_TLS_UNTRUSTED@', String(ports.grpcTlsUntrusted))
-    .replaceAll('@DEAD@', String(ports.dead));
+    .replaceAll('@DEAD@', String(ports.dead))
+    .replaceAll('@CACHE_ROOT@', ports.cacheRoot);
   // The `# @UNIX_SERVER_INJECT@` marker stays a comment here: the gateway
   // serves this file through the nginx compatibility plane, which fails closed
   // on `unix:` pass targets by design. The unix listener runs in a separate
@@ -136,7 +137,7 @@ function renderTemplate(ports) {
   for (const marker of [
     '@ROOT@', '@PORT@', '@FCGI@', '@UWSGI@', '@UWSGI_TLS_OK@',
     '@UWSGI_TLS_UNTRUSTED@', '@SCGI@', '@MEMCACHED@', '@GRPC@',
-    '@GRPC_TLS_OK@', '@GRPC_TLS_UNTRUSTED@', '@DEAD@',
+    '@GRPC_TLS_OK@', '@GRPC_TLS_UNTRUSTED@', '@DEAD@', '@CACHE_ROOT@',
   ]) {
     if (text.includes(marker)) throw new Error(`placeholder ${marker} left unrendered`);
   }
@@ -515,9 +516,16 @@ async function main() {
       grpcTlsOk: GATEWAY_GRPC_TLS_OK_PORT,
       grpcTlsUntrusted: GATEWAY_GRPC_TLS_UNTRUSTED_PORT,
       dead: GATEWAY_DEAD_PORT,
+      cacheRoot: path.join(GATEWAY_CONF_DIR, 'cache'),
     }),
   );
 
+  // Cold cache on every run: drop the fixture-owned cache trees by exact path.
+  for (const module of ['fastcgi', 'uwsgi', 'scgi']) {
+    const directory = path.join(GATEWAY_CONF_DIR, 'cache', module);
+    fs.rmSync(directory, { recursive: true, force: true });
+    fs.mkdirSync(directory, { recursive: true });
+  }
   fs.mkdirSync(GATEWAY_UNIX_ROOT, { recursive: true });
   fs.rmSync(GATEWAY_FCGI_SOCKET, { force: true });
   fs.rmSync(GATEWAY_UWSGI_SOCKET, { force: true });

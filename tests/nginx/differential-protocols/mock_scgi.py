@@ -9,6 +9,18 @@ import socket
 import threading
 
 
+_CACHE_GENERATION = 0
+_CACHE_GENERATION_LOCK = threading.Lock()
+
+
+def cache_response() -> bytes:
+    """Wave 7C: cacheable `gen=<n>` response for the SCGI cache cases."""
+    global _CACHE_GENERATION
+    with _CACHE_GENERATION_LOCK:
+        _CACHE_GENERATION += 1
+        generation = _CACHE_GENERATION
+    return f"gen={generation}".encode()
+
 
 def peer_address(connection: socket.socket) -> str:
     peer = connection.getpeername()
@@ -53,6 +65,18 @@ def handle(connection: socket.socket) -> None:
             content_length = 0
         body = read_exact(connection, content_length) if content_length > 0 else b""
         request_uri = by_name.get("REQUEST_URI", "")
+        if request_uri.startswith("/cache-scgi/"):
+            payload = cache_response()
+            head = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "X-Mock-Scgi: yes\r\n"
+                f"Content-Length: {len(payload)}\r\n"
+                "\r\n"
+            ).encode()
+            method = by_name.get("REQUEST_METHOD", "GET")
+            connection.sendall(head + (payload if method != "HEAD" else b""))
+            return
         status = 404 if "errors" in request_uri else 200
         reason = "Not Found" if status == 404 else "OK"
         response = json.dumps(

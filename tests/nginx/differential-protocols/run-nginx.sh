@@ -13,6 +13,7 @@ SCGI=$((PORT + 11))
 UWSGI_TLS_OK=$((PORT + 12))
 UWSGI_TLS_UNTRUSTED=$((PORT + 13))
 MEMCACHED=$((PORT + 14))
+CACHE_ROOT=""  # set after $WORK is defined
 GRPC=$((PORT + 20))
 GRPC_TLS_OK=$((PORT + 21))
 GRPC_TLS_UNTRUSTED=$((PORT + 22))
@@ -21,6 +22,7 @@ WORK=${NGINX_DIFF_PROTOCOLS_WORK:-/tmp/ngx-differential-protocols}
 UNIX_ROOT_DIR="$WORK/unix"
 FCGI_SOCKET="$UNIX_ROOT_DIR/fcgi.sock"
 UWSGI_SOCKET="$UNIX_ROOT_DIR/uwsgi.sock"
+CACHE_ROOT="$WORK/cache"
 CONF="$WORK/nginx.conf"
 OUT=${NGINX_DIFF_PROTOCOLS_ORACLE_OUT:-$HERE/nginx-oracle.json}
 if [ -z "${NGINX_BIN:-}" ]; then
@@ -50,7 +52,10 @@ if [ ! -x "$GRPC_MOCK" ]; then
 fi
 [ -x "$GRPC_MOCK" ] || oracle_unavailable "gRPC mock responder binary is missing"
 
-mkdir -p "$WORK" "$UNIX_ROOT_DIR"
+# The response-cache cases require a cold cache on every capture: the work dir
+# persists across runs, so drop the fixture-owned cache tree explicitly.
+rm -rf "$CACHE_ROOT"
+mkdir -p "$WORK" "$UNIX_ROOT_DIR" "$CACHE_ROOT/fastcgi" "$CACHE_ROOT/uwsgi" "$CACHE_ROOT/scgi"
 rm -f "$FCGI_SOCKET" "$UWSGI_SOCKET"
 for sub in client_body proxy fastcgi uwsgi scgi; do
     mkdir -p "$WORK/tmp/$sub"
@@ -114,6 +119,7 @@ sed \
     -e "s|@GRPC_TLS_OK@|$GRPC_TLS_OK|g" \
     -e "s|@GRPC_TLS_UNTRUSTED@|$GRPC_TLS_UNTRUSTED|g" \
     -e "s|@DEAD@|$DEAD|g" \
+    -e "s|@CACHE_ROOT@|$CACHE_ROOT|g" \
     "$HERE/nginx.conf" |
     sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF.main"
 awk -v unix_file="$WORK/unix-server.conf" '

@@ -154,7 +154,33 @@ impl CgiRequestFacts<'_> {
         output
     }
 
-    fn variable(&self, name: &str) -> Option<String> {
+    /// Clone the facts with a different effective request method and header
+    /// map (CGI cache HEAD→GET conversion and conditional revalidation).
+    pub(crate) fn with_overrides<'b>(
+        &'b self,
+        method: &'b Method,
+        headers: &'b HeaderMap,
+    ) -> CgiRequestFacts<'b> {
+        CgiRequestFacts {
+            method,
+            scheme: self.scheme,
+            authority: self.authority,
+            path: self.path,
+            raw_request_uri: self.raw_request_uri,
+            query: self.query,
+            client_ip: self.client_ip,
+            listener_port: self.listener_port,
+            server_protocol: self.server_protocol,
+            server_name: self.server_name,
+            headers,
+            document_root: self.document_root,
+            script_name: self.script_name.clone(),
+            path_info: self.path_info.clone(),
+            maps: self.maps,
+        }
+    }
+
+    pub(crate) fn variable(&self, name: &str) -> Option<String> {
         let value = match name {
             "host" => self
                 .authority

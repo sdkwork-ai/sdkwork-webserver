@@ -16,9 +16,9 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **246** | 可承诺 |
+| executable（真实执行且有测试证据） | 79 | **291** | 可承诺 |
 | accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **314** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
+| rejected (fail closed)（活跃出现即报错） | 253 | **269** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
 | excluded from profile（明确排除） | 229 | **13** | 仅 GeoIP 8 / Perl 4 / 动态模块 1；HTTP/3 为 fail-closed 规划项 |
 | **合计** | 744 | **744** | |
 
@@ -129,7 +129,7 @@
 | 进程内全表面行为回归 | `python3 tests/nginx/full-surface/probe.py` | **76/76** |
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
 | 宽面 HTTP 差分（87→259 例） | `node tools/run-nginx-differential-http.mjs` | **259/259**，0 非预期 |
-| 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **49/49** 逐字节一致（含 bind/keep-conn/unix 传输与 uWSGI TLS/mTLS 用例） |
+| 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **65/65** 逐字节一致（含 bind/keep-conn/unix、uWSGI TLS/mTLS、16 个 CGI cache 用例） |
 | 真实生产配置验收（api.birdcoder.com 快照） | `node tools/check-nginx-real-world.mjs` | virtualHosts=41 / listeners=4 / resources=150 / upstreams=88 / skipped=0，纳入聚合门禁 |
 | stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **9/9**（limit_conn/dry-run/ACL/return/set/map/SNI） |
 | 邮件代理差分（POP3/IMAP/SMTP vs nginx） | `node tools/run-nginx-differential-mail.mjs` | **9/9**（auth_http、登录/中继、AUTH 失败、XCLIENT、隐式 TLS、STARTTLS） |

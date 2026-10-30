@@ -2568,10 +2568,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_background_update",
@@ -2584,10 +2658,85 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_background_update` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_background_update)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "serves the stale representation while a fill is in flight instead of a detached background revalidation task"
+      ]
     },
     {
       "id": "http:fastcgi_cache_bypass",
@@ -2600,10 +2749,84 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_bypass` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_bypass)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_key",
@@ -2616,10 +2839,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_key` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_key)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_lock",
@@ -2632,10 +2929,84 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_lock` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_lock)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_lock_age",
@@ -2648,10 +3019,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_lock_age` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_lock_age)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "accepted but not enforceable: the shared store cannot preempt an in-progress fill; a second fill starts after lock_timeout"
+      ]
     },
     {
       "id": "http:fastcgi_cache_lock_timeout",
@@ -2664,10 +3110,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_lock_timeout` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_lock_timeout)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_max_range_offset",
@@ -2680,10 +3200,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_max_range_offset` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_max_range_offset)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "Range start <= limit participates in caching; missing/malformed or larger offsets bypass (full 200 representations are cached)"
+      ]
     },
     {
       "id": "http:fastcgi_cache_methods",
@@ -2696,10 +3291,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_methods` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_methods)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "GET/HEAD plus configured methods; Authorization/Upgrade requests bypass"
+      ]
     },
     {
       "id": "http:fastcgi_cache_min_uses",
@@ -2712,10 +3382,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_min_uses` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_min_uses)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_path",
@@ -2726,10 +3470,83 @@
         "http"
       ],
       "grammar": "2+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_path` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_path)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "one process store backs every declared zone; additional paths are accepted as zone declarations but only the first provides a disk tier; a CGI *_cache may reference a proxy_cache_path zone (documented superset of nginx)"
+      ]
     },
     {
       "id": "http:fastcgi_cache_revalidate",
@@ -2742,10 +3559,84 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_revalidate` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_revalidate)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_cache_use_stale",
@@ -2758,10 +3649,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_use_stale` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_use_stale)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "serves a stale entry on adapter failure statuses within the store stale window; only Cache-Control/Expires are parsed for explicit freshness (X-Accel-Expires is not consulted)"
+      ]
     },
     {
       "id": "http:fastcgi_cache_valid",
@@ -2774,10 +3740,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_cache_valid` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_cache_valid)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "nginx has no default caching time; rules apply exactly as configured and explicit Cache-Control/Expires overrides them"
+      ]
     },
     {
       "id": "http:fastcgi_catch_stderr",
@@ -3374,10 +4415,84 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_no_cache` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"fast-cgi\" cache policy (fastcgi_no_cache)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:fastcgi_param",
@@ -10841,10 +11956,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_background_update",
@@ -10857,10 +12046,85 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_background_update` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_background_update)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "serves the stale representation while a fill is in flight instead of a detached background revalidation task"
+      ]
     },
     {
       "id": "http:scgi_cache_bypass",
@@ -10873,10 +12137,84 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_bypass` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_bypass)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_key",
@@ -10889,10 +12227,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_key` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_key)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_lock",
@@ -10905,10 +12317,84 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_lock` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_lock)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_lock_age",
@@ -10921,10 +12407,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_lock_age` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_lock_age)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "accepted but not enforceable: the shared store cannot preempt an in-progress fill; a second fill starts after lock_timeout"
+      ]
     },
     {
       "id": "http:scgi_cache_lock_timeout",
@@ -10937,10 +12498,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_lock_timeout` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_lock_timeout)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_max_range_offset",
@@ -10953,10 +12588,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_max_range_offset` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_max_range_offset)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "Range start <= limit participates in caching; missing/malformed or larger offsets bypass (full 200 representations are cached)"
+      ]
     },
     {
       "id": "http:scgi_cache_methods",
@@ -10969,10 +12679,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_methods` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_methods)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "GET/HEAD plus configured methods; Authorization/Upgrade requests bypass"
+      ]
     },
     {
       "id": "http:scgi_cache_min_uses",
@@ -10985,10 +12770,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_min_uses` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_min_uses)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_path",
@@ -10999,10 +12858,83 @@
         "http"
       ],
       "grammar": "2+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_path` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_path)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "one process store backs every declared zone; additional paths are accepted as zone declarations but only the first provides a disk tier; a CGI *_cache may reference a proxy_cache_path zone (documented superset of nginx)"
+      ]
     },
     {
       "id": "http:scgi_cache_revalidate",
@@ -11015,10 +12947,84 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_revalidate` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_revalidate)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_cache_use_stale",
@@ -11031,10 +13037,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_use_stale` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_use_stale)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "serves a stale entry on adapter failure statuses within the store stale window; only Cache-Control/Expires are parsed for explicit freshness (X-Accel-Expires is not consulted)"
+      ]
     },
     {
       "id": "http:scgi_cache_valid",
@@ -11047,10 +13128,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_cache_valid` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_cache_valid)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "nginx has no default caching time; rules apply exactly as configured and explicit Cache-Control/Expires overrides them"
+      ]
     },
     {
       "id": "http:scgi_connect_timeout",
@@ -11389,10 +13545,84 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_no_cache` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (scgi_no_cache)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:scgi_param",
@@ -13711,10 +15941,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_background_update",
@@ -13727,10 +16031,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_background_update` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_background_update)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "serves the stale representation while a fill is in flight instead of a detached background revalidation task"
+      ]
     },
     {
       "id": "http:uwsgi_cache_bypass",
@@ -13743,10 +16122,84 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_bypass` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_bypass)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_key",
@@ -13759,10 +16212,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_key` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_key)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_lock",
@@ -13775,10 +16302,84 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_lock` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_lock)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_lock_age",
@@ -13791,10 +16392,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_lock_age` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_lock_age)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "accepted but not enforceable: the shared store cannot preempt an in-progress fill; a second fill starts after lock_timeout"
+      ]
     },
     {
       "id": "http:uwsgi_cache_lock_timeout",
@@ -13807,10 +16483,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_lock_timeout` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_lock_timeout)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_max_range_offset",
@@ -13823,10 +16573,85 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_max_range_offset` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_max_range_offset)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "Range start <= limit participates in caching; missing/malformed or larger offsets bypass (full 200 representations are cached)"
+      ]
     },
     {
       "id": "http:uwsgi_cache_methods",
@@ -13839,10 +16664,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_methods` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_methods)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "GET/HEAD plus configured methods; Authorization/Upgrade requests bypass"
+      ]
     },
     {
       "id": "http:uwsgi_cache_min_uses",
@@ -13855,10 +16755,84 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_min_uses` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_min_uses)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_path",
@@ -13869,10 +16843,83 @@
         "http"
       ],
       "grammar": "2+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_path` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_path)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "one process store backs every declared zone; additional paths are accepted as zone declarations but only the first provides a disk tier; a CGI *_cache may reference a proxy_cache_path zone (documented superset of nginx)"
+      ]
     },
     {
       "id": "http:uwsgi_cache_revalidate",
@@ -13885,10 +16932,84 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_revalidate` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_revalidate)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_cache_use_stale",
@@ -13901,10 +17022,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_use_stale` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_use_stale)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "serves a stale entry on adapter failure statuses within the store stale window; only Cache-Control/Expires are parsed for explicit freshness (X-Accel-Expires is not consulted)"
+      ]
     },
     {
       "id": "http:uwsgi_cache_valid",
@@ -13917,10 +17113,85 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_cache_valid` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_cache_valid)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6",
+        "nginx has no default caching time; rules apply exactly as configured and explicit Cache-Control/Expires overrides them"
+      ]
     },
     {
       "id": "http:uwsgi_connect_timeout",
@@ -14341,10 +17612,84 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_no_cache` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"cgi-upstream\" cache policy (uwsgi_no_cache)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-bypass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-no-cache"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-valid"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-key"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-min-uses"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-lock"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-stale"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-revalidate"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-convert-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-beyond"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-range-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-uwsgi-hit"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "cache-scgi-hit"
+        }
+      ],
+      "knownDifferences": [
+        "reuses the shared HTTP cache store with a CGI-specific key/policy layer; cache key default is $scheme$request_method$host$request_uri",
+        "bypass skips both lookup and store (nginx serves the previously cached entry next request); no_cache blocks storing only; single-flight lock, min_uses, use_stale and conditional revalidation are differential-proven against nginx 1.29.6"
+      ]
     },
     {
       "id": "http:uwsgi_param",

@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '23bcf739';
+const AUDIT_HEAD = '91ad3e2e';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B) and the uWSGI upstream-TLS wave (wave 7B) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the CGI cache-family wave (wave 7C) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -351,6 +351,58 @@ const COMPLETED_WAVES = [
       'http:uwsgi_ssl_protocols',
     ],
   },
+  {
+    key: 'wave 7C (CGI cache family)',
+    summary:
+      'fastcgi/uwsgi/scgi response-cache family at http/server/location on the shared HTTP cache store (Vary-aware refinement, single-flight lock, bounded min_uses counters)',
+    ids: [
+      'http:fastcgi_cache',
+      'http:fastcgi_cache_background_update',
+      'http:fastcgi_cache_bypass',
+      'http:fastcgi_cache_key',
+      'http:fastcgi_cache_lock',
+      'http:fastcgi_cache_lock_age',
+      'http:fastcgi_cache_lock_timeout',
+      'http:fastcgi_cache_max_range_offset',
+      'http:fastcgi_cache_methods',
+      'http:fastcgi_cache_min_uses',
+      'http:fastcgi_cache_path',
+      'http:fastcgi_cache_revalidate',
+      'http:fastcgi_cache_use_stale',
+      'http:fastcgi_cache_valid',
+      'http:fastcgi_no_cache',
+      'http:scgi_cache',
+      'http:scgi_cache_background_update',
+      'http:scgi_cache_bypass',
+      'http:scgi_cache_key',
+      'http:scgi_cache_lock',
+      'http:scgi_cache_lock_age',
+      'http:scgi_cache_lock_timeout',
+      'http:scgi_cache_max_range_offset',
+      'http:scgi_cache_methods',
+      'http:scgi_cache_min_uses',
+      'http:scgi_cache_path',
+      'http:scgi_cache_revalidate',
+      'http:scgi_cache_use_stale',
+      'http:scgi_cache_valid',
+      'http:scgi_no_cache',
+      'http:uwsgi_cache',
+      'http:uwsgi_cache_background_update',
+      'http:uwsgi_cache_bypass',
+      'http:uwsgi_cache_key',
+      'http:uwsgi_cache_lock',
+      'http:uwsgi_cache_lock_age',
+      'http:uwsgi_cache_lock_timeout',
+      'http:uwsgi_cache_max_range_offset',
+      'http:uwsgi_cache_methods',
+      'http:uwsgi_cache_min_uses',
+      'http:uwsgi_cache_path',
+      'http:uwsgi_cache_revalidate',
+      'http:uwsgi_cache_use_stale',
+      'http:uwsgi_cache_valid',
+      'http:uwsgi_no_cache',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -535,27 +587,12 @@ const REMAINING_GAP_CATEGORIES = [
       'http:fastcgi_buffer_size',
       'http:fastcgi_buffers',
       'http:fastcgi_busy_buffers_size',
-      'http:fastcgi_cache',
-      'http:fastcgi_cache_background_update',
-      'http:fastcgi_cache_bypass',
-      'http:fastcgi_cache_key',
-      'http:fastcgi_cache_lock',
-      'http:fastcgi_cache_lock_age',
-      'http:fastcgi_cache_lock_timeout',
-      'http:fastcgi_cache_max_range_offset',
-      'http:fastcgi_cache_methods',
-      'http:fastcgi_cache_min_uses',
-      'http:fastcgi_cache_path',
-      'http:fastcgi_cache_revalidate',
-      'http:fastcgi_cache_use_stale',
-      'http:fastcgi_cache_valid',
       'http:fastcgi_catch_stderr',
       'http:fastcgi_force_ranges',
       'http:fastcgi_ignore_client_abort',
       'http:fastcgi_ignore_headers',
       'http:fastcgi_limit_rate',
       'http:fastcgi_max_temp_file_size',
-      'http:fastcgi_no_cache',
       'http:fastcgi_pass_request_body',
       'http:fastcgi_send_lowat',
       'http:fastcgi_store',
@@ -565,7 +602,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this FastCGI sub-family fails to activate.',
-    why: 'the implemented FastCGI request/response and transport forms (IP-literal bind, SO_KEEPALIVE, bounded per-generation keep_conn pool) now execute end-to-end; the residual cache/buffer/store/SSL sub-families, unix/variable targets and hostname/transparent binds are unimplemented and are backlog, not profile exclusions.',
+    why: 'the implemented FastCGI request/response, transport and response-cache forms now execute end-to-end; the residual buffer/store/temp path sub-families, unix/variable targets and hostname/transparent binds are unimplemented backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/fastcgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
@@ -578,26 +615,11 @@ const REMAINING_GAP_CATEGORIES = [
       'http:uwsgi_buffer_size',
       'http:uwsgi_buffers',
       'http:uwsgi_busy_buffers_size',
-      'http:uwsgi_cache',
-      'http:uwsgi_cache_background_update',
-      'http:uwsgi_cache_bypass',
-      'http:uwsgi_cache_key',
-      'http:uwsgi_cache_lock',
-      'http:uwsgi_cache_lock_age',
-      'http:uwsgi_cache_lock_timeout',
-      'http:uwsgi_cache_max_range_offset',
-      'http:uwsgi_cache_methods',
-      'http:uwsgi_cache_min_uses',
-      'http:uwsgi_cache_path',
-      'http:uwsgi_cache_revalidate',
-      'http:uwsgi_cache_use_stale',
-      'http:uwsgi_cache_valid',
       'http:uwsgi_force_ranges',
       'http:uwsgi_ignore_client_abort',
       'http:uwsgi_ignore_headers',
       'http:uwsgi_limit_rate',
       'http:uwsgi_max_temp_file_size',
-      'http:uwsgi_no_cache',
       'http:uwsgi_pass_request_body',
       'http:uwsgi_ssl_certificate_cache',
       'http:uwsgi_ssl_ciphers',
@@ -613,7 +635,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this uWSGI sub-family fails to activate.',
-    why: 'the implemented uWSGI request/response and transport forms (IP-literal bind, SO_KEEPALIVE) plus uWSGI upstream TLS identity/verification now execute end-to-end; the residual cache/buffer/store sub-families, unix/variable targets, hostname/transparent binds, uWSGI keep-conn reuse and the rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth) are unimplemented backlog, not profile exclusions.',
+    why: 'the implemented uWSGI request/response, transport, response-cache and upstream TLS identity/verification forms now execute end-to-end; the residual buffer/store/temp path sub-families, unix/variable targets, hostname/transparent binds, uWSGI keep-conn reuse and the rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth) are unimplemented backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/uwsgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
@@ -626,26 +648,11 @@ const REMAINING_GAP_CATEGORIES = [
       'http:scgi_buffer_size',
       'http:scgi_buffers',
       'http:scgi_busy_buffers_size',
-      'http:scgi_cache',
-      'http:scgi_cache_background_update',
-      'http:scgi_cache_bypass',
-      'http:scgi_cache_key',
-      'http:scgi_cache_lock',
-      'http:scgi_cache_lock_age',
-      'http:scgi_cache_lock_timeout',
-      'http:scgi_cache_max_range_offset',
-      'http:scgi_cache_methods',
-      'http:scgi_cache_min_uses',
-      'http:scgi_cache_path',
-      'http:scgi_cache_revalidate',
-      'http:scgi_cache_use_stale',
-      'http:scgi_cache_valid',
       'http:scgi_force_ranges',
       'http:scgi_ignore_client_abort',
       'http:scgi_ignore_headers',
       'http:scgi_limit_rate',
       'http:scgi_max_temp_file_size',
-      'http:scgi_no_cache',
       'http:scgi_pass_request_body',
       'http:scgi_store',
       'http:scgi_store_access',
@@ -654,7 +661,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this SCGI sub-family fails to activate.',
-    why: 'the implemented SCGI request/response and transport forms (IP-literal bind, SO_KEEPALIVE) now execute end-to-end; the residual cache/buffer/store/SSL sub-families, unix/variable targets, hostname/transparent binds and SCGI keep-conn reuse are unimplemented and are backlog, not profile exclusions.',
+    why: 'the implemented SCGI request/response, transport and response-cache forms now execute end-to-end; the residual buffer/store/temp path sub-families, unix/variable targets, hostname/transparent binds and SCGI keep-conn reuse are unimplemented backlog, not profile exclusions.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/scgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-protocols with cache/buffer/store/SSL and unix/variable-target cases',
@@ -1760,6 +1767,27 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the mTLS differential case completes the upstream handshake with the configured client certificate/key and matches nginx 1.29.6 behaviour',
   },
+  {
+    id: 'http:fastcgi_cache',
+    evidence: 'tests/nginx/differential-protocols/battery.py::cache-hit',
+    claim: 'fastcgi_cache serves a hit from the shared HTTP cache store',
+    proves:
+      'the cache differential compares the FastCGI cache hit/miss body (`gen=<n>`) against nginx 1.29.6; the sibling `cache-default` case proves nginx has no default caching time until valid/Cache-Control/Expires allows it',
+  },
+  {
+    id: 'http:fastcgi_cache_valid',
+    evidence: 'tests/nginx/differential-protocols/battery.py::cache-valid',
+    claim: 'fastcgi_cache_valid sets the per-status caching time',
+    proves:
+      'the cache-valid case compares status-based expiry (and the no-default case) against nginx 1.29.6',
+  },
+  {
+    id: 'http:fastcgi_cache_key',
+    evidence: 'tests/nginx/differential-protocols/battery.py::cache-key',
+    claim: 'fastcgi_cache_key selects the cache entry key',
+    proves:
+      'the custom-key case proves two requests with different keys are cached separately and match nginx 1.29.6',
+  },
 ];
 
 /**
@@ -2052,7 +2080,8 @@ function renderHeader(inventory, catalog) {
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
   3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the
   stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
-  wave (wave 10), the mail waves (9A/9B) and the uWSGI upstream-TLS wave (wave 7B).** The code, tests, generated operator matrix and the re-synced directive
+  wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
+  CGI cache-family wave (wave 7C).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2071,8 +2100,9 @@ function renderHeader(inventory, catalog) {
   rewrite/variable-engine wave (\`if\` conditions over the bounded variable engine) and
   the mail waves (POP3/IMAP/SMTP proxy end-to-end after the PRD section 4 mail-module
   amendment) and the uWSGI upstream-TLS wave (uwsgi_ssl_* identity/verification through
-  the CGI transport seam) are recorded as completed in section 3, and every one of them
-  is asserted executable by \`--verify-evidence\`.
+  the CGI transport seam) and the CGI cache-family wave (shared HTTP cache store with a
+  CGI key/policy layer) are recorded as completed in section 3, and every one of them is
+  asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2177,7 +2207,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves and the uWSGI upstream-TLS wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave and the CGI cache-family wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2212,7 +2242,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-uWSGI-upstream-TLS-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-CGI-cache-family-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2286,7 +2316,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2310,7 +2340,9 @@ the FastCGI/uWSGI/SCGI/memcached adapters (http/server/location inheritance); an
 rewrite/variable-engine wave made server/location \`if\` conditions executable; and the
 mail waves brought the POP3/IMAP/SMTP mail proxy in profile (PRD section 4 amendment) with
 the 27 implemented mail-module directives executing end-to-end; and the uWSGI
-upstream-TLS wave made the seven uwsgi_ssl_* identity/verification directives executable.
+upstream-TLS wave made the seven uwsgi_ssl_* identity/verification directives executable;
+and the CGI cache-family wave made 45 fastcgi/uwsgi/scgi response-cache directives
+executable on the shared HTTP cache store.
 
 ${completedTable}
 ${completedRows}
@@ -2346,6 +2378,17 @@ nginx 1.29.6 has **no** scgi_ssl_* and **no** fastcgi_ssl_* directives (inventor
 uwsgi_ssl, 0 scgi_ssl), so those names are rejected as non-nginx extensions and are not
 counted as nginx gaps.
 
+Wave 7C acceptance evidence: the 45 fastcgi/uwsgi/scgi response-cache directives execute on
+the shared HTTP cache store with a CGI-specific key/policy layer (Vary-aware refinement,
+single-flight lock, bounded min_uses counters), proven by 16 new cache cases in
+differential-protocols (49 -> 65; it remains the second aggregate differential slice):
+hit, no-default-caching, bypass, no_cache, valid-by-status, custom key, min_uses, lock
+coalescing, use_stale http_500, conditional revalidate, HEAD->GET convert_head, three
+range/max_range_offset decisions, and uWSGI/SCGI cache hits. **nginx has no default caching
+time**: the task brief's "10m/1h defaults" are not nginx defaults, and the
+differential \`cache-default\` case proves nginx caches nothing until
+\`*_cache_valid\`/\`Cache-Control\`/\`Expires\` says so.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
@@ -2357,7 +2400,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the uWSGI upstream-TLS wave (7B). An accepted-unenforced row is silently ignored today; a rejected row fails
+the CGI cache-family wave (7C). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2413,6 +2456,16 @@ backlog. nginx 1.29.6 defines no scgi_ssl_* or fastcgi_ssl_* directives, so thos
 are non-nginx extensions rather than missing nginx features and are deliberately not
 listed as gaps.
 
+Wave 7C bounded differences (documented known differences, not backlog rows): (a)
+\`*_cache_lock_age\` cannot preempt an in-flight fill (the store waits or serves as its
+policy allows); (b) \`*_cache_background_update\` serves stale instead of spawning a
+detached task; (c) \`X-Accel-Expires\` is not consulted - only \`Cache-Control\` and \`Expires\`
+drive freshness; (d) \`inactive=\` is accepted but eviction is LRU/object-cap based rather
+than a strict inactive timer; (e) one process cache store backs every declared zone, and
+only the first zone provides a disk tier; (f) a CGI cache may reference a
+\`proxy_cache_path\` zone, a documented superset of nginx. nginx has no default caching
+time, and the runtime matches that (no implicit TTL).
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2459,7 +2512,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves and the uWSGI upstream-TLS wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave and the CGI cache-family wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2589,9 +2642,10 @@ strict-descendant confinement for \`unix:/absolute\` upstream targets (nginx-con
 keep_conn pool with the pooled-socket framing fix. Wave 7B added uWSGI upstream TLS
 identity/verification through the same transport seam (always verified unless
 uwsgi_ssl_verify is off), and nginx 1.29.6 defines no scgi_ssl_* or fastcgi_ssl_*
-directives. The residual cache/buffer/store/SSL, unix/variable-target,
-hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library knobs are backlog rows,
-not profile exclusions.
+directives. Wave 7C executes the fastcgi/uwsgi/scgi response-cache family on the shared
+HTTP cache store (nginx has no default caching time). The residual buffer/store/SSL,
+unix/variable-target, hostname/transparent-bind, reuse and gRPC bind/socket/TLS-library
+knobs are backlog rows, not profile exclusions.
 
 Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
 \`crates/sdkwork-webserver-mail-protocol\` crate (POP3/IMAP/SMTP state machines) and the
@@ -2675,7 +2729,7 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the uWSGI upstream-TLS wave (7B) landed and the Lead
+This refresh was regenerated after the CGI cache-family wave (7C) landed and the Lead
 re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 

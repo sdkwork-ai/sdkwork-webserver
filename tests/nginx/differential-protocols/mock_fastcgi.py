@@ -22,9 +22,15 @@ import os
 import socket
 import struct
 import threading
+import time
 
 _CONNECTION_IDS = 0
 _CONNECTION_IDS_LOCK = threading.Lock()
+# Wave 7C: generation counter for the response-cache cases. Every cacheable
+# upstream fetch increments it, so the battery can prove hit/miss/bypass
+# behaviour through the response body instead of timing.
+_CACHE_GENERATION = 0
+_CACHE_GENERATION_LOCK = threading.Lock()
 
 
 def read_exact(stream: socket.socket, length: int) -> bytes:
@@ -108,6 +114,35 @@ def read_request(connection: socket.socket):
     return params, body, keep_conn
 
 
+def cache_response(by_name: dict, request_uri: str):
+    """Deterministic response for the nginx CGI response-cache cases.
+
+    Returns `(status, headers, body)` for a `/cache*` request, or `None` when the
+    request is not a cache case (the normal PARAMS/STDIN echo path handles it).
+    """
+    global _CACHE_GENERATION
+    fail = by_name.get("HTTP_X_FAIL") == "1"
+    if request_uri.startswith("/cache-lock/"):
+        # Slow upstream so two concurrent requests overlap (lock coalescing).
+        time.sleep(0.5)
+    if request_uri.startswith("/cache-revalidate/"):
+        conditional = by_name.get("HTTP_IF_NONE_MATCH", "")
+        if '"stable"' in conditional:
+            return 304, {"ETag": '"stable"'}, b""
+    with _CACHE_GENERATION_LOCK:
+        _CACHE_GENERATION += 1
+        generation = _CACHE_GENERATION
+    if fail:
+        body = b"fail"
+        return 500, {"Content-Type": "text/plain", "Content-Length": str(len(body))}, body
+    headers = {"Content-Type": "text/plain", "X-Mock-Fcgi": "yes"}
+    if request_uri.startswith("/cache-revalidate/"):
+        headers["ETag"] = '"stable"'
+    body = f"gen={generation}".encode()
+    headers["Content-Length"] = str(len(body))
+    return 200, headers, body
+
+
 def handle(connection: socket.socket, connection_id: int) -> None:
     try:
         while True:
@@ -117,6 +152,32 @@ def handle(connection: socket.socket, connection_id: int) -> None:
             params, body, keep_conn = request
             by_name = dict(params)
             request_uri = by_name.get("REQUEST_URI", "")
+            if request_uri.startswith("/cache"):
+                cache_result = cache_response(by_name, request_uri)
+                if cache_result is not None:
+                    cache_status, cache_headers, cache_payload = cache_result
+                    reason = {
+                        200: "OK",
+                        304: "Not Modified",
+                        500: "Internal Server Error",
+                    }.get(cache_status, "Status")
+                    cache_head = f"Status: {cache_status} {reason}\r\n".encode()
+                    for name, value in cache_headers.items():
+                        cache_head += f"{name}: {value}\r\n".encode()
+                    cache_head += b"\r\n"
+                    emit_body = (
+                        by_name.get("REQUEST_METHOD", "GET") != "HEAD"
+                        and cache_status != 304
+                    )
+                    connection.sendall(record(7, b"mock-stderr\n"))
+                    connection.sendall(
+                        record(6, cache_head + (cache_payload if emit_body else b""))
+                    )
+                    connection.sendall(record(6, b""))
+                    connection.sendall(record(3, struct.pack("!IB3x", 0, 0)))
+                    if not keep_conn:
+                        return
+                    continue
             status = 200
             if request_uri.startswith("/errors/"):
                 status = 404

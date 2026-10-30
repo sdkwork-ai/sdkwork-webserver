@@ -14,6 +14,8 @@ from __future__ import annotations
 import argparse
 import json
 import socket
+import threading
+import time
 
 HOST = "fcgi.example.com"
 IGNORED_RESPONSE_HEADERS = {
@@ -181,6 +183,23 @@ CASES = [
     ("uwsgi-tls-mtls", "GET", "/uwsgi-tls-mtls/hello?x=1", {"X-Sent": "tls-beta"}, None),
     ("uwsgi-tls-untrusted", "GET", "/uwsgi-tls-untrusted/hello", {"X-Sent": "tls-gamma"}, None),
 
+    # ---- Wave 7C: CGI response-cache sequences (SPECIAL rows) ----
+    ("cache-hit", "SPECIAL", "", {}, None),
+    ("cache-default", "SPECIAL", "", {}, None),
+    ("cache-bypass", "SPECIAL", "", {}, None),
+    ("cache-no-cache", "SPECIAL", "", {}, None),
+    ("cache-valid", "SPECIAL", "", {}, None),
+    ("cache-key", "SPECIAL", "", {}, None),
+    ("cache-min-uses", "SPECIAL", "", {}, None),
+    ("cache-lock", "SPECIAL", "", {}, None),
+    ("cache-stale", "SPECIAL", "", {}, None),
+    ("cache-revalidate", "SPECIAL", "", {}, None),
+    ("cache-convert-head", "SPECIAL", "", {}, None),
+    ("cache-range", "SPECIAL", "", {}, None),
+    ("cache-range-default", "SPECIAL", "", {}, None),
+    ("cache-range-beyond", "SPECIAL", "", {}, None),
+    ("cache-uwsgi-hit", "SPECIAL", "", {}, None),
+    ("cache-scgi-hit", "SPECIAL", "", {}, None),
 ]
 
 
@@ -305,6 +324,209 @@ UNIX_CASES = [
 UNIX_HOST = "unix.example.com"
 
 
+def cache_case(name: str, port: int) -> dict:
+    """Run one stateful cache sequence and fold it into one comparable record.
+
+    The body is a relation string (generation values, hit flags), so the oracle
+    and the runtime compare equal only when they agree on *when* the upstream
+    was consulted -- absolute timing is not part of the contract.
+    """
+
+    def get(path: str, headers: dict | None = None, method: str = "GET") -> dict:
+        result, _ = request(port, method, path, headers or {}, None, port)
+        return result
+
+    if name == "cache-default":
+        first = get("/cache-default/one")
+        second = get("/cache-default/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s cached=%s"
+            % (first["body"], second["body"], first["body"] == second["body"]),
+        }
+    if name == "cache-hit":
+        first = get("/cache/basic/one")
+        second = get("/cache/basic/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s cached=%s"
+            % (first["body"], second["body"], first["body"] == second["body"]),
+        }
+    if name == "cache-bypass":
+        first = get("/cache-bypass/one")
+        bypassed = get("/cache-bypass/one?bypass=1")
+        third = get("/cache-bypass/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s bypassed=%s third=%s"
+            % (first["body"], bypassed["body"], third["body"]),
+        }
+    if name == "cache-no-cache":
+        first = get("/cache-nocache/one?nocache=1")
+        second = get("/cache-nocache/one")
+        third = get("/cache-nocache/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s third=%s"
+            % (first["body"], second["body"], third["body"]),
+        }
+    if name == "cache-valid":
+        first = get("/cache-valid/one")
+        time.sleep(2.4)
+        expired = get("/cache-valid/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s expired=%s refetched=%s"
+            % (first["body"], expired["body"], first["body"] != expired["body"]),
+        }
+    if name == "cache-key":
+        first = get("/cache-key/first?key=shared")
+        second = get("/cache-key/second?key=shared")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s shared=%s"
+            % (first["body"], second["body"], first["body"] == second["body"]),
+        }
+    if name == "cache-min-uses":
+        first = get("/cache-min-uses/one")
+        second = get("/cache-min-uses/one")
+        third = get("/cache-min-uses/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s third=%s"
+            % (first["body"], second["body"], third["body"]),
+        }
+    if name == "cache-lock":
+        results: list[dict] = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(2)
+
+        def fetch() -> None:
+            barrier.wait()
+            result, _ = request(port, "GET", "/cache-lock/slow", {}, None, port)
+            with lock:
+                results.append(result)
+
+        threads = [threading.Thread(target=fetch) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        bodies = sorted(result["body"] for result in results)
+        status = results[0]["status"] if results else 0
+        return {
+            "status": status,
+            "headers": results[0]["headers"] if results else {},
+            "trailers": {},
+            "body": "bodies=%s coalesced=%s"
+            % (",".join(bodies), len({result["body"] for result in results}) == 1),
+        }
+    if name == "cache-stale":
+        prime = get("/cache-stale/one")
+        time.sleep(2.4)
+        stale = get("/cache-stale/one", {"X-Fail": "1"})
+        return {
+            "status": stale["status"],
+            "headers": stale["headers"],
+            "trailers": {},
+            "body": "prime=%s stale=%s served_stale=%s"
+            % (prime["body"], stale["body"], stale["status"] == 200),
+        }
+    if name == "cache-revalidate":
+        prime = get("/cache-revalidate/one")
+        time.sleep(2.4)
+        revalidated = get("/cache-revalidate/one")
+        return {
+            "status": revalidated["status"],
+            "headers": revalidated["headers"],
+            "trailers": {},
+            "body": "prime=%s revalidated=%s refreshed=%s"
+            % (prime["body"], revalidated["body"], prime["body"] == revalidated["body"]),
+        }
+    if name == "cache-convert-head":
+        first = get("/cache-head/one")
+        head = get("/cache-head/one", method="HEAD")
+        second = get("/cache-head/one")
+        return {
+            "status": head["status"],
+            "headers": head["headers"],
+            "trailers": {},
+            "body": "get=%s head_body=%s second=%s"
+            % (first["body"], len(head["body"]), second["body"]),
+        }
+    # nginx may consult the upstream twice for the first Range request (it
+    # fills the cache with the full representation), so the absolute generation
+    # counter is not part of the contract here: the cache decision is.
+    if name == "cache-range-default":
+        first = get("/cache-range-default/one", {"Range": "bytes=0-4"})
+        second = get("/cache-range-default/one", {"Range": "bytes=0-4"})
+        return {
+            "status": first["status"],
+            "headers": {},
+            "trailers": {},
+            "body": "cached=%s" % (first["body"] == second["body"]),
+        }
+    # nginx may consult the upstream twice for the first Range request (it
+    # fills the cache with the full representation), so the absolute generation
+    # counter is not part of the contract here: the cache decision is.
+    if name == "cache-range-beyond":
+        first = get("/cache-range-beyond/one", {"Range": "bytes=100-104"})
+        second = get("/cache-range-beyond/one", {"Range": "bytes=100-104"})
+        return {
+            "status": first["status"],
+            "headers": {},
+            "trailers": {},
+            "body": "cached=%s" % (first["body"] == second["body"]),
+        }
+    if name == "cache-uwsgi-hit":
+        first = get("/cache-uwsgi/one")
+        second = get("/cache-uwsgi/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s cached=%s"
+            % (first["body"], second["body"], first["body"] == second["body"]),
+        }
+    if name == "cache-scgi-hit":
+        first = get("/cache-scgi/one")
+        second = get("/cache-scgi/one")
+        return {
+            "status": first["status"],
+            "headers": first["headers"],
+            "trailers": {},
+            "body": "first=%s second=%s cached=%s"
+            % (first["body"], second["body"], first["body"] == second["body"]),
+        }
+    # nginx may consult the upstream twice for the first Range request (it
+    # fills the cache with the full representation), so the absolute generation
+    # counter is not part of the contract here: the cache decision is.
+    if name == "cache-range":
+        first = get("/cache-range/one", {"Range": "bytes=0-4"})
+        second = get("/cache-range/one", {"Range": "bytes=0-4"})
+        return {
+            "status": first["status"],
+            "headers": {},
+            "trailers": {},
+            "body": "cached=%s" % (first["body"] == second["body"]),
+        }
+    raise AssertionError(f"unknown cache case {name}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
@@ -314,6 +536,9 @@ def main() -> None:
     captured = {}
     server = None
     for name, method, path, headers, body in CASES:
+        if method == "SPECIAL" and name.startswith("cache-"):
+            captured[name] = cache_case(name, arguments.port)
+            continue
         if method == "SPECIAL":
             # `fastcgi_keep_conn` reuse: two sequential requests must be answered
             # on the same responder connection (the mock reports its local

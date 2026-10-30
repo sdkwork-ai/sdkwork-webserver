@@ -702,12 +702,22 @@ impl SemanticValidator {
                     read_timeout_ms,
                     response_policy,
                     retry,
+                    cache,
                     ..
                 } => {
                     if !upstreams.contains_key(upstream_ref.as_str()) {
                         self.push(
                             format!("{path}/upstreamRef"),
                             format!("unknown upstream {upstream_ref}"),
+                        );
+                    }
+                    if let Some(cache) = cache {
+                        validate_cgi_cache_config(
+                            self,
+                            &format!("{path}/cache"),
+                            cache,
+                            config.proxy_cache.enabled,
+                            &config.cache_zone_names,
                         );
                     }
                     if let Some(root) = document_root {
@@ -886,12 +896,22 @@ impl SemanticValidator {
                     response_policy,
                     retry,
                     extra_string,
+                    cache,
                     ..
                 } => {
                     if !upstreams.contains_key(upstream_ref.as_str()) {
                         self.push(
                             format!("{path}/upstreamRef"),
                             format!("unknown upstream {upstream_ref}"),
+                        );
+                    }
+                    if let Some(cache) = cache {
+                        validate_cgi_cache_config(
+                            self,
+                            &format!("{path}/cache"),
+                            cache,
+                            config.proxy_cache.enabled,
+                            &config.cache_zone_names,
                         );
                     }
                     if let Some(root) = document_root {
@@ -2912,6 +2932,118 @@ impl SemanticValidator {
 /// Validate an nginx `valid_referers` policy: nginx rejects `none`/`blocked`
 /// without at least one positive matcher, and every host/wildcard/regex must be
 /// well formed (the runtime executes them, so a bad pattern fails at load).
+/// nginx CGI-family `*_cache*` policy validation for the JSON/typed planes
+/// (the nginx materializer validates the same rules at parse time).
+fn validate_cgi_cache_config(
+    validator: &mut SemanticValidator,
+    path: &str,
+    cache: &super::CgiCacheConfig,
+    proxy_cache_enabled: bool,
+    zone_names: &[String],
+) {
+    const USE_STALE_CONDITIONS: &[&str] = &[
+        "error",
+        "timeout",
+        "invalid_header",
+        "updating",
+        "http_403",
+        "http_404",
+        "http_500",
+        "http_502",
+        "http_503",
+        "http_504",
+    ];
+    if cache.zone.trim().is_empty() {
+        validator.push(format!("{path}/zone"), "cache zone name must not be empty");
+    } else if !zone_names.iter().any(|name| name == &cache.zone) {
+        validator.push(
+            format!("{path}/zone"),
+            format!(
+                "cache zone `{}` is not declared in cacheZoneNames",
+                cache.zone
+            ),
+        );
+    }
+    if !proxy_cache_enabled {
+        validator.push(
+            path,
+            "CGI response caching requires a cache store: declare a `<module>_cache_path`/`proxy_cache_path` (proxyCache.enabled in JSON)",
+        );
+    }
+    if cache.key.is_empty() || cache.key.len() > 4096 {
+        validator.push(
+            format!("{path}/key"),
+            "cache key template must be 1..4096 bytes",
+        );
+    }
+    for (index, rule) in cache.valid.iter().enumerate() {
+        if rule.seconds > 31_536_000 {
+            validator.push(
+                format!("{path}/valid/{index}/seconds"),
+                "cache freshness must not exceed one year",
+            );
+        }
+        for status in &rule.statuses {
+            if !(100..=599).contains(status) {
+                validator.push(
+                    format!("{path}/valid/{index}/statuses"),
+                    format!("invalid status code {status}"),
+                );
+            }
+        }
+    }
+    if cache.methods.is_empty() {
+        validator.push(format!("{path}/methods"), "cache methods must not be empty");
+    }
+    for method in &cache.methods {
+        if method.is_empty()
+            || !method
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+        {
+            validator.push(
+                format!("{path}/methods"),
+                format!("invalid cache method `{method}`"),
+            );
+        }
+    }
+    if cache.min_uses == 0 {
+        validator.push(format!("{path}/minUses"), "minUses must be at least 1");
+    }
+    if cache.lock_timeout_ms > 86_400_000 || cache.lock_age_ms > 86_400_000 {
+        validator.push(path, "cache lock timeouts must not exceed 24 hours");
+    }
+    for condition in &cache.use_stale {
+        if !USE_STALE_CONDITIONS.contains(&condition.as_str()) {
+            validator.push(
+                format!("{path}/useStale"),
+                format!("unsupported use_stale condition `{condition}`"),
+            );
+        }
+    }
+    for (field, entries) in [("bypass", &cache.bypass), ("noCache", &cache.no_cache)] {
+        for (index, entry) in entries.iter().enumerate() {
+            let Some(name) = entry.strip_prefix('$') else {
+                validator.push(
+                    format!("{path}/{field}/{index}"),
+                    format!("`{entry}` must be a `$variable`"),
+                );
+                continue;
+            };
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            {
+                validator.push(
+                    format!("{path}/{field}/{index}"),
+                    format!("`{entry}` is not a valid variable reference"),
+                );
+            }
+        }
+    }
+}
+
 fn validate_referer_policy(
     validator: &mut SemanticValidator,
     path: &str,

@@ -1519,6 +1519,7 @@ async fn route_admitted_request(
             response_policy,
             intercept_errors,
             retry,
+            cache,
             ..
         } => {
             let fastcgi_arm = match collect_bounded_request_body(
@@ -1564,26 +1565,68 @@ async fn route_admitted_request(
                         path_info: String::new(),
                         maps: &map_results,
                     };
-                    let fastcgi_response = super::cgi_upstream::serve_fastcgi(
+                    let cache_lookup = super::cgi_cache::begin(
                         &generation,
-                        upstream_ref,
-                        params,
-                        split_path_info.as_deref(),
-                        index.as_deref(),
-                        *pass_request_headers,
-                        *keep_conn,
-                        *bind_address,
-                        socket_keepalive.unwrap_or(false),
-                        *connect_timeout_ms,
-                        *send_timeout_ms,
-                        *read_timeout_ms,
-                        response_policy.as_ref(),
-                        retry.as_ref(),
-                        response_variables,
-                        &request_body,
-                        &state.runtime.metrics,
+                        cache.as_ref(),
+                        &response_variables,
+                        request.method(),
+                        request.headers(),
                     )
                     .await;
+                    let fastcgi_response = match cache_lookup {
+                        super::cgi_cache::CgiCacheLookup::Hit(response) => response,
+                        super::cgi_cache::CgiCacheLookup::Disabled => {
+                            super::cgi_upstream::serve_fastcgi(
+                                &generation,
+                                upstream_ref,
+                                params,
+                                split_path_info.as_deref(),
+                                index.as_deref(),
+                                *pass_request_headers,
+                                *keep_conn,
+                                *bind_address,
+                                socket_keepalive.unwrap_or(false),
+                                *connect_timeout_ms,
+                                *send_timeout_ms,
+                                *read_timeout_ms,
+                                response_policy.as_ref(),
+                                retry.as_ref(),
+                                response_variables,
+                                &request_body,
+                                &state.runtime.metrics,
+                            )
+                            .await
+                        }
+                        super::cgi_cache::CgiCacheLookup::Miss(plan) => {
+                            let upstream_method = plan.upstream_method();
+                            let upstream_headers = plan.upstream_headers();
+                            let effective_facts = response_variables.with_overrides(
+                                &upstream_method,
+                                upstream_headers.unwrap_or(request.headers()),
+                            );
+                            let response = super::cgi_upstream::serve_fastcgi(
+                                &generation,
+                                upstream_ref,
+                                params,
+                                split_path_info.as_deref(),
+                                index.as_deref(),
+                                *pass_request_headers,
+                                *keep_conn,
+                                *bind_address,
+                                socket_keepalive.unwrap_or(false),
+                                *connect_timeout_ms,
+                                *send_timeout_ms,
+                                *read_timeout_ms,
+                                response_policy.as_ref(),
+                                retry.as_ref(),
+                                effective_facts,
+                                &request_body,
+                                &state.runtime.metrics,
+                            )
+                            .await;
+                            plan.finish(response).await
+                        }
+                    };
                     // nginx `fastcgi_intercept_errors on`: an upstream error status is
                     // replaced by the matched `error_page` target.
                     let intercepted = if *intercept_errors {
@@ -1636,6 +1679,7 @@ async fn route_admitted_request(
             modifier1,
             modifier2,
             extra_string,
+            cache,
             ..
         } => {
             let cgi_arm = match collect_bounded_request_body(
@@ -1681,27 +1725,70 @@ async fn route_admitted_request(
                         path_info: String::new(),
                         maps: &map_results,
                     };
-                    let cgi_response = super::cgi_upstream::serve_cgi(
+                    let cache_lookup = super::cgi_cache::begin(
                         &generation,
-                        *protocol,
-                        upstream_ref,
-                        params,
-                        *pass_request_headers,
-                        *bind_address,
-                        socket_keepalive.unwrap_or(false),
-                        *connect_timeout_ms,
-                        *send_timeout_ms,
-                        *read_timeout_ms,
-                        response_policy.as_ref(),
-                        retry.as_ref(),
-                        *modifier1,
-                        *modifier2,
-                        extra_string.as_deref(),
-                        response_variables,
-                        &request_body,
-                        &state.runtime.metrics,
+                        cache.as_ref(),
+                        &response_variables,
+                        request.method(),
+                        request.headers(),
                     )
                     .await;
+                    let cgi_response = match cache_lookup {
+                        super::cgi_cache::CgiCacheLookup::Hit(response) => response,
+                        super::cgi_cache::CgiCacheLookup::Disabled => {
+                            super::cgi_upstream::serve_cgi(
+                                &generation,
+                                *protocol,
+                                upstream_ref,
+                                params,
+                                *pass_request_headers,
+                                *bind_address,
+                                socket_keepalive.unwrap_or(false),
+                                *connect_timeout_ms,
+                                *send_timeout_ms,
+                                *read_timeout_ms,
+                                response_policy.as_ref(),
+                                retry.as_ref(),
+                                *modifier1,
+                                *modifier2,
+                                extra_string.as_deref(),
+                                response_variables,
+                                &request_body,
+                                &state.runtime.metrics,
+                            )
+                            .await
+                        }
+                        super::cgi_cache::CgiCacheLookup::Miss(plan) => {
+                            let upstream_method = plan.upstream_method();
+                            let upstream_headers = plan.upstream_headers();
+                            let effective_facts = response_variables.with_overrides(
+                                &upstream_method,
+                                upstream_headers.unwrap_or(request.headers()),
+                            );
+                            let response = super::cgi_upstream::serve_cgi(
+                                &generation,
+                                *protocol,
+                                upstream_ref,
+                                params,
+                                *pass_request_headers,
+                                *bind_address,
+                                socket_keepalive.unwrap_or(false),
+                                *connect_timeout_ms,
+                                *send_timeout_ms,
+                                *read_timeout_ms,
+                                response_policy.as_ref(),
+                                retry.as_ref(),
+                                *modifier1,
+                                *modifier2,
+                                extra_string.as_deref(),
+                                effective_facts,
+                                &request_body,
+                                &state.runtime.metrics,
+                            )
+                            .await;
+                            plan.finish(response).await
+                        }
+                    };
                     // nginx `uwsgi_intercept_errors` / `scgi_intercept_errors`.
                     let intercepted = if *intercept_errors {
                         if let Some((method, headers, query)) = error_page_saved.as_ref() {

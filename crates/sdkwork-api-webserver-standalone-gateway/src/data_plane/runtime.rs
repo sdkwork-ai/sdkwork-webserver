@@ -91,6 +91,8 @@ pub(crate) struct RuntimeGeneration {
     pub protocol_pool: Arc<super::protocol_pool::ProtocolPool>,
     /// Stream `limit_conn_zone` counters (separate zone table from HTTP).
     pub stream_limit_conn: LimitConnRuntime,
+    /// Per-key request counters for nginx CGI `*_cache_min_uses`.
+    pub cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters,
 }
 
 impl RuntimeGeneration {
@@ -159,6 +161,7 @@ impl RuntimeGeneration {
             limit_conn,
             protocol_pool: Arc::new(super::protocol_pool::ProtocolPool::new()),
             stream_limit_conn,
+            cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters::default(),
         }))
     }
 

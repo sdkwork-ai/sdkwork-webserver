@@ -1,5 +1,5 @@
 {
- "_cases": 49,
+ "_cases": 65,
  "_server": "nginx/1.29.6",
  "cases": {
   "args-get": {
@@ -63,6 +63,241 @@
     ],
     "x-mock-pass": [
      "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-bypass": {
+   "body": "first=gen=4 bypassed=gen=5 third=gen=4",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-convert-head": {
+   "body": "get=gen=17 head_body=0 second=gen=17",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-default": {
+   "body": "first=gen=2 second=gen=3 cached=False",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-hit": {
+   "body": "first=gen=1 second=gen=1 cached=True",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-key": {
+   "body": "first=gen=10 second=gen=10 shared=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-lock": {
+   "body": "bodies=gen=13,gen=13 coalesced=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-min-uses": {
+   "body": "first=gen=11 second=gen=12 third=gen=12",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-no-cache": {
+   "body": "first=gen=6 second=gen=7 third=gen=7",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-range": {
+   "body": "cached=True",
+   "headers": {},
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-range-beyond": {
+   "body": "cached=False",
+   "headers": {},
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-range-default": {
+   "body": "cached=True",
+   "headers": {},
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-revalidate": {
+   "body": "prime=gen=16 revalidated=gen=16 refreshed=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "etag": [
+     "\"stable\""
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-scgi-hit": {
+   "body": "first=gen=1 second=gen=1 cached=True",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-stale": {
+   "body": "prime=gen=14 stale=gen=14 served_stale=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-uwsgi-hit": {
+   "body": "first={\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4565002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f63616368652d75777367692f6f6e650b005343524950545f4e414d4510002f63616368652d75777367692f6f6e650900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f63616368652d75777367692f6f6e650c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5400000900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"} second={\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4565002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f63616368652d75777367692f6f6e650b005343524950545f4e414d4510002f63616368652d75777367692f6f6e650900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f63616368652d75777367692f6f6e650c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5400000900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"} cached=True",
+   "headers": {
+    "content-length": [
+     "1034"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-valid": {
+   "body": "first=gen=8 expired=gen=9 refetched=True",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
     ]
    },
    "status": 200,

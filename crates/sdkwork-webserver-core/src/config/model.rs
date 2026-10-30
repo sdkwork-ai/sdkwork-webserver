@@ -470,6 +470,16 @@ pub struct WebServerAppConfig {
     /// plane knows at accept/preread time).
     #[serde(rename = "streamMaps", default, skip_serializing_if = "Vec::is_empty")]
     pub stream_maps: Vec<MapConfig>,
+    /// Names of nginx HTTP cache zones declared by `proxy_cache_path` or a
+    /// CGI `*_cache_path` `keys_zone=` parameter. All zones share the single
+    /// process cache store (bounded difference: nginx sizes each zone
+    /// separately).
+    #[serde(
+        rename = "cacheZoneNames",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub cache_zone_names: Vec<String>,
     /// nginx **stream** `limit_conn_zone` declarations (the stream module owns
     /// a separate zone table from the HTTP one).
     #[serde(
@@ -1556,6 +1566,9 @@ pub enum ResourceConfig {
         /// `fastcgi_next_upstream_timeout` as the runtime retry policy.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry: Option<UpstreamRetryConfig>,
+        /// Resolved `fastcgi_cache*` policy; `None` disables response caching.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache: Option<CgiCacheConfig>,
     },
     /// nginx `memcached_pass` location handler: bounded text-protocol GET/HEAD
     /// against one memcached upstream. The request key is the expansion of the
@@ -1642,6 +1655,10 @@ pub enum ResourceConfig {
         /// packet (uWSGI only).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         extra_string: Option<String>,
+        /// Resolved `uwsgi_cache*` / `scgi_cache*` policy; `None` disables
+        /// response caching.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache: Option<CgiCacheConfig>,
     },
     /// nginx `grpc_pass` location handler: gRPC over HTTP/2. The transport is
     /// cleartext h2c for `grpc://` targets and TLS for `grpcs://` targets (the
@@ -1726,6 +1743,82 @@ pub enum ResourceConfig {
         #[serde(default)]
         cache: Option<ProviderCachePolicy>,
     },
+}
+
+/// One nginx `*_cache_valid [code...] <time>` rule: the listed statuses are
+/// fresh for `seconds`; an empty status list means the directive's default
+/// status list (`200`, `302`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CgiCacheValidRule {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub statuses: Vec<u16>,
+    pub seconds: u64,
+}
+
+/// Resolved nginx CGI-family response cache policy (`fastcgi_cache`,
+/// `uwsgi_cache`, `scgi_cache` and their companion directives) for one
+/// location. The runtime reuses the shared HTTP response cache store
+/// (`proxy_cache_path` capacity/disk tier); `zone` selects the nginx zone name
+/// the location was declared against.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CgiCacheConfig {
+    pub zone: String,
+    /// Cache-key template (nginx default
+    /// `$scheme$request_method$host$request_uri`).
+    pub key: String,
+    /// Freshness rules by status (`*_cache_valid`). nginx has no default:
+    /// when empty, a response is cached only if it carries an explicit upstream
+    /// freshness header (`Cache-Control`/`Expires`).
+    #[serde(default)]
+    pub valid: Vec<CgiCacheValidRule>,
+    /// `*_cache_bypass`: if any listed variable is non-empty and not `"0"`,
+    /// the cache is not consulted for this request (the response may still be
+    /// stored unless `no_cache` matches).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bypass: Vec<String>,
+    /// `*_no_cache`: if any listed variable is non-empty and not `"0"`, the
+    /// response is not stored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub no_cache: Vec<String>,
+    /// `*_cache_revalidate on`: an expired entry is revalidated with its
+    /// stored validators (`If-None-Match` / `If-Modified-Since`).
+    #[serde(default)]
+    pub revalidate: bool,
+    /// `*_cache_use_stale` conditions (nginx tokens; the runtime supports
+    /// `error`, `timeout`, `invalid_header`, `updating`, `http_403`,
+    /// `http_404`, `http_500`, `http_502`, `http_503`, `http_504`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub use_stale: Vec<String>,
+    /// `*_cache_methods`: request methods eligible for caching (default GET,
+    /// HEAD).
+    pub methods: Vec<String>,
+    /// `*_cache_min_uses`: requests for the same key before the response is
+    /// stored (default 1).
+    pub min_uses: u32,
+    /// `*_cache_lock on|off`: collapse concurrent fills of the same key into
+    /// one upstream request (default on).
+    pub lock: bool,
+    /// `*_cache_lock_timeout`: how long a coalesced waiter waits for the
+    /// filling request before doing its own upstream call (default 5 s).
+    pub lock_timeout_ms: u64,
+    /// `*_cache_lock_age`: accepted nginx-compatibility value; the shared
+    /// store cannot preempt an in-progress fill (bounded difference).
+    #[serde(default)]
+    pub lock_age_ms: u64,
+    /// `*_cache_background_update on`: when a fill for the same key is already
+    /// in progress, an expired entry is served stale instead of waiting.
+    #[serde(default)]
+    pub background_update: bool,
+    /// `*_cache_convert_head on`: a HEAD cache miss is filled with a GET (and
+    /// HEAD lookups use the GET key). Default on.
+    pub convert_head: bool,
+    /// `*_cache_max_range_offset`: accepted; the runtime never caches Range
+    /// requests (it always bypasses the cache for them), which is the
+    /// conservative form of this limit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_range_offset: Option<u64>,
 }
 
 impl ResourceConfig {
