@@ -533,6 +533,14 @@ pub fn materialize_nginx_app(
             "fastcgi_cache_path" => mapper.materialize_cgi_cache_path("fastcgi", directive)?,
             "uwsgi_cache_path" => mapper.materialize_cgi_cache_path("uwsgi", directive)?,
             "scgi_cache_path" => mapper.materialize_cgi_cache_path("scgi", directive)?,
+            name if is_subrequest_directive(name) => {
+                apply_subrequest_directive(
+                    directive,
+                    &mut mapper.http_addition,
+                    &mut mapper.http_auth_request,
+                    &mut mapper.http_mirror,
+                )?;
+            }
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
             "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
             // Collected by the order-independent pre-scan above.
@@ -896,7 +904,249 @@ fn extract_stream_context(
     Ok(stream_blocks[0].children.clone())
 }
 
+/// nginx `addition` filter declarations accumulated over http/etc levels.
 #[derive(Clone, Default)]
+struct AdditionSettings {
+    before: Option<String>,
+    after: Option<String>,
+    types: Option<Vec<String>>,
+}
+
+impl AdditionSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            before: inner.before.clone().or_else(|| self.before.clone()),
+            after: inner.after.clone().or_else(|| self.after.clone()),
+            types: inner.types.clone().or_else(|| self.types.clone()),
+        }
+    }
+
+    fn resolve(&self) -> Option<crate::config::AdditionConfig> {
+        (self.before.is_some() || self.after.is_some()).then(|| crate::config::AdditionConfig {
+            before: self.before.clone(),
+            after: self.after.clone(),
+            types: self
+                .types
+                .clone()
+                .unwrap_or_else(|| vec!["text/html".to_owned()]),
+        })
+    }
+}
+
+/// nginx `auth_request` / `auth_request_set` declarations.
+#[derive(Clone, Default)]
+struct AuthRequestSettings {
+    uri: Option<String>,
+    set: Option<Vec<crate::config::AuthRequestSetConfig>>,
+}
+
+impl AuthRequestSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            uri: inner.uri.clone().or_else(|| self.uri.clone()),
+            set: inner.set.clone().or_else(|| self.set.clone()),
+        }
+    }
+
+    fn resolve(&self) -> Option<crate::config::AuthRequestConfig> {
+        self.uri.clone().map(|uri| crate::config::AuthRequestConfig {
+            uri,
+            set: self.set.clone().unwrap_or_default(),
+        })
+    }
+}
+
+/// nginx `mirror` / `mirror_request_body` declarations.
+#[derive(Clone, Default)]
+struct MirrorSettings {
+    targets: Option<Vec<String>>,
+    request_body: Option<bool>,
+}
+
+impl MirrorSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            targets: inner.targets.clone().or_else(|| self.targets.clone()),
+            request_body: inner.request_body.or(self.request_body),
+        }
+    }
+
+    fn resolve(&self) -> Option<crate::config::MirrorConfig> {
+        // `mirror_request_body on` is rejected at parse time (the runtime does
+        // not replay request bodies into fire-and-forget subrequests), so an
+        // effective mirror policy always has `request_body: false` here.
+        self.targets
+            .clone()
+            .filter(|targets| !targets.is_empty())
+            .map(|targets| crate::config::MirrorConfig {
+                targets,
+                request_body: false,
+            })
+    }
+}
+
+/// The subrequest-family directive names (`addition`/`auth_request`/`mirror`).
+fn is_subrequest_directive(name: &str) -> bool {
+    matches!(
+        name,
+        "add_before_body"
+            | "add_after_body"
+            | "addition_types"
+            | "auth_request"
+            | "auth_request_set"
+            | "mirror"
+            | "mirror_request_body"
+    )
+}
+
+/// Apply one subrequest-family directive; returns `true` when handled.
+fn apply_subrequest_directive(
+    directive: &NginxDirective,
+    addition: &mut AdditionSettings,
+    auth: &mut AuthRequestSettings,
+    mirror: &mut MirrorSettings,
+) -> Result<bool, NginxConfigError> {
+    match directive.name.as_str() {
+        "add_before_body" => addition.before = Some(parse_subrequest_uri(directive)?),
+        "add_after_body" => addition.after = Some(parse_subrequest_uri(directive)?),
+        "addition_types" => addition.types = Some(validate_addition_types(directive)?),
+        "auth_request" => auth.uri = Some(parse_subrequest_uri(directive)?),
+        "auth_request_set" => {
+            let [variable, value] = directive.args.as_slice() else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "auth_request_set requires `<variable> <value>`",
+                ));
+            };
+            let Some(name) = variable.strip_prefix('$') else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "auth_request_set variable must start with `$`",
+                ));
+            };
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("auth_request_set variable `{variable}` is invalid"),
+                ));
+            }
+            validate_auth_request_set_value(directive, value)?;
+            auth.set
+                .get_or_insert_with(Vec::new)
+                .push(crate::config::AuthRequestSetConfig {
+                    variable: name.to_owned(),
+                    value: value.clone(),
+                });
+        }
+        "mirror" => {
+            let uri = parse_subrequest_uri(directive)?;
+            let targets = mirror.targets.get_or_insert_with(Vec::new);
+            if targets.len() >= 8 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "at most 8 `mirror` targets are executable",
+                ));
+            }
+            targets.push(uri);
+        }
+        "mirror_request_body" => {
+            let enabled = parse_on_off(directive, "mirror_request_body")?;
+            if enabled {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`mirror_request_body on` is not executable: the runtime does not replay request bodies into fire-and-forget subrequests; declare `mirror_request_body off`",
+                ));
+            }
+            mirror.request_body = Some(false);
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+/// Validate one configured subrequest URI: bounded to an internal absolute path
+/// without variables.
+fn parse_subrequest_uri(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    let Some(uri) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} requires an internal URI", directive.name),
+        ));
+    };
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{} takes exactly one URI", directive.name),
+        ));
+    }
+    if !uri.starts_with('/') || uri.len() > 2048 || uri.contains('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "{} URI `{uri}` must be an internal absolute path without variables",
+                directive.name
+            ),
+        ));
+    }
+    Ok(uri.clone())
+}
+
+fn validate_addition_types(directive: &NginxDirective) -> Result<Vec<String>, NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "addition_types requires at least one MIME type",
+        ));
+    }
+    for value in &directive.args {
+        validate_media_type(directive, value)?;
+    }
+    Ok(directive.args.clone())
+}
+
+/// Bounded `auth_request_set` value vocabulary: literals interleaved with
+/// `$upstream_http_<name>` (subrequest response headers) and
+/// `$upstream_status`.
+fn validate_auth_request_set_value(
+    directive: &NginxDirective,
+    template: &str,
+) -> Result<(), NginxConfigError> {
+    let mut remainder = template;
+    while let Some(index) = remainder.find('$') {
+        let after = &remainder[index + 1..];
+        if let Some(rest) = after.strip_prefix('$') {
+            remainder = rest;
+            continue;
+        }
+        let end = after
+            .find(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+            .unwrap_or(after.len());
+        if end == 0 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "auth_request_set contains a lone `$`",
+            ));
+        }
+        let name = &after[..end];
+        if name == "upstream_status" || (name.starts_with("upstream_http_") && name.len() > 14) {
+            remainder = &after[end..];
+            continue;
+        }
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "auth_request_set value `${name}` is not executable; supported variables: $upstream_status and $upstream_http_<name>"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Default)]
 struct LocationExtras {
     rewrite: Vec<Value>,
     access: Vec<Value>,
@@ -949,6 +1199,12 @@ struct LocationExtras {
     rewrite_phase: Vec<Value>,
     /// Effective location `client_max_body_size` (inherited when undeclared).
     max_request_body_bytes: Option<u64>,
+    /// Location-level nginx `addition` declarations.
+    addition: AdditionSettings,
+    /// Location-level nginx `auth_request` declarations.
+    auth_request: AuthRequestSettings,
+    /// Location-level nginx `mirror` declarations.
+    mirror: MirrorSettings,
 }
 
 /// Resolved nginx `ssl_protocols` policy as an inclusive version window.
@@ -1169,6 +1425,12 @@ struct Mapper<'a> {
     gzip_static: GzipStaticMode,
     /// http-level `fastcgi_*` settings inherited by every server.
     http_fastcgi: FastCgiSettings,
+    http_addition: AdditionSettings,
+    server_addition: AdditionSettings,
+    http_auth_request: AuthRequestSettings,
+    server_auth_request: AuthRequestSettings,
+    http_mirror: MirrorSettings,
+    server_mirror: MirrorSettings,
     /// http → server resolved `fastcgi_*` settings inherited by locations.
     server_fastcgi: FastCgiSettings,
     /// http-level `uwsgi_*` (index 0) / `scgi_*` (index 1) settings.
@@ -1346,6 +1608,12 @@ impl<'a> Mapper<'a> {
             gzip_vary: false,
             gzip_static: GzipStaticMode::Off,
             http_fastcgi: FastCgiSettings::default(),
+            http_addition: AdditionSettings::default(),
+            server_addition: AdditionSettings::default(),
+            http_auth_request: AuthRequestSettings::default(),
+            server_auth_request: AuthRequestSettings::default(),
+            http_mirror: MirrorSettings::default(),
+            server_mirror: MirrorSettings::default(),
             server_fastcgi: FastCgiSettings::default(),
             http_cgi: [CgiSettings::default(), CgiSettings::default()],
             server_cgi: [CgiSettings::default(), CgiSettings::default()],
@@ -1883,6 +2151,9 @@ impl<'a> Mapper<'a> {
         // response-header policy and the request-boundary policies.
         let mut server_proxy_response = ProxyResponseDirectives::default();
         let mut server_fastcgi_local = FastCgiSettings::default();
+        let mut server_addition_local = AdditionSettings::default();
+        let mut server_auth_local = AuthRequestSettings::default();
+        let mut server_mirror_local = MirrorSettings::default();
         let mut server_cgi_local = [CgiSettings::default(), CgiSettings::default()];
         let mut server_cgi_ssl_local = [CgiSslSettings::default(), CgiSslSettings::default()];
         let mut server_memcached_local = MemcachedSettings::default();
@@ -2234,6 +2505,14 @@ impl<'a> Mapper<'a> {
                     validate_media_type(child, &child.args[0])?;
                     server_default_type = Some(child.args[0].clone());
                 }
+                name if is_subrequest_directive(name) => {
+                    apply_subrequest_directive(
+                        child,
+                        &mut server_addition_local,
+                        &mut server_auth_local,
+                        &mut server_mirror_local,
+                    )?;
+                }
                 "fastcgi_pass" => {
                     return Err(NginxConfigError::unsupported(
                         child,
@@ -2557,6 +2836,9 @@ impl<'a> Mapper<'a> {
             .clone()
             .overlay(server_proxy_response);
         self.server_fastcgi = self.http_fastcgi.overlay(&server_fastcgi_local);
+        self.server_addition = self.http_addition.overlay(&server_addition_local);
+        self.server_auth_request = self.http_auth_request.overlay(&server_auth_local);
+        self.server_mirror = self.http_mirror.overlay(&server_mirror_local);
         self.server_cgi = [
             self.http_cgi[0].overlay(&server_cgi_local[0]),
             self.http_cgi[1].overlay(&server_cgi_local[1]),
@@ -3166,6 +3448,33 @@ impl<'a> Mapper<'a> {
         if let Some(max_ranges) = extras.max_ranges {
             route["maxRanges"] = json!(max_ranges);
         }
+        // nginx `addition` / `auth_request` / `mirror` inheritance: the
+        // effective policy is the location declaration when present, else the
+        // inherited http → server one.
+        let effective_addition = self.server_addition.overlay(&extras.addition);
+        if let Some(addition) = effective_addition.resolve() {
+            route["addition"] = serde_json::to_value(&addition).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!(
+                    "nginx materialization failed: {error}"
+                ))
+            })?;
+        }
+        let effective_auth = self.server_auth_request.overlay(&extras.auth_request);
+        if let Some(auth_request) = effective_auth.resolve() {
+            route["authRequest"] = serde_json::to_value(&auth_request).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!(
+                    "nginx materialization failed: {error}"
+                ))
+            })?;
+        }
+        let effective_mirror = self.server_mirror.overlay(&extras.mirror);
+        if let Some(mirror) = effective_mirror.resolve() {
+            route["mirror"] = serde_json::to_value(&mirror).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!(
+                    "nginx materialization failed: {error}"
+                ))
+            })?;
+        }
         if extras.internal {
             route["internal"] = Value::Bool(true);
         }
@@ -3274,8 +3583,19 @@ impl<'a> Mapper<'a> {
         let mut auth_file = inherited_auth_file.map(str::to_owned);
         let mut auth_off = inherited_auth_off;
         let mut location_proxy_ssl = ProxySslSettings::default();
+        let mut location_addition = AdditionSettings::default();
+        let mut location_auth = AuthRequestSettings::default();
+        let mut location_mirror = MirrorSettings::default();
         for child in &location.children {
             match child.name.as_str() {
+                name if is_subrequest_directive(name) => {
+                    apply_subrequest_directive(
+                        child,
+                        &mut location_addition,
+                        &mut location_auth,
+                        &mut location_mirror,
+                    )?;
+                }
                 "fastcgi_pass" => {
                     if child.args.len() != 1 {
                         return Err(NginxConfigError::unsupported(
@@ -5216,6 +5536,9 @@ impl<'a> Mapper<'a> {
         self.note_client_max_body_size(effective_client_max_body_size);
         extras.max_request_body_bytes = effective_client_max_body_size;
         extras.rewrite_phase = location_rewrite_phase;
+        extras.addition = location_addition;
+        extras.auth_request = location_auth;
+        extras.mirror = location_mirror;
         let _ = (server_name, client_max_body_size);
         Ok(extras)
     }

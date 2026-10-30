@@ -129,7 +129,11 @@ fn raw_cookie(headers: &HeaderMap, name: &str) -> String {
 /// Every declared map result for one request, in declaration order.
 #[derive(Clone, Default)]
 pub(crate) struct MapResults {
-    values: Vec<(String, String)>,
+    /// Interior mutability: `auth_request_set` fills one variable after the
+    /// access-phase subrequest, and every response layer that already holds a
+    /// `&MapResults` (header expansion, rewrite-phase variables, proxy
+    /// templates) must observe it without re-borrowing the whole handler state.
+    values: std::sync::Mutex<Vec<(String, String)>>,
 }
 
 impl MapResults {
@@ -158,31 +162,61 @@ impl MapResults {
                 values.push((name.to_owned(), value));
             }
         }
-        Self { values }
+        Self {
+            values: std::sync::Mutex::new(values),
+        }
     }
 
     /// Build a result table directly (tests only).
     #[cfg(test)]
     pub(crate) fn from_pairs(pairs: &[(&str, &str)]) -> Self {
         Self {
-            values: pairs
-                .iter()
-                .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
-                .collect(),
+            values: std::sync::Mutex::new(
+                pairs
+                    .iter()
+                    .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+                    .collect(),
+            ),
         }
     }
 
+    /// Store one variable; `auth_request_set` is the only writer (it replaces
+    /// a previous value for the same variable).
+    pub(crate) fn insert(&self, name: &str, value: String) {
+        let mut entries = self
+            .values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(entry) = entries.iter_mut().find(|(candidate, _)| candidate == name) {
+            entry.1 = value;
+        } else {
+            entries.push((name.to_owned(), value));
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_empty()
+    }
+
     /// The resolved `(name, value)` pairs, in declaration order.
-    pub(crate) fn pairs(&self) -> &[(String, String)] {
-        &self.values
+    pub(crate) fn pairs(&self) -> Vec<(String, String)> {
+        self.values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     /// Resolve one map result by name (without `$`).
-    pub(crate) fn lookup(&self, name: &str) -> Option<&str> {
+    pub(crate) fn lookup(&self, name: &str) -> Option<String> {
         self.values
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .iter()
             .find(|(candidate, _)| candidate == name)
-            .map(|(_, value)| value.as_str())
+            .map(|(_, value)| value.clone())
     }
 
     /// Substitute declared map result references (`$name`) in a template,
@@ -203,7 +237,10 @@ impl MapResults {
     }
 
     fn expand_tokens_inner(&self, template: &str, escape_dollars: bool) -> String {
-        if self.values.is_empty() || !template.contains('$') {
+        if template.contains('$') && self.is_empty() {
+            return template.to_owned();
+        }
+        if !template.contains('$') {
             return template.to_owned();
         }
         let mut output = String::with_capacity(template.len() + 16);

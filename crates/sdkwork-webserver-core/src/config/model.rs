@@ -3616,6 +3616,75 @@ pub struct RouteConfig {
     /// value (a location declaration replaces the inherited list).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referer: Option<RefererConfig>,
+    /// Effective nginx `addition` filter policy (http/server/location
+    /// inheritance resolved at materialization).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub addition: Option<AdditionConfig>,
+    /// Effective nginx `auth_request`/`auth_request_set` access gate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_request: Option<AuthRequestConfig>,
+    /// Effective nginx `mirror` subrequests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mirror: Option<MirrorConfig>,
+}
+
+/// nginx `addition` filter (`add_before_body` / `add_after_body` /
+/// `addition_types`): the configured internal URIs are served as one-level
+/// subrequests and their bodies spliced before/after the main response body
+/// when the main response's content type matches `types`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AdditionConfig {
+    /// `add_before_body <uri>`; `None` disables the pre-body subrequest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    /// `add_after_body <uri>`; `None` disables the post-body subrequest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+    /// `addition_types` (nginx default `text/html`).
+    #[serde(default = "default_addition_types")]
+    pub types: Vec<String>,
+}
+
+fn default_addition_types() -> Vec<String> {
+    vec!["text/html".to_owned()]
+}
+
+/// nginx `auth_request_set <variable> <value>`: after the authorization
+/// subrequest one request variable is set from the subrequest response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthRequestSetConfig {
+    /// Target variable name without the leading `$`.
+    pub variable: String,
+    /// Value template; the bounded vocabulary is literals plus
+    /// `$upstream_http_<name>` and `$upstream_status`.
+    pub value: String,
+}
+
+/// nginx `auth_request` access-phase gate: a one-level subrequest whose status
+/// decides whether the main request is served, plus `auth_request_set`
+/// assignments taken from its response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthRequestConfig {
+    /// Internal URI of the authorization subrequest (must start with `/`).
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set: Vec<AuthRequestSetConfig>,
+}
+
+/// nginx `mirror` (fire-and-forget one-level subrequests; the main response is
+/// unaffected). The bounded form requires `mirror_request_body off` because the
+/// runtime does not tee the request body into subrequests.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MirrorConfig {
+    /// Configured internal mirror URIs in declaration order.
+    pub targets: Vec<String>,
+    /// `mirror_request_body` (the bounded runtime only supports `off`).
+    #[serde(default)]
+    pub request_body: bool,
 }
 
 /// One `valid_referers` host entry: a lowercased host (optionally a leading

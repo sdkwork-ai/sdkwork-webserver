@@ -60,8 +60,9 @@ pub use map_variables::{
     MapVariables, MAP_SOURCE_PREFIXES, MAP_SOURCE_VARIABLES,
 };
 pub use model::{
-    AccessAction, AccessRuleConfig, AcmeHttp01Config, AppDomainFallbackConfig,
-    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, AutoindexConfig,
+    AccessAction, AccessRuleConfig, AcmeHttp01Config, AdditionConfig, AppDomainFallbackConfig,
+    AppDomainFallbackLookup, AuthBasicConfig, AuthBasicUserConfig, AuthRequestConfig,
+    AuthRequestSetConfig, AutoindexConfig,
     AutoindexFormat, CachePolicyConfig, CertificateConfig, CertificateSource, CgiCacheConfig,
     CgiCacheValidRule, CgiUpstreamProtocol, CharsetConfig, ClientAuthConfig, ClientAuthMode,
     ConfigProviderType, CookieRewritePolicyConfig, CustomHeaderConfig, DeploymentConfig,
@@ -70,7 +71,8 @@ pub use model::{
     LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig, ListenerConfig, ListenerProtocol,
     ListenerTlsRuntime, MailAuthHttpConfig, MailAuthMechanism, MailConfig, MailProxyConfig,
     MailProxyTlsConfig, MailServerConfig, MailServerProtocol, MailStarttlsMode, MailTlsConfig,
-    MailTlsProtocol, MapConfig, MapEntryConfig, MimeTypeConfig, NginxConfig, ObservabilityConfig,
+    MailTlsProtocol, MapConfig, MapEntryConfig, MimeTypeConfig, MirrorConfig, NginxConfig,
+    ObservabilityConfig,
     ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
     ProxyProtocolVersion, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
     ProxyRewriteRegexRuleConfig, ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig,

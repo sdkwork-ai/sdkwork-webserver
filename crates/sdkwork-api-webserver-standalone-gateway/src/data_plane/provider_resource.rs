@@ -439,6 +439,9 @@ mod tests {
             charset: None,
             autoindex: None,
             referer: None,
+            addition: None,
+            auth_request: None,
+            mirror: None,
         }
     }
 

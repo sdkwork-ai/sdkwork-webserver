@@ -4066,6 +4066,9 @@ mod tests {
             charset: None,
             autoindex: None,
             referer: None,
+            addition: None,
+            auth_request: None,
+            mirror: None,
         };
         let mut route = sdkwork_webserver_core::RouteConfig {
             id: "r".to_owned(),
