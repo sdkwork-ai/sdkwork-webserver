@@ -9,6 +9,7 @@ members = [
   "crates/sdkwork-routes-webserver-common",
   "crates/sdkwork-webserver-contract",
   "crates/sdkwork-webserver-core",
+  "crates/sdkwork-webserver-mail-protocol",
   "crates/sdkwork-webserver-resolver-cache",
   "crates/sdkwork-webserver-delivery-runtime",
   "crates/sdkwork-webserver-drive-provider",

@@ -1,0 +1,18 @@
+[package]
+name = "sdkwork-webserver-mail-protocol"
+version = "0.1.0"
+description = "Bounded POP3/IMAP/SMTP dialog codecs and frontend/backend relay state machines for the nginx-compatible mail proxy."
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "sdkwork_webserver_mail_protocol"
+path = "src/lib.rs"
+
+[dependencies]
+base64.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
