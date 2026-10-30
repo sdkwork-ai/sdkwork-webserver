@@ -508,7 +508,6 @@ fn declared_body_length(
 
 /// Execute one FastCGI request/response exchange over a fresh TCP connection.
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 async fn exchange(
     generation: &RuntimeGeneration,
     upstream_id: &str,
@@ -726,7 +725,7 @@ pub(crate) async fn serve_fastcgi(
                 } else {
                     upstream.record_success(selected);
                 }
-                let retryable_status = matches!(status.as_u16(), 502 | 503 | 504)
+                let retryable_status = matches!(status.as_u16(), 502..=504)
                     && conditions.iter().any(|condition| match condition {
                         UpstreamRetryCondition::Http502 => status.as_u16() == 502,
                         UpstreamRetryCondition::Http503 => status.as_u16() == 503,
@@ -894,7 +893,7 @@ pub(crate) async fn serve_cgi(
                 } else {
                     upstream.record_success(selected);
                 }
-                let retryable_status = matches!(status.as_u16(), 502 | 503 | 504)
+                let retryable_status = matches!(status.as_u16(), 502..=504)
                     && conditions.iter().any(|condition| match condition {
                         UpstreamRetryCondition::Http502 => status.as_u16() == 502,
                         UpstreamRetryCondition::Http503 => status.as_u16() == 503,

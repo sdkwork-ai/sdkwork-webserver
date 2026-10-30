@@ -395,6 +395,10 @@ fn resource_kind(resource: &ResourceConfig) -> &'static str {
     match resource {
         ResourceConfig::Static { .. } => "static",
         ResourceConfig::Proxy { .. } => "proxy",
+        ResourceConfig::FastCgi { .. } => "fastcgi",
+        ResourceConfig::CgiUpstream { .. } => "cgi-upstream",
+        ResourceConfig::Memcached { .. } => "memcached",
+        ResourceConfig::Grpc { .. } => "grpc",
         ResourceConfig::Redirect { .. } => "redirect",
         ResourceConfig::EmptyGif { .. } => "empty-gif",
         ResourceConfig::StubStatus { .. } => "stub-status",

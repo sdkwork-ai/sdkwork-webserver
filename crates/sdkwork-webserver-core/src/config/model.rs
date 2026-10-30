@@ -1315,6 +1315,11 @@ fn default_upstream_pass_request_headers() -> bool {
     true
 }
 
+fn default_grpc_buffer_size() -> u64 {
+    // nginx `grpc_buffer_size` default.
+    4096
+}
+
 /// Upstream CGI-family protocol of a [`ResourceConfig::CgiUpstream`] resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -1537,6 +1542,46 @@ pub enum ResourceConfig {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         extra_string: Option<String>,
     },
+    /// nginx `grpc_pass` location handler: gRPC over HTTP/2. The transport is
+    /// cleartext h2c for `grpc://` targets and TLS for `grpcs://` targets (the
+    /// per-upstream TLS policy carries the certificate/trust settings); the
+    /// bounded directive subset below is executable, unsupported `grpc_*` forms
+    /// fail closed at materialization with a located diagnostic.
+    Grpc {
+        id: String,
+        /// Upstream id resolved by the materializer (a literal `host:port`
+        /// target or a declared `upstream` name). The upstream URL scheme is
+        /// `http` for h2c and `https` for TLS.
+        upstream_ref: String,
+        /// nginx `grpc_set_header` entries as `"Name value"` strings. Supported
+        /// value tokens are the shared proxy vocabulary
+        /// (`$host`, `$scheme`, `$remote_addr`,
+        /// `$proxy_add_x_forwarded_for`, `$http_upgrade`, `$server_port`) plus
+        /// literals; any other variable fails closed at materialization.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        request_set_headers: Vec<String>,
+        #[serde(default = "default_fastcgi_connect_timeout_ms")]
+        connect_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        send_timeout_ms: u64,
+        #[serde(default = "default_fastcgi_io_timeout_ms")]
+        read_timeout_ms: u64,
+        /// nginx `grpc_buffer_size`: the adapter's response stream chunk bound.
+        #[serde(default = "default_grpc_buffer_size")]
+        buffer_size: u64,
+        /// `grpc_hide_header` / `grpc_pass_header` resolved policy for the
+        /// upstream response (headers and trailing metadata).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        response_policy: Option<ProxyResponsePolicyConfig>,
+        /// `grpc_intercept_errors on`: an upstream HTTP error status (not a gRPC
+        /// status) is replaced by the matched `error_page` target.
+        #[serde(default)]
+        intercept_errors: bool,
+        /// `grpc_next_upstream` / `grpc_next_upstream_tries` /
+        /// `grpc_next_upstream_timeout` as the runtime retry policy.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry: Option<UpstreamRetryConfig>,
+    },
     Redirect {
         id: String,
         status: u16,
@@ -1590,6 +1635,7 @@ impl ResourceConfig {
             | Self::FastCgi { id, .. }
             | Self::CgiUpstream { id, .. }
             | Self::Memcached { id, .. }
+            | Self::Grpc { id, .. }
             | Self::Redirect { id, .. }
             | Self::EmptyGif { id }
             | Self::StubStatus { id }
@@ -1606,6 +1652,7 @@ impl ResourceConfig {
             | Self::FastCgi { id: current, .. }
             | Self::CgiUpstream { id: current, .. }
             | Self::Memcached { id: current, .. }
+            | Self::Grpc { id: current, .. }
             | Self::Redirect { id: current, .. }
             | Self::EmptyGif { id: current }
             | Self::StubStatus { id: current }
@@ -1638,6 +1685,7 @@ impl ResourceConfig {
             | Self::FastCgi { .. }
             | Self::CgiUpstream { .. }
             | Self::Memcached { .. }
+            | Self::Grpc { .. }
             | Self::Redirect { .. }
             | Self::EmptyGif { .. }
             | Self::StubStatus { .. }
@@ -1662,6 +1710,7 @@ impl ResourceConfig {
             | Self::FastCgi { .. }
             | Self::CgiUpstream { .. }
             | Self::Memcached { .. }
+            | Self::Grpc { .. }
             | Self::Redirect { .. }
             | Self::EmptyGif { .. }
             | Self::StubStatus { .. }
@@ -1678,6 +1727,7 @@ impl ResourceConfig {
             | Self::FastCgi { .. }
             | Self::CgiUpstream { .. }
             | Self::Memcached { .. }
+            | Self::Grpc { .. }
             | Self::Redirect { .. }
             | Self::EmptyGif { .. }
             | Self::StubStatus { .. }
@@ -1926,6 +1976,11 @@ pub struct UpstreamAddressPolicyConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpstreamTlsConfig {
+    /// Upstream SNI / certificate-verification name override. Consumed by the
+    /// gRPC adapter when nginx `grpc_ssl_name` declares a name different from
+    /// the target host; the HTTP proxy path verifies the target host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
     #[serde(default)]
     pub trust_mode: UpstreamTlsTrustMode,
     #[serde(default)]

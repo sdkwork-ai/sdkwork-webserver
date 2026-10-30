@@ -14,6 +14,7 @@ mod dns;
 mod error;
 mod fixed_histogram;
 mod forwarded_scheme;
+mod grpc_upstream;
 mod gzip_predicate;
 mod handler;
 mod handshake_timeout;

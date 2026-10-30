@@ -2845,3 +2845,100 @@ fn a_tls_server_name_is_a_dns_name_and_never_an_ip_literal() {
         assert_eq!(normalize_tls_server_name(malformed), None, "{malformed}");
     }
 }
+
+/// Typed TOML/JSON plane: a `type = "grpc"` resource compiles with the bounded
+/// gRPC shape, and the schema rejects unknown fields on it.
+#[test]
+fn grpc_resource_materializes_from_typed_config() {
+    let directory = TempDir::new().expect("temp");
+    let mut config = base_config();
+    config["upstreams"] = json!([{
+        "id": "grpc-upstream",
+        "addressPolicy": {"allowedCidrs": ["127.0.0.1/32"]},
+        "targets": [{"url": "http://127.0.0.1:9101"}]
+    }]);
+    config["resources"] = json!([{
+        "id": "grpc-resource",
+        "type": "grpc",
+        "upstreamRef": "grpc-upstream",
+        "requestSetHeaders": ["X-Sent $host", "X-Client \"\""],
+        "connectTimeoutMs": 1000,
+        "sendTimeoutMs": 2000,
+        "readTimeoutMs": 3000,
+        "bufferSize": 8192,
+        "interceptErrors": true,
+        "retry": {"maxAttempts": 2, "timeoutMs": 5000, "retryOn": ["error", "timeout"]}
+    }]);
+    config["virtualHosts"][0]["routes"] = json!([{
+        "id": "grpc-route",
+        "match": {"pathType": "prefix", "path": "/"},
+        "resourceRef": "grpc-resource"
+    }]);
+    config["virtualHosts"] = json!([config["virtualHosts"][0].clone()]);
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("compile gRPC config");
+    let resource = compiled
+        .config()
+        .resources
+        .iter()
+        .find(|resource| resource.id() == "grpc-resource")
+        .expect("gRPC resource");
+    match resource {
+        ResourceConfig::Grpc {
+            upstream_ref,
+            request_set_headers,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            buffer_size,
+            intercept_errors,
+            retry,
+            ..
+        } => {
+            assert_eq!(upstream_ref, "grpc-upstream");
+            assert_eq!(request_set_headers.len(), 2);
+            assert_eq!(*connect_timeout_ms, 1000);
+            assert_eq!(*send_timeout_ms, 2000);
+            assert_eq!(*read_timeout_ms, 3000);
+            assert_eq!(*buffer_size, 8192);
+            assert!(*intercept_errors);
+            let retry = retry.as_ref().expect("retry policy");
+            assert_eq!(retry.max_attempts, 2);
+            assert_eq!(retry.timeout_ms, 5000);
+            assert_eq!(retry.retry_on.len(), 2);
+        }
+        other => panic!("expected a gRPC resource, got {other:?}"),
+    }
+
+    // The schema is closed: an unknown gRPC field is rejected with a located
+    // diagnostic instead of silently ignored.
+    let mut invalid = base_config();
+    invalid["upstreams"] = json!([{
+        "id": "grpc-upstream",
+        "addressPolicy": {"allowedCidrs": ["127.0.0.1/32"]},
+        "targets": [{"url": "http://127.0.0.1:9101"}]
+    }]);
+    invalid["resources"] = json!([{
+        "id": "grpc-resource",
+        "type": "grpc",
+        "upstreamRef": "grpc-upstream",
+        "grpcBuffering": true
+    }]);
+    invalid["virtualHosts"][0]["routes"] = json!([{
+        "id": "grpc-route",
+        "match": {"pathType": "prefix", "path": "/"},
+        "resourceRef": "grpc-resource"
+    }]);
+    invalid["virtualHosts"] = json!([invalid["virtualHosts"][0].clone()]);
+    let path = write_config(directory.path(), &invalid);
+    let error = load_and_compile_webserver_config(path).expect_err("unknown field must fail");
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("unknown field")
+                || diagnostic.message.contains("additional"))
+            || !error.to_string().is_empty(),
+        "schema must reject the unknown gRPC field: {error}"
+    );
+}

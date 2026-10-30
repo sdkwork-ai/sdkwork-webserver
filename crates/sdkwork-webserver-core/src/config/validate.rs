@@ -703,6 +703,87 @@ impl SemanticValidator {
                         }
                     }
                 }
+                ResourceConfig::Grpc {
+                    upstream_ref,
+                    request_set_headers,
+                    connect_timeout_ms,
+                    send_timeout_ms,
+                    read_timeout_ms,
+                    buffer_size,
+                    response_policy,
+                    retry,
+                    ..
+                } => {
+                    if !upstreams.contains_key(upstream_ref.as_str()) {
+                        self.push(
+                            format!("{path}/upstreamRef"),
+                            format!("unknown upstream {upstream_ref}"),
+                        );
+                    }
+                    let map_variable_names = self.map_variables.clone();
+                    let map_variables: Vec<&str> =
+                        map_variable_names.iter().map(String::as_str).collect();
+                    for (entry_index, entry) in request_set_headers.iter().enumerate() {
+                        if let Err(message) =
+                            super::proxy_headers::validate_proxy_set_header_entry_with_maps(
+                                entry,
+                                &map_variables,
+                            )
+                        {
+                            self.push(format!("{path}/requestSetHeaders/{entry_index}"), message);
+                        }
+                    }
+                    for (field, value) in [
+                        ("connectTimeoutMs", connect_timeout_ms),
+                        ("sendTimeoutMs", send_timeout_ms),
+                        ("readTimeoutMs", read_timeout_ms),
+                    ] {
+                        if *value == 0 || *value > 86_400_000 {
+                            self.push(
+                                format!("{path}/{field}"),
+                                "gRPC timeout must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                    if *buffer_size == 0 || *buffer_size > 1_048_576 {
+                        self.push(
+                            format!("{path}/bufferSize"),
+                            "gRPC bufferSize must be in 1..=1048576 bytes",
+                        );
+                    }
+                    if let Some(policy) = response_policy {
+                        for (name_index, name) in policy.hide_headers.iter().enumerate() {
+                            if !super::header_block_token(name) {
+                                self.push(
+                                    format!("{path}/responsePolicy/hideHeaders/{name_index}"),
+                                    "hideHeaders entry is not a valid HTTP field name",
+                                );
+                            }
+                        }
+                        for (name_index, name) in policy.pass_headers.iter().enumerate() {
+                            if !super::header_block_token(name) {
+                                self.push(
+                                    format!("{path}/responsePolicy/passHeaders/{name_index}"),
+                                    "passHeaders entry is not a valid HTTP field name",
+                                );
+                            }
+                        }
+                    }
+                    if let Some(retry) = retry {
+                        if retry.max_attempts == 0 {
+                            self.push(
+                                format!("{path}/retry/maxAttempts"),
+                                "retry maxAttempts must be at least 1",
+                            );
+                        }
+                        if retry.timeout_ms == 0 || retry.timeout_ms > 86_400_000 {
+                            self.push(
+                                format!("{path}/retry/timeoutMs"),
+                                "retry timeoutMs must be in 1..=86400000 ms",
+                            );
+                        }
+                    }
+                }
                 ResourceConfig::CgiUpstream {
                     upstream_ref,
                     params,
@@ -1090,11 +1171,10 @@ impl SemanticValidator {
                     _ => {}
                 }
                 for (file_index, file) in tls.ca_certificate_files.iter().enumerate() {
-                    validate_relative_path(
+                    validate_upstream_tls_material_path(
                         self,
                         &format!("{path}/tls/caCertificateFiles/{file_index}"),
                         file,
-                        true,
                     );
                 }
                 match (
@@ -1102,17 +1182,15 @@ impl SemanticValidator {
                     tls.client_private_key_file.as_deref(),
                 ) {
                     (Some(certificate), Some(private_key)) => {
-                        validate_relative_path(
+                        validate_upstream_tls_material_path(
                             self,
                             &format!("{path}/tls/clientCertificateFile"),
                             certificate,
-                            true,
                         );
-                        validate_relative_path(
+                        validate_upstream_tls_material_path(
                             self,
                             &format!("{path}/tls/clientPrivateKeyFile"),
                             private_key,
-                            true,
                         );
                     }
                     (None, None) => {}
@@ -1126,6 +1204,19 @@ impl SemanticValidator {
                         format!("{path}/tls/maximumVersion"),
                         "maximum TLS version must not be lower than minimumVersion",
                     );
+                }
+                if let Some(server_name) = &tls.server_name {
+                    if server_name.is_empty()
+                        || server_name.len() > 253
+                        || server_name
+                            .bytes()
+                            .any(|byte| byte.is_ascii_control() || byte == b' ' || byte == b'/')
+                    {
+                        self.push(
+                            format!("{path}/tls/serverName"),
+                            "upstream TLS serverName must be a host name without controls, spaces or `/`",
+                        );
+                    }
                 }
             }
             if let Some(active_health) = &upstream.active_health {
@@ -2757,6 +2848,31 @@ fn validate_relative_path(
         validator.push(
             path,
             "path must be a safe relative path without parent, root, prefix, backslash, or NUL",
+        );
+    }
+}
+
+/// Validate one upstream TLS material file reference.
+///
+/// JSON/TOML policies name conf-directory-relative files; nginx materialization
+/// resolves them against the loaded nginx configuration directory first and
+/// hands the compiled model absolute paths (the `NginxConf` compile base is
+/// `/`). Both spellings are legal here; `CompiledWebServerApp::compile` still
+/// enforces that the canonical file stays inside the format's base directory.
+fn validate_upstream_tls_material_path(validator: &mut SemanticValidator, path: &str, value: &str) {
+    let candidate = Path::new(value);
+    let has_parent = candidate
+        .components()
+        .any(|component| matches!(component, Component::ParentDir));
+    if value.is_empty()
+        || value.contains('\\')
+        || value.contains('\0')
+        || has_parent
+        || (candidate.is_absolute() && value.starts_with("//"))
+    {
+        validator.push(
+            path,
+            "TLS material path must not be empty, contain parent traversal, a backslash, or NUL",
         );
     }
 }

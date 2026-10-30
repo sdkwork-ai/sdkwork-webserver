@@ -30,6 +30,7 @@ members = [
   "crates/sdkwork-webserver-tunnel",
   "crates/sdkwork-webserver-cluster",
   "crates/sdkwork-webserver-upstream-protocol",
+  "crates/sdkwork-webserver-grpc-mock",
 ]
 exclude = [
   "sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-rust/generated/server-openapi",

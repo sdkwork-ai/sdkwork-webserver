@@ -55,6 +55,7 @@ cap-fs-ext.workspace = true
 cap-std.workspace = true
 crc.workspace = true
 futures-util.workspace = true
+h2.workspace = true
 http.workspace = true
 http-body.workspace = true
 http-body-util = { workspace = true, features = ["channel"] }

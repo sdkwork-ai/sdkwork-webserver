@@ -4113,10 +4113,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_buffer_size setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_connect_timeout",
@@ -4129,10 +4192,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_connect_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_hide_header",
@@ -4145,10 +4271,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_hide_header setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ignore_headers",
@@ -4177,10 +4366,73 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_intercept_errors setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_next_upstream",
@@ -4193,10 +4445,73 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_next_upstream setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_next_upstream_timeout",
@@ -4209,10 +4524,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_next_upstream_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_next_upstream_tries",
@@ -4225,10 +4603,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_next_upstream_tries setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_pass",
@@ -4240,10 +4681,72 @@
         "http-location"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http-if",
+        "http-location"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_pass setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_pass_header",
@@ -4256,10 +4759,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_pass_header setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_read_timeout",
@@ -4272,10 +4838,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_read_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_send_timeout",
@@ -4288,10 +4917,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_send_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_set_header",
@@ -4304,10 +4996,73 @@
         "http-server"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_set_header setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_socket_keepalive",
@@ -4336,10 +5091,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_certificate_cache",
@@ -4368,10 +5186,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_certificate_key setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_ciphers",
@@ -4432,10 +5313,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_name setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_password_file",
@@ -4464,10 +5408,73 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_protocols setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_server_name",
@@ -4480,10 +5487,73 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_server_name setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_session_reuse",
@@ -4512,10 +5582,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_trusted_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_verify",
@@ -4528,10 +5661,73 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_verify setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:grpc_ssl_verify_depth",
@@ -4544,10 +5740,73 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].type=\"grpc\" (grpc_ssl_verify_depth setting in the grpc adapter; h2 client with always-verified upstream TLS)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-unary"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-stream"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-error-trailers-only"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-status-error"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-set-header"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-hide-pass"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-read-timeout"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-retry"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-ok"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-tls-untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-intercept-http"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-bad-trailers"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/battery.py",
+          "case": "grpc-dead"
+        }
+      ],
+      "knownDifferences": [
+        "nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle",
+        "no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced",
+        "unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics"
+      ]
     },
     {
       "id": "http:gunzip",

@@ -721,7 +721,7 @@ async fn route_admitted_request(
                     .map_or("", String::as_str),
                 maps: Some(&map_results),
                 invalid_referer: referer_invalid_for(
-                    &candidate.virtual_host,
+                    candidate.virtual_host,
                     Some(candidate.route),
                     &request_headers,
                 ),
@@ -832,7 +832,7 @@ async fn route_admitted_request(
                         .map_or("", String::as_str),
                     maps: Some(&map_results),
                     invalid_referer: referer_invalid_for(
-                        &candidate.virtual_host,
+                        candidate.virtual_host,
                         Some(candidate.route),
                         &request_headers,
                     ),
@@ -1549,6 +1549,92 @@ async fn route_admitted_request(
                 Err(response) => response,
             };
             cgi_arm
+        }
+        ResourceConfig::Grpc {
+            upstream_ref,
+            request_set_headers,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            buffer_size,
+            response_policy,
+            intercept_errors,
+            retry,
+            ..
+        } => {
+            let grpc_arm = match collect_bounded_request_body(
+                request,
+                generation.app.config().limits.max_request_body_bytes,
+                &request_failure,
+            )
+            .await
+            {
+                Ok((request, request_body)) => {
+                    let grpc_response = super::grpc_upstream::serve_grpc(
+                        &generation,
+                        upstream_ref,
+                        request_set_headers,
+                        *connect_timeout_ms,
+                        *send_timeout_ms,
+                        *read_timeout_ms,
+                        *buffer_size,
+                        response_policy.as_ref(),
+                        retry.as_ref(),
+                        request.method(),
+                        &path,
+                        request_query.as_deref(),
+                        &authority,
+                        super::grpc_upstream::GrpcRequestFacts {
+                            client_ip,
+                            external_scheme: scheme.as_str(),
+                            listener_port: state
+                                .runtime
+                                .current()
+                                .app
+                                .listeners()
+                                .find(|listener| listener.id == state.listener_id)
+                                .map(|listener| listener.port)
+                                .unwrap_or(0),
+                            maps: &map_results,
+                        },
+                        request.headers(),
+                        &request_body,
+                        &state.runtime.metrics,
+                    )
+                    .await;
+                    // nginx `grpc_intercept_errors on`: an upstream HTTP error
+                    // status is replaced by the matched `error_page` target. A
+                    // non-zero gRPC status is not an HTTP error and is forwarded.
+                    let intercepted = if *intercept_errors {
+                        if let Some((method, headers, query)) = error_page_saved.as_ref() {
+                            resolve_error_pages(
+                                &state,
+                                &generation,
+                                &selected,
+                                &authority,
+                                grpc_response.status(),
+                                method,
+                                headers,
+                                &path,
+                                query.as_deref(),
+                                scheme.as_str(),
+                                &map_results,
+                            )
+                            .await
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    match intercepted {
+                        Some(paged) => paged,
+                        None => grpc_response,
+                    }
+                }
+                Err(response) => response,
+            };
+            grpc_arm
         }
         ResourceConfig::Memcached {
             upstream_ref,
@@ -2487,9 +2573,7 @@ impl ResponseHeaderVariables<'_> {
                 "request_method" => output.push_str(self.method),
                 "server_name" => output.push_str(self.server_name),
                 "invalid_referer" => {
-                    if self.invalid_referer {
-                        output.push('1');
-                    }
+                    output.push_str(if self.invalid_referer { "1" } else { "" });
                 }
                 _ => {}
             }

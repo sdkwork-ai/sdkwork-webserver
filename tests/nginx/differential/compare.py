@@ -120,6 +120,45 @@ def freshness_seconds(record, field):
     return int((moment - date).total_seconds())
 
 
+def implied_expiry_moment(record, field):
+    """The absolute expiry a freshness field declares, as a UTC datetime.
+
+    `Expires` is absolute; `Cache-Control: max-age=N` is relative to the
+    response's own `Date`. The daily (`expires @<time>`) form resolves to the
+    next occurrence of a fixed time of day, so two captures taken at different
+    times of day legitimately show different offsets/max-age even though both
+    implementations agree on the configured time of day. Comparing the implied
+    expiry's time of day keeps the daily contract asserted without making the
+    committed oracle depend on when it was captured.
+    """
+    value = record.get(field)
+    if value is None:
+        return None
+    date = http_date(record.get("date"))
+    if date is None:
+        return None
+    moment = http_date(value)
+    if moment is not None:
+        return moment
+    match = MAX_AGE.match(value)
+    if match:
+        return date + datetime.timedelta(seconds=int(match.group(1)))
+    return None
+
+
+def same_time_of_day(left, right):
+    """True when two absolute moments share a wall-clock time of day (UTC)."""
+    if left is None or right is None:
+        return False
+    left_seconds = left.hour * 3600 + left.minute * 60 + left.second
+    right_seconds = right.hour * 3600 + right.minute * 60 + right.second
+    delta = abs(left_seconds - right_seconds)
+    # `23:59:59` and `00:00:00` are one second apart on the clock even though
+    # their linear distance is a whole day minus one second.
+    delta = min(delta, 86_400 - delta)
+    return delta <= TOLERANCE_SECONDS
+
+
 def error_page_difference(case, field, expected, actual):
     """The one documented error-page allowance, matched against pinned widths."""
     length = ERROR_PAGE_BODY_BYTES.get(case)
@@ -188,6 +227,14 @@ def compare_case(case, expected, actual, failures, known):
             if abs(left_age - right_age) <= TOLERANCE_SECONDS:
                 continue
             if abs(left_age - right_age - elapsed) <= TOLERANCE_SECONDS:
+                continue
+            # A daily `expires @<time>` value resolves against the next
+            # occurrence of a fixed time of day: captures taken before and
+            # after that occurrence shift by a whole day, not by `elapsed`.
+            if same_time_of_day(
+                implied_expiry_moment(expected, field),
+                implied_expiry_moment(actual, field),
+            ):
                 continue
         record(failures, known, case, field, left, right)
 

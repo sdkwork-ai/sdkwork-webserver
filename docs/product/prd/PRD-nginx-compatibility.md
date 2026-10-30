@@ -73,7 +73,7 @@ V1 excludes:
 - OS-specific directives that cannot be reproduced safely and portably.
 - Arbitrary forward-proxy/`CONNECT` execution and executable embedded configuration.
 - Perl, `geoip`, and the nginx mail proxy modules.
-- FastCGI, uWSGI, SCGI, `memcached` and gRPC are **in profile as of the upstream-protocol expansion**: the edge implements its own bounded protocol adapters (FastCGI/uWSGI/SCGI/memcached landed with real-nginx differential evidence; gRPC follows). They are not "embedded CGI" — no process is spawned; the edge is only a protocol client to a configured upstream, with SSRF policy, bounded bodies, timeouts and retry gates identical to HTTP proxying.
+- FastCGI, uWSGI, SCGI, `memcached` and gRPC are **in profile as of the upstream-protocol expansion**: the edge implements its own bounded protocol adapters: FastCGI/uWSGI/SCGI/memcached and gRPC are executable end-to-end with real-nginx differential evidence. They are not "embedded CGI" — no process is spawned; the edge is only a protocol client to a configured upstream, with SSRF policy, bounded bodies, timeouts and retry gates identical to HTTP proxying.
 - Arbitrary directives carried as opaque text into Rust activation.
 
 The importer may preserve unsupported source text only for inspection or Nginx-target round-trip. Preserved text is marked `notExecutableByRust`, cannot contribute hidden behavior, and blocks Rust publication when it is in an active context.

@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "gRPC wiring (2026-10-30, REQ-2026-0073 wave 6): grpc_pass/h2 client landed end-to-end with 13 differential cases against nginx 1.29.6 (protocol slice 26 -> 39, byte-identical where the contract allows); upstream TLS is always verified and non-zero grpc-status follows nginx (forwarded, not 502). The conditional-cache differential was hardened against daily `expires @<time>` midnight rollover so the committed oracle no longer depends on capture time. Catalog: 195 executable / 171 accepted-unenforced / 314 fail-closed / 64 excluded. Remaining: stream advanced gaps, subrequest filters, module-sized modules, OCSP (rustls), chunked/http2_chunk (hyper), open_file_cache, mail/geoip/Perl/dynamic modules.",
     "Upstream-protocol expansion (2026-10-30, REQ-2026-0073 wave 5): FastCGI, uWSGI, SCGI and memcached moved from out-of-profile to executable end-to-end with a new committed differential-protocols slice (26/26 byte-identical vs nginx 1.29.6). A substrate codec crate for FastCGI/uWSGI/SCGI/memcached/gRPC landed with 89 tests; gRPC wiring is the next wave. Remaining out-of-profile after this wave: perl, geoip, mail proxy and third-party/Lua/njs modules. Catalog counts moved to 175 executable / 171 accepted-unenforced / 334 fail-closed / 64 excluded.",
     "Wave 4a execution (2026-10-30, REQ-2026-0073): referer module (valid_referers + $invalid_referer) and geo/split_clients variable blocks moved to executable; differential-http grew 237 -> 259 cases. chunked_transfer_encoding keeps a truthful diagnostic (pinned hyper HTTP/1.1 encoder cannot emit a close-delimited 1.1 body) and open_file_cache keeps its precise cache/staleness rationale. Subrequest filters (addition/auth_request/mirror) and userid/browser/random_index/degradation/slice remain fail-closed pending a bounded subrequest engine / module-sized work.",
     "Wave 3b execution (2026-10-30, REQ-2026-0073): http2_max_concurrent_streams (real ALPN h2 SETTINGS proof), proxy_method (differential), stream allow/deny and stream return moved to executable; the HTTP/2 directives nginx 1.29.6 made obsolete are accepted no-ops with truthful diagnostics; stream limit_conn/set/preread/proxy_protocol_timeout/stream-map/upstream-TLS and OCSP stapling stay unimplemented with exact architecture blockers reported. differential-http grew 236 -> 237 cases. Remaining behavior-gap after wave 3b: chunked framing, addition filter, referer, open_file_cache, http2_chunk_size, stream advanced gaps, OCSP.",
@@ -524,6 +525,12 @@
       "group": "upstreams",
       "status": "implemented",
       "summary": "New crate sdkwork-webserver-upstream-protocol: pure bounded codecs for FastCGI/uWSGI/SCGI/memcached/gRPC framing with adversarial fail-closed tests (89 tests); the wiring plane for FastCGI/uWSGI/SCGI/memcached is live, gRPC framing is ready for the next wiring wave (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.grpc",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "gRPC upstream adapter: grpc_pass (grpc:// h2c, grpcs:// TLS1.2/1.3 with always-verified chains, declared upstreams), grpc_set_header, connect/send/read timeouts, grpc_buffer_size, hide/pass, grpc_intercept_errors, bounded next_upstream retries, full grpc_ssl_* policy; h2 client with trailers forwarding, trailers-only promotion, 502 transport/protocol and 504 read-timeout mapping; nginx 1.29.6 differential (39/39 protocol slice incl 13 gRPC cases) with a test-only Rust h2 mock (REQ-2026-0073 wave 6)"
     }
   ]
 }

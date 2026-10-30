@@ -32,7 +32,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-protocols-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 26;
+const CASE_FLOOR = 39;
 /**
  * nginx renders its own generated error page for a memcached miss/upstream
  * failure; the status mapping is the contract under test there, while the body
@@ -42,6 +42,12 @@ const STATUS_ONLY_CASES = new Set([
   'memcached-miss',
   'memcached-raw-502',
   'memcached-post',
+  // nginx renders a generated 504/502 page for a gRPC read timeout and for an
+  // unreachable/untrusted upstream; the status mapping is the contract, the
+  // body is the documented generated-error-page difference.
+  'grpc-read-timeout',
+  'grpc-tls-untrusted',
+  'grpc-dead',
 ]);
 const ORACLE_PORT = 21092;
 const GATEWAY_PORT = 21093;
@@ -49,10 +55,17 @@ const ORACLE_FCGI_PORT = ORACLE_PORT + 2;
 const ORACLE_UWSGI_PORT = ORACLE_PORT + 10;
 const ORACLE_SCGI_PORT = ORACLE_PORT + 11;
 const ORACLE_MEMCACHED_PORT = ORACLE_PORT + 14;
+const ORACLE_GRPC_PORT = ORACLE_PORT + 20;
+const ORACLE_GRPC_TLS_OK_PORT = ORACLE_PORT + 21;
+const ORACLE_GRPC_TLS_UNTRUSTED_PORT = ORACLE_PORT + 22;
 const GATEWAY_FCGI_PORT = GATEWAY_PORT + 2;
 const GATEWAY_UWSGI_PORT = GATEWAY_PORT + 10;
 const GATEWAY_SCGI_PORT = GATEWAY_PORT + 11;
 const GATEWAY_MEMCACHED_PORT = GATEWAY_PORT + 14;
+const GATEWAY_GRPC_PORT = GATEWAY_PORT + 20;
+const GATEWAY_GRPC_TLS_OK_PORT = GATEWAY_PORT + 21;
+const GATEWAY_GRPC_TLS_UNTRUSTED_PORT = GATEWAY_PORT + 22;
+const GRPC_MOCK_BINARY = 'sdkwork-webserver-grpc-mock';
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
 const ORACLE_UNAVAILABLE_EXITS = new Set([3, 4, 5]);
@@ -87,20 +100,80 @@ async function waitForPort(port, timeoutMs) {
   return false;
 }
 
-function renderTemplate(port, fcgiPort, uwsgiPort, scgiPort, memcachedPort, deadPort) {
+function renderTemplate(ports) {
   let text = fs.readFileSync(path.join(fixtureDir, 'nginx.conf'), 'utf8');
   text = text
     .replaceAll('@ROOT@', path.join(fixtureDir, 'public'))
-    .replaceAll('@PORT@', String(port))
-    .replaceAll('@FCGI@', String(fcgiPort))
-    .replaceAll('@UWSGI@', String(uwsgiPort))
-    .replaceAll('@SCGI@', String(scgiPort))
-    .replaceAll('@MEMCACHED@', String(memcachedPort))
-    .replaceAll('@DEAD@', String(deadPort));
-  for (const marker of ['@ROOT@', '@PORT@', '@FCGI@', '@UWSGI@', '@SCGI@', '@MEMCACHED@', '@DEAD@']) {
+    .replaceAll('@PORT@', String(ports.port))
+    .replaceAll('@FCGI@', String(ports.fcgi))
+    .replaceAll('@UWSGI@', String(ports.uwsgi))
+    .replaceAll('@SCGI@', String(ports.scgi))
+    .replaceAll('@MEMCACHED@', String(ports.memcached))
+    .replaceAll('@GRPC@', String(ports.grpc))
+    .replaceAll('@GRPC_TLS_OK@', String(ports.grpcTlsOk))
+    .replaceAll('@GRPC_TLS_UNTRUSTED@', String(ports.grpcTlsUntrusted))
+    .replaceAll('@DEAD@', String(ports.dead));
+  for (const marker of [
+    '@ROOT@', '@PORT@', '@FCGI@', '@UWSGI@', '@SCGI@', '@MEMCACHED@',
+    '@GRPC@', '@GRPC_TLS_OK@', '@GRPC_TLS_UNTRUSTED@', '@DEAD@',
+  ]) {
     if (text.includes(marker)) throw new Error(`placeholder ${marker} left unrendered`);
   }
   return text;
+}
+
+/** Generate the gRPC mock's CA, an unrelated CA, and the CA-signed server cert. */
+function generateGrpcCertificates(directory) {
+  fs.mkdirSync(directory, { recursive: true });
+  const ca = path.join(directory, 'grpc-ca.pem');
+  const otherCa = path.join(directory, 'grpc-other-ca.pem');
+  const serverCert = path.join(directory, 'grpc-server.pem');
+  const serverKey = path.join(directory, 'grpc-server.key');
+  const extensions = path.join(directory, 'grpc-server.ext');
+  fs.writeFileSync(
+    extensions,
+    'subjectAltName=DNS:localhost,IP:127.0.0.1\n' +
+      'basicConstraints=critical,CA:FALSE\n' +
+      'keyUsage=critical,digitalSignature,keyEncipherment\n' +
+      'extendedKeyUsage=serverAuth\n',
+  );
+  const run = (...args) => {
+    const result = spawnSync('openssl', args, { encoding: 'utf8' });
+    if (result.error || result.status !== 0) {
+      throw new Error(`openssl ${args.join(' ')} failed: ${result.stderr ?? result.error}`);
+    }
+  };
+  for (const [cert, key, subject] of [
+    [ca, path.join(directory, 'grpc-ca.key'), '/CN=grpc-test-ca'],
+    [otherCa, path.join(directory, 'grpc-other-ca.key'), '/CN=grpc-other-ca'],
+  ]) {
+    run('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert,
+      '-days', '3', '-subj', subject);
+  }
+  const request = path.join(directory, 'grpc-server.csr');
+  run('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', serverKey, '-out', request,
+    '-subj', '/CN=localhost');
+  run('x509', '-req', '-in', request, '-CA', ca,
+    '-CAkey', path.join(directory, 'grpc-ca.key'), '-CAcreateserial', '-days', '3',
+    '-out', serverCert, '-extfile', extensions);
+  return { ca, otherCa, serverCert, serverKey };
+}
+
+/** Build (or locate) the test-only Rust HTTP/2 gRPC responder. */
+function grpcMockBinaryPath() {
+  const candidate = path.join(root, 'target', 'debug', GRPC_MOCK_BINARY);
+  const build = spawnSync(
+    'cargo',
+    ['build', '-p', GRPC_MOCK_BINARY],
+    { cwd: root, stdio: 'inherit', env: process.env },
+  );
+  if (build.error || build.status !== 0) {
+    throw new Error('cannot build the gRPC mock responder');
+  }
+  if (!fs.existsSync(candidate)) {
+    throw new Error(`gRPC mock binary not found at ${candidate}`);
+  }
+  return candidate;
 }
 
 function candidateBinaries() {
@@ -185,6 +258,11 @@ function compare(expected, actual, statusOnlyCases = new Set()) {
     if (want.body !== got.body) {
       differences.push(`${name}: body differs`);
     }
+    const wantTrailers = JSON.stringify(want.trailers ?? {});
+    const gotTrailers = JSON.stringify(got.trailers ?? {});
+    if (wantTrailers !== gotTrailers) {
+      differences.push(`${name}: trailers ${wantTrailers} != ${gotTrailers}`);
+    }
   }
   return differences;
 }
@@ -241,6 +319,9 @@ async function main() {
     ['gateway uWSGI responder', GATEWAY_UWSGI_PORT],
     ['gateway SCGI responder', GATEWAY_SCGI_PORT],
     ['gateway memcached responder', GATEWAY_MEMCACHED_PORT],
+    ['gateway gRPC responder', GATEWAY_GRPC_PORT],
+    ['gateway gRPC TLS responder', GATEWAY_GRPC_TLS_OK_PORT],
+    ['gateway gRPC TLS (untrusted) responder', GATEWAY_GRPC_TLS_UNTRUSTED_PORT],
     ['gateway dead upstream', GATEWAY_DEAD_PORT],
   ]) {
     if (!(await portFree(port))) {
@@ -259,16 +340,26 @@ async function main() {
   }
 
   fs.mkdirSync(GATEWAY_CONF_DIR, { recursive: true });
+  let grpcCertificates;
+  try {
+    grpcCertificates = generateGrpcCertificates(GATEWAY_CONF_DIR);
+  } catch (error) {
+    log(`FAIL: cannot generate the gRPC mock certificates: ${error.message}`);
+    return 1;
+  }
   fs.writeFileSync(
     GATEWAY_CONF,
-    renderTemplate(
-      GATEWAY_PORT,
-      GATEWAY_FCGI_PORT,
-      GATEWAY_UWSGI_PORT,
-      GATEWAY_SCGI_PORT,
-      GATEWAY_MEMCACHED_PORT,
-      GATEWAY_DEAD_PORT,
-    ),
+    renderTemplate({
+      port: GATEWAY_PORT,
+      fcgi: GATEWAY_FCGI_PORT,
+      uwsgi: GATEWAY_UWSGI_PORT,
+      scgi: GATEWAY_SCGI_PORT,
+      memcached: GATEWAY_MEMCACHED_PORT,
+      grpc: GATEWAY_GRPC_PORT,
+      grpcTlsOk: GATEWAY_GRPC_TLS_OK_PORT,
+      grpcTlsUntrusted: GATEWAY_GRPC_TLS_UNTRUSTED_PORT,
+      dead: GATEWAY_DEAD_PORT,
+    }),
   );
 
   const mockLog = fs.openSync(path.join(root, 'tmp', 'nginx-differential-protocols-mock.log'), 'w');
@@ -287,6 +378,25 @@ async function main() {
   const mockMemcached = spawn(
     python,
     [path.join(fixtureDir, 'mock_memcached.py'), '--port', String(GATEWAY_MEMCACHED_PORT)],
+    { cwd: root, stdio: ['ignore', mockLog, mockLog] },
+  );
+  let grpcMockBinary;
+  try {
+    grpcMockBinary = grpcMockBinaryPath();
+  } catch (error) {
+    log(`FAIL: ${error.message}`);
+    for (const child of [mock, mockUwsgi, mockScgi, mockMemcached]) child.kill();
+    return 1;
+  }
+  const mockGrpc = spawn(
+    grpcMockBinary,
+    [
+      '--plain-port', String(GATEWAY_GRPC_PORT),
+      '--tls-port', String(GATEWAY_GRPC_TLS_OK_PORT),
+      '--tls-port', String(GATEWAY_GRPC_TLS_UNTRUSTED_PORT),
+      '--cert', grpcCertificates.serverCert,
+      '--key', grpcCertificates.serverKey,
+    ],
     { cwd: root, stdio: ['ignore', mockLog, mockLog] },
   );
   const gatewayLog = fs.openSync(path.join(root, 'tmp', 'nginx-differential-protocols-gateway.log'), 'w');
@@ -328,11 +438,11 @@ async function main() {
     log(`PASS: ${cases} differential CGI-family cases match real nginx ${recordedServer}`);
     return 0;
   } finally {
-    for (const child of [gateway, mock, mockUwsgi, mockScgi, mockMemcached]) {
+    for (const child of [gateway, mock, mockUwsgi, mockScgi, mockMemcached, mockGrpc]) {
       if (child.exitCode === null) child.kill();
     }
     await delay(500);
-    for (const child of [gateway, mock, mockUwsgi, mockScgi, mockMemcached]) {
+    for (const child of [gateway, mock, mockUwsgi, mockScgi, mockMemcached, mockGrpc]) {
       if (child.exitCode === null) child.kill('SIGKILL');
     }
     fs.closeSync(mockLog);

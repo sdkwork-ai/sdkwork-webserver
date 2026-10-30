@@ -1896,3 +1896,318 @@ server {
         report.ignored
     );
 }
+
+// ---- Wave 6: gRPC-over-HTTP/2 upstream (`ngx_http_grpc_module`) ----
+
+#[test]
+fn grpc_pass_materializes_plaintext_resource_and_retry_policy() {
+    let config = materialize_ok(
+        r#"
+upstream grpc_pool {
+    server 127.0.0.1:9101;
+    server 127.0.0.1:9102;
+}
+server {
+    listen 80;
+    server_name grpc.example.com;
+    location /grpc.test.Echo/ {
+        grpc_pass grpc://127.0.0.1:9100;
+        grpc_set_header X-Sent $host;
+        grpc_connect_timeout 1s;
+        grpc_send_timeout 2s;
+        grpc_read_timeout 3s;
+        grpc_buffer_size 8k;
+    }
+    location /retry/ {
+        grpc_pass grpc_pool;
+        grpc_next_upstream error timeout;
+        grpc_next_upstream_tries 2;
+        grpc_next_upstream_timeout 5s;
+        grpc_intercept_errors on;
+    }
+}
+"#,
+    );
+    let grpc = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::Grpc { .. }))
+        .expect("gRPC resource");
+    match grpc {
+        ResourceConfig::Grpc {
+            upstream_ref,
+            request_set_headers,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            buffer_size,
+            ..
+        } => {
+            assert!(upstream_ref.starts_with("literal-127-0-0-1-9100"));
+            assert_eq!(request_set_headers, &vec!["X-Sent $host".to_owned()]);
+            assert_eq!(*connect_timeout_ms, 1000);
+            assert_eq!(*send_timeout_ms, 2000);
+            assert_eq!(*read_timeout_ms, 3000);
+            assert_eq!(*buffer_size, 8192);
+        }
+        other => panic!("expected gRPC resource, got {other:?}"),
+    }
+    // The literal target became an upstream with the http scheme (h2c).
+    assert!(config.upstreams.iter().any(|upstream| upstream
+        .targets
+        .iter()
+        .any(|target| target.url == "http://127.0.0.1:9100")));
+    // The declared upstream name resolves to the pool; retry policy is bounded
+    // by the pool size and carries the declared conditions.
+    let retry = config
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::Grpc {
+                upstream_ref,
+                retry,
+                ..
+            } if upstream_ref == "grpc_pool" => retry.as_ref(),
+            _ => None,
+        })
+        .next()
+        .expect("retry policy");
+    assert_eq!(retry.max_attempts, 2);
+    assert_eq!(retry.timeout_ms, 5000);
+}
+
+#[test]
+fn grpc_settings_inherit_from_http_and_location_overrides() {
+    let config = materialize_ok(
+        r#"
+grpc_set_header X-Level http;
+grpc_connect_timeout 9s;
+grpc_hide_header X-Hidden;
+server {
+    listen 80;
+    server_name grpc.example.com;
+    grpc_set_header X-Level server;
+    location /a/ {
+        grpc_pass grpc://127.0.0.1:9100;
+        grpc_read_timeout 4s;
+    }
+    location /b/ {
+        grpc_pass grpc://127.0.0.1:9100;
+        grpc_set_header X-Level location;
+        grpc_hide_header X-Hidden-2;
+    }
+}
+"#,
+    );
+    let mut headers = Vec::new();
+    for resource in &config.resources {
+        if let ResourceConfig::Grpc {
+            request_set_headers,
+            connect_timeout_ms,
+            read_timeout_ms,
+            intercept_errors,
+            ..
+        } = resource
+        {
+            headers.push(request_set_headers.clone());
+            // nginx http-level connect timeout is inherited.
+            assert_eq!(*connect_timeout_ms, 9000);
+            assert!(!intercept_errors);
+            let _ = read_timeout_ms;
+        }
+    }
+    assert_eq!(headers.len(), 2);
+    // A location that declares no grpc_set_header inherits the http list
+    // (server-level declarations replace it, then location-level replaces that).
+    assert_eq!(
+        headers[0],
+        vec!["X-Level server".to_owned()],
+        "location /a/ inherits the server-level set-header list"
+    );
+    assert_eq!(
+        headers[1],
+        vec!["X-Level location".to_owned()],
+        "location /b/ replaces the inherited list"
+    );
+    let hide_lists: Vec<&Vec<String>> = config
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::Grpc {
+                response_policy, ..
+            } => response_policy.as_ref().map(|policy| &policy.hide_headers),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(hide_lists.len(), 2);
+    assert!(
+        hide_lists
+            .iter()
+            .any(|list| list.contains(&"x-hidden".to_owned())
+                || list.contains(&"X-Hidden".to_owned()))
+    );
+}
+
+#[test]
+fn grpc_ssl_materializes_tls_policy_with_sni_override() {
+    let directory = TempDir::new().expect("temp dir");
+    std::fs::write(directory.path().join("ca.pem"), "ca").expect("write ca");
+    std::fs::write(directory.path().join("client.pem"), "cert").expect("write cert");
+    std::fs::write(directory.path().join("client.key"), "key").expect("write key");
+    let text = r#"
+server {
+    listen 80;
+    server_name grpc.example.com;
+    location /a/ {
+        grpc_ssl_verify on;
+        grpc_ssl_verify_depth 2;
+        grpc_ssl_trusted_certificate ca.pem;
+        grpc_ssl_certificate client.pem;
+        grpc_ssl_certificate_key client.key;
+        grpc_ssl_server_name on;
+        grpc_ssl_name localhost;
+        grpc_ssl_protocols TLSv1.3;
+        grpc_pass grpcs://127.0.0.1:9101;
+    }
+    location /b/ {
+        grpc_ssl_verify on;
+        grpc_ssl_trusted_certificate ca.pem;
+        grpc_ssl_server_name on;
+        grpc_ssl_name localhost;
+        grpc_pass grpcs://127.0.0.1:9101;
+        grpc_set_header X-Other location;
+    }
+}
+"#;
+    let parsed = parse_nginx_config(text, Path::new("site.conf")).expect("parse");
+    let config = materialize_nginx_app(&parsed, directory.path(), "surface").expect("materialize");
+    let tls_policies: Vec<_> = config
+        .upstreams
+        .iter()
+        .filter_map(|upstream| upstream.tls.as_ref())
+        .collect();
+    // Two locations with different `grpc_ssl_*` policies point at the same
+    // authority; nginx scopes the policy per location, so the materializer
+    // creates one policy-scoped upstream per distinct policy.
+    assert_eq!(tls_policies.len(), 2);
+    for tls in &tls_policies {
+        assert_eq!(
+            tls.trust_mode,
+            sdkwork_webserver_core::UpstreamTlsTrustMode::Custom
+        );
+        assert_eq!(tls.ca_certificate_files.len(), 1);
+        assert!(tls.ca_certificate_files[0].ends_with("ca.pem"));
+        assert_eq!(tls.server_name.as_deref(), Some("localhost"));
+    }
+    assert!(tls_policies.iter().any(|tls| {
+        tls.client_certificate_file.is_some()
+            && tls.minimum_version == sdkwork_webserver_core::TlsVersion::Tls13
+            && tls.maximum_version == sdkwork_webserver_core::TlsVersion::Tls13
+    }));
+}
+
+#[test]
+fn grpc_unsupported_forms_fail_closed_with_located_diagnostics() {
+    for (body, expected) in [
+        (
+            "grpc_pass grpc://127.0.0.1:9100/v1;",
+            "URI part",
+        ),
+        ("grpc_pass $backend;", "variable `grpc_pass` targets"),
+        (
+            "grpc_pass unix:/tmp/grpc.sock;",
+            "unix:",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_buffering on;",
+            "grpc_buffering",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_ignore_headers X-Accel-Expires;",
+            "grpc_ignore_headers",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive on;",
+            "grpc_socket_keepalive",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_bind 127.0.0.1;",
+            "grpc_bind",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_verify off;",
+            "grpc_ssl_verify off",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_server_name off;",
+            "grpc_ssl_server_name off",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_trusted_certificate ca.pem;",
+            "requires `grpc_ssl_verify on`",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_verify on; grpc_ssl_certificate client.pem;",
+            "requires `grpc_ssl_certificate_key`",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_ciphers HIGH;",
+            "grpc_ssl_ciphers",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_session_reuse on;",
+            "grpc_ssl_session_reuse",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_buffers 8 8k;",
+            "grpc_buffers",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_busy_buffers_size 8k;",
+            "grpc_busy_buffers_size",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_internal_trailers on;",
+            "grpc_internal_trailers",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_limit_rate 10k;",
+            "grpc_limit_rate",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_max_temp_file_size 8m;",
+            "grpc_max_temp_file_size",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_temp_path /tmp;",
+            "grpc_temp_path",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_crl revoked.pem;",
+            "grpc_ssl_crl",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_conf_command Options -session_tickets;",
+            "grpc_ssl_conf_command",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_password_file pass.txt;",
+            "grpc_ssl_password_file",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_certificate_cache max=8;",
+            "grpc_ssl_certificate_cache",
+        ),
+    ] {
+        let text = format!(
+            "server {{ listen 80; server_name grpc.example.com; location / {{ {body} }} }}"
+        );
+        materialize_err(&text, expected);
+    }
+    // `grpc_pass` is a location handler in nginx; http/server contexts fail
+    // closed with a located diagnostic instead of being silently ignored.
+    materialize_err(
+        "server { listen 80; server_name grpc.example.com; grpc_pass grpc://127.0.0.1:9100; }",
+        "only allowed inside a `location` block",
+    );
+}

@@ -513,6 +513,20 @@ pub fn materialize_nginx_app(
             name if name.starts_with("memcached_") => {
                 mapper.http_memcached.apply(directive)?;
             }
+            "grpc_pass" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`grpc_pass` is only allowed inside a `location` block",
+                ));
+            }
+            name if name.starts_with("grpc_ssl_") => {
+                mapper.http_grpc_ssl.apply(directive)?;
+            }
+            name if name.starts_with("grpc_") => {
+                let map_results = mapper.map_results.clone();
+                let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                mapper.http_grpc.apply(directive, &map_variables)?;
+            }
             "proxy_set_header" => {
                 let map_variables = mapper.map_variable_refs();
                 let entry =
@@ -1069,6 +1083,14 @@ struct Mapper<'a> {
     http_memcached: MemcachedSettings,
     /// http → server resolved `memcached_*` settings.
     server_memcached: MemcachedSettings,
+    /// http-level `grpc_*` settings.
+    http_grpc: GrpcSettings,
+    /// http → server resolved `grpc_*` settings inherited by locations.
+    server_grpc: GrpcSettings,
+    /// http-level `grpc_ssl_*` upstream TLS settings.
+    http_grpc_ssl: GrpcSslSettings,
+    /// http → server resolved `grpc_ssl_*` settings inherited by locations.
+    server_grpc_ssl: GrpcSslSettings,
     /// http-level `map` declarations collected in a pre-scan so their result
     /// variables are known before any `add_header`/`proxy_set_header` value is
     /// validated (nginx resolves the variable at configuration init, so
@@ -1214,6 +1236,10 @@ impl<'a> Mapper<'a> {
             server_cgi: [CgiSettings::default(), CgiSettings::default()],
             http_memcached: MemcachedSettings::default(),
             server_memcached: MemcachedSettings::default(),
+            http_grpc: GrpcSettings::default(),
+            server_grpc: GrpcSettings::default(),
+            http_grpc_ssl: GrpcSslSettings::default(),
+            server_grpc_ssl: GrpcSslSettings::default(),
             maps: Vec::new(),
             geo: Vec::new(),
             split_clients: Vec::new(),
@@ -1727,6 +1753,8 @@ impl<'a> Mapper<'a> {
         let mut server_fastcgi_local = FastCgiSettings::default();
         let mut server_cgi_local = [CgiSettings::default(), CgiSettings::default()];
         let mut server_memcached_local = MemcachedSettings::default();
+        let mut server_grpc_local = GrpcSettings::default();
+        let mut server_grpc_ssl_local = GrpcSslSettings::default();
         let mut server_merge_slashes: Option<bool> = None;
         let mut server_underscores_in_headers: Option<bool> = None;
         let mut server_ignore_invalid_headers: Option<bool> = None;
@@ -2088,6 +2116,20 @@ impl<'a> Mapper<'a> {
                         "`memcached_pass` is only allowed inside a `location` block",
                     ));
                 }
+                "grpc_pass" => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        "`grpc_pass` is only allowed inside a `location` block",
+                    ));
+                }
+                name if name.starts_with("grpc_ssl_") => {
+                    server_grpc_ssl_local.apply(child)?;
+                }
+                name if name.starts_with("grpc_") => {
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    server_grpc_local.apply(child, &map_variables)?;
+                }
                 name if name.starts_with("memcached_") => {
                     server_memcached_local.apply(child)?;
                 }
@@ -2323,6 +2365,8 @@ impl<'a> Mapper<'a> {
             self.http_cgi[1].overlay(&server_cgi_local[1]),
         ];
         self.server_memcached = self.http_memcached.overlay(&server_memcached_local);
+        self.server_grpc = self.http_grpc.overlay(&server_grpc_local);
+        self.server_grpc_ssl = server_grpc_ssl_local.merge(&self.http_grpc_ssl);
         let effective_merge_slashes =
             server_merge_slashes.unwrap_or(self.http_merge_slashes.unwrap_or(true));
         let effective_underscores_in_headers = server_underscores_in_headers
@@ -2989,6 +3033,9 @@ impl<'a> Mapper<'a> {
         let mut cgi_pass: [Option<String>; 2] = [None, None];
         let mut location_memcached = MemcachedSettings::default();
         let mut memcached_pass: Option<String> = None;
+        let mut location_grpc = GrpcSettings::default();
+        let mut grpc_pass: Option<String> = None;
+        let mut location_grpc_ssl = GrpcSslSettings::default();
         let mut memcached_key_template: Option<String> = None;
         let mut auth_realm = inherited_auth_realm.map(str::to_owned);
         let mut auth_file = inherited_auth_file.map(str::to_owned);
@@ -3038,6 +3085,23 @@ impl<'a> Mapper<'a> {
                         ));
                     }
                     memcached_pass = Some(child.args[0].clone());
+                }
+                "grpc_pass" => {
+                    if child.args.len() != 1 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "grpc_pass takes exactly one target",
+                        ));
+                    }
+                    grpc_pass = Some(child.args[0].clone());
+                }
+                name if name.starts_with("grpc_ssl_") => {
+                    location_grpc_ssl.apply(child)?;
+                }
+                name if name.starts_with("grpc_") => {
+                    let map_results = self.map_results.clone();
+                    let map_variables: Vec<&str> = map_results.iter().map(String::as_str).collect();
+                    location_grpc.apply(child, &map_variables)?;
                 }
                 "set" => {
                     let (name, value) = match child.args.as_slice() {
@@ -3606,6 +3670,7 @@ impl<'a> Mapper<'a> {
             fastcgi_pass.is_some(),
             cgi_pass[0].is_some() || cgi_pass[1].is_some(),
             memcached_pass.is_some(),
+            grpc_pass.is_some(),
             return_directive.is_some(),
             root.is_some(),
             alias.is_some(),
@@ -3647,7 +3712,7 @@ impl<'a> Mapper<'a> {
         {
             return Err(NginxConfigError::unsupported(
                 location,
-                "a location must declare exactly one of proxy_pass | fastcgi_pass | uwsgi_pass | scgi_pass | memcached_pass | return | root | alias (or inherit the server root with try_files, or Adaptive Web try_files → @named)",
+                "a location must declare exactly one of proxy_pass | fastcgi_pass | uwsgi_pass | scgi_pass | memcached_pass | grpc_pass | return | root | alias (or inherit the server root with try_files, or Adaptive Web try_files → @named)",
             ));
         }
         self.note_client_max_body_size(client_max_body_size);
@@ -4262,6 +4327,145 @@ impl<'a> Mapper<'a> {
                 "connectTimeoutMs": effective_memcached.connect_timeout_ms.unwrap_or(60_000),
                 "sendTimeoutMs": effective_memcached.send_timeout_ms.unwrap_or(60_000),
                 "readTimeoutMs": effective_memcached.read_timeout_ms.unwrap_or(60_000),
+                "retry": json!({
+                    "maxAttempts": retry.max_attempts,
+                    "timeoutMs": retry.timeout_ms,
+                    "retryOn": retry_condition_names,
+                }),
+            }));
+        } else if let Some(grpc_target) = grpc_pass {
+            let effective_grpc = self.server_grpc.overlay(&location_grpc);
+            let effective_grpc_ssl = location_grpc_ssl.merge(&self.server_grpc_ssl);
+            let tls_policy = materialize_grpc_tls(location, &effective_grpc_ssl, self.base_dir)?;
+            let upstream_ref = match split_grpc_target(location, &grpc_target)? {
+                GrpcTarget::Literal { scheme, authority } => {
+                    // nginx applies `grpc_ssl_*` per location, while the runtime
+                    // model owns one TLS policy per upstream. A literal target
+                    // therefore gets a policy-scoped id: two locations that point
+                    // at the same authority with different TLS policies stay two
+                    // upstreams instead of failing the whole configuration.
+                    let literal_base = format!("literal-{}", sanitize_id(&authority));
+                    let literal_id = match &tls_policy {
+                        Some(tls) => {
+                            use std::hash::{Hash, Hasher};
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            tls.to_string().hash(&mut hasher);
+                            format!("{literal_base}-tls-{:016x}", hasher.finish())
+                        }
+                        None => literal_base,
+                    };
+                    let (host, _) = authority
+                        .rsplit_once(':')
+                        .expect("validated grpc authority");
+                    if !self.upstream_names.contains(&literal_id) {
+                        let allowed_cidrs: Vec<String> = match host.parse::<std::net::IpAddr>() {
+                            Ok(std::net::IpAddr::V4(ip)) => vec![format!("{ip}/32")],
+                            Ok(std::net::IpAddr::V6(ip)) => vec![format!("{ip}/128")],
+                            Err(_) => hostname_upstream_allowed_cidrs()
+                                .into_iter()
+                                .map(|network| network.to_string())
+                                .collect(),
+                        };
+                        let mut literal_upstream = json!({
+                            "id": literal_id,
+                            "targets": [{"url": format!("{scheme}://{authority}")}],
+                            "loadBalancing": "round-robin",
+                        });
+                        if !allowed_cidrs.is_empty() {
+                            literal_upstream["addressPolicy"] =
+                                json!({ "allowedCidrs": allowed_cidrs });
+                        }
+                        self.upstreams.push(literal_upstream);
+                        self.upstream_names.push(literal_id.clone());
+                    }
+                    literal_id
+                }
+                GrpcTarget::Upstream(name) => {
+                    if !self.upstream_names.iter().any(|known| known == name) {
+                        return Err(NginxConfigError::unsupported(
+                            location,
+                            format!("grpc_pass references undefined upstream `{name}`"),
+                        ));
+                    }
+                    name.to_owned()
+                }
+            };
+            if let Some(tls) = tls_policy {
+                let Some(upstream) = self.upstreams.iter_mut().find(|upstream| {
+                    upstream.get("id").and_then(Value::as_str) == Some(upstream_ref.as_str())
+                }) else {
+                    return Err(NginxConfigError::unsupported(
+                        location,
+                        format!("grpc_pass upstream `{upstream_ref}` is not materialized"),
+                    ));
+                };
+                match upstream.get("tls") {
+                    Some(existing) if existing != &tls => {
+                        return Err(NginxConfigError::unsupported(
+                            location,
+                            format!(
+                                "conflicting `grpc_ssl_*` settings for upstream `{upstream_ref}`; the runtime model owns one TLS policy per upstream"
+                            ),
+                        ));
+                    }
+                    _ => upstream["tls"] = tls,
+                }
+            }
+            let response_policy = ProxyResponsePolicyConfig {
+                hide_headers: effective_grpc.hide_headers.clone().unwrap_or_default(),
+                pass_headers: effective_grpc.pass_headers.clone().unwrap_or_default(),
+                redirect: None,
+                cookie_path: None,
+                cookie_domain: None,
+            };
+            let target_count = self
+                .upstreams
+                .iter()
+                .find(|upstream| {
+                    upstream.get("id").and_then(Value::as_str) == Some(upstream_ref.as_str())
+                })
+                .and_then(|upstream| upstream.get("targets"))
+                .and_then(Value::as_array)
+                .map(|targets| targets.len())
+                .unwrap_or(1);
+            let retry_conditions = effective_grpc.next_upstream.clone().unwrap_or_else(|| {
+                vec![
+                    UpstreamRetryCondition::TransportFailure,
+                    UpstreamRetryCondition::Timeout,
+                ]
+            });
+            let retry_condition_names: Vec<&str> = retry_conditions
+                .iter()
+                .map(|condition| match condition {
+                    UpstreamRetryCondition::TransportFailure => "error",
+                    UpstreamRetryCondition::Timeout => "timeout",
+                    UpstreamRetryCondition::Http502 => "http_502",
+                    UpstreamRetryCondition::Http503 => "http_503",
+                    UpstreamRetryCondition::Http504 => "http_504",
+                })
+                .collect();
+            let target_count_u8 = u8::try_from(target_count).unwrap_or(u8::MAX);
+            let max_attempts = effective_grpc
+                .next_upstream_tries
+                .filter(|tries| *tries != 0)
+                .unwrap_or(target_count_u8)
+                .clamp(1, target_count_u8.max(1));
+            let retry = UpstreamRetryConfig {
+                max_attempts,
+                timeout_ms: effective_grpc.next_upstream_timeout_ms.unwrap_or(30_000),
+                retry_on: retry_conditions,
+            };
+            self.resources.push(json!({
+                "id": resource_id,
+                "type": "grpc",
+                "upstreamRef": upstream_ref,
+                "requestSetHeaders": effective_grpc.set_headers.clone().unwrap_or_default(),
+                "connectTimeoutMs": effective_grpc.connect_timeout_ms.unwrap_or(60_000),
+                "sendTimeoutMs": effective_grpc.send_timeout_ms.unwrap_or(60_000),
+                "readTimeoutMs": effective_grpc.read_timeout_ms.unwrap_or(60_000),
+                "bufferSize": effective_grpc.buffer_size.unwrap_or(4096),
+                "responsePolicy": proxy_response_policy_json(&response_policy)?,
+                "interceptErrors": effective_grpc.intercept_errors.unwrap_or(false),
                 "retry": json!({
                     "maxAttempts": retry.max_attempts,
                     "timeoutMs": retry.timeout_ms,
@@ -5473,6 +5677,270 @@ impl ProxySslSettings {
     }
 }
 
+/// nginx `grpc_*` settings accumulated over the http → server → location
+/// inheritance chain (the module follows the proxy-family merge rules: a level
+/// that declares `grpc_set_header` replaces the inherited list, single-value
+/// directives override per directive, hide/pass lists append).
+#[derive(Clone, Default)]
+struct GrpcSettings {
+    set_headers: Option<Vec<String>>,
+    connect_timeout_ms: Option<u64>,
+    send_timeout_ms: Option<u64>,
+    read_timeout_ms: Option<u64>,
+    buffer_size: Option<u64>,
+    intercept_errors: Option<bool>,
+    hide_headers: Option<Vec<String>>,
+    pass_headers: Option<Vec<String>>,
+    next_upstream: Option<Vec<UpstreamRetryCondition>>,
+    next_upstream_tries: Option<u8>,
+    next_upstream_timeout_ms: Option<u64>,
+}
+
+impl GrpcSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            set_headers: inner
+                .set_headers
+                .clone()
+                .or_else(|| self.set_headers.clone()),
+            connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
+            send_timeout_ms: inner.send_timeout_ms.or(self.send_timeout_ms),
+            read_timeout_ms: inner.read_timeout_ms.or(self.read_timeout_ms),
+            buffer_size: inner.buffer_size.or(self.buffer_size),
+            intercept_errors: inner.intercept_errors.or(self.intercept_errors),
+            hide_headers: inner
+                .hide_headers
+                .clone()
+                .or_else(|| self.hide_headers.clone()),
+            pass_headers: inner
+                .pass_headers
+                .clone()
+                .or_else(|| self.pass_headers.clone()),
+            next_upstream: inner
+                .next_upstream
+                .clone()
+                .or_else(|| self.next_upstream.clone()),
+            next_upstream_tries: inner.next_upstream_tries.or(self.next_upstream_tries),
+            next_upstream_timeout_ms: inner
+                .next_upstream_timeout_ms
+                .or(self.next_upstream_timeout_ms),
+        }
+    }
+
+    fn apply(
+        &mut self,
+        directive: &NginxDirective,
+        map_variables: &[&str],
+    ) -> Result<(), NginxConfigError> {
+        match directive.name.as_str() {
+            "grpc_set_header" => {
+                let entry =
+                    format_proxy_set_header_entry_with_maps(&directive.args, map_variables)
+                        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+                self.set_headers.get_or_insert_with(Vec::new).push(entry);
+            }
+            "grpc_connect_timeout" => {
+                self.connect_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
+            }
+            "grpc_send_timeout" => self.send_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "grpc_read_timeout" => self.read_timeout_ms = Some(parse_fastcgi_timeout(directive)?),
+            "grpc_buffer_size" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "grpc_buffer_size requires a size",
+                    ));
+                };
+                let Some(bytes) = parse_size_bytes(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid grpc_buffer_size `{value}`"),
+                    ));
+                };
+                if bytes == 0 || bytes > 1_048_576 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "grpc_buffer_size must be in 1..=1048576 bytes",
+                    ));
+                }
+                self.buffer_size = Some(bytes);
+            }
+            "grpc_intercept_errors" => {
+                self.intercept_errors = Some(parse_on_off(directive, "grpc_intercept_errors")?)
+            }
+            "grpc_hide_header" | "grpc_pass_header" => {
+                let Some(name) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a header name", directive.name),
+                    ));
+                };
+                if !crate::config::header_block_token(name) {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "{} `{name}` is not a valid HTTP field name",
+                            directive.name
+                        ),
+                    ));
+                }
+                let list = if directive.name == "grpc_hide_header" {
+                    self.hide_headers.get_or_insert_with(Vec::new)
+                } else {
+                    self.pass_headers.get_or_insert_with(Vec::new)
+                };
+                list.push(name.clone());
+            }
+            "grpc_next_upstream" => {
+                self.next_upstream = Some(parse_fastcgi_next_upstream(directive)?);
+            }
+            "grpc_next_upstream_tries" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "grpc_next_upstream_tries requires a count",
+                    ));
+                };
+                let tries = value.parse::<u8>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid grpc_next_upstream_tries `{value}`"),
+                    )
+                })?;
+                self.next_upstream_tries = Some(tries);
+            }
+            "grpc_next_upstream_timeout" => {
+                self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_ssl_*"
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+/// nginx `grpc_ssl_*` upstream TLS settings (the gRPC module's TLS surface is a
+/// superset of `proxy_ssl_*`: it also accepts a verification depth and a custom
+/// SNI/verification name).
+#[derive(Clone, Default, PartialEq)]
+struct GrpcSslSettings {
+    verify: Option<bool>,
+    verify_depth: Option<u32>,
+    trusted_certificate: Option<String>,
+    certificate: Option<String>,
+    certificate_key: Option<String>,
+    server_name: Option<bool>,
+    name: Option<String>,
+    protocols: Option<SslProtocolRange>,
+}
+
+impl GrpcSslSettings {
+    fn merge(&self, lower: &GrpcSslSettings) -> GrpcSslSettings {
+        GrpcSslSettings {
+            verify: self.verify.or(lower.verify),
+            verify_depth: self.verify_depth.or(lower.verify_depth),
+            trusted_certificate: self
+                .trusted_certificate
+                .clone()
+                .or_else(|| lower.trusted_certificate.clone()),
+            certificate: self
+                .certificate
+                .clone()
+                .or_else(|| lower.certificate.clone()),
+            certificate_key: self
+                .certificate_key
+                .clone()
+                .or_else(|| lower.certificate_key.clone()),
+            server_name: self.server_name.or(lower.server_name),
+            name: self.name.clone().or_else(|| lower.name.clone()),
+            protocols: self.protocols.or(lower.protocols),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self == &GrpcSslSettings::default()
+    }
+
+    fn apply(&mut self, directive: &NginxDirective) -> Result<(), NginxConfigError> {
+        let Some(value) = directive.args.first() else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{} requires an argument", directive.name),
+            ));
+        };
+        let resolve = |directive: &NginxDirective| -> Result<String, NginxConfigError> {
+            let value = directive.args.first().expect("checked argument presence");
+            if value.starts_with('/') || value.contains('\\') {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{}` file `{value}` must be relative to the loaded configuration directory: the runtime sandboxes upstream TLS material to the config directory",
+                        directive.name
+                    ),
+                ));
+            }
+            Ok(value.clone())
+        };
+        match directive.name.as_str() {
+            "grpc_ssl_verify" => match value.as_str() {
+                "on" => self.verify = Some(true),
+                "off" => self.verify = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("grpc_ssl_verify accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "grpc_ssl_verify_depth" => {
+                let depth = value.parse::<u32>().map_err(|_| {
+                    NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid grpc_ssl_verify_depth `{value}`"),
+                    )
+                })?;
+                if depth == 0 || depth > 16 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "grpc_ssl_verify_depth must be in 1..=16; the runtime verifies the full chain",
+                    ));
+                }
+                self.verify_depth = Some(depth);
+            }
+            "grpc_ssl_trusted_certificate" => self.trusted_certificate = Some(resolve(directive)?),
+            "grpc_ssl_certificate" => self.certificate = Some(resolve(directive)?),
+            "grpc_ssl_certificate_key" => self.certificate_key = Some(resolve(directive)?),
+            "grpc_ssl_server_name" => match value.as_str() {
+                "on" => self.server_name = Some(true),
+                "off" => self.server_name = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("grpc_ssl_server_name accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "grpc_ssl_name" => self.name = Some(value.clone()),
+            "grpc_ssl_protocols" => self.protocols = Some(parse_ssl_protocols(directive)?),
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{other}` cannot be enforced by the bounded gRPC TLS client; supported: grpc_ssl_verify/grpc_ssl_verify_depth/grpc_ssl_trusted_certificate/grpc_ssl_certificate/grpc_ssl_certificate_key/grpc_ssl_server_name/grpc_ssl_name/grpc_ssl_protocols"
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Server/http-level `set_real_ip_from` / `real_ip_header` /
 /// `real_ip_recursive` settings (nginx realip module) attached to the
 /// server's listeners as `trustedProxy`.
@@ -5936,6 +6404,188 @@ fn materialize_upstream_tls(
             "clientPrivateKeyFile".to_owned(),
             Value::String(key.clone()),
         );
+    }
+    Ok(Some(Value::Object(tls)))
+}
+
+/// Parse one literal `grpc_pass` target.
+///
+/// nginx 1.29.6 accepts `grpc://host[:port]`, `grpcs://host[:port]` and a
+/// declared `upstream` name; a URI part after the authority is rejected by
+/// nginx itself ("invalid host in upstream"), so this materializer fails closed
+/// with the same reading instead of inventing replacement semantics the module
+/// does not have. Variable and `unix:` targets are outside the bounded adapter.
+fn split_grpc_target<'a>(
+    location: &NginxDirective,
+    target: &'a str,
+) -> Result<GrpcTarget<'a>, NginxConfigError> {
+    if target.contains('$') {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "variable `grpc_pass` targets are not executable by the bounded gRPC adapter; use a literal grpc://host:port, grpcs://host:port, or a declared upstream",
+        ));
+    }
+    if target.starts_with("unix:") {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`grpc_pass unix:` sockets are not executable by the bounded gRPC adapter (TCP upstreams only)",
+        ));
+    }
+    if let Some(rest) = target.strip_prefix("grpc://") {
+        return Ok(GrpcTarget::Literal {
+            scheme: "http",
+            authority: validate_grpc_authority(location, target, rest)?,
+        });
+    }
+    if let Some(rest) = target.strip_prefix("grpcs://") {
+        return Ok(GrpcTarget::Literal {
+            scheme: "https",
+            authority: validate_grpc_authority(location, target, rest)?,
+        });
+    }
+    if target.contains("://") {
+        return Err(NginxConfigError::unsupported(
+            location,
+            format!("grpc_pass `{target}` must use grpc:// or grpcs://"),
+        ));
+    }
+    Ok(GrpcTarget::Upstream(target))
+}
+
+enum GrpcTarget<'a> {
+    Literal {
+        scheme: &'static str,
+        authority: String,
+    },
+    Upstream(&'a str),
+}
+
+fn validate_grpc_authority(
+    location: &NginxDirective,
+    target: &str,
+    rest: &str,
+) -> Result<String, NginxConfigError> {
+    if rest.contains('/') {
+        return Err(NginxConfigError::unsupported(
+            location,
+            format!(
+                "grpc_pass `{target}` carries a URI part, which nginx 1.29.6 rejects (`invalid host in upstream`); `grpc_pass` has no URI replacement semantics"
+            ),
+        ));
+    }
+    let Some((host, port)) = rest.rsplit_once(':') else {
+        return Err(NginxConfigError::unsupported(
+            location,
+            format!("grpc_pass `{target}` must be host:port"),
+        ));
+    };
+    if host.is_empty() || port.parse::<u16>().map(|port| port == 0).unwrap_or(true) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            format!("grpc_pass `{target}` must be a valid host:port"),
+        ));
+    }
+    Ok(rest.to_owned())
+}
+
+/// Materialize the resolved `grpc_ssl_*` settings into the runtime upstream TLS
+/// policy. The runtime always verifies the upstream chain and always sends SNI,
+/// so `grpc_ssl_verify off` / `grpc_ssl_server_name off` fail closed rather than
+/// silently weakening verification (mirroring the `proxy_ssl_*` reading).
+/// Resolve a relative upstream TLS material path against the loaded nginx
+/// configuration directory. The compiled model for `NginxConf` uses `/` as its
+/// base directory (materialization already resolved every nginx-relative path),
+/// so the mapping must hand it absolute, conf-directory-anchored paths.
+fn resolve_upstream_tls_file(base_dir: &std::path::Path, value: &str) -> String {
+    base_dir.join(value).to_string_lossy().replace('\\', "/")
+}
+
+fn materialize_grpc_tls(
+    location: &NginxDirective,
+    settings: &GrpcSslSettings,
+    base_dir: &std::path::Path,
+) -> Result<Option<Value>, NginxConfigError> {
+    // nginx materialization feeds the compiled model, whose `NginxConf` base
+    // directory is `/` (every nginx-relative path is resolved here). Resolving
+    // against the conf directory keeps the protected-file sandbox
+    // (`resolve_protected_relative_file`) working instead of anchoring TLS
+    // material to `/`.
+    if settings.is_empty() {
+        return Ok(None);
+    }
+    if settings.verify == Some(false) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`grpc_ssl_verify off` cannot be honored: the runtime always verifies upstream TLS; remove the directive or use `grpc_ssl_verify on` with `grpc_ssl_trusted_certificate`",
+        ));
+    }
+    if settings.server_name == Some(false) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`grpc_ssl_server_name off` cannot be honored: the runtime always sends the upstream SNI name; remove the directive",
+        ));
+    }
+    if settings.trusted_certificate.is_some() && settings.verify != Some(true) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`grpc_ssl_trusted_certificate` requires `grpc_ssl_verify on` (the runtime always verifies upstream TLS)",
+        ));
+    }
+    match (&settings.certificate, &settings.certificate_key) {
+        (Some(_), None) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`grpc_ssl_certificate` requires `grpc_ssl_certificate_key`",
+            ));
+        }
+        (None, Some(_)) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`grpc_ssl_certificate_key` requires `grpc_ssl_certificate`",
+            ));
+        }
+        (Some(_), Some(_)) if settings.verify != Some(true) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`grpc_ssl_certificate`/`grpc_ssl_certificate_key` require `grpc_ssl_verify on` (upstream TLS is always verified)",
+            ));
+        }
+        _ => {}
+    }
+    let mut tls = serde_json::Map::new();
+    if let Some(ca_file) = &settings.trusted_certificate {
+        tls.insert("trustMode".to_owned(), Value::String("custom".to_owned()));
+        tls.insert(
+            "caCertificateFiles".to_owned(),
+            Value::Array(vec![Value::String(resolve_upstream_tls_file(
+                base_dir, ca_file,
+            ))]),
+        );
+    } else {
+        tls.insert("trustMode".to_owned(), Value::String("system".to_owned()));
+    }
+    if let (Some(certificate), Some(key)) = (&settings.certificate, &settings.certificate_key) {
+        tls.insert(
+            "clientCertificateFile".to_owned(),
+            Value::String(resolve_upstream_tls_file(base_dir, certificate)),
+        );
+        tls.insert(
+            "clientPrivateKeyFile".to_owned(),
+            Value::String(resolve_upstream_tls_file(base_dir, key)),
+        );
+    }
+    if let Some(protocols) = settings.protocols {
+        tls.insert(
+            "minimumVersion".to_owned(),
+            Value::String(protocols.minimum.wire().to_owned()),
+        );
+        tls.insert(
+            "maximumVersion".to_owned(),
+            Value::String(protocols.maximum.wire().to_owned()),
+        );
+    }
+    if let Some(name) = &settings.name {
+        tls.insert("serverName".to_owned(), Value::String(name.clone()));
     }
     Ok(Some(Value::Object(tls)))
 }

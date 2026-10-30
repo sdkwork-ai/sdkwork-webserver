@@ -113,6 +113,9 @@
             "$ref": "#/$defs/cgiUpstreamResource"
           },
           {
+            "$ref": "#/$defs/grpcResource"
+          },
+          {
             "$ref": "#/$defs/memcachedResource"
           },
           {
@@ -1527,6 +1530,72 @@
         }
       }
     },
+    "grpcResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx grpc_pass location handler (gRPC over HTTP/2: h2c for grpc:// or verified TLS for grpcs://).",
+      "required": [
+        "id",
+        "type",
+        "upstreamRef"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "grpc"
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "requestSetHeaders": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "nginx grpc_set_header entries as \"Name value\" strings using the runtime's bounded proxy-header variable vocabulary.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "default": []
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "bufferSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "responsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "interceptErrors": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        }
+      }
+    },
     "memcachedResource": {
       "type": "object",
       "additionalProperties": false,
@@ -1933,6 +2002,11 @@
             "system-and-custom"
           ],
           "default": "system"
+        },
+        "serverName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
         },
         "caCertificateFiles": {
           "type": "array",

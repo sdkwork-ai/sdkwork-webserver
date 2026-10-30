@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '1bcfd615';
+const AUDIT_HEAD = '5ebfee21';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a and the upstream-protocol wave (wave 5) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5) and the gRPC wave (wave 6) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -240,6 +240,33 @@ const COMPLETED_WAVES = [
       'http:uwsgi_string',
     ],
   },
+  {
+    key: 'wave 6 (gRPC)',
+    summary:
+      'gRPC upstream execution: grpc_pass/h2 client, headers, timeouts, buffer, next-upstream, intercept and always-verified grpc_ssl_* forms',
+    ids: [
+      'http:grpc_buffer_size',
+      'http:grpc_connect_timeout',
+      'http:grpc_hide_header',
+      'http:grpc_intercept_errors',
+      'http:grpc_next_upstream',
+      'http:grpc_next_upstream_timeout',
+      'http:grpc_next_upstream_tries',
+      'http:grpc_pass',
+      'http:grpc_pass_header',
+      'http:grpc_read_timeout',
+      'http:grpc_send_timeout',
+      'http:grpc_set_header',
+      'http:grpc_ssl_certificate',
+      'http:grpc_ssl_certificate_key',
+      'http:grpc_ssl_name',
+      'http:grpc_ssl_protocols',
+      'http:grpc_ssl_server_name',
+      'http:grpc_ssl_trusted_certificate',
+      'http:grpc_ssl_verify',
+      'http:grpc_ssl_verify_depth',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -391,46 +418,26 @@ const REMAINING_GAP_CATEGORIES = [
     tests: 'stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6',
   },
   {
-    key: 'grpc-wiring',
-    label: 'gRPC wiring',
-    priority: 'high (next wave)',
+    key: 'grpc-residual',
+    label: 'gRPC residual forms',
+    priority: 'low',
     ids: [
       'http:grpc_bind',
-      'http:grpc_buffer_size',
-      'http:grpc_connect_timeout',
-      'http:grpc_hide_header',
       'http:grpc_ignore_headers',
-      'http:grpc_intercept_errors',
-      'http:grpc_next_upstream',
-      'http:grpc_next_upstream_timeout',
-      'http:grpc_next_upstream_tries',
-      'http:grpc_pass',
-      'http:grpc_pass_header',
-      'http:grpc_read_timeout',
-      'http:grpc_send_timeout',
-      'http:grpc_set_header',
       'http:grpc_socket_keepalive',
-      'http:grpc_ssl_certificate',
       'http:grpc_ssl_certificate_cache',
-      'http:grpc_ssl_certificate_key',
       'http:grpc_ssl_ciphers',
       'http:grpc_ssl_conf_command',
       'http:grpc_ssl_crl',
-      'http:grpc_ssl_name',
       'http:grpc_ssl_password_file',
-      'http:grpc_ssl_protocols',
-      'http:grpc_ssl_server_name',
       'http:grpc_ssl_session_reuse',
-      'http:grpc_ssl_trusted_certificate',
-      'http:grpc_ssl_verify',
-      'http:grpc_ssl_verify_depth',
     ],
     rejectedLoss:
-      'a stock nginx.conf that proxies to a gRPC upstream fails to activate.',
-    why: 'the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile.',
+      'the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate.',
+    why: 'the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them',
   },
   {
     key: 'fastcgi-residual',
@@ -731,7 +738,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_grpc_module$/,
-    'gRPC wiring is tracked as the next wave in the remaining backlog, not as a profile exclusion.',
+    'the residual gRPC bind/socket/TLS-library forms are tracked as remaining backlog, not as a profile exclusion.',
   ],
   [
     /^ngx_http_v2_module$/,
@@ -1542,6 +1549,20 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the location-scoped set variable is consumed by memcached_pass in the hit/miss differential cases; other set variables/sources fail closed',
   },
+  {
+    id: 'http:grpc_pass',
+    evidence: 'tests/nginx/differential-protocols/battery.py::grpc-unary',
+    claim: 'grpc_pass proxies to a gRPC upstream over h2 with nginx-exact trailers and status mapping',
+    proves:
+      '13 differential cases against nginx 1.29.6 with a test-only Rust HTTP/2 mock: unary body+trailers byte-identical, trailers-only non-zero grpc-status kept as 200 headers (not 502), server streaming, set/hide/pass headers, read-timeout 504, retry, positive/negative verified TLS, intercept and missing-trailers cases',
+  },
+  {
+    id: 'http:grpc_ssl_verify',
+    evidence: 'tests/nginx/differential-protocols/battery.py::grpc-tls-untrusted',
+    claim: 'grpc_ssl_verify runs against an always-verified upstream TLS client',
+    proves:
+      'the grpcs positive case succeeds with a trusted CA and the negative case fails with an unrelated CA, matching nginx; the runtime enforces full-chain verification even where nginx accepts a depth setting',
+  },
 ];
 
 /**
@@ -1832,7 +1853,7 @@ function renderHeader(inventory, catalog) {
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
-  3a-2, 3b, 4a and the upstream-protocol wave (wave 5).** The code, tests, generated operator matrix and the re-synced directive
+  3a-2, 3b, 4a, the upstream-protocol wave (wave 5) and the gRPC wave (wave 6).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -1842,10 +1863,11 @@ function renderHeader(inventory, catalog) {
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
   (autoindex family, empty_gif, stub_status), Wave 3b (h2 stream ceiling,
   proxy_method, stream allow/deny and literal return), Wave 4a (geo and
-  split_clients variable blocks plus valid_referers) and the upstream-protocol wave
+  split_clients variable blocks plus valid_referers), the upstream-protocol wave
   (FastCGI/uWSGI/SCGI/memcached implemented forms plus the bounded memcached-backed
-  \`set\` form) are recorded as completed in section 3, and every one of them is
-  asserted executable by \`--verify-evidence\`.
+  \`set\` form) and the gRPC wave (grpc_pass/h2 client with headers, timeouts, buffer,
+  retry, intercept and always-verified grpc_ssl_* forms) are recorded as completed in
+  section 3, and every one of them is asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -1950,7 +1972,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a and the upstream-protocol wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave and the gRPC wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -1985,7 +2007,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-upstream-protocol worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-gRPC-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2059,7 +2081,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2072,7 +2094,10 @@ stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream retu
 Wave 4a added the geo and split_clients variable blocks and the referer module
 (valid_referers / $invalid_referer); the upstream-protocol wave moved FastCGI, uWSGI,
 SCGI and memcached from out-of-profile to executable for their implemented
-request/response forms and added the bounded memcached-backed \`set\` variable form.
+request/response forms and added the bounded memcached-backed \`set\` variable form;
+the gRPC wave added the h2 upstream client with header/timeout/buffer/retry/intercept
+and always-verified grpc_ssl_* forms (trailers forwarded and non-zero grpc-status
+following nginx rather than mapping to 502).
 
 ${completedTable}
 ${completedRows}
@@ -2088,7 +2113,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the upstream-protocol wave. An accepted-unenforced row is silently ignored today; a rejected row fails
+the gRPC wave. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2096,14 +2121,13 @@ have to change, and the tests to add.
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest surface is the residual sub-families of the four landed
-protocol modules (110 directives: cache/buffer/store/SSL, unix/variable targets and
-connection-pool knobs), followed by gRPC wiring (29): the shared upstream-protocol
-substrate has codecs for both, but the data-plane adapters are not complete. The
-bounded **re-entrant subrequest engine** (addition filter, \`auth_request\`, mirror) is
-the largest HTTP-side item, then the stream advanced gaps (zone state, stream variable
-engine, upstream TLS client). userid, browser, random_index, degradation and slice are
-self-contained module-sized work. \`chunked_transfer_encoding\` and the static open-file
+Within the backlog, the largest surface is still the residual sub-families of the four
+landed protocol modules (110 directives: cache/buffer/store/SSL, unix/variable targets
+and connection-pool knobs), followed by the bounded **re-entrant subrequest engine**
+(addition filter, \`auth_request\`, mirror). The stream advanced gaps (zone state, stream
+variable engine, upstream TLS client) and the module-sized userid/browser/random_index/
+degradation/slice modules come next. The gRPC wave reduced its category to nine residual
+bind/socket/TLS-library knobs. \`chunked_transfer_encoding\` and the static open-file
 cache are precisely bounded (hyper HTTP/1.1 close-delimited framing; staleness-only
 performance cache), while \`http2_chunk_size\` and the OCSP/trust-chain rows are
 architecture-blocked (hyper/h2; rustls).
@@ -2154,7 +2178,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a and the upstream-protocol wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave and the gRPC wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2275,13 +2299,13 @@ What implementing each remaining group would actually require:
 | Dynamic module loading | ${outOfProfile.filter((row) => row.module === 'ngx_core_module').length} | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
 Substrate note: the landed \`crates/sdkwork-webserver-upstream-protocol\` substrate
-(FastCGI/uWSGI/SCGI/memcached/gRPC codecs, 89 tests) is now wired end-to-end for the four
-embedded protocols through \`crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs\`
-and the new \`tests/nginx/differential-protocols\` slice (26 cases, byte-identical against
-nginx 1.29.6). Implemented request/response forms execute; the residual cache/buffer/store/
-SSL sub-families and unix/variable-target/connection-pool knobs are backlog rows, not
-profile exclusions. gRPC wiring is the next wave: the grpc_* module is backlog, not
-excluded.
+(FastCGI/uWSGI/SCGI/memcached/gRPC codecs, 89 tests) is now wired end-to-end for all five
+protocols through \`crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs\`
+and \`tests/nginx/differential-protocols\` (39 cases, byte-identical against nginx 1.29.6;
+13 of them gRPC against a test-only Rust HTTP/2 mock, plaintext h2c and verified TLS).
+Implemented forms execute; the residual cache/buffer/store/SSL, unix/variable-target,
+connection-pool and gRPC bind/socket/TLS-library knobs are backlog rows, not profile
+exclusions.
 
 ### 5.3 Fail-Closed Groups (${failClosed.length} directives, top modules)
 
@@ -2312,10 +2336,10 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 
 A "parity" target would still require: the mail proxy (three protocols), embedded Perl,
 GeoIP, a QUIC transport, embedded template/language filters, dynamic module loading, and
-the residual protocol sub-families plus the gRPC adapter that are now backlog rather than
-profile exclusions. Four embedded application protocols (FastCGI/uWSGI/SCGI/memcached)
-are no longer in that excluded set: their implemented forms execute end-to-end on the
-Rust data plane against nginx 1.29.6. The coherent target remains the declared
+the residual protocol/gRPC sub-families that are now backlog rather than profile
+exclusions. Five embedded application protocols (FastCGI/uWSGI/SCGI/memcached/gRPC) are
+no longer in that excluded set: their implemented forms execute end-to-end on the Rust
+data plane against nginx 1.29.6. The coherent target remains the declared
 \`${PROFILE}\` profile with the four PRD section 2 grades (parse, semantic, behavioral,
 operational), a generated directive catalog, and a versioned evidence revision. That is
 what this ledger audits.
@@ -2351,8 +2375,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the upstream-protocol wave landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the gRPC wave landed and the Lead re-synced the
+catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

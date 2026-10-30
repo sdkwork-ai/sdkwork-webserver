@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `1bcfd615` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a and the upstream-protocol wave (wave 5) (code plus the re-synced directive catalog), on top of HEAD 1bcfd615 |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `5ebfee21` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5) and the gRPC wave (wave 6) (code plus the re-synced directive catalog), on top of HEAD 5ebfee21 |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `888939fc9b30fe743e863c65ce4e221695c8ffeecd4f22bae86a12085d096fbd` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `72337f6207ce3cbfba4a08b8d9a7e3fdf4ac2cec1f78538381a2e49e784d02fd` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -25,9 +25,9 @@
   verified. Behavior-gap rows that the catalog still rejects are marked as such: they
   are planned work, not current support.
 - **This snapshot is the uncommitted worktree refresh after Waves 1, 2, 2b, 3a,
-  3a-2, 3b, 4a and the upstream-protocol wave (wave 5).** The code, tests, generated operator matrix and the re-synced directive
+  3a-2, 3b, 4a, the upstream-protocol wave (wave 5) and the gRPC wave (wave 6).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `1bcfd615`; the audit is regenerated against that post-wave catalog (evidence
+  `5ebfee21`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
@@ -35,10 +35,11 @@
   (charset family header-level behaviour, gzip_disable/gzip_proxied) and Wave 3a-2
   (autoindex family, empty_gif, stub_status), Wave 3b (h2 stream ceiling,
   proxy_method, stream allow/deny and literal return), Wave 4a (geo and
-  split_clients variable blocks plus valid_referers) and the upstream-protocol wave
+  split_clients variable blocks plus valid_referers), the upstream-protocol wave
   (FastCGI/uWSGI/SCGI/memcached implemented forms plus the bounded memcached-backed
-  `set` form) are recorded as completed in section 3, and every one of them is
-  asserted executable by `--verify-evidence`.
+  `set` form) and the gRPC wave (grpc_pass/h2 client with headers, timeouts, buffer,
+  retry, intercept and always-verified grpc_ssl_* forms) are recorded as completed in
+  section 3, and every one of them is asserted executable by `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` are generated/checked by
@@ -67,15 +68,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 175 | 23.5% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `enforced` | 195 | 26.2% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
 | `runtime-owned` | 143 | 19.2% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 188 | 25.3% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `behavior-gap` | 168 | 22.6% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 64 | 8.6% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
 | `fail-closed` | 157 | 21.1% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 175 + 143 + 17 + 188 + 64 + 157 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 195 + 143 + 17 + 168 + 64 + 157 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -87,11 +88,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 175 | 175 | 0 | 0 | 0 | 0 | 0 |
+| `executable` | 195 | 195 | 0 | 0 | 0 | 0 | 0 |
 | `accepted-unenforced` | 171 | 0 | 143 | 17 | 11 | 0 | 0 |
-| `unsupported-fail-closed` | 334 | 0 | 0 | 0 | 177 | 0 | 157 |
+| `unsupported-fail-closed` | 314 | 0 | 0 | 0 | 157 | 0 | 157 |
 | `excluded` | 64 | 0 | 0 | 0 | 0 | 64 | 0 |
-| **total** | **744** | 175 | 143 | 17 | 188 | 64 | 157 |
+| **total** | **744** | 195 | 143 | 17 | 168 | 64 | 157 |
 
 ### 1.3 Wave Completion Status
 
@@ -105,8 +106,9 @@ wave-3 backlog entries that are currently rejected.
 | `wave 3b` | 5 | done - HTTP/2 stream ceiling, proxy_method, stream allow/deny and literal stream return (catalog: executable) |
 | `wave 4a` | 3 | done - geo and split_clients variable blocks plus the referer module (valid_referers / $invalid_referer) (catalog: executable) |
 | `wave 5 (upstream-protocol)` | 56 | done - FastCGI/uWSGI/SCGI/memcached end-to-end implemented forms plus the bounded memcached-backed `set` variable form (catalog: executable) |
-| remaining backlog | 188 | open - 12 categories, see section 3.2 |
-| **total planned work** | **284** | 96 completed, 188 remaining |
+| `wave 6 (gRPC)` | 20 | done - gRPC upstream execution: grpc_pass/h2 client, headers, timeouts, buffer, next-upstream, intercept and always-verified grpc_ssl_* forms (catalog: executable) |
+| remaining backlog | 168 | open - 12 categories, see section 3.2 |
+| **total planned work** | **284** | 116 completed, 168 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -118,16 +120,16 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 156 | 86 | 9 | 171 | 9 | 116 |
+| `http` | 547 | 176 | 86 | 9 | 151 | 9 | 116 |
 | `mail` | 51 | 0 | 0 | 0 | 0 | 51 | 0 |
 | `stream` | 105 | 18 | 23 | 8 | 17 | 3 | 36 |
-| **total** | **744** | 175 | 143 | 17 | 188 | 64 | 157 |
+| **total** | **744** | 195 | 143 | 17 | 168 | 64 | 157 |
 
 ### 1.5 Headline Findings
 
-1. **175 of 744 directives (23.5%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a and the upstream-protocol wave landed 96 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
-2. **188 behavior-gap directives remain in the remaining backlog** (25.3% of the surface): HTTP/1 framing policy (1), re-entrant subrequest engine (7), module-sized functional modules (17), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP stapling / trust chain (6), stream advanced gaps (14), gRPC wiring (29), FastCGI residual forms (32), uWSGI residual forms (44), SCGI residual forms (30), memcached residual forms (4).
+1. **195 of 744 directives (26.2%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave and the gRPC wave landed 116 directives. 143 more are deliberately runtime-owned (19.2%) and 17 are intentional, spec-justified security differences.
+2. **168 behavior-gap directives remain in the remaining backlog** (22.6% of the surface): HTTP/1 framing policy (1), re-entrant subrequest engine (7), module-sized functional modules (17), HTTP/2 DATA chunking (1), static open-file cache (3), OCSP stapling / trust chain (6), stream advanced gaps (14), gRPC residual forms (9), FastCGI residual forms (32), uWSGI residual forms (44), SCGI residual forms (30), memcached residual forms (4).
 3. **221 of 744 directives (29.7%) are excluded or rejected, not silently emulated.** 64 are explicit PRD section 4 profile exclusions and 157 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
@@ -135,7 +137,7 @@ them fails the gate.
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-upstream-protocol worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-gRPC-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -530,35 +532,35 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `grpc_bind` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_buffer_size` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_connect_timeout` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_hide_header` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ignore_headers` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_intercept_errors` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_next_upstream` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_next_upstream_timeout` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_next_upstream_tries` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_pass` | http-if, http-location | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_pass_header` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_read_timeout` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_send_timeout` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_set_header` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_socket_keepalive` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_certificate` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_certificate_cache` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_certificate_key` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_ciphers` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_conf_command` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_crl` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_name` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_password_file` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_protocols` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_server_name` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_session_reuse` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_trusted_certificate` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_verify` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `grpc_ssl_verify_depth` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC wiring): currently rejected at load; a stock nginx.conf that proxies to a gRPC upstream fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_bind` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_buffer_size` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_buffer_size setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_connect_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_connect_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_hide_header` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_hide_header setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ignore_headers` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_intercept_errors` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_intercept_errors setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_next_upstream` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_next_upstream setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_next_upstream_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_next_upstream_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_next_upstream_tries` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_next_upstream_tries setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_pass` | http-if, http-location | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_pass setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_pass_header` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_pass_header setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_read_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_read_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_send_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_send_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_set_header` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_set_header setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_socket_keepalive` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_certificate` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_certificate_cache` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_certificate_key` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_certificate_key setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_ciphers` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_conf_command` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_crl` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_name` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_name setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_password_file` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_protocols` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_protocols setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_server_name` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_server_name setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_session_reuse` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, gRPC residual forms): currently rejected at load; the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `grpc_ssl_trusted_certificate` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_trusted_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_verify` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_verify setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
+| `grpc_ssl_verify_depth` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `resources[].type="grpc" (grpc_ssl_verify_depth setting in the grpc adapter; h2 client with always-verified upstream TLS)`; evidence tests/nginx/differential-protocols/battery.py::grpc-unary. Known difference: nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics. |
 
 #### `ngx_http_gunzip_filter_module` (2 directives)
 
@@ -1429,7 +1431,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 ## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC)
 
 The catalog now classifies every directive below as `executable` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -1442,7 +1444,10 @@ stream ceiling, proxy_method, stream allow/deny ACLs and the literal stream retu
 Wave 4a added the geo and split_clients variable blocks and the referer module
 (valid_referers / $invalid_referer); the upstream-protocol wave moved FastCGI, uWSGI,
 SCGI and memcached from out-of-profile to executable for their implemented
-request/response forms and added the bounded memcached-backed `set` variable form.
+request/response forms and added the bounded memcached-backed `set` variable form;
+the gRPC wave added the h2 upstream client with header/timeout/buffer/retry/intercept
+and always-verified grpc_ssl_* forms (trailers forwarded and non-zero grpc-status
+following nginx rather than mapping to 502).
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1542,16 +1547,36 @@ request/response forms and added the bounded memcached-backed `set` variable for
 | `wave 5 (upstream-protocol)` | `uwsgi_request_buffering` (`http:uwsgi_request_buffering`) | `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_request_buffering setting in the uwsgi adapter)` | `tests/nginx/differential-protocols/battery.py::uwsgi-basic` |
 | `wave 5 (upstream-protocol)` | `uwsgi_send_timeout` (`http:uwsgi_send_timeout`) | `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_send_timeout setting in the uwsgi adapter)` | `tests/nginx/differential-protocols/battery.py::uwsgi-basic` |
 | `wave 5 (upstream-protocol)` | `uwsgi_string` (`http:uwsgi_string`) | `resources[].type="cgi-upstream" protocol="uwsgi" (uwsgi_string setting in the uwsgi adapter)` | `tests/nginx/differential-protocols/battery.py::uwsgi-basic` |
+| `wave 6 (gRPC)` | `grpc_buffer_size` (`http:grpc_buffer_size`) | `resources[].type="grpc" (grpc_buffer_size setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_connect_timeout` (`http:grpc_connect_timeout`) | `resources[].type="grpc" (grpc_connect_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_hide_header` (`http:grpc_hide_header`) | `resources[].type="grpc" (grpc_hide_header setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_intercept_errors` (`http:grpc_intercept_errors`) | `resources[].type="grpc" (grpc_intercept_errors setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_next_upstream` (`http:grpc_next_upstream`) | `resources[].type="grpc" (grpc_next_upstream setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_next_upstream_timeout` (`http:grpc_next_upstream_timeout`) | `resources[].type="grpc" (grpc_next_upstream_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_next_upstream_tries` (`http:grpc_next_upstream_tries`) | `resources[].type="grpc" (grpc_next_upstream_tries setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_pass` (`http:grpc_pass`) | `resources[].type="grpc" (grpc_pass setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_pass_header` (`http:grpc_pass_header`) | `resources[].type="grpc" (grpc_pass_header setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_read_timeout` (`http:grpc_read_timeout`) | `resources[].type="grpc" (grpc_read_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_send_timeout` (`http:grpc_send_timeout`) | `resources[].type="grpc" (grpc_send_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_set_header` (`http:grpc_set_header`) | `resources[].type="grpc" (grpc_set_header setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_certificate` (`http:grpc_ssl_certificate`) | `resources[].type="grpc" (grpc_ssl_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_certificate_key` (`http:grpc_ssl_certificate_key`) | `resources[].type="grpc" (grpc_ssl_certificate_key setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_name` (`http:grpc_ssl_name`) | `resources[].type="grpc" (grpc_ssl_name setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_protocols` (`http:grpc_ssl_protocols`) | `resources[].type="grpc" (grpc_ssl_protocols setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_server_name` (`http:grpc_ssl_server_name`) | `resources[].type="grpc" (grpc_ssl_server_name setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_trusted_certificate` (`http:grpc_ssl_trusted_certificate`) | `resources[].type="grpc" (grpc_ssl_trusted_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_verify` (`http:grpc_ssl_verify`) | `resources[].type="grpc" (grpc_ssl_verify setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
+| `wave 6 (gRPC)` | `grpc_ssl_verify_depth` (`http:grpc_ssl_verify_depth`) | `resources[].type="grpc" (grpc_ssl_verify_depth setting in the grpc adapter; h2 client with always-verified upstream TLS)` | `tests/nginx/differential-protocols/battery.py::grpc-unary` |
 
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (188 directives)
+### 3.2 Remaining Behavior-Gap Backlog (168 directives)
 
 These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
-the upstream-protocol wave. An accepted-unenforced row is silently ignored today; a rejected row fails
+the gRPC wave. An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1640,39 +1665,19 @@ have to change, and the tests to add.
 | `proxy_ssl_verify` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
 | `proxy_ssl_trusted_certificate` | high | unsupported-fail-closed | a stock stream sidecar that uses this stream-plane feature fails to activate. | the remaining stream features need three building blocks the stream plane lacks: shared zone state for limit_conn, a stream variable engine for set/map (and variable-valued return), and an upstream TLS client for proxy_ssl identity; the HTTP plane already executes the analogous access/limit/routing policies. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/stream_proxy.rs, crates/sdkwork-webserver-core/src/config/model.rs (streams), src/nginx/mapping.rs, src/config/uri.rs (stream map variables) | stream_proxy.rs unit/integration tests for limit_conn zones, set/map variables, timeouts and upstream TLS identity plus a stream differential slice against nginx 1.29.6 |
 
-### 3.2.8 gRPC wiring - 29 directive(s)
+### 3.2.8 gRPC residual forms - 9 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `grpc_bind` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_buffer_size` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_connect_timeout` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_hide_header` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ignore_headers` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_intercept_errors` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_next_upstream` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_next_upstream_timeout` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_next_upstream_tries` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_pass` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_pass_header` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_read_timeout` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_send_timeout` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_set_header` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_socket_keepalive` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_certificate` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_certificate_cache` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_certificate_key` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_ciphers` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_conf_command` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_crl` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_name` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_password_file` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_protocols` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_server_name` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_session_reuse` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_trusted_certificate` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_verify` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
-| `grpc_ssl_verify_depth` | high (next wave) | unsupported-fail-closed | a stock nginx.conf that proxies to a gRPC upstream fails to activate. | the upstream-protocol substrate already ships a gRPC codec, but no data-plane adapter is wired yet; the whole grpc_* module is planned for the next wave rather than being outside the profile. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | gRPC responder cases added to tests/nginx/differential-protocols against nginx 1.29.6 plus trailer/status-mapping unit tests |
+| `grpc_bind` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ignore_headers` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_socket_keepalive` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ssl_certificate_cache` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ssl_ciphers` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ssl_conf_command` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ssl_crl` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ssl_password_file` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
+| `grpc_ssl_session_reuse` | low | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that uses this gRPC form fails to activate. | the gRPC h2 client now executes the request/response, header, timeout, buffer, retry, intercept and TLS-identity forms end-to-end against nginx 1.29.6; the residual bind/ignore_headers/socket-pool and OpenSSL cipher/conf/CRL/password/session-reuse knobs are unimplemented and are backlog, not profile exclusions. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-protocols with the residual bind/socket/TLS-library forms once the h2 client exposes them |
 
 ### 3.2.9 FastCGI residual forms - 32 directive(s)
 
@@ -1806,14 +1811,13 @@ have to change, and the tests to add.
 
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest surface is the residual sub-families of the four landed
-protocol modules (110 directives: cache/buffer/store/SSL, unix/variable targets and
-connection-pool knobs), followed by gRPC wiring (29): the shared upstream-protocol
-substrate has codecs for both, but the data-plane adapters are not complete. The
-bounded **re-entrant subrequest engine** (addition filter, `auth_request`, mirror) is
-the largest HTTP-side item, then the stream advanced gaps (zone state, stream variable
-engine, upstream TLS client). userid, browser, random_index, degradation and slice are
-self-contained module-sized work. `chunked_transfer_encoding` and the static open-file
+Within the backlog, the largest surface is still the residual sub-families of the four
+landed protocol modules (110 directives: cache/buffer/store/SSL, unix/variable targets
+and connection-pool knobs), followed by the bounded **re-entrant subrequest engine**
+(addition filter, `auth_request`, mirror). The stream advanced gaps (zone state, stream
+variable engine, upstream TLS client) and the module-sized userid/browser/random_index/
+degradation/slice modules come next. The gRPC wave reduced its category to nine residual
+bind/socket/TLS-library knobs. `chunked_transfer_encoding` and the static open-file
 cache are precisely bounded (hyper HTTP/1.1 close-delimited framing; staleness-only
 performance cache), while `http2_chunk_size` and the OCSP/trust-chain rows are
 architecture-blocked (hyper/h2; rustls).
@@ -1827,9 +1831,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 77 `executable` directive rows was drawn,
+- A sample of 79 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a and the upstream-protocol wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave and the gRPC wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -1838,7 +1842,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (77 directive rows)
+### 4.2 Verified Sample (79 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -1919,6 +1923,8 @@ compression layer owns the level).
 | `http:scgi_pass` | `scgi_pass proxies to an SCGI responder` | `tests/nginx/differential-protocols/battery.py::scgi-basic` | differential cases compare basic GET, POST upload, auto-generated CGI headers and intercept-404 against nginx 1.29.6 | verified |
 | `http:memcached_pass` | `memcached_pass proxies a key lookup to a memcached responder` | `tests/nginx/differential-protocols/battery.py::memcached-hit` | differential cases compare hit, HEAD, large value, miss, raw-error 502 and POST against nginx 1.29.6 with a deterministic mock memcached responder | verified |
 | `http:set` | `the bounded 'set $memcached_key' form feeds the memcached adapter` | `tests/nginx/differential-protocols/battery.py::memcached-hit` | the location-scoped set variable is consumed by memcached_pass in the hit/miss differential cases; other set variables/sources fail closed | verified |
+| `http:grpc_pass` | `grpc_pass proxies to a gRPC upstream over h2 with nginx-exact trailers and status mapping` | `tests/nginx/differential-protocols/battery.py::grpc-unary` | 13 differential cases against nginx 1.29.6 with a test-only Rust HTTP/2 mock: unary body+trailers byte-identical, trailers-only non-zero grpc-status kept as 200 headers (not 502), server streaming, set/hide/pass headers, read-timeout 504, retry, positive/negative verified TLS, intercept and missing-trailers cases | verified |
+| `http:grpc_ssl_verify` | `grpc_ssl_verify runs against an always-verified upstream TLS client` | `tests/nginx/differential-protocols/battery.py::grpc-tls-untrusted` | the grpcs positive case succeeds with a trusted CA and the negative case fails with an unrelated CA, matching nginx; the runtime enforces full-chain verification even where nginx accepts a depth setting | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -1964,7 +1970,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-175 executable rows cite only the generic
+195 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -1975,7 +1981,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (175 <=> 175). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (195 <=> 195). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -1983,9 +1989,9 @@ Consistent: `executable` <=> `enforced` in both directions (175 <=> 175). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 175 | 23.5% |
+| `enforced` (actually nginx-compatible behavior) | 195 | 26.2% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 188 | 25.3% |
+| `behavior-gap` (planned toward compatibility) | 168 | 22.6% |
 | `runtime-owned` (deliberately not nginx value) | 143 | 19.2% |
 | `out-of-profile` (PRD section 4 exclusion) | 64 | 8.6% |
 | `fail-closed` (rejected, not planned) | 157 | 21.1% |
@@ -1993,7 +1999,7 @@ Consistent: `executable` <=> `enforced` in both directions (175 <=> 175). Every 
 364 of 744 directives (48.9%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 175 executed directives plus the 188 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 195 executed directives plus the 168 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (64 directives)
@@ -2026,13 +2032,13 @@ What implementing each remaining group would actually require:
 | Dynamic module loading | 1 | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
 Substrate note: the landed `crates/sdkwork-webserver-upstream-protocol` substrate
-(FastCGI/uWSGI/SCGI/memcached/gRPC codecs, 89 tests) is now wired end-to-end for the four
-embedded protocols through `crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs`
-and the new `tests/nginx/differential-protocols` slice (26 cases, byte-identical against
-nginx 1.29.6). Implemented request/response forms execute; the residual cache/buffer/store/
-SSL sub-families and unix/variable-target/connection-pool knobs are backlog rows, not
-profile exclusions. gRPC wiring is the next wave: the grpc_* module is backlog, not
-excluded.
+(FastCGI/uWSGI/SCGI/memcached/gRPC codecs, 89 tests) is now wired end-to-end for all five
+protocols through `crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs`
+and `tests/nginx/differential-protocols` (39 cases, byte-identical against nginx 1.29.6;
+13 of them gRPC against a test-only Rust HTTP/2 mock, plaintext h2c and verified TLS).
+Implemented forms execute; the residual cache/buffer/store/SSL, unix/variable-target,
+connection-pool and gRPC bind/socket/TLS-library knobs are backlog rows, not profile
+exclusions.
 
 ### 5.3 Fail-Closed Groups (157 directives, top modules)
 
@@ -2080,10 +2086,10 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 
 A "parity" target would still require: the mail proxy (three protocols), embedded Perl,
 GeoIP, a QUIC transport, embedded template/language filters, dynamic module loading, and
-the residual protocol sub-families plus the gRPC adapter that are now backlog rather than
-profile exclusions. Four embedded application protocols (FastCGI/uWSGI/SCGI/memcached)
-are no longer in that excluded set: their implemented forms execute end-to-end on the
-Rust data plane against nginx 1.29.6. The coherent target remains the declared
+the residual protocol/gRPC sub-families that are now backlog rather than profile
+exclusions. Five embedded application protocols (FastCGI/uWSGI/SCGI/memcached/gRPC) are
+no longer in that excluded set: their implemented forms execute end-to-end on the Rust
+data plane against nginx 1.29.6. The coherent target remains the declared
 `http-core-v1` profile with the four PRD section 2 grades (parse, semantic, behavioral,
 operational), a generated directive catalog, and a versioned evidence revision. That is
 what this ledger audits.
@@ -2110,8 +2116,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the upstream-protocol wave landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the gRPC wave landed and the Lead re-synced the
+catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |
@@ -2212,13 +2218,33 @@ current state:
 | `uwsgi_request_buffering` (`http:uwsgi_request_buffering`) | `wave 5 (upstream-protocol)` | completed - `enforced` |
 | `uwsgi_send_timeout` (`http:uwsgi_send_timeout`) | `wave 5 (upstream-protocol)` | completed - `enforced` |
 | `uwsgi_string` (`http:uwsgi_string`) | `wave 5 (upstream-protocol)` | completed - `enforced` |
+| `grpc_buffer_size` (`http:grpc_buffer_size`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_connect_timeout` (`http:grpc_connect_timeout`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_hide_header` (`http:grpc_hide_header`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_intercept_errors` (`http:grpc_intercept_errors`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_next_upstream` (`http:grpc_next_upstream`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_next_upstream_timeout` (`http:grpc_next_upstream_timeout`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_next_upstream_tries` (`http:grpc_next_upstream_tries`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_pass` (`http:grpc_pass`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_pass_header` (`http:grpc_pass_header`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_read_timeout` (`http:grpc_read_timeout`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_send_timeout` (`http:grpc_send_timeout`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_set_header` (`http:grpc_set_header`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_certificate` (`http:grpc_ssl_certificate`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_certificate_key` (`http:grpc_ssl_certificate_key`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_name` (`http:grpc_ssl_name`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_protocols` (`http:grpc_ssl_protocols`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_server_name` (`http:grpc_ssl_server_name`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_trusted_certificate` (`http:grpc_ssl_trusted_certificate`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_verify` (`http:grpc_ssl_verify`) | `wave 6 (gRPC)` | completed - `enforced` |
+| `grpc_ssl_verify_depth` (`http:grpc_ssl_verify_depth`) | `wave 6 (gRPC)` | completed - `enforced` |
 
-All 96 rows above were re-spot-checked (section 4.2) and are
+All 116 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 188 wave-3 backlog rows are the only behavior-gap
+The 168 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 

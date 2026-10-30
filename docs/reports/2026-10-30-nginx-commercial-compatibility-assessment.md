@@ -16,7 +16,7 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **175** | 可承诺 |
+| executable（真实执行且有测试证据） | 79 | **195** | 可承诺 |
 | accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
 | rejected (fail closed)（活跃出现即报错） | 253 | **334** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
 | excluded from profile（明确排除） | 229 | **64** | 仅 mail proxy 51 / GeoIP 8 / Perl 4 / 动态模块 1 |
@@ -101,7 +101,7 @@
 | 进程内全表面行为回归 | `python3 tests/nginx/full-surface/probe.py` | **76/76** |
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
 | 宽面 HTTP 差分（87→259 例） | `node tools/run-nginx-differential-http.mjs` | **259/259**，0 非预期 |
-| 上游协议差分（FastCGI/uWSGI/SCGI/memcached vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **26/26** 逐字节一致 |
+| 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **39/39** 逐字节一致（13 个 gRPC 用例） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |
@@ -143,7 +143,7 @@
 | memcached | 有界 `set $memcached_key` + `memcached_pass` 文本 GET/HEAD、命中/未命中/502/504、Accept-Ranges/CL 对齐 | 6 例逐字节一致 |
 | referer / geo / split_clients | `valid_referers`+`$invalid_referer`；geo 最长前缀/范围；split_clients nginx MurmurHash2 分桶 | differential-http 22 例 |
 
-> 说明：协议模块中原先被排除的 cache/buffer/store/ssl 子族、unix socket、变量目标等未实现形式现为**带定位诊断的失败关闭**（行为缺口清单），不再是"档位外"。
+> 说明：协议模块中原先被排除的 cache/buffer/store/ssl 子族、unix socket、变量目标等未实现形式现为**带定位诊断的失败关闭**（行为缺口清单），不再是"档位外"。gRPC 已端到端落地（h2 客户端 + 始终校验的上游 TLS + trailers；非零 grpc-status 按 nginx 语义透传而非 502）。
 
 ## 4.1 剩余行为缺口（审计台账 §3.2，全部有明确架构阻塞，不是静默忽略）
 
