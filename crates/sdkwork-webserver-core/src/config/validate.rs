@@ -2606,7 +2606,15 @@ impl SemanticValidator {
                 );
             }
         }
-        let mut sockets = HashSet::new();
+        // SNI virtual servers share one listening socket: duplicate
+        // bind:port is legal when every server on the socket is routable by
+        // `server_name` (or carries the single `default_server`), matching
+        // nginx's `server_name`-based stream virtual servers.
+        let mut sockets: HashSet<String> = HashSet::new();
+        let mut socket_defaults: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        let mut socket_members: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
         for (index, stream) in config.streams.iter().enumerate() {
             let path = format!("/streams/{index}");
             if stream.bind.parse::<IpAddr>().is_err() {
@@ -2616,12 +2624,41 @@ impl SemanticValidator {
                 );
             }
             let socket_key = stream.socket_key();
-            if !sockets.insert(socket_key.clone()) {
+            let current_sni_capable = !stream.server_names.is_empty()
+                && matches!(
+                    stream.tls,
+                    Some(crate::config::model::StreamTlsMode::Preread)
+                );
+            let previous_members = socket_members.get(&socket_key).cloned().unwrap_or_default();
+            let previous_sni_capable = previous_members.iter().all(|previous_index| {
+                let previous = &config.streams[*previous_index];
+                !previous.server_names.is_empty()
+                    && matches!(
+                        previous.tls,
+                        Some(crate::config::model::StreamTlsMode::Preread)
+                    )
+            });
+            if !sockets.insert(socket_key.clone()) && !(current_sni_capable && previous_sni_capable)
+            {
                 self.push(
                     &path,
-                    "another stream server already owns this bind and port",
+                    "another stream server already owns this bind and port (duplicate listens are allowed only for server_name-based virtual servers)",
                 );
             }
+            if stream.default_server {
+                let count = socket_defaults.entry(socket_key.clone()).or_insert(0);
+                *count += 1;
+                if *count > 1 {
+                    self.push(
+                        &path,
+                        "only one stream server per listening socket may be the default_server",
+                    );
+                }
+            }
+            socket_members
+                .entry(socket_key.clone())
+                .or_default()
+                .push(index);
             if config.listeners.iter().any(|listener| {
                 format!("{}:{}", listener.bind.to_ascii_lowercase(), listener.port) == socket_key
             }) {
@@ -2646,6 +2683,97 @@ impl SemanticValidator {
                     format!("{path}/prereadBufferBytes"),
                     "stream preread_buffer_size must be between 512 bytes and 1 MiB",
                 );
+            }
+            if stream.protocol == crate::config::model::StreamProtocol::Udp {
+                if stream.upstream_tls.is_some() {
+                    self.push(
+                        format!("{path}/upstreamTls"),
+                        "stream upstream TLS is a TCP transport; UDP stream servers cannot set proxy_ssl",
+                    );
+                }
+                if stream.accept_proxy_protocol {
+                    self.push(
+                        format!("{path}/acceptProxyProtocol"),
+                        "inbound PROXY protocol on UDP stream listeners is not implemented by the bounded adapter; only TCP listeners accept the v1/v2 header",
+                    );
+                }
+                if stream.half_close || !stream.server_names.is_empty() || stream.default_server {
+                    self.push(
+                        &path,
+                        "stream server_name/half_close are TCP semantics and cannot be combined with a udp listener",
+                    );
+                }
+            }
+            if !(1..=3_600_000).contains(&stream.proxy_protocol_timeout_ms) {
+                self.push(
+                    format!("{path}/proxyProtocolTimeoutMs"),
+                    "stream proxy_protocol_timeout must be between 1 ms and 1 hour",
+                );
+            }
+            for (name_index, name) in stream.server_names.iter().enumerate() {
+                if crate::config::server_name_is_regex(name) || parse_server_name(name).is_none() {
+                    self.push(
+                        format!("{path}/serverNames/{name_index}"),
+                        "stream server_name must be an exact, leading-wildcard or trailing-wildcard DNS name (regex names are not executable by the bounded SNI routing table)",
+                    );
+                }
+            }
+            for (cidr_index, cidr) in stream.real_ip_trusted_cidrs.iter().enumerate() {
+                if cidr.parse::<IpNet>().is_err() && cidr.parse::<IpAddr>().is_err() {
+                    self.push(
+                        format!("{path}/realIpTrustedCidrs/{cidr_index}"),
+                        "stream set_real_ip_from must be an IP address or CIDR",
+                    );
+                }
+            }
+            if let Some(tls) = &stream.upstream_tls {
+                match tls.trust_mode {
+                    UpstreamTlsTrustMode::System if !tls.ca_certificate_files.is_empty() => {
+                        self.push(
+                            format!("{path}/upstreamTls/caCertificateFiles"),
+                            "system trust mode does not accept custom CA certificate files",
+                        );
+                    }
+                    UpstreamTlsTrustMode::Custom | UpstreamTlsTrustMode::SystemAndCustom
+                        if tls.ca_certificate_files.is_empty() =>
+                    {
+                        self.push(
+                            format!("{path}/upstreamTls/caCertificateFiles"),
+                            "custom trust modes require at least one CA certificate file",
+                        );
+                    }
+                    _ => {}
+                }
+                if tls.dangerous_accept_any_verify {
+                    if tls.trust_mode != UpstreamTlsTrustMode::System
+                        || !tls.ca_certificate_files.is_empty()
+                    {
+                        self.push(
+                            format!("{path}/upstreamTls"),
+                            "dangerousAcceptAnyVerify disables peer-chain verification and cannot be combined with custom trust material",
+                        );
+                    }
+                    self.push(
+                        format!("{path}/upstreamTls/dangerousAcceptAnyVerify"),
+                        "explicit dangerous accept-any upstream verification (stream proxy_ssl_verify off): the upstream certificate chain is NOT validated",
+                    );
+                }
+                match (
+                    tls.client_certificate_file.as_deref(),
+                    tls.client_private_key_file.as_deref(),
+                ) {
+                    (Some(_), Some(_)) | (None, None) => {}
+                    _ => self.push(
+                        format!("{path}/upstreamTls"),
+                        "clientCertificateFile and clientPrivateKeyFile must be configured together",
+                    ),
+                }
+                if tls.minimum_version > tls.maximum_version {
+                    self.push(
+                        format!("{path}/upstreamTls/maximumVersion"),
+                        "maximum TLS version must not be lower than minimumVersion",
+                    );
+                }
             }
             for (set_index, set) in stream.set_variables.iter().enumerate() {
                 let set_path = format!("{path}/setVariables/{set_index}");

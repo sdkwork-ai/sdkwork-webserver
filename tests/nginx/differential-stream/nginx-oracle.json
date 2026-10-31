@@ -15,6 +15,12 @@
         "sent": "stream-echo-two\n"
       }
     ],
+    "half_close.on": [
+      {
+        "received": "got:18",
+        "sent": "half-close-payload"
+      }
+    ],
     "limit_conn.dry-run": [
       {
         "received": "dry-run-second\n",
@@ -51,6 +57,28 @@
       {
         "received": "backend-a",
         "sni": "a.example"
+      }
+    ],
+    "proxy_protocol.inbound-v1": [
+      {
+        "received": "proxy-in-echo\n",
+        "sent": "proxy-in-echo\n"
+      }
+    ],
+    "proxy_protocol.missing-header": [
+      {
+        "sent": "payload\n"
+      }
+    ],
+    "proxy_ssl.untrusted-ca": [
+      {
+        "sent": "must-not-arrive\n"
+      }
+    ],
+    "proxy_ssl.verified": [
+      {
+        "received": "tls-echo-payload\n",
+        "sent": "tls-echo-payload\n"
       }
     ],
     "return.403": [

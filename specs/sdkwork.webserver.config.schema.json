@@ -3760,6 +3760,103 @@
         "proxyProtocol": {
           "type": "boolean"
         },
+        "upstreamTls": {
+          "$ref": "#/$defs/upstreamTlsPolicy"
+        },
+        "bindAddress": {
+          "description": "nginx stream `proxy_bind <address>`: bind the upstream connection source address (IP literal only).",
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "halfClose": {
+          "description": "nginx stream `proxy_half_close on|off` (nginx default off).",
+          "type": "boolean",
+          "default": false
+        },
+        "requests": {
+          "description": "nginx stream `proxy_requests`: client request counter (nginx applies it to UDP connections; a TCP stream connection has no request framing, so it is accepted with nginx-identical no-op behaviour).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "responses": {
+          "description": "nginx stream `proxy_responses`: response counter (nginx applies it to UDP connections; nginx-identical no-op for a TCP stream connection).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "downloadRate": {
+          "description": "nginx stream `proxy_download_rate`: upstream-to-client byte rate in bytes per second (0 = unlimited).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "uploadRate": {
+          "description": "nginx stream `proxy_upload_rate`: client-to-upstream byte rate in bytes per second (0 = unlimited).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "nextUpstream": {
+          "description": "nginx stream `proxy_next_upstream`: retry conditions when another upstream target remains.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["error", "timeout"]
+          }
+        },
+        "nextUpstreamTries": {
+          "description": "nginx stream `proxy_next_upstream_tries` (0 = one attempt per target, bounded by the target count).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "nextUpstreamTimeoutMs": {
+          "description": "nginx stream `proxy_next_upstream_timeout`: total retry budget.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "serverNames": {
+          "description": "nginx stream `server_name`: SNI virtual-server names on one listening socket (ssl_preread / TLS termination).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
+        },
+        "defaultServer": {
+          "description": "nginx stream `listen … default_server`: selected when no `server_name` matches.",
+          "type": "boolean",
+          "default": false
+        },
+        "acceptProxyProtocol": {
+          "description": "nginx stream `listen … proxy_protocol`: accept an inbound PROXY protocol v1/v2 header before proxying.",
+          "type": "boolean",
+          "default": false
+        },
+        "proxyProtocolTimeoutMs": {
+          "description": "nginx stream `proxy_protocol_timeout`: deadline for the inbound PROXY protocol header.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 30000
+        },
+        "realIpTrustedCidrs": {
+          "description": "nginx stream `set_real_ip_from`: trusted peers whose inbound PROXY header source replaces the connection address.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
         "tls": {
           "oneOf": [
             {

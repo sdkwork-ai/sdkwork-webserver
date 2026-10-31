@@ -1,738 +1,599 @@
-# Nginx Final-Gap Feasibility And Closing Sequence (`http-core-v1`) - 2026-10-30
+# Nginx Final-Gap Feasibility And Closing Sequence (`http-core-v1`) - 2026-10-30 (v2)
 
 | Field | Value |
 | --- | --- |
-| Report date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `e43fa1c9d2cda8b1c24217cab72cb18cd9ca25c7` |
-| Scope | final-gap feasibility and closing sequence for the **172 behavior-gap rows** and the **64 out-of-profile directives** remaining after the stream/OCSP wave |
+| Report date | 2026-10-30 (v2; supersedes the v1 snapshot at HEAD `e43fa1c9`) |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `3f169e8b76a748f92775bb26be547d0ffb4fe3a8` |
+| Scope | final-gap feasibility for the **95 behavior-gap rows** and the **13 out-of-profile directives** at this HEAD, plus the HTTP/3 profile question (9 fail-closed rows) |
 | Compatibility profile | `http-core-v1` ([PRD-nginx-compatibility.md](../product/prd/PRD-nginx-compatibility.md) §2-§4) |
-| Reference implementation | nginx 1.29.6, nginx.org official Linux package (the differential oracle build) |
-| Companion reports | [2026-10-30-nginx-commercial-compatibility-assessment.md](2026-10-30-nginx-commercial-compatibility-assessment.md), [NGINX-COMPATIBILITY-MATRIX.md](../guides/operator/NGINX-COMPATIBILITY-MATRIX.md), [nginx-gap.catalog.json](../../specs/nginx-gap.catalog.json) |
-| Directive inventory | [nginx-directive-inventory.json](../../specs/nginx-directive-inventory.json) - 744 directives; canonical-JSON sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` (catalog `inventory.digest`) |
-| Support catalog | [nginx-directive-support.catalog.json](../../specs/nginx-directive-support.catalog.json) - 744 rows, sha256 `3669202ba3115739a2985fca95151836baf71e039f4979e220875c4d9017d2a2` |
-| Audit ledger | [2026-10-30-nginx-directive-by-directive-audit.md](2026-10-30-nginx-directive-by-directive-audit.md) (744 rows, sha256 `85fd3f427304965921dd5d0a80671d47099948d3ca8ce7b2fb24eeaf90cfe63b`) |
-| Method | read-only: catalog + audit recomputation, repo source inspection, pinned-crate source inspection under `~/.cargo/registry` |
-| Not evidence | no behavioral gate was re-run for this report; every count below is derived from the committed catalog/audit, and the report claims no implementation the catalog does not claim |
+| Reference implementation | nginx 1.29.6, nginx.org official Linux package (the differential oracle build; `nginx -V` includes `--with-mail --with-mail_ssl_module --with-http_v3_module`) |
+| Companion reports | [2026-10-30-nginx-directive-by-directive-audit.md](2026-10-30-nginx-directive-by-directive-audit.md), [NGINX-COMPATIBILITY-MATRIX.md](../guides/operator/NGINX-COMPATIBILITY-MATRIX.md), [nginx-gap.catalog.json](../../specs/nginx-gap.catalog.json), [2026-10-30-nginx-commercial-compatibility-assessment.md](2026-10-30-nginx-commercial-compatibility-assessment.md) |
+| Directive inventory | [nginx-directive-inventory.json](../../specs/nginx-directive-inventory.json) - 744 directives, nginx 1.29.6; catalog `inventory.digest` `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
+| Support catalog | [nginx-directive-support.catalog.json](../../specs/nginx-directive-support.catalog.json) - 744 rows, raw sha256 `37dc0ad686e08bca618bd0291d6453e210b5653a15ba452bf20ce83e7da010bd` |
+| Audit ledger | [2026-10-30-nginx-directive-by-directive-audit.md](2026-10-30-nginx-directive-by-directive-audit.md) - 744 rows, raw sha256 `549e06450034c454cdaf60e2c763b0bdeb623896f15abb06a6f7b3310931929f`; `--check --verify-evidence` passes at this HEAD |
+| Differential manifest | [nginx-behavioral-corpus.manifest.json](../../specs/nginx-behavioral-corpus.manifest.json) - 6 differential slices, raw sha256 `54514f311614fb184ef2e1c3a88dc9bbb4952c6afdefabf7487f7800c565f50c` |
+| Production-config gate | [check-nginx-real-world.mjs](../../tools/check-nginx-real-world.mjs) - committed api.birdcoder.com snapshot (nginx 1.28.0, 33 files): **41 vhosts / 4 listeners / 150 resources / 88 upstreams / 0 skipped**, verified at this snapshot |
+| Method | read-only: catalog/audit/manifest recomputation, source inspection, pinned-crate source inspection (`Cargo.lock`), static gates re-run at this snapshot |
+| Not evidence | the binary-dependent aggregate/differential gates were **not** re-run live while this report was written: a concurrent code wave had the worktree dirty (`crates/sdkwork-webserver-core/src/config/model.rs`) and the gateway binary older than that source. Every count below is recomputed from the committed catalog/audit/manifest at HEAD `3f169e8b`; no implementation is claimed that the catalog does not claim |
 
 ## Status And Authority
 
-- The source of truth for this report is the committed **catalog** (classification per
-  directive) plus the generated **audit ledger** (operator-facing decision per
-  directive). The report does not edit either artifact and does not reclassify any row;
-  it recommends classification moves where the honest close is "do not implement",
-  and names the owner action (catalog + matrix resync) for each.
-- "Behavior gap" in this report is the audit decision `behavior-gap` (172 rows), which
-  spans two catalog classifications: 10 `accepted-unenforced` rows and 162
-  `unsupported-fail-closed` rows. "Out of profile" is the audit decision
-  `out-of-profile` (64 rows, all catalog `excluded`).
-- Effort classes are planning estimates, not commitments: **S** = one directive or a
-  small mechanical mapping over an existing model field; **M** = one coherent wave
-  slice (model + materializer + data-plane path + differential evidence, several files);
-  **L** = a new engine or architecture change (subrequest executor, protocol adapter
-  family, TLS-fetch owner); **XL** = a new transport/protocol subsystem (HTTP/3, mail
-  listener plane).
-- Every wave in the closing sequence keeps the release gates unchanged. No gate is
-  lowered or skipped; each wave adds evidence and raises the manifest case floor.
+- The source of truth is the committed **catalog** (classification per directive) plus the
+  generated **audit ledger** (operator-facing decision per directive). This report edits
+  neither artifact and reclassifies no row; where the honest close is "do not implement"
+  it names the owner action (catalog + audit + matrix resync, Lead-owned).
+- "Behavior gap" is the audit decision `behavior-gap` (**95 rows**), which spans two
+  catalog classifications: 7 `accepted-unenforced` rows (the dependency-blocked tail) and
+  88 `unsupported-fail-closed` rows. "Out of profile" is the audit decision
+  `out-of-profile` (**13 rows**, all catalog `excluded`).
+- Effort classes are planning estimates, not commitments: **S** = one directive or a small
+  mechanical mapping over an existing model field; **M** = one coherent wave slice
+  (model + materializer + data-plane path + differential evidence, several files);
+  **L** = a new engine or architecture change (temp-spool subsystem, slice cache
+  indexing, mail client-cert flows); **XL** = a new transport/protocol subsystem
+  (HTTP/3 listener plane).
+- Every planned wave keeps the release gates unchanged. No gate is lowered or skipped;
+  each wave adds evidence and raises a manifest case floor.
+- The mail proxy is **in profile** as of the Wave 9A/9B work (PRD §4 amended): 27 mail
+  directives are executable and the mail differential slice exists. The v1 report's
+  64-row out-of-profile set is therefore historical; the current set is 13.
 
 ## 0. Executive Summary
 
-The remaining program is **finite and mostly ordinary work**, with a small, precisely
-identifiable dependency-blocked tail:
+At HEAD `3f169e8b` the declared `http-core-v1` surface is:
 
-| Backlog class | Rows | Meaning |
+| Bucket | Rows | Meaning |
 | --- | ---: | --- |
-| Implementable in profile (execute the bounded form, fail closed on unsupported forms) | **145** | ordinary model + data-plane + differential work |
-| Recommended "runtime-owned / documented difference" without new code | **20** | `*_temp_path`/`*_max_temp_file_size`/`*_temp_file_write_size`/`*_buffers`/`*_busy_buffers_size` (15, no disk temp spool), `open_file_cache*` (3, performance-only), `grpc_ssl_certificate_cache` + `uwsgi_ssl_certificate_cache` (2, config-time material cache) |
-| Blocked by the pinned dependency stack | **5** | `chunked_transfer_encoding` (hyper HTTP/1 encoder), `ssl_stapling`/`ssl_stapling_verify` http+stream (rustls static `CertifiedKey.ocsp` only) |
-| Not implementable on the pinned TLS stack (close as fail-closed) | **2** | `grpc_ssl_conf_command`, `uwsgi_ssl_conf_command` (OpenSSL command strings have no rustls equivalent) |
-| **total behavior-gap** | **172** | |
+| Executable, evidence-backed | **328** | the Rust data plane executes the bounded form; committed evidence reaches it |
+| Deliberately runtime-owned | **147** | no client-visible effect; the runtime owns the subsystem by design |
+| Intentional security difference | **17** | stricter/safer than nginx, spec-justified |
+| Behavior gap (remaining backlog) | **95** | client-visible nginx behavior not produced yet |
+| Out of profile | **13** | excluded by PRD §4 and rejected in active contexts |
+| Fail-closed, not planned | **144** | rejected at materialization; outside the declared required surface |
+| **total** | **744** | every inventory row appears exactly once |
 
-Out-of-profile (64): the mail proxy (51) and GeoIP (8) are implementable **only after a
-PRD §4 profile amendment** (L and M respectively); embedded Perl (4) and dynamic module
-loading (1) are genuinely not implementable in this product. HTTP/3 (9 rows currently
-`unsupported-fail-closed`, not part of the 172) is also a profile question: PRD §4 lists
-HTTP/3 as excluded while the catalog rejects it as fail-closed, and a real HTTP/3 wave is
-**XL**.
+The 95-row backlog decomposes into ten categories and closes as follows:
 
-Recommended closing order (in-profile first, because it needs no requirement change):
-**7A FastCGI residual -> 7B uWSGI residual -> 7C SCGI residual -> 7D memcached+gRPC
-residual -> stream advanced -> subrequest engine -> module-sized modules -> HTTP
-leftovers**, then the optional profile-expansion program (**mail wiring -> GeoIP ->
-HTTP/3**). After the in-profile sequence the counter projection is **enforced 348 /
-runtime-owned 163 / behavior-gap 7 / out-of-profile 64 / fail-closed 145 /
-security-difference 17 = 744**, with the last 7 rows exactly the dependency-blocked
-tail; after the Lead records those 7 as explicit decisions the audit's
-"implementable backlog" is **zero**.
+| Disposition | Rows | Composition |
+| --- | ---: | --- |
+| Code-implementable bounded forms | **58** | stream advanced 18, module-sized 15 (`userid` 9 + `browser` 4 + `random_index` + `slice`), HTTP/2 DATA 1, protocol residuals 14 (3 `ignore_client_abort` + 2 gRPC bind/keepalive + 9 temp-spool), mail residuals 10 |
+| Runtime-owned, close by decision (no code) | **5** | protocol 4 (`fastcgi_catch_stderr`, `fastcgi_send_lowat`, 2 `*_ssl_certificate_cache`), mail 1 (`ssl_verify_depth`) |
+| Blocked by the pinned rustls 0.23.46 surface | **23** | gRPC 5, uWSGI 6, mail 12 (cipher/CRL/session/password/command/depth knobs) |
+| Blocked by the pinned hyper 1.12.0 encoder | **1** | `chunked_transfer_encoding` |
+| Blocked by rustls' static-only OCSP field | **6** | `ssl_stapling`/`ssl_stapling_verify`/`ssl_trusted_certificate` (http + stream) |
+| nginx Plus, no OSS oracle | **2** | `degradation`, `degrade` |
+| **total** | **95** | **sum proof: 58 + 5 + 23 + 1 + 6 + 2 = 95** |
 
-The single largest item is the **re-entrant subrequest engine** (7 rows, L); the largest
-surface is the **FastCGI/uWSGI/SCGI/memcached residual toolkit** (7A-7D, 119 rows: two
-M slices, one M/L slice and one S/M slice once the toolkit exists). The largest single risk is
-`chunked_transfer_encoding` because it is the only backlog row that is *wire-visible and
-pinned-blocked*; the report documents three workarounds and their fidelity costs.
+The 7 dependency-blocked rows (`chunked_transfer_encoding` + the six dynamic-OCSP rows)
+are the only accepted-unenforced gap rows; the exact per-row allocation is in §4 and the
+counter arithmetic in §6.
+
+The largest single implementable item is the **bounded temp-spool subsystem** (9 rows,
+L). The largest surface is **stream advanced gaps** (18 rows), then **mail residuals**
+(23 rows, 10 implementable) and **protocol residuals** (29 rows, 14 implementable). The
+only wire-visible *pinned-blocked* row remains `chunked_transfer_encoding`; the only
+consumer-blocking dependency tail is dynamic OCSP stapling.
+
+After the four in-profile waves in §6, the projection is **executable 386 / runtime-owned
+152 / security-difference 17 / behavior-gap 7 (all dependency-blocked) / out-of-profile 13
+/ fail-closed 169 = 744**; after the Lead records the last 7 rows as explicit
+dependency-blocked decisions, **no implementable backlog remains**.
 
 ## 1. Ground Truth (Recomputed, Read-Only)
 
-### 1.1 Decision Counts (744 Rows)
+### 1.1 Inventory And Catalog Counts
 
-Reproduced from the [generated audit ledger](2026-10-30-nginx-directive-by-directive-audit.md)
-(section 1.1) and re-parsed row-by-row for this report:
+`node tools/gen-nginx-directive-inventory.mjs --check` at this snapshot:
+`nginx directive inventory is canonical and valid (744 directives, nginx 1.29.6)`.
 
-| Decision | Count | Meaning |
-| --- | ---: | --- |
-| `enforced` | 203 | executed by the Rust data plane with committed evidence |
-| `runtime-owned` | 143 | no client-visible effect; the runtime owns the subsystem by design |
-| `security-difference` | 17 | intentionally stricter/safer than nginx, spec-justified |
-| `behavior-gap` | **172** | client-visible nginx behavior not produced yet (planned backlog) |
-| `out-of-profile` | **64** | excluded from the declared `http-core-v1` profile |
-| `fail-closed` | 145 | rejected at materialization, not planned |
-| **total** | **744** | every inventory row appears exactly once |
+Catalog classification (`specs/nginx-directive-support.catalog.json`, 744 rows):
 
-### 1.2 Catalog Classification x Audit Decision
+| Classification | Rows | Share | Meaning |
+| --- | ---: | ---: | --- |
+| `executable` | **328** | 44.1% | executed by the Rust data plane, with a committed evidence reference |
+| `accepted-unenforced` | **171** | 23.0% | parsed and accepted; the value has no (or only a documented) runtime effect |
+| `unsupported-fail-closed` | **232** | 31.2% | rejected at materialization with a located diagnostic |
+| `excluded` | **13** | 1.7% | deliberately outside the declared product profile |
+| **total** | **744** | 100% | **sum proof: 328 + 171 + 232 + 13 = 744** |
+
+Per nginx group:
+
+| Group | Directives | executable | accepted-unenforced | unsupported-fail-closed | excluded |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `core` | 21 | 1 | 16 | 3 | 1 |
+| `events` | 20 | 0 | 18 | 2 | 0 |
+| `http` | 547 | 275 | 102 | 161 | 9 |
+| `mail` | 51 | 27 | 1 | 23 | 0 |
+| `stream` | 105 | 25 | 34 | 43 | 3 |
+| **total** | **744** | **328** | **171** | **232** | **13** |
+
+The mail group is fully in profile (27 executable = the Wave 9A/9B set); the remaining
+out-of-profile rows are HTTP/stream GeoIP (8), HTTP Perl (4) and `load_module` (1).
+
+### 1.2 Audit Decision Counts (744 Rows)
+
+`node tools/gen-nginx-directive-audit.mjs --check --verify-evidence` at this snapshot:
+`audit evidence verification passed: 744 rows, 328 executable evidence references, 249 completed-wave directives, 6 resolved evidence citations, 11 resolved migration over-claims`.
+
+| Decision | Count | Share | Meaning |
+| --- | ---: | ---: | --- |
+| `enforced` | **328** | 44.1% | executed with committed evidence |
+| `runtime-owned` | **147** | 19.8% | no client-visible effect; runtime owns the subsystem |
+| `security-difference` | **17** | 2.3% | intentional stricter/safer behavior, spec-justified |
+| `behavior-gap` | **95** | 12.8% | client-visible behavior not produced yet (planned backlog) |
+| `out-of-profile` | **13** | 1.7% | PRD §4 exclusion, rejected in active contexts |
+| `fail-closed` | **144** | 19.4% | rejected at materialization, not planned |
+| **total** | **744** | 100% | **sum proof: 328 + 147 + 17 + 95 + 13 + 144 = 744** |
+
+Catalog classification × audit decision:
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 203 | 203 | 0 | 0 | 0 | 0 | 0 |
-| `accepted-unenforced` | 170 | 0 | 143 | 17 | 10 | 0 | 0 |
-| `unsupported-fail-closed` | 307 | 0 | 0 | 0 | 162 | 0 | 145 |
-| `excluded` | 64 | 0 | 0 | 0 | 0 | 64 | 0 |
-| **total** | **744** | 203 | 143 | 17 | 172 | 64 | 145 |
+| `executable` | 328 | 328 | 0 | 0 | 0 | 0 | 0 |
+| `accepted-unenforced` | 171 | 0 | 147 | 17 | 7 | 0 | 0 |
+| `unsupported-fail-closed` | 232 | 0 | 0 | 0 | 88 | 0 | 144 |
+| `excluded` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| **total** | **744** | 328 | 147 | 17 | 95 | 13 | 144 |
 
-The 10 `accepted-unenforced` behavior-gap rows are exactly: `chunked_transfer_encoding`,
-`open_file_cache`, `open_file_cache_min_uses`, `open_file_cache_valid`,
-`ssl_stapling`, `ssl_stapling_verify`, `ssl_trusted_certificate`,
-`stream:ssl_stapling`, `stream:ssl_stapling_verify`, `stream:ssl_trusted_certificate`
-(the accepted-but-ignored forms of an otherwise real feature); all other 162 gap rows
-are rejected at load today.
+The 7 `accepted-unenforced` behavior-gap rows are exactly the dependency-blocked tail:
+`chunked_transfer_encoding`, `ssl_stapling`/`ssl_stapling_verify`/`ssl_trusted_certificate`
+(http) and the three `stream:` equivalents. Every other gap row is still rejected at load.
 
-### 1.3 The 172-Row Backlog, By Category (Exact Directives)
+### 1.3 The 95-Row Backlog, By Category (Exact Directives)
 
-Categories and membership are the audit generator's `REMAINING_GAP_CATEGORIES` set
-([tools/gen-nginx-directive-audit.mjs](../../tools/gen-nginx-directive-audit.mjs)), cross-checked
-against the [support catalog](../../specs/nginx-directive-support.catalog.json); the audit
-renderer emits the same set in the [audit ledger](2026-10-30-nginx-directive-by-directive-audit.md) §3.2.
+Categories are the audit generator's `REMAINING_GAP_CATEGORIES` set
+([tools/gen-nginx-directive-audit.mjs](../../tools/gen-nginx-directive-audit.mjs)), emitted
+in [audit ledger](2026-10-30-nginx-directive-by-directive-audit.md) §3.2 and cross-checked
+against the committed catalog:
 
 | # | Category | Rows | Exact directives |
 | --- | --- | ---: | --- |
 | 1 | HTTP/1 framing policy | 1 | `chunked_transfer_encoding` |
-| 2 | re-entrant subrequest engine | 7 | `add_before_body`, `add_after_body`, `addition_types`, `auth_request`, `auth_request_set`, `mirror`, `mirror_request_body` |
-| 3 | module-sized functional modules | 17 | `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`, `ancient_browser`, `ancient_browser_value`, `modern_browser`, `modern_browser_value`, `random_index`, `degradation`, `degrade`, `slice` |
-| 4 | HTTP/2 DATA chunking | 1 | `http2_chunk_size` |
-| 5 | static open-file cache | 3 | `open_file_cache`, `open_file_cache_min_uses`, `open_file_cache_valid` |
-| 6 | OCSP dynamic fetch / refresh / verification | 6 | `ssl_stapling`, `ssl_stapling_verify`, `ssl_trusted_certificate`, `stream:ssl_stapling`, `stream:ssl_stapling_verify`, `stream:ssl_trusted_certificate` |
-| 7 | stream advanced gaps | 18 | `stream:proxy_protocol_timeout`, `stream:pass`, `stream:server_name`, `stream:proxy_bind`, `stream:proxy_half_close`, `stream:proxy_next_upstream_timeout`, `stream:proxy_next_upstream_tries`, `stream:proxy_requests`, `stream:proxy_responses`, `stream:proxy_download_rate`, `stream:proxy_upload_rate`, `stream:proxy_ssl`, `stream:proxy_ssl_certificate`, `stream:proxy_ssl_certificate_key`, `stream:proxy_ssl_name`, `stream:proxy_ssl_server_name`, `stream:proxy_ssl_verify`, `stream:proxy_ssl_trusted_certificate` |
-| 8 | gRPC residual forms | 9 | `grpc_bind`, `grpc_ignore_headers`, `grpc_socket_keepalive`, `grpc_ssl_certificate_cache`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_password_file`, `grpc_ssl_session_reuse` |
-| 9 | FastCGI residual forms | 32 | `fastcgi_bind`, `fastcgi_buffer_size`, `fastcgi_buffers`, `fastcgi_busy_buffers_size`, `fastcgi_cache`, `fastcgi_cache_background_update`, `fastcgi_cache_bypass`, `fastcgi_cache_key`, `fastcgi_cache_lock`, `fastcgi_cache_lock_age`, `fastcgi_cache_lock_timeout`, `fastcgi_cache_max_range_offset`, `fastcgi_cache_methods`, `fastcgi_cache_min_uses`, `fastcgi_cache_path`, `fastcgi_cache_revalidate`, `fastcgi_cache_use_stale`, `fastcgi_cache_valid`, `fastcgi_catch_stderr`, `fastcgi_force_ranges`, `fastcgi_ignore_client_abort`, `fastcgi_ignore_headers`, `fastcgi_limit_rate`, `fastcgi_max_temp_file_size`, `fastcgi_no_cache`, `fastcgi_pass_request_body`, `fastcgi_send_lowat`, `fastcgi_socket_keepalive`, `fastcgi_store`, `fastcgi_store_access`, `fastcgi_temp_file_write_size`, `fastcgi_temp_path` |
-| 10 | uWSGI residual forms | 44 | `uwsgi_bind`, `uwsgi_buffer_size`, `uwsgi_buffers`, `uwsgi_busy_buffers_size`, `uwsgi_cache`, `uwsgi_cache_background_update`, `uwsgi_cache_bypass`, `uwsgi_cache_key`, `uwsgi_cache_lock`, `uwsgi_cache_lock_age`, `uwsgi_cache_lock_timeout`, `uwsgi_cache_max_range_offset`, `uwsgi_cache_methods`, `uwsgi_cache_min_uses`, `uwsgi_cache_path`, `uwsgi_cache_revalidate`, `uwsgi_cache_use_stale`, `uwsgi_cache_valid`, `uwsgi_force_ranges`, `uwsgi_ignore_client_abort`, `uwsgi_ignore_headers`, `uwsgi_limit_rate`, `uwsgi_max_temp_file_size`, `uwsgi_no_cache`, `uwsgi_pass_request_body`, `uwsgi_socket_keepalive`, `uwsgi_ssl_certificate`, `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_certificate_key`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_name`, `uwsgi_ssl_password_file`, `uwsgi_ssl_protocols`, `uwsgi_ssl_server_name`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_trusted_certificate`, `uwsgi_ssl_verify`, `uwsgi_ssl_verify_depth`, `uwsgi_store`, `uwsgi_store_access`, `uwsgi_temp_file_write_size`, `uwsgi_temp_path` |
-| 11 | SCGI residual forms | 30 | `scgi_bind`, `scgi_buffer_size`, `scgi_buffers`, `scgi_busy_buffers_size`, `scgi_cache`, `scgi_cache_background_update`, `scgi_cache_bypass`, `scgi_cache_key`, `scgi_cache_lock`, `scgi_cache_lock_age`, `scgi_cache_lock_timeout`, `scgi_cache_max_range_offset`, `scgi_cache_methods`, `scgi_cache_min_uses`, `scgi_cache_path`, `scgi_cache_revalidate`, `scgi_cache_use_stale`, `scgi_cache_valid`, `scgi_force_ranges`, `scgi_ignore_client_abort`, `scgi_ignore_headers`, `scgi_limit_rate`, `scgi_max_temp_file_size`, `scgi_no_cache`, `scgi_pass_request_body`, `scgi_socket_keepalive`, `scgi_store`, `scgi_store_access`, `scgi_temp_file_write_size`, `scgi_temp_path` |
-| 12 | memcached residual forms | 4 | `memcached_bind`, `memcached_buffer_size`, `memcached_gzip_flag`, `memcached_socket_keepalive` |
-| | **total** | **172** | |
+| 2 | module-sized functional modules | 17 | `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`, `ancient_browser`, `ancient_browser_value`, `modern_browser`, `modern_browser_value`, `random_index`, `degradation`, `degrade`, `slice` |
+| 3 | HTTP/2 DATA chunking | 1 | `http2_chunk_size` |
+| 4 | OCSP dynamic fetch / refresh / verification | 6 | `ssl_stapling`, `ssl_stapling_verify`, `ssl_trusted_certificate`, `stream:ssl_stapling`, `stream:ssl_stapling_verify`, `stream:ssl_trusted_certificate` |
+| 5 | stream advanced gaps | 18 | `proxy_protocol_timeout`, `pass`, `server_name`, `proxy_bind`, `proxy_half_close`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_requests`, `proxy_responses`, `proxy_download_rate`, `proxy_upload_rate`, `proxy_ssl`, `proxy_ssl_certificate`, `proxy_ssl_certificate_key`, `proxy_ssl_name`, `proxy_ssl_server_name`, `proxy_ssl_verify`, `proxy_ssl_trusted_certificate` (all `stream:`) |
+| 6 | gRPC residual forms | 8 | `grpc_bind`, `grpc_socket_keepalive`, `grpc_ssl_certificate_cache`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_password_file`, `grpc_ssl_session_reuse` |
+| 7 | FastCGI residual forms | 6 | `fastcgi_catch_stderr`, `fastcgi_ignore_client_abort`, `fastcgi_max_temp_file_size`, `fastcgi_send_lowat`, `fastcgi_temp_file_write_size`, `fastcgi_temp_path` |
+| 8 | uWSGI residual forms | 11 | `uwsgi_ignore_client_abort`, `uwsgi_max_temp_file_size`, `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_password_file`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_verify_depth`, `uwsgi_temp_file_write_size`, `uwsgi_temp_path` |
+| 9 | SCGI residual forms | 4 | `scgi_ignore_client_abort`, `scgi_max_temp_file_size`, `scgi_temp_file_write_size`, `scgi_temp_path` |
+| 10 | mail module residuals | 23 | `auth_http_pass_client_cert`, `imap_capabilities`, `pop3_capabilities`, `smtp_capabilities`, `resolver`, `resolver_timeout`, `set_real_ip_from`, `ssl_certificate_compression`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth` (all `mail:`) |
+| | **total** | **95** | **sum proof: 1 + 17 + 1 + 6 + 18 + 8 + 6 + 11 + 4 + 23 = 95** |
 
-### 1.4 The 64 Out-Of-Profile Directives (Exact)
+`open_file_cache`, `open_file_cache_min_uses` and `open_file_cache_valid` are **not** in
+the 95: the audit records them as `runtime-owned` (three of the 147). They are a
+performance cache with no client-visible response contract; the runtime owns static-file
+open/caching policy. §4.6 explains why no code is planned.
 
-All 64 carry catalog classification `excluded` and PRD §4 as authority. They are listed
-here by module; the [audit ledger](2026-10-30-nginx-directive-by-directive-audit.md)
-§2 (`mail` group and the two excluded HTTP modules) is authoritative for each row.
+### 1.4 The 13 Out-Of-Profile Directives (Exact)
+
+All carry catalog classification `excluded` and PRD §4 as authority; the audit decision is
+`out-of-profile` for each.
 
 | Group | Module | Rows | Directives |
 | --- | --- | ---: | --- |
-| mail | `ngx_mail_module` | 1 | `mail` |
-| mail | `ngx_mail_core_module` | 9 | `error_log`, `listen`, `max_errors`, `protocol`, `resolver`, `resolver_timeout`, `server`, `server_name`, `timeout` |
-| mail | `ngx_mail_ssl_module` | 20 | `ssl_certificate`, `ssl_certificate_compression`, `ssl_certificate_key`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_protocols`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`, `starttls` |
-| mail | `ngx_mail_auth_http_module` | 4 | `auth_http`, `auth_http_header`, `auth_http_pass_client_cert`, `auth_http_timeout` |
-| mail | `ngx_mail_proxy_module` | 7 | `proxy_buffer`, `proxy_pass_error_message`, `proxy_protocol`, `proxy_smtp_auth`, `proxy_timeout`, `proxy_xclient`, `xclient` |
-| mail | `ngx_mail_smtp_module` | 4 | `smtp_auth`, `smtp_capabilities`, `smtp_client_buffer`, `smtp_greeting_delay` |
-| mail | `ngx_mail_imap_module` | 3 | `imap_auth`, `imap_capabilities`, `imap_client_buffer` |
-| mail | `ngx_mail_pop3_module` | 2 | `pop3_auth`, `pop3_capabilities` |
-| mail | `ngx_mail_realip_module` | 1 | `set_real_ip_from` (mail context) |
 | http | `ngx_http_geoip_module` | 5 | `geoip_city`, `geoip_country`, `geoip_org`, `geoip_proxy`, `geoip_proxy_recursive` |
 | stream | `ngx_stream_geoip_module` | 3 | `geoip_city`, `geoip_country`, `geoip_org` |
 | http | `ngx_http_perl_module` | 4 | `perl`, `perl_modules`, `perl_require`, `perl_set` |
 | core | `ngx_core_module` | 1 | `load_module` |
-| | **total** | **64** | |
+| | | **13** | **sum proof: 8 GeoIP + 4 Perl + 1 load_module = 13** |
 
-### 1.5 Context Rows (Not Backlog, For Completeness)
+HTTP/3 and QUIC are a separate profile question: the `ngx_http_v3_module` rows
+(`http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`,
+`quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`) plus
+`events:quic_bpf` are **9 `unsupported-fail-closed`** rows, not part of the 13 and not part
+of the 95. See §5.3.
 
-- **145 `fail-closed`**: rejected at materialization and *not planned* in the declared
-  profile. They include the content-transform module families (`image_filter`, `ssi`,
-  `xslt`, `mp4`, `flv`, `gunzip`, `early_hints`), the remaining HTTP `rewrite`
-  internals (`if`, `break`, `rewrite_log`, `uninitialized_variable_warn`), `limit_except`,
-  `satisfy`, `aio`, `post_action`, `limit_rate`, most `proxy_*` cache-lock/store/SSL
-  knobs (31 rows), HTTP/2 `http3/QUIC` (8+1), and stream `ssl_certificate_cache/crl/
-  password_file/conf_command/ocsp/ech/alpn/handshake_timeout/reject_handshake/session_ticket_key/
-  stapling_responder` (14). Several of these are technically implementable; they are
-  outside the declared required surface, so promoting any of them is a **requirement
-  decision**, not a missing-code decision. Full row list: audit ledger §2.
-- **143 `runtime-owned`**: no client-visible behavior (process/event-loop/buffer/TLS-
-  default/logging/upstream-policy ownership). Not work.
-- **17 `security-difference`**: intentionally stricter (e.g. hop-by-hop stripping where
-  nginx 1.29.6 forwards, `nosniff` default). Not work; keep the difference documented.
+### 1.5 Wave Completion (249 Directives)
 
-### 1.6 Findings From The Recomputation
+Seventeen waves landed 249 directives, all `executable` with verified evidence:
 
-- **F1 (latent silent-drop candidate, code defect class).** The typed config surface
-  declares source-address bind and socket keep-alive on the CGI-family resources:
-  `bindAddress`/`socketKeepalive` are in the config schema
-  ([config schema](../../specs/sdkwork.webserver.config.schema.json) lines 1451/1456, 1541/1546, 1693/1698)
-  and in the model ([model.rs](../../crates/sdkwork-webserver-core/src/config/model.rs)
-  `FastCgi`/`Memcached`/`CgiUpstream` `bind_address`/`socket_keepalive`, lines
-  1495/1499, 1541/1545, 1579/1583), and validation reasons about them for unix targets
-  ([validate.rs](../../crates/sdkwork-webserver-core/src/config/validate.rs), the `bindAddress`/unix check),
-  **but no adapter consumes them** ([cgi_upstream.rs](../../crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs)
-  never reads `bind_address`/`socket_keepalive`; the only consumer of `bind_address` in
-  the gateway is the unrelated provider-event ingress). This is the same defect class as
-  the two manifest defects fixed in Wave 2 (`proxyConnectTimeout*`, `chainFile`): a
-  declared key that is silently dropped. The 7A/7D waves must either consume the fields
-  (`socket2` is already a gateway dependency) or remove them from schema/model and fail
-  closed. **Worktree note:** while this report was being written, the in-flight 7A code
-  wave was observed wiring `fastcgi_bind`/`fastcgi_socket_keepalive` through a shared
-  connector (`cgi_upstream.rs` + `mapping.rs`), i.e. exactly the recommended resolution;
-  re-verify at commit and apply the same wiring to `uwsgi_*`/`scgi_*`/`memcached_*`/`grpc_*`
-  in their waves.
-- **F2 (decision consistency across protocol families).** Equivalent nginx semantics are
-  classified differently depending on the module: `proxy_bind`, `proxy_socket_keepalive`,
-  `proxy_limit_rate`, `proxy_cache_lock*`, `proxy_ignore_headers`, `proxy_store*` are
-  *fail-closed* (not planned), while the same sub-family under
-  `fastcgi_*`/`uwsgi_*`/`scgi_*`/`grpc_*`/`memcached_*` is *backlog*; and
-  `proxy_temp_path` is *accepted-unenforced* while `fastcgi_temp_path`/`uwsgi_temp_path`/
-  `scgi_temp_path` are *rejected*. Closing 7A-7D without aligning these decisions will
-  re-create the same inconsistency in the opposite direction. Recommendation: the
-  residual toolkit defines one decision per semantic class (prefer the HTTP-proxy
-  precedent) and the Lead re-syncs the catalog/audit once, rather than letting each
-  family choose.
-- **F3 (profile-boundary drift, HTTP/3).** PRD §4 lists "Mail proxy and HTTP/3 (QUIC)"
-  as excluded, and the catalog marks mail `excluded` (51), but all 8 `ngx_http_v3_module`
-  rows plus `events:quic_bpf` are `unsupported-fail-closed` (9), i.e. the same profile
-  exclusion is encoded as two different decisions. Before an HTTP/3 wave this must be
-  made consistent, otherwise the counter movement is unpredictable.
-- **F4 (gap-catalog note lag).** The [nginx-gap.catalog.json](../../specs/nginx-gap.catalog.json) notes still quote earlier
-  counts (e.g. "203 executable / 171 accepted-unenforced / 306 fail-closed / 64 excluded")
-  while the committed catalog is 203/170/307/64; and `tls.ocsp-*` notes pre-date the
-  static-stapling wave (the static `ssl_stapling_file` form executes, gap catalog row
-  `tls.ocsp-static-stapling` is `partial`). The Lead-owned catalog regeneration should
-  refresh these notes; this report does not edit them.
-- **F5 (mail substrate state).** [sdkwork-webserver-mail-protocol](../../crates/sdkwork-webserver-mail-protocol) is present and
-  green (45 tests: 37 lib + 8 integration) with POP3/IMAP/SMTP dialog state machines,
-  SASL PLAIN/LOGIN, STARTTLS boundaries, dot-stuffing, XCLIENT/PROXY v1, frontend
-  transition table and backend relay helpers. There is **no** mail listener plane in the
-  gateway data plane (`data_plane/mod.rs` has no mail module), and no mail model /
-  materializer. That is exactly the wiring gap.
-- **F6 (evidence grade).** All completed waves are backed by the differential harnesses
-  and/or integration tests; 82 executable rows were spot-checked by the audit. New waves
-  must cite **behavioral** evidence (a differential case or a wire/integration test),
-  not only "materializes into a model field", or the audit will record a weak citation.
+| Wave | Directives | State |
+| --- | ---: | --- |
+| wave 1 | 5 | done - map, MIME `types`/`default_type`, `gzip_static`, `gzip_vary` |
+| wave 2 | 6 | done - redirect construction, limit status codes, `max_ranges`, chain files, typed-TOML maps |
+| wave 2b | 9 | done - proxy response-header/cookie policy, `internal`, `merge_slashes`, header acceptance |
+| wave 3a | 6 | done - charset family header behavior, gzip refinements |
+| wave 3a-2 | 6 | done - autoindex family, `empty_gif`, `stub_status` |
+| wave 3b | 5 | done - HTTP/2 stream ceiling, `proxy_method`, stream allow/deny/return |
+| wave 4a | 3 | done - `geo`, `split_clients`, `valid_referers` |
+| wave 5 (upstream protocol) | 56 | done - FastCGI/uWSGI/SCGI/memcached + bounded memcached `set` |
+| wave 6 (gRPC) | 20 | done - h2 upstream client, headers/timeouts/buffer/retry/intercept, verified `grpc_ssl_*` |
+| stream/OCSP wave | 8 | done - stream limit/zone/dry-run/map/set/preread, static `ssl_stapling_file` |
+| wave 7A (CGI transport) | 8 | done - `*_bind`, `*_socket_keepalive` for all CGI/memcached transports |
+| wave 10 (rewrite/variable) | 1 | done - server/location `if` conditions over the bounded variable engine |
+| mail waves (9A/9B) | 27 | done - POP3/IMAP/SMTP proxy end-to-end (auth_http, login/relay, STARTTLS/implicit TLS) |
+| wave 7B (uWSGI upstream TLS) | 7 | done - `uwsgi_ssl_*` identity/verification |
+| wave 7C (CGI cache family) | 45 | done - FastCGI/uWSGI/SCGI `*_cache*` on the shared cache store |
+| wave 7D (protocol response policy) | 30 | done - CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body, memcached buffer/gzip-flag, gRPC ignore_headers |
+| wave 8 (subrequest engine) | 7 | done - `addition`, `auth_request`/`auth_request_set`, `mirror` on a one-level bounded engine |
+| **total** | **249** | **sum proof: 5+6+9+6+6+5+3+56+20+8+8+1+27+7+45+30+7 = 249** |
 
-## 2. Feasibility By Backlog Category
+## 2. Implemented Surface And Evidence
 
-### 2.1 HTTP/1 Framing Policy - `chunked_transfer_encoding` (1, class L)
+### 2.1 Differential Slices (6, 458 Cases) And The Production Gate
 
-**What nginx does.** With `chunked_transfer_encoding off` (http/server/location), a
-response whose body length is unknown is sent with `Connection: close` and no
-`Transfer-Encoding: chunked` (close-delimited body, HTTP/1.1 status line kept); the
-connection cannot be reused.
+Each slice renders one fixture twice (real nginx 1.29.6 oracle and the gateway) and compares
+the observable contract; every slice owns its committed oracle, pins `nginx/1.29.6`, and
+proves which implementation answered through an identity witness (`Server: nginx/1.29.6`
+vs no banner on the gateway).
 
-**Current state.** `accepted-unenforced` with a truthful diagnostic: the value has no
-effect because the pinned hyper HTTP/1.1 encoder chooses the framing.
-
-**Feasibility analysis (pinned dependency, verified in source).**
-`hyper` 1.12.0 `proto/h1/role.rs` (Server `encode`) picks the encoder as follows: an
-unknown-length response is `Encoder::close_delimited()` **only** when
-`msg.head.version == HTTP_10` or the method/status cannot be chunked (HEAD/1xx/204/304);
-otherwise it unconditionally writes `transfer-encoding: chunked`. There is no public
-builder knob for close-delimited HTTP/1.1 framing. Three workarounds exist, none of them
-faithful within the current stack:
-
-1. **Bounded buffering to synthesize `Content-Length`.** Works when the body fits the
-   configured buffer ceiling; a streaming/oversized body would still have to chunk. This
-   is an opt-in partial behavior, not parity, and it contradicts the runtime's streaming
-   proxy model.
-2. **Response version HTTP/1.0.** Setting the response version to `HTTP_10` makes hyper
-   use `close_delimited`, but the status line becomes `HTTP/1.0`, which is a wire-visible
-   difference from nginx (nginx answers `HTTP/1.1` + `Connection: close`).
-3. **Patch/vendor hyper** (or replace the h1 response path). A small `role.rs` change can
-   honor an explicit "close-delimited" marker; carrying a vendored hyper via
-   `[patch.crates-io]` is a supply-chain and maintenance cost (security updates, audit
-   evidence, Cargo.lock pinning), and a bespoke h1 response writer means owning response
-   framing/keep-alive semantics outside hyper.
-
-**Verdict.** Blocked by the pinned dependency for faithful parity. Recommended close:
-keep the accepted-unenforced diagnostic, state the limitation in the operator matrix, and
-track an upstream hyper feature request (opt-in close-delimited HTTP/1.1 response). If
-the Lead wants a product answer now, the bounded-buffering partial (1) is the only
-defensible one; do not ship the HTTP/1.0 trick. **Effort: L** (pin only; S upstream patch
-+ L vendoring/maintenance if chosen).
-
-### 2.2 Re-entrant Subrequest Engine - 7 Rows (class L, largest single item)
-
-`add_before_body`, `add_after_body`, `addition_types`, `auth_request`,
-`auth_request_set`, `mirror`, `mirror_request_body`.
-
-**What nginx does.** A filter/access phase issues a *subrequest*: an internal request
-that re-runs location selection and the content phase for another URI (same server
-block), whose response is either concatenated into the main body (addition), used as an
-authorization decision (auth_request: 2xx allow, 401/403 deny, other -> 500), or
-fire-and-forget (mirror). `auth_request_set` copies a variable from the auth subrequest
-response (e.g. `$upstream_http_x_user`) into the main request; `mirror_request_body on`
-tees the client body to the mirror.
-
-**Why it is not just another handler.** The current engine performs only *internal
-redirects* (rewrite `last`, error_page, one-hop named locations), all of which continue
-the same request through the existing content dispatch. A subrequest is a **nested
-request**: it needs its own route selection, its own headers/method/body, its own
-response, and its own bounded lifecycle, while sharing the client connection, the config
-generation, and the outer request's identity/logging.
-
-**Bounded design sketch.**
-- Extract the dispatch core of `route_admitted_request` in
-  [handler.rs](../../crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs) into an
-  internal request executor that takes a synthetic `http::Request<Body>`, the selected
-  config generation, the scheme/authority/client facts, and a depth/cycle token — no
-  socket, no connection permits.
-- Budgets: max subrequest depth (nginx allows nesting; the product implementation should
-  allow depth 1 and reject deeper declarations/uses with a located diagnostic), max
-  subrequests per main request, per-subrequest timeout, bounded body buffers for
-  addition/mirror (reuse `limits.max_request_body_bytes` and add a response-side bound).
-- Phase semantics to specify and test: whether location gates (`allow`/`deny`,
-  `auth_basic`, `limit_req`, `limit_conn`) and `add_header` apply to the subrequest and
-  to the main response (nginx runs the access/rewrite phases for subrequests in its own
-  way; mirror/auth_request semantics differ). This spec must be written before code.
-- `auth_request`: subrequest response status -> main response mapping, `WWW-Authenticate`
-  forwarding, `auth_request_set` variable table (a small named result map threaded into
-  the response-variable expansion the runtime already has for `add_header`/`return`).
-- `mirror`: fire-and-forget with a bounded queue and a hard timeout; body tee is the
-  only place `mirror_request_body on` differs from `off`.
-- Additions: body concatenation requires the response body to be read to the end within
-  the bound; interacts with gzip/range (nginx applies the addition filter before gzip, so
-  content-length/ETag semantics change) — the wave must decide and test the interaction
-  matrix (static, proxy, return bodies).
-
-**Dependencies.** No new crates. Requires the dispatch refactor, a subrequest budget type
-in `config/model.rs` (declaration validation), mapping for the seven directives, and a
-new differential slice (`tests/nginx/differential-subrequest/` + manifest slice +
-orchestrator) proving addition/auth/mirror against nginx 1.29.6, plus depth/cycle unit
-tests. **Effort: L** (one wave, mostly `handler.rs` refactor + filter pipeline).
-
-### 2.3 Module-Sized Functional Modules - 17 Rows (class M, `slice` is L)
-
-| Module | Rows | What it needs | Effort |
+| Slice | Cases | Orchestrator / floor | What it proves |
 | --- | ---: | --- | --- |
-| `userid` | 9 | `$uid_got`/`$uid_set` variables, `uid` cookie generation (nginx: base64 of pid/start time/counter, `service`/`path`/`domain`/`expires`/`p3p`/`mark`/`flags`), response filter that sets the cookie and exposes the variables | M |
-| `browser` | 4 | `$modern_browser`/`$ancient_browser` UA classification from authored `modern_browser`/`ancient_browser` version lists (regex/family grammar), result variables consumed by existing variable expansion | M |
-| `random_index` | 1 | location handler: when the URI maps to a directory, pick a random regular file instead of `index` (bounded directory read; nginx sorts/indexes and picks randomly) | S |
-| `degradation` | 2 | `$degradation` variable and `degrade` handler triggered by an allocation threshold. nginx measures its own pool allocation; the Rust runtime must map this onto an explicit, documented memory-pressure signal (the existing `resource_pressure` controller is the natural source) and accept that the trigger metric differs | M (documented difference) |
-| `slice` | 1 | `slice <size>` splits a proxied response into cached range subrequests (`$slice_range`, cache key includes the range); requires the cache engine + range engine + upstream request coalescing. This is a cache feature, not a small module | L |
+| conditional-cache | 50 | [run-nginx-differential.mjs](../../tools/run-nginx-differential.mjs) / 50 | conditional requests (`If-None-Match`/`If-Modified-Since`), byte ranges, `expires`/`etag`/cache policy field by field |
+| differential-http | 274 | [run-nginx-differential-http.mjs](../../tools/run-nginx-differential-http.mjs) / 274 | broad HTTP surface: static/MIME/HEAD/ranges incl. multipart, routing/rewrite/`return`, response headers (`add_header` full semantics), `error_page`, gzip, allow/deny + `auth_basic`, `limit_req`/`limit_conn`, proxy URI splice/forwarded headers/hop-by-hop/upstream status, referer/geo/split_clients variables, autoindex, charset, addition/auth_request/mirror subrequests |
+| host-selection | 39 | [run-nginx-differential-host.mjs](../../tools/run-nginx-differential-host.mjs) / 39 | virtual-host selection precedence (exact/leading+trailing wildcard/dot-prefix/regex authored order/default), bounded named locations for `try_files`/`error_page` |
+| differential-protocols | 77 | [run-nginx-differential-protocols.mjs](../../tools/run-nginx-differential-protocols.mjs) / 77 | FastCGI/uWSGI/SCGI parameter+body+header+intercept+retry forms, memcached hit/miss, gRPC unary/headers/retry/TLS; cache family, response policy (store/rate/ranges), uWSGI upstream TLS (trusted/mTLS/untrusted) |
+| differential-stream | 9 | [run-nginx-differential-stream.mjs](../../tools/run-nginx-differential-stream.mjs) / 9 | stream variable engine (`set`/`map`/`$ssl_preread_server_name`), ordered access phase, literal `return`, `limit_conn` both directions, proxied byte flow |
+| differential-mail | 9 | [run-nginx-differential-mail.mjs](../../tools/run-nginx-differential-mail.mjs) / 9 | POP3/IMAP/SMTP proxy: client byte transcript, every backend line and every `auth_http` request header for login/relay, AUTH LOGIN dialogs, auth failures, SMTP `AUTH`+XCLIENT, STARTTLS/implicit TLS |
+| **total** | **458** | **sum proof: 50 + 274 + 39 + 77 + 9 + 9 = 458** | |
 
-**Dependencies.** `userid` needs a response-filter hook and a per-process cookie
-signing/identity policy (nginx's cookie is not signed; the runtime should at least keep
-the same wire format). `browser` needs the variable vocabulary extended and a UA parser
-(bounded; no new crate strictly required). `degradation` needs a policy decision on the
-pressure signal. `slice` depends on the proxy cache semantics being extended (overlaps
-with 7A cache toolkit). **Effort: M together (17 rows, one or two waves), with `slice`
-as a separate L if required.**
+Plus the in-process behavioural corpus (full-surface, 76 cases) and the production-config
+gate: the committed api.birdcoder.com nginx snapshot (33 files, nginx 1.28.0) materializes
+through `validate-nginx` with an operator document-root allowlist and reports
+**`virtualHosts=41 listeners=4 resources=150 upstreams=88 skipped=0`** — i.e. the whole
+real-world tree loads with no skipped site and no fail-closed marker.
 
-### 2.4 HTTP/2 DATA Chunking - `http2_chunk_size` (1, class M)
+### 2.2 What Landed After v1
 
-**What nginx does.** Caps the size of body chunks sliced into HTTP/2 DATA frames
-(default 8k); a smaller value raises frame count/overhead.
+- **Wave 8 subrequest engine** (7 rows): one-level bounded re-entrant dispatch now backs
+  `add_before_body`/`add_after_body`/`addition_types`, `auth_request`/`auth_request_set`
+  and `mirror`/`mirror_request_body`; differential-http grew 259 -> 274 cases.
+- **Mail 9A/9B** (27 rows): config plane (`MailConfig`/`MailServerConfig`, schema,
+  validation, typed TOML), nginx `mail {}` materialization, `FrontendSession` plaintext
+  dialog listeners with timeout/`so_keepalive`/inbound PROXY v1, `auth_http` exchange,
+  STARTTLS/implicit TLS, XCLIENT and backend relay; mail differential 9/9; mail is now in
+  profile.
+- **Protocol response policy (7D)** and **CGI cache family (7C)**: the shared cache store
+  and response-policy seam now also serve the CGI family, which is the foundation the
+  remaining temp-spool and `ignore_client_abort` rows build on.
+- **uWSGI upstream TLS (7B)**: the upstream TLS policy builder is now proven on a second
+  protocol family, which is directly reusable for the stream upstream-TLS rows in §4.5.
 
-**Current catalog state.** `unsupported-fail-closed`, described as "hyper/h2 API gap".
+## 3. Feasibility Rules Used Below
 
-**Feasibility analysis (verified in pinned source).** There is no direct knob: the pinned
-`hyper` 1.12.0 h2 server forwards each body frame chunk through
-`h2::SendStream::send_data` (`proto/h2/mod.rs`, `PipeToSendStream::poll`), and `h2`
-0.4.20 splits a chunk further only for peer `SETTINGS_MAX_FRAME_SIZE`/flow control. That
-means a **response-body adapter that yields at most N bytes per data frame** realizes
-nginx's observable contract (DATA-frame size <= `http2_chunk_size`). h2 may split a chunk
-further; it does not merge distinct `send_data` calls in the server path. Residual risk:
-the exact frame-size distribution must be proven by a raw HTTP/2 wire test (the repo has
-[http2_tuning.rs](../../crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs) for SETTINGS; a
-DATA-frame test needs a small frame-capturing client).
+- **Implementable** = a bounded form can execute and the unsupported forms fail closed with
+  a located diagnostic; requires model + materializer + data-plane path + behavioral
+  evidence (a differential case or a wire/integration test). "Materializes into a model
+  field" alone is not evidence.
+- **Runtime-owned** = the value has no client-visible contract the nginx documentation
+  promises; the runtime owns the subsystem by design. Close by decision, not by code.
+- **Blocked by the pinned dependency** = the contract is real but the pinned crate cannot
+  express it; the row stays fail-closed/accepted-unenforced with the blocker diagnostic and
+  a named upstream fix path.
+- **Not implementable in this product** = the feature requires an embedded interpreter, a
+  foreign C ABI, or a proprietary implementation with no OSS oracle, and would contradict
+  the standalone memory-safe edge model or PRD §4.
 
-**Verdict.** Implementable without an upstream change; the catalog's "blocked" wording
-should be revised to "no direct knob; body-sizing adapter executes the bounded
-semantics". **Effort: M** (body adapter + wire test + config mapping).
+## 4. The 95 Behavior-Gap Rows, Category By Category
 
-### 2.5 Static Open-File Cache - 3 Rows (class S; recommend runtime-owned)
+### 4.1 HTTP/1 Framing Policy - `chunked_transfer_encoding` (1) - **blocked by pinned hyper**
 
-`open_file_cache`, `open_file_cache_min_uses`, `open_file_cache_valid`.
+**nginx contract (probe).** With `chunked_transfer_encoding on` (default) an unknown-length
+HTTP/1.1 response is sent with `Transfer-Encoding: chunked`. With `off` the same response is
+close-delimited: status line stays `HTTP/1.1`, no `Transfer-Encoding`, and the server adds
+`Connection: close` (the connection cannot be reused).
 
-**What nginx does.** Caches open file descriptors, file metadata and directory listings
-so a hot static path avoids `open`/`stat`. The contract is deliberately staleness-
-tolerant (nginx documents that cached errors/metadata may be stale; `open_file_cache`
-is a performance cache, not a correctness feature). The response bytes are unchanged.
+**Pinned stack.** `hyper` **1.12.0** `proto/h1/role.rs` selects the server encoder:
+an unknown-length response uses `Encoder::close_delimited()` only for HTTP/1.0 or for
+methods/statuses that cannot be chunked (HEAD/1xx/204/304); otherwise it unconditionally
+writes `transfer-encoding: chunked`. There is no public knob to request close-delimited
+HTTP/1.1 framing. The three local workarounds all change the contract: (a) buffer to
+synthesize `Content-Length` (breaks unbounded/streaming responses), (b) answer HTTP/1.0
+(wire-visible version change — do not ship), (c) vendor/patch hyper (supply-chain +
+maintenance cost for response framing/keep-alive ownership).
 
-**Verdict.** No client-visible behavior; the runtime already owns the open policy and its
-file path walk (`data_plane/static_path.rs`). Implementing an fd cache is possible (S:
-LRU keyed by device+inode with validity/min-uses), but it adds unsafe-ish OS-state
-management and memory for a tuning-only gap. **Recommendation: keep runtime-owned,
-document the difference in the operator matrix, and move the three rows out of the
-backlog by decision (Lead catalog action), not by new code.** If implemented anyway:
-S, and it must never cache errors or serve differently from a fresh `open`.
+**Verdict: blocked by the pinned dependency.** Keep the truthful accepted-unenforced
+diagnostic; record the upstream feature request (opt-in close-delimited HTTP/1.1 response)
+and re-verify on any hyper bump. Effort: L only if a vendored encoder is chosen.
 
-### 2.6 OCSP Dynamic Fetch / Refresh / Verification - 6 Rows (class L; recommend defer)
+### 4.2 Module-Sized Functional Modules (17) - **15 implementable, 2 nginx Plus**
 
-`ssl_stapling`, `ssl_stapling_verify`, `ssl_trusted_certificate` (http) and the three
-`stream:` rows.
+| Module | Rows | Design sketch | Effort | Verdict |
+| --- | ---: | --- | --- | --- |
+| `userid` | 9 | Process-identity cookie (`uid`) generation with nginx's wire format + `$uid_got`/`$uid_set` variables; `name`/`domain`/`path`/`expires`/`p3p`/`flags`/`mark`/`service` knobs consumed by the response filter; reuses the existing response-header/variable seam | M | implementable |
+| `browser` | 4 | `$modern_browser`/`$ancient_browser` classification from authored `modern_browser`/`ancient_browser` version lists (family/version grammar) feeding the shared variable engine; bounded UA parser, no new crate required | M | implementable |
+| `random_index` | 1 | Location handler: for a directory request with no index, pick a random regular file from a bounded directory read (sorted set + random index) | S | implementable |
+| `slice` | 1 | Split a proxied response into cached range subrequests (`slice <size>`, `$slice_range` variable, cache key includes the range, range coalescing); builds on the landed shared cache store + range engine | M/L | implementable (cache-indexing work) |
+| `degradation`/`degrade` | 2 | nginx Plus module (`ngx_http_degradation_module`, no `--with-http_degradation_module` in the OSS reference build) keyed on nginx's own pool-allocation threshold: no OSS oracle exists to differential against, and the runtime's `resource_pressure` controller is a different (documented) signal | S by size, 0 by fidelity | **not implementable — nginx Plus only; close fail-closed with a Plus/Plus-oracle diagnostic** |
 
-**What already works.** Static stapling via `ssl_stapling_file`: the DER response is
-validated, carried into the certificate source and fed to rustls
-`CertifiedKey.ocsp`, proven on the wire by
-[tls_ocsp_stapling.rs](../../crates/sdkwork-api-webserver-standalone-gateway/tests/tls_ocsp_stapling.rs)
-(gap-catalog row `tls.ocsp-static-stapling` is `partial`).
+`degradation`/`degrade` appear in the 744-row inventory because the inventory is derived
+from nginx source tables, but the OSS reference binary does not build the module: there is
+no behavior to reproduce and no oracle to compare. The catalog/audit should move these two
+rows from `behavior-gap` to a fail-closed "not implementable (nginx Plus, no OSS oracle)"
+decision — Lead catalog action.
 
-**Why dynamic is not there.** rustls 0.23.46 exposes `CertifiedKey { cert, key, ocsp }`
-(`crypto/signer.rs`) — a static byte field. There is **no fetch, refresh, responder
-selection or OCSP-response verification API** in rustls (CRLs are supported for client
-and server verification via `with_crls`, but OCSP is not). A dynamic implementation
-needs: an HTTP fetch owner (reqwest is already a workspace dependency), OCSP response
-parsing/verification (a new crate, e.g. an `x509-ocsp` implementation; none is in the
-tree), a refresh schedule, a key-swap path (the layered certificate resolver supports
-atomic replacement, so no reload is strictly required), and a fallback policy for
-`ssl_stapling_verify on` (verify or serve without stapling).
+### 4.3 HTTP/2 DATA Chunking - `http2_chunk_size` (1) - **implementable M**
 
-`ssl_trusted_certificate` is separate and cheap: it is the trust store for client-cert
-verification and for OCSP verification. Wiring it into `ClientAuthConfig.caCertificateFiles`
-(both http and stream policies) reuses the cert loader and can execute as a bounded M
-item, independent of dynamic stapling. It is also the typed plane's `chainFile`
-counterpart already consumed by the certificate materializer.
+nginx caps the body bytes sliced into one HTTP/2 DATA frame (default 8k). The pinned
+`hyper` 1.12.0/h2 0.4.20 server path does not merge distinct `send_data` calls; it may only
+split further for peer `SETTINGS_MAX_FRAME_SIZE`/flow control. A bounded response-body
+wrapper that yields at most N bytes per frame therefore realizes the observable contract.
+Needs a raw-h2 frame-capturing wire test (the repo already proves SETTINGS publication in
+`tests/http2_tuning.rs`), a mapping knob, and a catalog wording fix from "blocked" to
+"body-sizing adapter". **Verdict: implementable M.**
 
-**Industry context.** Let's Encrypt ended its OCSP service in 2025 and moved to CRL/ARI;
-the declared fleet uses short-lived ACME certificates; nginx defaults `ssl_stapling off`.
-The client-visible value of dynamic stapling in this product is therefore bounded and
-shrinking.
+### 4.4 OCSP Dynamic Fetch / Refresh / Verification (6) - **blocked by pinned rustls**
 
-**Verdict.** `ssl_trusted_certificate` (http+stream): **M, implement**. Dynamic
-fetch/refresh/verify (4 rows): **L**, technically feasible only with a new verifier
-dependency and a refresh owner; recommended close as a documented intentional difference
-(declaration remains accepted-unenforced with the precise blocker diagnostic), not as
-code work. **Effort: M + defer.**
+Rows: `ssl_stapling`, `ssl_stapling_verify`, `ssl_trusted_certificate` (http) and the three
+`stream:` equivalents.
 
-### 2.7 Stream Advanced Gaps - 18 Rows (class M, `pass`/`server_name` push it to L)
+**What already works.** Static stapling via `ssl_stapling_file` is executable: the DER
+response is loaded into rustls `CertifiedKey.ocsp` and is wire-proven by
+`tests/tls_ocsp_stapling.rs` (the static form is *not* a gap).
+
+**Why dynamic is blocked.** rustls **0.23.46** exposes `CertifiedKey { cert, key, ocsp }`
+as static bytes; there is no fetch, refresh, responder-selection or OCSP-response
+verification API (CRLs are supported for verification, OCSP is not). A dynamic
+implementation needs an OCSP owner outside rustls: HTTP fetch (`reqwest` 0.13.5 is already
+a dependency), DER parse/verify (a new crate — none is in `Cargo.lock`), a refresh
+scheduler, and an atomic key-swap path. `ssl_trusted_certificate` is the trust store those
+verification paths would consume; wiring it alone is M but has no client-visible effect
+until verification exists.
+
+**Verdict: blocked by the pinned dependency M/L.** Keep the accepted-unenforced blocker
+diagnostic; recommended close as a documented intentional difference (Let's Encrypt ended
+OCSP service in 2025; the fleet uses short-lived ACME certificates; nginx defaults
+`ssl_stapling off`). If a future requirement needs it: add the verifier crate + refresh
+owner as one L wave.
+
+### 4.5 Stream Advanced Gaps (18) - **implementable M/L**
 
 | Sub-family | Rows | Path | Effort |
 | --- | ---: | --- | --- |
-| Upstream TLS client | 7 (`proxy_ssl`, `proxy_ssl_certificate`, `proxy_ssl_certificate_key`, `proxy_ssl_name`, `proxy_ssl_server_name`, `proxy_ssl_verify`, `proxy_ssl_trusted_certificate`) | Reuse [upstream_tls.rs](../../crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_tls.rs) (`build_upstream_tls_config`, already used by HTTP proxying) and `cgi_upstream.rs`; add stream upstream TLS fields to `StreamServerConfig`/`StreamTargetConfig` and a `tokio-rustls` client handshake in `stream_proxy.rs`. Keep the runtime's always-verified default unless the operator explicitly disables verification (documented stricter-than-nginx difference where nginx defaults `verify off`). | M |
-| Transport controls | 5 (`proxy_bind`, `proxy_half_close`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_protocol_timeout`) | `proxy_bind`/`SO_KEEPALIVE` via `socket2` (already a gateway dependency); half-close via `TcpStream::shutdown` after EOF on one direction; retry budget reuses the existing HTTP `UpstreamRetryConfig` model; `proxy_protocol_timeout` bounds the inbound PROXY-header read (the HTTP listener plane already owns an inbound PROXY parser — mirror it for stream listeners). | S/M |
-| Rate/counting | 4 (`proxy_download_rate`, `proxy_upload_rate`, `proxy_requests`, `proxy_responses`) | Token-bucket throttling in the stream copy loop (reuse `limit_req` math) and response/request counters exposed to the existing stream metrics (`sdkwork-api-webserver-standalone-gateway/src/data_plane/metrics.rs`); nginx's `proxy_requests`/`proxy_responses` gate connection lifetime. | S/M |
-| Routing | 2 (`pass`, `server_name`) | `server_name` makes a stream listener select a virtual server by SNI/preread value — the model currently materializes one stream server per listen; needs a per-listener stream server table plus preread-based selection. `pass <addr>` hands a connection to another stream server's address (nginx 1.25.5 `ngx_stream_pass_module`); implement as an internal dispatch to the target listener's TCP socket (bounded, no loop) or a direct in-process handoff. These two are the only structural items. | L |
+| Upstream TLS client | 7 (`proxy_ssl`, `_certificate`, `_certificate_key`, `_name`, `_server_name`, `_verify`, `_trusted_certificate`) | Reuse the now-proven upstream TLS policy builder (HTTP proxy + uWSGI 7B) and add a `tokio-rustls` client handshake in `stream_proxy.rs`; verify by default unless the operator explicitly disables it (documented stricter-than-nginx default) | M |
+| Transport controls | 5 (`proxy_bind`, `proxy_half_close`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_protocol_timeout`) | `socket2` bind (already a gateway dependency); half-close via per-direction `shutdown`; retry budget reuses the HTTP `UpstreamRetryConfig`; `proxy_protocol_timeout` bounds an inbound PROXY v1 read using the mail substrate's `ProxyProtocolV1` parser (already committed) | S/M |
+| Rate / counters | 4 (`proxy_download_rate`, `proxy_upload_rate`, `proxy_requests`, `proxy_responses`) | Token-bucket throttling in the stream copy loop (reuse limit_req math) and per-connection counters in the stream metrics; `proxy_requests`/`proxy_responses` gate connection lifetime | S/M |
+| Routing | 2 (`pass`, `server_name`) | `server_name` needs a per-listener stream-server table selected from the preread SNI; `pass <addr>` needs bounded in-process handoff to another stream listener (no loop). Only structural rows | L |
 
-**Dependencies.** No new crates for the transport/rate families. `server_name`/`pass`
-need a model/selection design and new [differential-stream](../../tests/nginx/differential-stream) cases; the TLS
-family needs stream client-identity configuration. Evidence: extend the existing
-[differential-stream](../../tests/nginx/differential-stream) slice (currently 9/9) and `tests/stream_proxy.rs` +
-`tests/tls_ocsp_stapling.rs` patterns. **Effort: M for 16 rows + L for the 2 routing
-rows; plan one L wave.**
+Evidence: extend `tests/nginx/differential-stream` (9/9) with TLS-upstream, PROXY-header,
+half-close/rate/counter and SNI-routing cases; integration tests in `tests/stream_proxy.rs`.
+**Verdict: implementable; one L wave (2 structural rows) or M + L split.**
 
-### 2.8 Protocol Residual Families - 119 Rows (Waves 7A-7D)
+### 4.6 Static Open-File Cache (3) - **not a gap (runtime-owned)**
 
-This is the largest surface (110 of the 119 rows are the four CGI/memcached families;
-9 are gRPC). The queued **7A-7D** split referenced by the Lead is pinned here explicitly
-so the counter effects are computable:
+`open_file_cache`, `open_file_cache_min_uses`, `open_file_cache_valid` are audit
+`runtime-owned`, not behavior-gap. nginx documents the cache as a performance cache with
+deliberately staleness-tolerant metadata; response bytes are unchanged and the runtime
+already owns the static-file open/walk policy (`data_plane/static_path.rs`). Implementing an
+fd cache would add OS-state management for a tuning-only knob. **Verdict: no work; keep the
+runtime-owned decision and the operator-matrix note.** (`open_file_cache_errors` and
+`open_file_cache_events` are already fail-closed with the same rationale.)
 
-| Wave | Family | Rows | Notes |
-| --- | --- | ---: | --- |
-| 7A | FastCGI residual | 32 | reference family; builds the shared toolkit |
-| 7B | uWSGI residual | 44 | largest; reuses toolkit **and** the upstream TLS builder (uWSGI is the only CGI family with an upstream TLS family) |
-| 7C | SCGI residual | 30 | toolkit reuse only |
-| 7D | memcached + gRPC residual | 13 (4 + 9) | small socket/response knobs + gRPC TLS-library tail |
-| | **total** | **119** | |
+### 4.7 Protocol Residual Forms (29: FastCGI 6, uWSGI 11, SCGI 4, gRPC 8)
 
-#### 2.8.1 The Shared Residual Toolkit (build once in 7A)
+The landed protocol adapters are complete for their implemented forms; the residual rows
+split into five semantic classes, which is why one shared toolkit closes them:
 
-The same semantic classes repeat across the families (the TLS-library class only exists
-in uWSGI and gRPC); implementing them per family would quadruple the work and the review
-surface. Build one toolkit in 7A, then map it into 7B-7D:
+| Class | Rows | Verdict | Path |
+| --- | ---: | --- | --- |
+| `*_ignore_client_abort` (FastCGI/uWSGI/SCGI) | 3 | implementable S | adapter flag: keep reading the upstream response when the client disconnects (bounded by response limits) rather than cancelling |
+| `grpc_bind`, `grpc_socket_keepalive` | 2 | implementable S | the shared transport connector already implements IP-literal bind + `SO_KEEPALIVE` for the CGI family; wire the same helper into the gRPC adapter |
+| Bounded temp-spool family (`*_max_temp_file_size`, `*_temp_file_write_size`, `*_temp_path` for FastCGI/uWSGI/SCGI) | 9 | implementable L | New bounded temp-spool subsystem: per-worker spool root confinement (operator-configured root, no `..`/symlink writes), write/rename/cleanup lifecycle, disk-pressure fail-closed policy, and response streaming from the spool. This is the one new subsystem in the in-profile backlog |
+| Logging/platform no-op (`fastcgi_catch_stderr`, `fastcgi_send_lowat`) | 2 | runtime-owned (close by decision) | the runtime is a protocol client with no child-process stderr channel (`catch_stderr`); `SO_SNDLOWAT` is not a portable, meaningful TCP tuning knob on supported platforms. Keep fail-closed/located diagnostic |
+| pinned-rustls TLS knobs: gRPC `ssl_ciphers`, `ssl_conf_command`, `ssl_crl`, `ssl_password_file`, `ssl_session_reuse`; uWSGI the same five + `ssl_verify_depth` | 11 | blocked by pinned rustls (close fail-closed) | OpenSSL cipher strings / CRL / session-reuse / encrypted-key / chain-depth policy have no faithful rustls 0.23.46 mapping at the pinned API surface; `ssl_conf_command` has no rustls equivalent at all |
+| config-time material cache: `uwsgi_ssl_certificate_cache`, `grpc_ssl_certificate_cache` | 2 | runtime-owned | nginx caches loaded certificate files; the runtime loads at config compile/rotation, so the value has no client-visible effect |
 
-| Toolkit piece | Rows per family | Implementation path | Effort |
-| --- | --- | --- | --- |
-| Socket transport: `*_bind`, `*_socket_keepalive`, `*_send_lowat` | 2-3 | `socket2` already declared in the gateway; the model fields (`bind_address`, `socket_keepalive`) exist but are unconsumed — wire them in the shared connector (see F1) | S |
-| Header/response buffer size: `*_buffer_size` | 1 | bounded header/body read buffer in the adapter; the adapters already buffer bounded responses | S |
-| Cache policy: `*_cache*` (15 per big family: valid/path/key/methods/min_uses/bypass/no_cache/use_stale/revalidate/background_update/lock*/max_range_offset) | 15 | Reuse and generalize the existing shared proxy cache (`crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cache/` + `ProxyCacheConfig` in the model) for the CGI response stream; per-directive knobs are incremental once the adapter is cache-capable. `lock`/`background_update`/`stale` add a single-flight + refresh policy. | M/L |
-| Store-to-root: `*_store`, `*_store_access` | 2 | Bounded async write of the upstream response into the static root path mapped from the request URI (nginx `store`), with no-symlink/no-`..` writes, atomic temp-file-then-rename, and `store_access` -> file mode mapping. Security-reviewed path; client-visible (serves future requests from the stored file). | M |
-| Response/request knobs: `*_ignore_headers`, `*_ignore_client_abort`, `*_pass_request_body`, `*_force_ranges`, `*_limit_rate`, `*_catch_stderr` | 5-6 | `ignore_headers` reuses `ProxyResponsePolicyConfig`; `limit_rate` reuses the stream/limit token bucket; `pass_request_body`/`ignore_client_abort` are flags in the adapter/retry path; `force_ranges` toggles range processing on a buffered response; `catch_stderr` only matters for a process-backed FastCGI (the runtime is a protocol client, so "stderr" has no channel — close as documented difference if promoted). | S/M |
-| Retry: `*_next_upstream_timeout`, `*_next_upstream_tries` | 0-2 | The adapters already use the HTTP upstream retry policy; these two map onto bounded retry budget/timeout fields. | S |
-| Temp-spool buffering: `*_buffers`, `*_busy_buffers_size`, `*_max_temp_file_size`, `*_temp_file_write_size`, `*_temp_path` | 5 | **Not implementable as nginx semantics by design.** The runtime streams/buffers bounded responses and has no disk temp spool; adding one would own disk-exhaustion/cleanup semantics for a tuning knob with no byte-level client-visible effect. Recommended close as documented difference (runtime-owned), not code. | 0 (decision) |
-| TLS library knobs (uWSGI and gRPC only): `*_ssl_ciphers`, `*_ssl_conf_command`, `*_ssl_crl`, `*_ssl_password_file`, `*_ssl_session_reuse`, `*_ssl_certificate_cache`, `uwsgi_ssl_protocols` | 6-7 | See §2.8.2; most are implementable (rustls `CryptoProvider` cipher list, `with_crls`, resumption, `pkcs8` decryption for password files, TLS window for protocols); `ssl_conf_command` is not. | M with one blocked row per family |
+**Row check: 3 + 2 + 9 + 2 + 11 + 2 = 29.** The implementable delta is 14 rows
+(3 S + 2 S + 9 L); the other 15 close by documented decision (11 fail-closed on the pinned
+TLS stack + 4 runtime-owned).
 
-#### 2.8.2 Per-Wave Assignment And Verdict
+### 4.8 Mail Module Residuals (23) - **10 implementable, 1 bounded, 12 pinned-blocked**
 
-| Wave | Executable after wave | Recommended documented-difference moves | Remaining blocked | Effort |
-| --- | ---: | ---: | ---: | --- |
-| 7A FastCGI (32) | 27 (cache 15, socket 3, filter 6, buffer 1, store 2) | 5 spool rows | 0 | M |
-| 7B uWSGI (44) | 37 (7A toolkit + TLS identity 7 + TLS-library 5 of 7 + `uwsgi_ssl_protocols`) | 5 spool + `uwsgi_ssl_certificate_cache` (runtime-owned) | 1 (`uwsgi_ssl_conf_command`) | M/L |
-| 7C SCGI (30) | 25 (same as 7A) | 5 spool rows | 0 | M |
-| 7D memcached+gRPC (13) | 11 (memcached 4; gRPC bind/keepalive/ignore_headers + crl/password_file/session_reuse/ciphers 7) | `grpc_ssl_certificate_cache` (runtime-owned) | 1 (`grpc_ssl_conf_command`) | S/M |
-| **totals** | **100** | **17** | **2** | |
+The mail proxy is in profile with 27 executable directives and a 9-case real-nginx
+differential. The residuals:
 
-Evidence: extend the existing [differential-protocols](../../tests/nginx/differential-protocols) slice (39/39 today;
-FastCGI/uWSGI/SCGI/memcached/gRPC) with cache/store/bind/keepalive/TLS cases, add unit
-tests for cache key/method/range behavior and for the unconsumed-field defect (F1), and
-raise the manifest case floor.
+| Class | Rows | Verdict | Path |
+| --- | ---: | --- | --- |
+| Capability lists: `pop3_capabilities`, `imap_capabilities`, `smtp_capabilities` | 3 | implementable S | the listener already advertises nginx default capability sets; make the authored extra tokens (and the resulting UTF-8 cap on the advertised list) a config field |
+| `resolver`, `resolver_timeout` | 2 | implementable S | mail `auth_http` backend hostname resolution; reuse the bounded runtime resolver already used by dynamic `proxy_pass` |
+| `set_real_ip_from` (mail) | 1 | implementable S/M | inbound PROXY v1 already gives the real client IP; the directive adds the trusted-source CIDR set and rewrites the client identity used for `auth_http` |
+| Client-certificate flow: `ssl_client_certificate`, `ssl_verify_client`, `ssl_trusted_certificate`, `auth_http_pass_client_cert` | 4 | implementable M | rustls supports client-certificate verification with a CA store; surface the verified peer identity in the generated `auth_http` request header when configured. Needs mail TLS material in the model (present) + differential mail cases |
+| `ssl_verify_depth` | 1 | runtime-owned / bounded difference | rustls verifies the full chain and exposes no depth knob; nginx's depth limit is a verification-policy difference. Close by decision with a located diagnostic |
+| pinned-rustls TLS knobs: `ssl_certificate_compression`, `ssl_ciphers`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout` | 12 | blocked by pinned rustls (close fail-closed) | OpenSSL certificate compression/cipher-string/CRL/DH/ECDH/password/session policy has no faithful rustls 0.23.46 mapping at the pinned API surface |
 
-#### 2.8.3 Why The TLS-Library Rows Are Feasible (Correcting "rustls blocks them")
+**Row check: 3 + 2 + 1 + 4 + 1 + 12 = 23.** Implementable delta: 10 rows; 12 fail-closed on
+the pinned stack; 1 runtime-owned/bounded.
 
-The earlier shorthand "rustls cannot do cipher/CRL knobs" is only partly true; checked
-against rustls 0.23.46:
+## 5. Out-Of-Profile Feasibility (13 + HTTP/3)
 
-| Row | rustls capability | Verdict |
-| --- | --- | --- |
-| `*_ssl_ciphers` | `CryptoProvider.cipher_suites` is configurable (TLS 1.2 suites selectable; TLS 1.3 suites are the three fixed ones). OpenSSL cipher-string grammar (`HIGH:!aNULL:!MD5:@SECLEVEL`) has no faithful mapping. | Executable as a **bounded named-suite subset**, fail closed on OpenSSL grammar syntax (the same "bounded subset or reject" precedent as `map`/`proxy_redirect`). Per-vhost cipher policy shares one rustls `ServerConfig` per listener, so conflicting declarations must fail closed. |
-| `*_ssl_crl` | `WebPkiServerVerifier::with_crls` and the client verifier `with_crls` exist for upstream and downstream verification. | Implementable (load CRL PEM/DER from auth/proxy TLS config, rebuild verifier). |
-| `*_ssl_password_file` | rustls-pemfile does not decrypt; a small dependency (e.g. `pkcs8`/`pkcs5` PEM decryption) can. | Implementable with a **new dependency** named in the wave plan, or close as documented difference. |
-| `*_ssl_session_reuse` | rustls client resumption (`ClientConfig.resumption`, session cache) exists. | Implementable (per-upstream TLS config). |
-| `*_ssl_certificate_cache` | nginx caches certificate files; the runtime reads at config compile/rotation. | No client-visible difference -> **runtime-owned**. |
-| `uwsgi_ssl_protocols` | TLS 1.2/1.3 window mapping (the runtime's established pattern for `ssl_protocols`). | Implementable. |
-| `*_ssl_conf_command` | OpenSSL `Options`/`NoAntiReplay`/`DHParameters` commands have no rustls equivalent and no portable meaning. | **Not implementable**; close as fail-closed with a diagnostic that names the rustls limitation. |
+### 5.1 GeoIP - 8 Rows (http 5 + stream 3) - **implementable M after a PRD amendment**
 
-## 3. Out-Of-Profile Feasibility (64 Rows)
+Plan when/if the profile admits a GeoIP module:
+- Dependency: a MaxMind DB reader (`maxminddb` crate — **not** in `Cargo.lock`; a named
+  supply-chain decision), memory-mapped lookup with a bounded per-lookup cost.
+- Database lifecycle: operator-configured path, existence/permission validation at config
+  compile, atomic reload/rotation on file change (same pattern as certificate material),
+  fail-closed startup when the configured DB is missing/invalid.
+- Variables: `$geoip_country_code`, `_code3`, `_name`, `$geoip_city_*`,
+  `$geoip_latitude`/`longitude`, `$geoip_org`, and the stream variants, fed into the
+  existing bounded variable engine; `geoip_proxy`/`geoip_proxy_recursive` reuse the
+  `TrustedProxyConfig`/real-IP machinery.
+- Product: MaxMind GeoIP2/GeoLite2 licence and update cadence (test fixtures need a
+  synthetic `.mmdb` or a licensed file), plus the PRD §4 amendment.
+- Evidence: unit tests for the lookup engine + variable expansion, a config-compile test
+  for DB lifecycle, and a synthetic-database differential (nginx `geoip_*` with the same
+  synthetic DB) proving the variable values.
 
-### 3.1 Mail Proxy - 51 Rows (class L; needs a profile amendment)
+**Effort: M** (shared engine http+stream) + legal/data decision + profile amendment.
 
-**What exists.** The protocol substrate ([sdkwork-webserver-mail-protocol](../../crates/sdkwork-webserver-mail-protocol), 45
-tests) covering POP3/IMAP/SMTP state machines, SASL PLAIN/LOGIN, STARTTLS boundaries,
-dot-stuffing, XCLIENT/PROXY v1, frontend transition table, backend relay helpers. It is
-transport-free: no socket, no listener, no auth backend.
+### 5.2 Perl - 4 Rows - **not implementable in this product**
 
-**What full wiring needs.**
-1. **Model + materializer**: a `[mail]`/`mail {}` surface (or nginx-conf `mail {}`
-   materialization) for `mail`, `server`, `listen`, `protocol`, `server_name`, `timeout`,
-   `max_errors`, `resolver*`, STARTTLS/TLS per listener, `smtp_auth`/`imap_auth`/
-   `pop3_auth`, capabilities/greeting, proxy timeout/buffer, `xclient`/`proxy_protocol`,
-   `proxy_smtp_auth`, `proxy_pass_error_message`.
-2. **Listener plane**: a mail listener type alongside the HTTP/stream listeners (gateway
-   `data_plane/`), accepting, detecting protocol (`protocol smtp|imap|pop3`), STARTTLS
-   upgrade with the existing rustls materializer, and per-connection timeouts/limits.
-3. **Auth backends**: the `auth_http` protocol — an HTTP POST to the operator's
-   auth server with nginx's mail auth fields (`Auth-User`, `Auth-Pass`, `Auth-Protocol`,
-   `Auth-Login-Attempt`, `Client-IP`, `Client-Host`, `Auth-SMTP-Login` / XCLIENT data,
-   etc.) and the nginx response grammar (`Auth-Status: OK|AUTHENTICATED|...`,
-   `Auth-Server`, `Auth-Port`, `Auth-User`, `Auth-Pass`, `Auth-Error-Code`, ...).
-   reqwest is already a workspace dependency; the protocol surface must be bounded and
-   timeout-gated. Also `smtp_auth`/`imap_auth`/`pop3_auth` for backend SASL.
-4. **Backend leg**: TLS to the backend (`proxy_ssl`-style trust/verification), XCLIENT/
-   PROXY v1 header injection, `proxy_protocol`, `proxy_timeout`, dot-stuffing already
-   handled by the substrate.
-5. **Security review**: mail proxying exposes an auth oracle and SMTP relay paths; it
-   needs a dedicated threat model (open-relay prevention, auth throttling, STARTTLS
-   downgrade policy) and its own differential harness (Python stdlib `smtplib`/
-   `imaplib`/`poplib` clients work offline; the reference nginx 1.29.6 oracle build has
-   `--with-mail --with-mail_ssl_module`, so a real differential is possible).
-6. **Requirement change**: PRD §4 excludes the mail proxy; the profile must be amended
-   (`http-core-v1` -> a profile that includes mail, or a separate profile) before the
-   rows can move from `excluded` to `executable`.
+`perl`, `perl_modules`, `perl_require`, `perl_set` require an embedded Perl interpreter
+executing arbitrary Perl inside the edge: libperl FFI (`unsafe`), per-request interpreter
+state, module loading from disk, and arbitrary-code security posture. That contradicts the
+memory-safe standalone-edge model (`RUST_CODE_SPEC` unsafe policy) and PRD §4 ("embedded
+executable configuration"). **Keep excluded; no OSS-runtime equivalent is defensible.**
 
-**Verdict.** Implementable; L (listener + auth_http + TLS + security review + evidence),
-not XL, because the protocol substrate is done. **Dependency: profile amendment first.**
-
-### 3.2 GeoIP - 8 Rows (class M; needs a profile amendment + new dependency)
-
-**What it needs.** `maxminddb` (new dependency; not in `Cargo.lock` — the report names
-it explicitly because a new database reader is a supply-chain decision), a database
-lifecycle owner (path config, file existence/permissions, memory-mapped load, reload/
-rotation, bounded lookup cost), variables (`$geoip_country_code`, `_code3`, `_name`;
-`$geoip_city_*`, `$geoip_org`, `$geoip_latitude/longitude`, plus the stream variants),
-and the `geoip_proxy`/`geoip_proxy_recursive` trust rules (reuse
-`TrustedProxyConfig`/`real_ip` machinery). Database licensing/update cadence (MaxMind
-GeoIP2/GeoLite2 EULA; test fixtures need a synthetic `.mmdb` or a licensed file) is a
-product/legal dependency, not just code. http (5) + stream (3) share the lookup engine.
-**Effort: M** + profile amendment + data-license decision.
-
-### 3.3 Perl - 4 Rows (not implementable)
-
-`perl`, `perl_modules`, `perl_require`, `perl_set` require an **embedded Perl
-interpreter** executing arbitrary Perl inside the edge process. That means linking
-libperl (C FFI, `unsafe`), per-request interpreter state, and a security posture
-(arbitrary code execution, module loading from disk) that directly contradicts the
-bounded, memory-safe, standalone-edge model (`RUST_CODE_SPEC` unsafe policy, PRD §4).
-**Not implementable in this product; keep excluded.**
-
-### 3.4 Lua / njs / Third-Party Dynamic Modules (1 excluded + PRD §4)
-
-- `load_module` (1 row): dynamically loaded third-party nginx modules are compiled
-  against nginx's internal C ABI; the Rust data plane has no such ABI. `dlopen` of nginx
-  modules would not run (they expect nginx request structs/hooks) and would be an
-  unbounded, memory-unsafe extension surface. The catalog already notes the reference
-  OSS build is static. **Not implementable.**
-- Lua (OpenResty) / njs: embedded script interpreters with nginx-specific APIs and
-  event-loop integration (OpenResty cosockets/timers). Equivalents would be a new
-  scripting subsystem with arbitrary-code security review; PRD §4 excludes
-  "OpenResty/Lua, Perl, njs, and embedded executable configuration". **Not implementable
-  in this product.**
-- nginx Plus proprietary: `sticky` (1 fail-closed row) and Plus-only surfaces (keyval,
-  commercial active-health details, Plus API) have no OSS reference implementation to
-  differential against and a licence boundary. **Not implementable.**
-
-### 3.5 HTTP/3 + QUIC - 9 Fail-Closed Rows (class XL; profile question first)
+### 5.3 HTTP/3 + QUIC - 9 Fail-Closed Rows - **XL; profile decision first**
 
 Rows: `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`,
 `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`,
 `events:quic_bpf`.
 
-**Feasibility.**
-- The QUIC transport substrate **exists**: `quinn` 0.11.12 is a workspace dependency and
-  [quic.rs](../../crates/sdkwork-webserver-tunnel-transport/src/quic.rs) already builds a QUIC
-  **server** endpoint (`quinn::Endpoint::server`, rustls TLS 1.3, transport tuning) for
-  the tunnel, so QUIC server plumbing and rustls interop are proven in-tree. What is
-  missing is HTTP/3: no `h3` crate is in the workspace or `Cargo.lock`.
-- A full HTTP/3 wave needs: `h3` + `h3-quinn` dependencies (new supply-chain decision);
-  a UDP listener plane (bind/firewall/Docker UDP port mapping, separate from TCP
-  listeners — note `bin/docker-*`/`etc/` deployment surfaces would need UDP exposure);
-  an h3 request/response adapter that reuses the compiled app/route selection and the
-  existing handler pipeline (h3 bodies differ from hyper bodies, so a thin adapter to
-  `axum::body::Body` is required); `Alt-Svc` advertisement on HTTP/1.1+HTTP/2 responses;
-  QUIC/TLS material (TLS 1.3 only, same rustls certificates, ticket keys/retry tokens);
-  0-RTT (rustls `max_early_data_size` exists; needs replay policy and `425 Too Early`/
-  `Early-Data` semantics before any mutating request); connection migration/observability;
-  and the nine directive mappings (`http3_max_concurrent_streams` -> quinn/h3
-  max concurrent bidi streams, `http3_stream_buffer_size`, `quic_*` transport knobs,
-  `http3_hq` HTTP/0.9-over-QUIC gating).
-- The oracle side is possible: the pinned nginx 1.29.6 package is built
-  `--with-http_v3_module` (verified with `nginx -V`), so a real differential is
-  attainable. **But the current environment has no HTTP/3 client**: `curl` 8.18.0 here
-  has HTTP2 but not HTTP3, and `aioquic` is not installed. The wave must first add an h3
-  client to the differential harness (curl-ngtcp2 build or `aioquic` via pip, which is
-  an offline-capability/CI dependency decision).
-- **Profile boundary:** PRD §4 excludes HTTP/3, while the catalog classifies these nine
-  rows `unsupported-fail-closed`, not `excluded` (finding F3). Decide the profile first.
+- QUIC server plumbing is proven in-tree: `quinn` 0.11.12 builds a rustls TLS 1.3 QUIC
+  server endpoint for the tunnel transport. Missing is HTTP/3: no `h3`/`h3-quinn` crate is
+  in the workspace or `Cargo.lock`.
+- A real wave needs: `h3`/`h3-quinn` (supply-chain decision); a UDP listener plane separate
+  from TCP listeners (bind/firewall/Docker UDP port mapping, `Alt-Svc` advertisement);
+  an h3 request/response adapter feeding the existing compiled routing/handler pipeline;
+  QUIC/TLS material (TLS 1.3 only, retry tokens, ticket keys); 0-RTT replay policy and
+  `425 Too Early`/`Early-Data` semantics before any mutating request; connection
+  migration/observability; and the 9 directive mappings.
+- The oracle is possible (`nginx -V` includes `--with-http_v3_module`), but this environment
+  has no HTTP/3 client (`curl` lacks HTTP3; no `aioquic`), so the differential harness must
+  gain an h3 client first (curl-ngtcp2 or a Python client — a CI/offline dependency
+  decision).
+- Profile: PRD §4 excludes HTTP/3 while the catalog classifies these rows
+  `unsupported-fail-closed`; align the profile/catalog decision before any work.
 
-**Verdict.** XL (new protocol family: deps + UDP listener plane + h3 adapter + 0-RTT
-policy + deployment UDP + new h3 test tooling). Residual risks: UDP ingress/PMTU,
-amplification/retry-token hardening, 0-RTT replay, dual-stack UDP deployment, and a
-differential harness that is materially new. Recommended only after the in-profile
-sequence; treat as a separate product decision, not an "RUST gap to close".
+**Verdict: XL, not part of the in-profile closing sequence.** Residual risks: UDP
+ingress/PMTU, amplification/retry hardening, 0-RTT replay, dual-stack UDP deployment, and
+new h3 test tooling.
 
-## 4. Recommended Closing Sequence
+## 6. Closing Sequence To "Nothing Implementable Left"
 
-Dependency-ordered, in-profile first. Each step is one reviewed change set that includes
-`cargo` tests, its differential slice, the catalog/matrix/audit regeneration
+Dependency-ordered, in-profile only. Each step is one reviewed change set with cargo tests,
+its differential/integration evidence, and the Lead's catalog/audit/matrix resync
 (`node tools/check-nginx-directive-matrix.mjs --write` then
-`node tools/gen-nginx-directive-audit.mjs`), and a raised manifest case floor.
+`node tools/gen-nginx-directive-audit.mjs`), raising the relevant manifest case floor.
 
-| Step | Wave | Rows moved | Counter delta (enforced / gap / runtime-owned) | Depends on | Evidence to add |
-| ---: | --- | ---: | --- | --- | --- |
-| 1 | 7A FastCGI residual | 32 | +27 / -27 / +5 | toolkit decision (F2), F1 field wiring | differential-protocols cases + cache/store unit tests |
-| 2 | 7B uWSGI residual | 44 | +37 / -38 / +1 (+1 blocked) | 7A toolkit + upstream TLS builder | differential-protocols TLS/cache cases |
-| 3 | 7C SCGI residual | 30 | +25 / -25 / +5 | 7A toolkit | differential-protocols cases |
-| 4 | 7D memcached + gRPC residual | 13 | +11 / -12 / +1 (+1 blocked) | 7A socket helper + gRPC adapter | differential-protocols cases |
-| 5 | Stream advanced | 18 | +18 / -18 | upstream TLS builder; stream `server_name`/`pass` design | differential-stream extended + stream integration tests |
-| 6 | Subrequest engine | 7 | +7 / -7 | handler dispatch refactor + phase-semantics spec | new differential-subrequest slice + depth/cycle unit tests |
-| 7 | Module-sized modules | 17 | +17 / -17 | none (parallelizable after 7A) | per-module differential cases (userid/browser/random_index/degradation/slice) |
-| 8 | HTTP leftovers | 6 | +3 / -3 / +3 (http2_chunk_size + ssl_trusted_certificate http+stream executable; open_file_cache* -> runtime-owned) | none | h2 DATA-frame wire test; client-auth trust test; matrix note |
-| 9 | Record non-implementable tail | 7 | gap -> 0 by decision | Lead catalog/audit change | blocker diagnostics + matrix rows |
-| **in-profile end** | | **172** | **enforced 348 / runtime-owned 163 / behavior-gap 7 (all dependency-blocked) / out-of-profile 64 / fail-closed 145 / security-difference 17** | | |
-| 10 | Mail wiring (optional profile expansion) | 51 | excluded -51, enforced +51 (bounded subset) | PRD §4 amendment, listener plane | mail differential (python stdlib clients vs nginx oracle) |
-| 11 | GeoIP (optional) | 8 | excluded -8, enforced +8 | PRD amendment, `maxminddb` dependency, data licence | geo lookup differential/unit tests |
-| 12 | HTTP/3 (optional) | 9 | fail-closed -9, enforced +9 | PRD/catalog boundary decision (F3), `h3` deps, UDP plane, h3 client tooling | h3 differential vs nginx 1.29.6 + UDP deployment verification |
+| Step | Wave | Rows moved | Executable delta | Other decision delta | Evidence to add |
+| ---: | --- | ---: | ---: | --- | --- |
+| 1 | Stream advanced (upstream TLS, half-close, rates/counters/retry, bind, inbound PROXY, SNI routing, `pass`) | 18 | +18 | - | differential-stream extended (TLS upstream, PROXY client, half-close/rate/counter/SNI cases) + `stream_proxy` integration tests |
+| 2 | Module-sized modules (`userid` 9, `browser` 4, `random_index`, `slice`) | 15 | +15 | `degradation`/`degrade` 2 -> fail-closed (Plus, no OSS oracle) | per-module differential/integration cases (userid cookie wire, browser variables, random index, slice range cache) |
+| 3 | HTTP/2 DATA chunking (`http2_chunk_size`) | 1 | +1 | - | raw h2 DATA-frame capture test + mapping |
+| 4 | Protocol residual toolkit (ignore_client_abort 3, gRPC bind/keepalive 2, temp-spool 9) | 14 | +14 | 4 -> runtime-owned (`fastcgi_catch_stderr`, `fastcgi_send_lowat`, 2 `*_ssl_certificate_cache`); 11 -> fail-closed (pinned rustls knobs) | differential-protocols cases + temp-spool integration tests + socket/bind tests |
+| 5 | Mail residuals (capabilities 3, resolver 2, realip 1, client-cert flow 4) | 10 | +10 | 1 -> runtime-owned (`ssl_verify_depth` bounded); 12 -> fail-closed (pinned rustls knobs) | differential-mail cases (capabilities, client-cert flow, real IP, resolver) |
+| **in-profile end** | | **58** | **+58 executable** | 7 blocked rows remain behavior-gap | |
+| 6 | Consolidation (Lead-owned) | 0 | 0 | Record the final 7 dependency-blocked rows as explicit decisions; regenerate catalog + audit + matrix + gap notes; raise slice floors | blocker diagnostics in operator matrix; audit rationale |
 
-Counter arithmetic. The current distribution is 203 enforced / 172 behavior-gap /
-143 runtime-owned / 64 out-of-profile / 145 fail-closed / 17 security-difference = 744.
-Steps 1-8 move **145 rows** into `enforced` (100 protocol residual + 18 stream + 7
-subrequest + 17 module-sized + 3 HTTP leftovers), **20 rows** into `runtime-owned` by
-approved documented-difference decision (15 no-spool rows + 3 `open_file_cache` + 2
-`*_ssl_certificate_cache`), and leave **7 rows** in `behavior-gap` solely because they are
-dependency-blocked (`chunked_transfer_encoding` 1, OCSP dynamic 4, `*_ssl_conf_command` 2).
-That is the honest "code complete" state:
+**Counter projection.**
 
-| Bucket | Current | After steps 1-8 (code complete) | Step 9 (Lead records the 7 decisions) |
+Current: `enforced 328 / runtime-owned 147 / security-difference 17 / behavior-gap 95 /
+out-of-profile 13 / fail-closed 144 = 744`.
+
+| Bucket | Current | After steps 1-5 | After step 6 (decision record) |
 | --- | ---: | ---: | ---: |
-| `enforced` | 203 | **348** | 348 |
-| `runtime-owned` | 143 | **163** | 163 |
-| `behavior-gap` | 172 | **7** | **5** (dependency-blocked, explicit rationale) |
-| `out-of-profile` | 64 | 64 | 64 |
-| `fail-closed` | 145 | 145 | **147** (2 `*_ssl_conf_command`) |
+| `enforced` | 328 | **386** | 386 |
+| `runtime-owned` | 147 | **152** | 152 |
 | `security-difference` | 17 | 17 | 17 |
+| `behavior-gap` | 95 | **7** | **7** (all dependency-blocked, explicit rationale) |
+| `out-of-profile` | 13 | 13 | 13 |
+| `fail-closed` | 144 | **169** | 169 |
 | **total** | **744** | **744** | **744** |
 
-Step 9 does not add code; it records that the last 7 rows are decisions, not work.
-The two `*_ssl_conf_command` rows move to `fail-closed` (no rustls equivalent; honoring
-OpenSSL command strings would silently change TLS posture). The other five
-(`chunked_transfer_encoding` 1 + dynamic OCSP 4) stay `behavior-gap` with an explicit
-dependency-blocked rationale and the precise blocker diagnostic in the operator matrix —
-unless the Lead prefers to move them to `fail-closed` too, which changes operator impact
-(working nginx configs would fail to load) and is therefore a product decision. If the
-Lead instead keeps the audit's six-decision taxonomy untouched, the seven rows remain
-`behavior-gap` with the blocked rationale; either way no *implementation* backlog remains
-after step 8.
+Arithmetic: executable +58 (18 + 15 + 1 + 14 + 10); runtime-owned +5 (4 protocol + 1 mail);
+fail-closed +25 (2 Plus + 11 protocol-rustls + 12 mail-rustls); behavior-gap -88
+(58 executed + 5 runtime-owned + 25 fail-closed = 88); the seven remaining gap rows are the
+blocked tail.
 
-Optional profile expansion (steps 10-12) would move 51 + 8 + 9 = 68 rows from
-`excluded`/`fail-closed` into `enforced` (bounded subsets) after the requirement changes.
-Measured from the step-9 state: enforced 348 -> 416, out-of-profile 64 -> 5
-(Perl 4 + `load_module` 1), fail-closed 147 -> 138, behavior-gap 5, runtime-owned 163,
-security-difference 17 - total 744.
+Row-level proof of the 95 -> 7 movement:
 
-### 4.1 What Each Step Must Not Do
+- 58 rows move to executable (steps 1-5).
+- 5 rows move to runtime-owned: 4 protocol (`fastcgi_catch_stderr`, `fastcgi_send_lowat`,
+  `uwsgi_ssl_certificate_cache`, `grpc_ssl_certificate_cache`) + 1 mail (`ssl_verify_depth`).
+- 25 rows move to fail-closed: 2 Plus (`degradation`, `degrade`) + 11 protocol pinned-rustls
+  + 12 mail pinned-rustls.
+- 58 + 5 + 25 = 88; **95 - 88 = 7** remaining: `chunked_transfer_encoding` (1) and the six
+  dynamic-OCSP rows.
 
-- No gate lowering: differential case floors only rise; intentional differences are
-  listed in the comparator allowlist with a spec justification, never by editing an
-  expectation.
-- No silent acceptance: every newly executable directive must either execute its bounded
-  form or fail closed with a located diagnostic on the forms it does not execute (the
-  Wave 1/2/2b precedent).
-- No catalog claim before evidence: the catalog is regenerated from the implementation
-  (`check-nginx-directive-matrix.mjs --write`), then the audit; a row moves only when
-  its behavioral evidence exists (F6).
-- No pile-up of decision debt: every step that lands a bounded difference updates the
-  operator matrix row and the catalog `knownDifferences` so F2/F4 cannot recur.
+**Catalog target after step 5** (same total): `executable 386`, `accepted-unenforced 176`
+(171 + the 5 runtime-owned closures), `unsupported-fail-closed 169`
+(232 - 58 executable moves - 5 accepted moves), `excluded 13`.
+Sum proof: 386 + 176 + 169 + 13 = 744.
 
-## 5. Not Implementable In This Product
+**After step 6** no code remains. The seven blocked rows stay behavior-gap (or move to
+fail-closed if the Lead prefers to make the operator impact explicit); either way the
+*implementable* backlog is zero and the closing claim becomes: every remaining row is
+either implemented, deliberately runtime-owned, an intentional security difference,
+out of profile, fail-closed, or blocked by a named pinned dependency.
 
-These rows are not "missing work"; they are outside what this product can safely be.
-They should stay excluded/fail-closed with a diagnostic that says so.
+**Optional profile-expansion program** (after the in-profile close, only with a PRD
+amendment and new-dependency approval): GeoIP 8 (excluded -> executable, M) and HTTP/3 9
+(fail-closed -> executable, XL). If both land: executable 403, out-of-profile 5 (Perl 4 +
+`load_module` 1), fail-closed 160, behavior-gap 7, runtime-owned 152, security-difference
+17 = 744. Perl/`load_module` stay the permanent "not implementable" tail.
+
+### 6.1 What Each Step Must Not Do
+
+- No gate lowering: differential case floors only rise; intentional differences are listed
+  in the comparator allowlist with a spec reason, never by editing an expectation.
+- No silent acceptance: every newly executable directive must execute its bounded form or
+  fail closed with a located diagnostic for the forms it does not execute.
+- No catalog claim before evidence: the catalog is regenerated from the implementation, then
+  the audit; a row moves only when behavioral evidence exists.
+- No decision debt: every bounded difference lands in the operator matrix and the catalog
+  notes in the same change set.
+
+## 7. Not Implementable In This Product
 
 | Item | Rows | Why not implementable |
 | --- | ---: | --- |
-| Perl (`perl`, `perl_modules`, `perl_require`, `perl_set`) | 4 | Requires an embedded Perl interpreter executing arbitrary Perl in the edge (C FFI/unsafe, per-request interpreter state, module loading); contradicts the memory-safe bounded-runtime model and PRD §4 "embedded executable configuration". |
-| Third-party dynamic modules (`load_module`) | 1 | nginx modules are C ABI plugins against nginx's internal request/hook structs; the Rust data plane has no such ABI. Loading them cannot work and would be an unbounded memory-unsafe extension surface. |
-| Lua (OpenResty) / njs | 0 rows in the inventory's OSS modules, but PRD §4 names them | Embedded script runtimes with nginx-specific event-loop/cosocket APIs; would be a new scripting subsystem plus arbitrary-code security review. |
-| nginx Plus proprietary features (`sticky` and Plus-only surfaces) | 1 (`sticky`) + Plus surfaces not in the OSS inventory | No open reference implementation/oracle; licence boundary; commercial-only semantics. |
-| `ssl_conf_command` (http/stream/upstream/mail variants) | 2 backlog + several fail-closed | OpenSSL `Options`/`NoAntiReplay`/`DHParameters` command strings have no rustls equivalent and no portable meaning; honoring them would silently change security posture. Close as fail-closed with a rustls-limitation diagnostic. |
-| nginx disk temp-spool buffering (`*_temp_path`, `*_temp_file_write_size`, `*_max_temp_file_size`, `*_buffers`, `*_busy_buffers_size`) | 15 backlog (+ HTTP fail-closed variants) | The runtime streams bounded responses and intentionally owns no disk spool; a spool subsystem would own disk-exhaustion/cleanup semantics for a knob with no byte-level client-visible difference. Documented difference. |
-| `chunked_transfer_encoding` (faithful parity) | 1 | Blocked by the pinned hyper encoder (see §2.1); only L workarounds exist. Recorded under §6 as dependency-blocked. |
+| Perl (`perl`, `perl_modules`, `perl_require`, `perl_set`) | 4 | Embedded Perl interpreter (libperl FFI/unsafe, per-request interpreter state, module loading) contradicts the memory-safe standalone edge and PRD §4. |
+| Third-party dynamic modules (`load_module`) | 1 | nginx modules are C-ABI plugins against nginx request/hook structs; the Rust data plane has no such ABI. Loading them cannot work and is an unbounded memory-unsafe extension surface. |
+| nginx Plus `degradation`/`degrade` | 2 (backlog) | Plus-only module; the OSS reference build does not compile it, so there is no OSS oracle and no reproducible behavior to match. Close fail-closed with a Plus rationale. |
+| `ssl_conf_command` (backlog forms: gRPC, uWSGI, mail; plus http/stream fail-closed variants) | 3 backlog rows | OpenSSL command strings (`Options`, `NoAntiReplay`, DH parameters, …) have no rustls equivalent and no portable meaning; honoring them would silently change TLS posture. |
+| nginx disk temp-spool buffering | 9 backlog rows (`*_temp_path`, `*_temp_file_write_size`, `*_max_temp_file_size` for FastCGI/uWSGI/SCGI) | **Implementable but L**: the runtime streams bounded responses and owns no disk spool; a spool subsystem must own disk-exhaustion/cleanup/confinement semantics. Listed under §4.7 as the one L subsystem, not as "impossible". |
 
-## 6. Implementable But Blocked By The Pinned Dependency
+## 8. Implementable But Blocked By The Pinned Dependency
+
+Pinned versions verified in `Cargo.lock` at this snapshot: `hyper` 1.12.0, `h2` 0.4.20,
+`rustls` 0.23.46, `tokio-rustls` 0.26.6, `quinn` 0.11.12, `axum-server` 0.8.0, `socket2`
+0.6.5, `reqwest` 0.13.5, `x509-parser` 0.18.1, `tower-http` 0.6.11. Absent:
+`maxminddb`, `h3`, `h3-quinn`, and any OCSP-verification crate.
 
 | Item | Rows | Pinned blocker | Upstream fix path | Local fallback (fidelity cost) |
 | --- | ---: | --- | --- | --- |
-| `chunked_transfer_encoding` | 1 | `hyper` 1.12.0 h1 encoder has no close-delimited HTTP/1.1 response mode (`proto/h1/role.rs` chooses `chunked` for unknown-length 1.1 responses). | Request/implement an opt-in "close-delimited" response framing in hyper (or a response extension that selects it); then map the directive in `data_plane/` + model. | (a) bounded buffering to synthesize Content-Length (not streaming); (b) HTTP/1.0 status line (wire-visible difference, do not ship); (c) vendored/patch hyper (supply-chain/maintenance cost). |
-| `ssl_stapling` / `ssl_stapling_verify` (http + stream) | 4 | `rustls` 0.23.46 exposes `CertifiedKey.ocsp` as a static byte field only — no fetch, refresh, responder selection or OCSP-response verification API (CRLs are supported; OCSP is not). | An OCSP owner outside rustls: fetch (reqwest, already a dependency), parse/verify (new crate), refresh scheduler, atomic key swap (the layered resolver supports it). Upstream rustls would need an OCSP verification hook to remove the extra crate. | Static `ssl_stapling_file` already executes (wire-proven); dynamic fetch is a documented difference, recommended given the industry OCSP sunset. |
-| `ssl_ech_file` (http + stream, currently fail-closed) | 2 | `rustls` 0.23.46 has **client-side** ECH only (`client::EchConfig`, `with_ech`); no server-side ECH config API. | Upstream rustls server ECH support. | None; keep fail-closed. |
-| `ssl_ciphers` full OpenSSL grammar | 2 backlog + fail-closed variants | rustls can select suites via `CryptoProvider.cipher_suites`, but OpenSSL cipher strings/`@SECLEVEL` have no faithful mapping; per-vhost cipher policy is one rustls `ServerConfig` per listener. | None needed for a bounded subset; full grammar is not a coherent target. | Execute a bounded named-suite subset, fail closed on OpenSSL grammar; document the difference. |
-| `http2_chunk_size` (catalog says "blocked") | 1 | No direct hyper/h2 DATA-frame-size knob. | Optional upstream knob; not required for the observable contract. | **Implementable now** via a body adapter yielding <=N-byte frames (see §2.4); prove with a DATA-frame wire test. |
+| `chunked_transfer_encoding` | 1 | `hyper` 1.12.0 h1 server encoder has no close-delimited HTTP/1.1 response mode (`proto/h1/role.rs` chooses `chunked` for unknown-length 1.1 responses) | opt-in close-delimited framing in hyper (or a response extension selecting it); then map the directive | (a) bounded buffering to synthesize `Content-Length` (not streaming); (b) HTTP/1.0 status line (wire-visible, do not ship); (c) vendored/patch hyper (supply-chain cost) |
+| `ssl_stapling` / `ssl_stapling_verify` / `ssl_trusted_certificate` (http + stream) | 6 | `rustls` 0.23.46 `CertifiedKey.ocsp` is static bytes only: no fetch/refresh/responder-selection/OCSP verification API (CRLs are supported; OCSP is not) | OCSP owner outside rustls: fetch (`reqwest`), DER parse/verify (new crate), refresh scheduler, atomic key swap; or an upstream rustls OCSP verification hook | static `ssl_stapling_file` already executes (wire-proven); dynamic fetch is a documented difference, defensible given the OCSP sunset |
+| gRPC pinned-TLS knobs (`ssl_ciphers`, `ssl_conf_command`, `ssl_crl`, `ssl_password_file`, `ssl_session_reuse`) | 5 | OpenSSL cipher strings / encrypted key files / CRL / resumption / command strings have no faithful rustls 0.23.46 mapping at the pinned API surface (`ssl_conf_command` has no equivalent at all) | none for full grammar; bounded named-suite subset and CRL wiring are possible but are a separate product decision | fail closed with a located rustls diagnostic; bounded subset only if the Lead requests it |
+| uWSGI pinned-TLS knobs (`ssl_ciphers`, `ssl_conf_command`, `ssl_crl`, `ssl_password_file`, `ssl_session_reuse`, `ssl_verify_depth`) | 6 | same as gRPC; `verify_depth` has no rustls chain-depth knob | same as gRPC; `verify_depth` could only be approximated by a custom verifier | fail closed; keep `ssl_verify` (already executable) as the supported policy |
+| mail pinned-TLS knobs (12 `ssl_*` forms listed in §4.8) | 12 | same OpenSSL surface: compression/cipher strings/commands/CRL/DH/ECDH/password/cipher preference/session cache/tickets/timeouts | none for full parity; session tickets are rustls-managed internally, not operator-configured | fail closed with a located rustls diagnostic; the executable mail TLS subset covers certificate/key/protocols/STARTTLS |
 
-Environment caveats for the dependency-blocked decisions:
+Dependency-blocked decisions are only valid for these pinned versions. Any bump of
+`hyper`, `rustls`, `tokio-rustls`, or `h2` invalidates the table: re-verify the source
+claims before the next catalog regeneration, and move a row to executable if the upstream
+surface appears.
 
-- The report inspected the **pinned** sources: `hyper` 1.12.0, `h2` 0.4.20, `rustls`
-  0.23.46, `axum-server` 0.8.0, `quinn` 0.11.12, `socket2` 0.6.5 (from `Cargo.lock`). A
-  dependency bump invalidates the "blocked" claims and they must be re-verified against
-  the new source before the next catalog regeneration.
-- The nginx reference build is 1.29.6 with `--with-http_v2_module
-  --with-http_v3_module --with-mail --with-mail_ssl_module` (verified with `nginx -V`),
-  so mail and HTTP/3 differentials are possible once client tooling exists; the current
-  environment has no HTTP/3 client (`curl` lacks HTTP3, no `aioquic`).
+## 9. Reproduction And Change Control
 
-## 7. Reproduction And Change Control
-
-All commands below are read-only and were exercised for this report at the snapshot
-above unless noted.
+All commands are read-only; the first four were exercised at this snapshot (outputs below).
+Commands 5-12 need the gateway binary; the last full aggregate run in this session passed
+every step when the manifest carried five differential slices, and the mail slice landed
+later the same day (see §9.1).
 
 ```sh
 # 1. Directive inventory (744 rows, nginx 1.29.6).
 node tools/gen-nginx-directive-inventory.mjs --check
 
-# 2. Directive matrix gate: catalog <-> implementation reconciliation, typed-TOML
-#    enforcement, fixture coverage, generated operator matrix (12/12).
+# 2. Directive matrix gate: catalog <-> mapping.rs, typed-TOML enforcement, fixture
+#    coverage, generated operator matrix (12 checks).
 node tools/check-nginx-directive-matrix.mjs
 
 # 3. Generated 744-row audit ledger: freshness + evidence verification.
 node tools/gen-nginx-directive-audit.mjs --check --verify-evidence
-#    Regenerate after a catalog change:
-#    node tools/check-nginx-directive-matrix.mjs --write
-#    node tools/gen-nginx-directive-audit.mjs
 
-# 4. Aggregate release gate (static gates + behavioural corpus + every manifest-discovered
-#    differential slice, with SDKWORK_REQUIRE_NGINX_EVIDENCE=1).
+# 4. Static compatibility gates.
+node tools/check-nginx-gap.mjs
+node --test tools/check-nginx-behavioral-corpus.mjs
+
+# 5. Aggregate release gate: static gates + behavioural corpus + real-world gate +
+#    every manifest-discovered differential slice (currently 6).
 node tools/run-nginx-compat-gate.mjs
 
-# 5. Backlog counts used by this report (catalog classifications).
+# 6. Real-world production config gate (api.birdcoder.com snapshot).
+node tools/check-nginx-real-world.mjs
+
+# 7-12. Differential slices (each also enforces its case floor and pins nginx/1.29.6).
+node tools/run-nginx-differential.mjs             # conditional-cache 50
+node tools/run-nginx-differential-http.mjs        # broad HTTP 274
+node tools/run-nginx-differential-host.mjs        # host selection 39
+node tools/run-nginx-differential-protocols.mjs   # CGI/memcached/gRPC 77
+node tools/run-nginx-differential-stream.mjs      # stream 9
+node tools/run-nginx-differential-mail.mjs        # mail 9
+
+# 13. Counts used by this report.
 python3 - <<'PY'
 import json, collections
 c = json.load(open('specs/nginx-directive-support.catalog.json'))
@@ -747,43 +608,67 @@ Outputs at this snapshot:
 | --- | --- |
 | inventory | `nginx directive inventory is canonical and valid (744 directives, nginx 1.29.6)` |
 | matrix gate | `tests 12 / pass 12 / fail 0` |
-| audit | `audit evidence verification passed: 744 rows, 203 executable evidence references, 124 completed-wave directives, 6 resolved evidence citations, 11 resolved migration over-claims` |
-| catalog classifications | `executable 203, accepted-unenforced 170, unsupported-fail-closed 307, excluded 64` |
+| audit | `audit evidence verification passed: 744 rows, 328 executable evidence references, 249 completed-wave directives, 6 resolved evidence citations, 11 resolved migration over-claims` |
+| catalog classifications | `executable 328, accepted-unenforced 171, unsupported-fail-closed 232, excluded 13` |
+| real-world gate | `ok: virtualHosts=41 listeners=4 resources=150 upstreams=88 skipped=0` (run at snapshot start) |
+| aggregate gate | last full run in this session passed every step against a fresh binary (static gates, behavioural corpus, real-world config and the then-indexed 5 differential slices); the mail slice is indexed now, so the next run executes 6 |
 
-Manifest slice floors that the closing waves must extend (not lower):
-[specs/nginx-behavioral-corpus.manifest.json](../../specs/nginx-behavioral-corpus.manifest.json) -> full-surface 76, conditional-cache 50,
-differential-http 259, host-selection 39, differential-protocols 39, differential-stream 9.
+Change control for the closing waves: after each wave, regenerate the matrix and audit
+(`node tools/check-nginx-directive-matrix.mjs --write` then
+`node tools/gen-nginx-directive-audit.mjs`) and raise the affected slice floor in
+`specs/nginx-behavioral-corpus.manifest.json`. The catalog is never hand-edited to claim a
+row before its behavioral evidence exists; this report does not edit the catalog, audit,
+matrix, manifest, code or tools.
 
-**Snapshot change control.** This report is a snapshot of the catalog at sha256
-`3669202b...` and HEAD `e43fa1c9...`. The worktree was concurrently receiving an
-uncommitted code wave while this report was written (implementation files only; no
-catalog, matrix or audit change). Those edits cannot change any count in this report
-until the Lead re-syncs the catalog; the wave may also implement individual rows
-discussed here (for example the 7A `fastcgi_bind`/`fastcgi_socket_keepalive` wiring), so
-re-verify the specific findings against the landing commit. After the next catalog sync,
-re-run the four commands above; if any count moved, regenerate this report rather than
-editing it by hand.
+### 9.1 Snapshot Change-Control Note
 
-## 8. Open Decisions For The Lead
+The worktree at this snapshot contains one uncommitted code change
+(`crates/sdkwork-webserver-core/src/config/model.rs`) from a concurrent in-flight wave; it
+cannot change any count above until the Lead re-syncs the catalog/audit, and it makes the
+gateway binary older than the source tree, which is why the binary-dependent gates were not
+re-run live for this report. The catalog/audit content itself is verified current by the
+static gates in §9. Before treating this report as a release statement, re-run the
+aggregate gate on a fresh binary after the wave lands.
 
-1. **F1 fix:** wire `bindAddress`/`socketKeepalive` for the CGI resources in 7A/7D (S), or
-   remove them from schema/model and fail closed. Do not leave a declared-and-dropped key.
-2. **F2 alignment:** choose one decision per semantic class across protocol families
-   (prefer `proxy_*` precedent) and re-sync the catalog once, instead of per-family
-   decisions.
-3. **F3 profile/catalog:** align HTTP/3 (`excluded` vs `unsupported-fail-closed`) and
-   decide whether a `mail`-including profile is in scope; both are requirement changes.
-4. **Documented-difference set:** approve moving the 15 spool rows + 2 certificate-cache
-   rows + 3 `open_file_cache` rows to `runtime-owned` (no implementation), so the backlog
-   counter reflects "nothing implementable".
-5. **OCSP:** approve `ssl_trusted_certificate` (M) and defer dynamic
-   stapling/refresh/verify as a documented difference (L, new verifier dependency,
-   industry sunset).
-6. **Dependency-blocked bucket:** approve recording the 7 remaining rows (chunked 1,
-   OCSP dynamic 4, `ssl_conf_command` 2) as "blocked by pinned dependency/OpenSSL
-   semantics" in the audit taxonomy; then the audit's implementable backlog is zero.
-7. **New dependencies:** approve, if/when the optional waves start: `maxminddb` (GeoIP),
-   `h3`/`h3-quinn` (HTTP/3), an OCSP verification crate (dynamic stapling), a PEM
-   decryption crate (`ssl_password_file`), and the h3 differential client tooling.
-8. **Evidence discipline:** every landing change regenerates catalog + matrix + audit and
+## 10. Open Decisions For The Lead
+
+1. **Pinned-blocked tail:** approve recording the 7 remaining behavior-gap rows
+   (`chunked_transfer_encoding` + the six dynamic-OCSP rows) as explicit
+   dependency-blocked decisions in the audit taxonomy; then the implementable backlog is
+   zero. If a fail-closed carve-out is preferred for `chunked_transfer_encoding`, that is a
+   separate operator-impact choice (working nginx configs would be rejected).
+2. **nginx Plus rows:** approve moving `degradation`/`degrade` from behavior-gap to
+   fail-closed "not implementable (Plus, no OSS oracle)"; catalog + audit sync.
+3. **Temp-spool subsystem:** approve the one new in-profile L subsystem (bounded disk
+   spool for the CGI family) or record the 9 rows as a documented difference; the
+   projection in §6 assumes it is implemented.
+4. **New dependencies:** if the optional waves ever start, approve `maxminddb` (GeoIP),
+   `h3`/`h3-quinn` (HTTP/3), an OCSP-verification crate (dynamic stapling), and an h3
+   differential client. None is needed for the in-profile close.
+5. **Manifest metadata:** `specs/nginx-behavioral-corpus.manifest.json` still declares
+   `pinnedNginx: "1.26.2"` while every differential runner pins `nginx/1.29.6`
+   (`REFERENCE_NGINX`). Update the manifest field (or add a per-slice oracle pin) so the
+   manifest and the gate cannot disagree; this report does not edit the manifest.
+6. **HTTP/3 profile boundary:** PRD §4 excludes HTTP/3 while the catalog classifies the 9
+   rows fail-closed; align the decision (keep excluded / move to explicit fail-closed) even
+   if no h3 wave is planned.
+7. **Evidence discipline:** every landing change regenerates catalog + matrix + audit and
    raises a manifest case floor; no behavioral gate is lowered to make a wave land.
+
+## Appendix A - Category-To-Verdict Summary
+
+| # | Category | Rows | Verdict | Effort | Owner action |
+| --- | --- | ---: | --- | --- | --- |
+| 1 | HTTP/1 framing | 1 | blocked by pinned hyper 1.12.0 | L (only if vendored) | record dependency-blocked decision; upstream request |
+| 2 | module-sized modules | 17 | 15 implementable; 2 nginx Plus (not implementable) | M (userid/browser), S (random_index), M/L (slice) | implement 15; move 2 to fail-closed |
+| 3 | HTTP/2 DATA chunking | 1 | implementable | M | implement + DATA-frame wire test |
+| 4 | dynamic OCSP | 6 | blocked by pinned rustls 0.23.46 | M/L | record decision; static `ssl_stapling_file` remains the supported form |
+| 5 | stream advanced | 18 | implementable | M (16) + L (routing 2) | implement; extend differential-stream |
+| 6 | gRPC residuals | 8 | 2 implementable + 1 runtime-owned + 5 pinned-rustls | S + decision | implement bind/keepalive; close 5 fail-closed |
+| 7 | FastCGI residuals | 6 | 1 implementable (`ignore_client_abort`) + 2 runtime-owned (`catch_stderr`, `send_lowat`) + 3 temp-spool L | S/L | temp-spool wave; close 2 by decision |
+| 8 | uWSGI residuals | 11 | 4 implementable (1 `ignore_client_abort` S + 3 temp-spool L) + 1 cert-cache runtime-owned + 6 pinned-rustls | S/L | implement 4; close 7 by decision |
+| 9 | SCGI residuals | 4 | 1 implementable + 3 temp (L) | S/L | temp-spool wave |
+| 10 | mail residuals | 23 | 10 implementable + 1 runtime-owned/bounded + 12 pinned-rustls | S/M | implement 10; extend differential-mail; close 13 by decision |
+
+(Appendix A is a reading aid; §4.7/§4.8 contain the exact per-row allocation and the
+95-row arithmetic.)

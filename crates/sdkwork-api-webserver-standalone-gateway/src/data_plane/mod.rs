@@ -50,6 +50,7 @@ pub(crate) mod static_file_response;
 pub(crate) mod static_files;
 pub(crate) mod static_path;
 mod stream_proxy;
+mod stream_proxy_protocol;
 mod stream_variables;
 mod sub_filter;
 mod subrequest;

@@ -35,7 +35,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-stream-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 9;
+const CASE_FLOOR = 14;
 const PORT_SEARCH_START = 23100;
 const PORT_SEARCH_END = 23900;
 const ORACLE_UNAVAILABLE_EXITS = new Set([3, 4, 5]);
@@ -129,7 +129,43 @@ async function pickFreePort(cursor) {
   throw new Error(`no free loopback port in ${PORT_SEARCH_START}..${PORT_SEARCH_END}`);
 }
 
-function renderConf(basePort, upstreamPort) {
+/** Mint the CA-signed TLS echo identity and the unrelated CA for proxy_ssl. */
+function generateStreamCertificates(directory) {
+  fs.mkdirSync(directory, { recursive: true });
+  const tlsCa = path.join(directory, 'tls-ca.pem');
+  const otherCa = path.join(directory, 'tls-other-ca.pem');
+  const tlsCert = path.join(directory, 'tls-stream.pem');
+  const tlsKey = path.join(directory, 'tls-stream.key');
+  if (fs.existsSync(tlsCa) && fs.existsSync(otherCa) && fs.existsSync(tlsCert) && fs.existsSync(tlsKey)) {
+    return { tlsCa, otherCa, tlsCert, tlsKey };
+  }
+  const run = (...args) => {
+    const result = spawnSync('openssl', args, { encoding: 'utf8' });
+    if (result.error || result.status !== 0) {
+      throw new Error(`openssl ${args.join(' ')} failed: ${result.stderr ?? result.error}`);
+    }
+  };
+  run('req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+    '-keyout', path.join(directory, 'tls-ca.key'), '-out', tlsCa,
+    '-days', '3', '-subj', '/CN=stream-tls-ca');
+  run('req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+    '-keyout', path.join(directory, 'tls-other-ca.key'), '-out', otherCa,
+    '-days', '3', '-subj', '/CN=stream-tls-other-ca');
+  const extensions = path.join(directory, 'tls-stream.ext');
+  fs.writeFileSync(extensions,
+    'subjectAltName=DNS:tls-stream.test\n' +
+    'basicConstraints=critical,CA:FALSE\n' +
+    'keyUsage=critical,digitalSignature,keyEncipherment\n' +
+    'extendedKeyUsage=serverAuth\n');
+  run('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', tlsKey,
+    '-out', path.join(directory, 'tls-stream.csr'), '-subj', '/CN=tls-stream.test');
+  run('x509', '-req', '-in', path.join(directory, 'tls-stream.csr'),
+    '-CA', tlsCa, '-CAkey', path.join(directory, 'tls-ca.key'),
+    '-CAcreateserial', '-days', '3', '-out', tlsCert, '-extfile', extensions);
+  return { tlsCa, otherCa, tlsCert, tlsKey };
+}
+
+function renderConf(basePort, upstreamPort, tlsEchoPort, tlsEcho2Port, halfClosePort, certificates) {
   let template;
   try {
     template = fs.readFileSync(path.join(differentialDir, 'nginx.conf'), 'utf8');
@@ -137,6 +173,11 @@ function renderConf(basePort, upstreamPort) {
     throw new Error(`missing stream fixture nginx.conf: ${error.message}`);
   }
   return template
+    .replaceAll('@TLS_CA@', path.basename(certificates.tlsCa))
+    .replaceAll('@OTHER_CA@', path.basename(certificates.otherCa))
+    .replaceAll('@UPSTREAM_TLS@', String(tlsEchoPort))
+    .replaceAll('@UPSTREAM_TLS2@', String(tlsEcho2Port))
+    .replaceAll('@UPSTREAM_HC@', String(halfClosePort))
     .replaceAll('@PORT0@', String(basePort))
     .replaceAll('@PORT1@', String(basePort + 1))
     .replaceAll('@PORT2@', String(basePort + 2))
@@ -145,6 +186,10 @@ function renderConf(basePort, upstreamPort) {
     .replaceAll('@PORT5@', String(basePort + 5))
     .replaceAll('@PORT6@', String(basePort + 6))
     .replaceAll('@PORT7@', String(basePort + 7))
+    .replaceAll('@PORT8@', String(basePort + 8))
+    .replaceAll('@PORT9@', String(basePort + 9))
+    .replaceAll('@PORT10@', String(basePort + 10))
+    .replaceAll('@PORT11@', String(basePort + 11))
     .replaceAll('@UPSTREAM@', String(upstreamPort));
 }
 
@@ -167,7 +212,7 @@ function captureOracle(oraclePort) {
   return { status: 'captured' };
 }
 
-function runBattery(python, basePort, upstreamPort) {
+function runBattery(python, basePort, upstreamPort, tlsEchoPort, tlsEcho2Port, halfClosePort, certificates) {
   const result = spawnSync(
     python,
     [
@@ -188,8 +233,26 @@ function runBattery(python, basePort, upstreamPort) {
       String(basePort + 6),
       '--port7',
       String(basePort + 7),
+      '--port8',
+      String(basePort + 8),
+      '--port9',
+      String(basePort + 9),
+      '--port10',
+      String(basePort + 10),
+      '--port11',
+      String(basePort + 11),
       '--upstream-port',
       String(upstreamPort),
+      '--tls-echo-port',
+      String(tlsEchoPort),
+      '--tls-echo-2-port',
+      String(tlsEcho2Port),
+      '--half-close-echo-port',
+      String(halfClosePort),
+      '--tls-cert',
+      certificates.tlsCert,
+      '--tls-key',
+      certificates.tlsKey,
       '--out',
       OUR_CAPTURE,
     ],
@@ -228,8 +291,18 @@ async function main() {
   }
 
   const gatewayPort = await pickFreePort(PORT_SEARCH_START);
-  const gatewayUpstreamPort = await pickFreePort(gatewayPort + 10);
-  const oraclePort = await pickFreePort(gatewayUpstreamPort + 10);
+  const gatewayUpstreamPort = await pickFreePort(gatewayPort + 20);
+  const gatewayTlsEchoPort = await pickFreePort(gatewayUpstreamPort + 1);
+  const gatewayTlsEcho2Port = await pickFreePort(gatewayTlsEchoPort + 1);
+  const gatewayHalfClosePort = await pickFreePort(gatewayTlsEcho2Port + 1);
+  const oraclePort = await pickFreePort(gatewayHalfClosePort + 10);
+  let certificates;
+  try {
+    certificates = generateStreamCertificates(GATEWAY_CONF_DIR);
+  } catch (error) {
+    log(`SKIP: cannot mint the stream TLS certificates: ${error.message}`);
+    return requireOracle ? 1 : 0;
+  }
 
   let baseline = fs.existsSync(BASELINE);
   if (refreshOracle || !baseline) {
@@ -276,7 +349,14 @@ async function main() {
   try {
     fs.writeFileSync(
       GATEWAY_CONF,
-      renderConf(gatewayPort, gatewayUpstreamPort),
+      renderConf(
+        gatewayPort,
+        gatewayUpstreamPort,
+        gatewayTlsEchoPort,
+        gatewayTlsEcho2Port,
+        gatewayHalfClosePort,
+        certificates,
+      ),
       'utf8',
     );
   } catch (error) {
@@ -286,7 +366,9 @@ async function main() {
 
   const logPath = path.join(root, 'tmp', 'nginx-differential-stream-gateway.log');
   const logHandle = fs.openSync(logPath, 'w');
-  log(`gateway listeners ${gatewayPort}..${gatewayPort + 7}, echo upstream ${gatewayUpstreamPort}`);
+  log(
+    `gateway listeners ${gatewayPort}..${gatewayPort + 11}, echo upstream ${gatewayUpstreamPort}, tls echo ${gatewayTlsEchoPort}/${gatewayTlsEcho2Port}, half-close echo ${gatewayHalfClosePort}`,
+  );
   const gateway = spawn(binary.path, ['serve-nginx', GATEWAY_CONF], {
     cwd: root,
     stdio: ['ignore', logHandle, logHandle],
@@ -303,7 +385,15 @@ async function main() {
       log(`FAIL: the gateway exited with ${gateway.exitCode} instead of serving`);
       return 1;
     }
-    const battery = runBattery(python, gatewayPort, gatewayUpstreamPort);
+    const battery = runBattery(
+      python,
+      gatewayPort,
+      gatewayUpstreamPort,
+      gatewayTlsEchoPort,
+      gatewayTlsEcho2Port,
+      gatewayHalfClosePort,
+      certificates,
+    );
     if (!battery.ok) {
       log('FAIL: the battery could not capture the gateway');
       return 1;

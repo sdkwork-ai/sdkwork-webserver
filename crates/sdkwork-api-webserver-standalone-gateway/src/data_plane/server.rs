@@ -55,7 +55,7 @@ use super::{
     },
     proxy_protocol::{resolve_connection_info, DownstreamConnectionInfo},
     runtime::RuntimeGeneration,
-    stream_proxy::{prepare_stream_listener, serve_stream_listener},
+    stream_proxy::{prepare_stream_listener, prepare_stream_listener_group, serve_stream_listener},
     tls::{build_tls_config, compile_policy_tls_material},
     tls_runtime::FileTlsRuntimeController,
     udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
@@ -268,14 +268,31 @@ where
     }
     let mut prepared_streams = Vec::with_capacity(initial.app.streams().len());
     let mut prepared_udp_streams = Vec::with_capacity(initial.app.streams().len());
+    // stream `server_name` virtual servers share one listening socket: bind
+    // each socket once and select the server by the preread SNI.
+    let mut tcp_groups: Vec<Vec<sdkwork_webserver_core::StreamServerConfig>> = Vec::new();
     for stream in initial.app.streams() {
         match stream.protocol {
             sdkwork_webserver_core::StreamProtocol::Tcp => {
-                prepared_streams.push(prepare_stream_listener(stream, &initial).await?);
+                if let Some(group) = tcp_groups
+                    .iter_mut()
+                    .find(|group| group[0].socket_key() == stream.socket_key())
+                {
+                    group.push(stream.clone());
+                } else {
+                    tcp_groups.push(vec![stream.clone()]);
+                }
             }
             sdkwork_webserver_core::StreamProtocol::Udp => {
                 prepared_udp_streams.push(prepare_udp_stream_listener(stream).await?);
             }
+        }
+    }
+    for group in &tcp_groups {
+        if group.len() == 1 {
+            prepared_streams.push(prepare_stream_listener(&group[0], &initial).await?);
+        } else {
+            prepared_streams.push(prepare_stream_listener_group(group, &initial).await?);
         }
     }
     let prepared_operations = match operations.as_ref() {

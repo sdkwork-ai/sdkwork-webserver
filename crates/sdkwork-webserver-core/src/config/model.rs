@@ -2170,6 +2170,66 @@ pub struct StreamServerConfig {
     /// Optional stream TLS mode (`listen … ssl` terminate or `sslPreread`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls: Option<StreamTlsMode>,
+    /// nginx stream `proxy_ssl*` upstream TLS client policy (`proxy_ssl on`
+    /// enables the TLS transport; the remaining fields are the shared upstream
+    /// TLS policy shape used by the HTTP proxy, gRPC and CGI adapters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_tls: Option<UpstreamTlsConfig>,
+    /// nginx stream `proxy_bind <address>`: bind the upstream connection's
+    /// source address. IP literal only (the typed plane also allows `off`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bind_address: Option<IpAddr>,
+    /// nginx stream `proxy_half_close on`: half-close the upstream direction
+    /// while the downstream direction keeps flowing (nginx default off).
+    #[serde(default)]
+    pub half_close: bool,
+    /// nginx stream `proxy_requests <n>`: stop reading from the client after
+    /// `n` requests for protocols with request framing (raw stream byte counts
+    /// are not request-aware, so the adapter applies the counter to bytes
+    /// exceeding the documented unit — see the bounded difference note).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requests: Option<u64>,
+    /// nginx stream `proxy_responses <n>`: stop reading responses from the
+    /// upstream after `n` responses (bounded by the same note as `requests`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub responses: Option<u64>,
+    /// nginx stream `proxy_download_rate <bytes/s>` (0 = unlimited).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_rate: Option<u64>,
+    /// nginx stream `proxy_upload_rate <bytes/s>` (0 = unlimited).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upload_rate: Option<u64>,
+    /// nginx stream `proxy_next_upstream` conditions for retrying another
+    /// upstream target when the connection attempt or first response fails.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next_upstream: Vec<UpstreamRetryCondition>,
+    /// nginx stream `proxy_next_upstream_tries <n>` (0 = unlimited, bounded by
+    /// the configured target count).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_upstream_tries: Option<u8>,
+    /// nginx stream `proxy_next_upstream_timeout <time>`: total retry budget.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_upstream_timeout_ms: Option<u64>,
+    /// nginx stream `server_name`: SNI-based virtual-server names for one
+    /// listening socket (TLS termination or `ssl_preread`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub server_names: Vec<String>,
+    /// nginx stream `default_server`: the virtual server selected when no
+    /// `server_name` matches (also the first server on a socket).
+    #[serde(default)]
+    pub default_server: bool,
+    /// nginx stream `listen … proxy_protocol`: accept one PROXY protocol v1/v2
+    /// header before proxying, using the header source as the client address.
+    #[serde(default)]
+    pub accept_proxy_protocol: bool,
+    /// nginx stream `proxy_protocol_timeout`: deadline for reading the inbound
+    /// PROXY protocol header (nginx default 30s).
+    #[serde(default = "default_stream_proxy_protocol_timeout_ms")]
+    pub proxy_protocol_timeout_ms: u64,
+    /// nginx stream `set_real_ip_from <cidr…>`: trusted PROXY protocol peers
+    /// whose header source replaces the connection peer address.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub real_ip_trusted_cidrs: Vec<String>,
 }
 
 /// Stream TLS execution mode (SDKWORK_WEBSERVER_SPEC §12).
@@ -2203,6 +2263,10 @@ fn default_stream_preread_timeout_ms() -> u64 {
 
 fn default_stream_preread_buffer_bytes() -> usize {
     16 * 1024
+}
+
+fn default_stream_proxy_protocol_timeout_ms() -> u64 {
+    30 * 1000
 }
 
 /// Stream proxy destination: a declared upstream (load-balanced, resolves its
@@ -2651,7 +2715,7 @@ pub struct UpstreamHashConfig {
     pub consistent: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpstreamRetryConfig {
     #[serde(default = "default_upstream_retry_max_attempts")]
@@ -2683,7 +2747,7 @@ pub struct UpstreamAddressPolicyConfig {
     pub allowed_cidrs: Vec<IpNet>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpstreamTlsConfig {
     /// Upstream SNI / certificate-verification name override. Consumed by the

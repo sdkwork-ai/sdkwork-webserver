@@ -3047,6 +3047,22 @@ impl<'a> Materializer<'a> {
                     // nginx stream access phase and `return` handler.
                     "access",
                     "return",
+                    // Wave 7E: upstream TLS, relay, routing and inbound PROXY.
+                    "upstreamTls",
+                    "bindAddress",
+                    "halfClose",
+                    "requests",
+                    "responses",
+                    "downloadRate",
+                    "uploadRate",
+                    "nextUpstream",
+                    "nextUpstreamTries",
+                    "nextUpstreamTimeout",
+                    "serverNames",
+                    "defaultServer",
+                    "acceptProxyProtocol",
+                    "proxyProtocolTimeout",
+                    "realIpTrustedCidrs",
                 ],
             )?;
             let listen = as_array(server, &path, "listen")?;
@@ -3236,6 +3252,165 @@ impl<'a> Materializer<'a> {
                 .get("proxyProtocol")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
+            let upstream_tls = match server.get("upstreamTls") {
+                None => None,
+                Some(value) => Some(
+                    serde_json::from_value::<crate::config::model::UpstreamTlsConfig>(
+                        value.clone(),
+                    )
+                    .map_err(|source| materialize_error(&format!("{path}.upstreamTls"), source))?,
+                ),
+            };
+            let bind_address = match server.get("bindAddress") {
+                None => None,
+                Some(value) => {
+                    let Some(text) = value.as_str() else {
+                        return Err(materialize_error(
+                            &format!("{path}.bindAddress"),
+                            "`bindAddress` must be an IP literal string",
+                        ));
+                    };
+                    Some(text.parse::<std::net::IpAddr>().map_err(|_| {
+                        materialize_error(
+                            &format!("{path}.bindAddress"),
+                            format!("`bindAddress` `{text}` is not an IP literal"),
+                        )
+                    })?)
+                }
+            };
+            let next_upstream = match server.get("nextUpstream") {
+                None => Vec::new(),
+                Some(value) => {
+                    let Some(conditions) = value.as_array() else {
+                        return Err(materialize_error(
+                            &format!("{path}.nextUpstream"),
+                            "`nextUpstream` must be an array of `error`/`timeout`",
+                        ));
+                    };
+                    let mut parsed = Vec::with_capacity(conditions.len());
+                    for condition in conditions {
+                        match condition.as_str() {
+                            Some("error") => {
+                                parsed.push(
+                                    crate::config::model::UpstreamRetryCondition::TransportFailure,
+                                );
+                            }
+                            Some("timeout") => {
+                                parsed.push(crate::config::model::UpstreamRetryCondition::Timeout);
+                            }
+                            _ => {
+                                return Err(materialize_error(
+                                    &format!("{path}.nextUpstream"),
+                                    "stream `nextUpstream` conditions are `error` and `timeout`",
+                                ));
+                            }
+                        }
+                    }
+                    parsed
+                }
+            };
+            let next_upstream_timeout_ms = match server.get("nextUpstreamTimeout") {
+                None => None,
+                Some(value) => {
+                    let Some(text) = value.as_str() else {
+                        return Err(materialize_error(
+                            &format!("{path}.nextUpstreamTimeout"),
+                            "`nextUpstreamTimeout` must be a duration string",
+                        ));
+                    };
+                    Some(materialize_duration_ms(text).ok_or_else(|| {
+                        materialize_error(
+                            &format!("{path}.nextUpstreamTimeout"),
+                            format!("invalid nextUpstreamTimeout `{text}`"),
+                        )
+                    })?)
+                }
+            };
+            let proxy_protocol_timeout_ms = match server.get("proxyProtocolTimeout") {
+                None => 30_000,
+                Some(value) => {
+                    let Some(text) = value.as_str() else {
+                        return Err(materialize_error(
+                            &format!("{path}.proxyProtocolTimeout"),
+                            "`proxyProtocolTimeout` must be a duration string",
+                        ));
+                    };
+                    materialize_duration_ms(text).ok_or_else(|| {
+                        materialize_error(
+                            &format!("{path}.proxyProtocolTimeout"),
+                            format!("invalid proxyProtocolTimeout `{text}`"),
+                        )
+                    })?
+                }
+            };
+            let server_names = match server.get("serverNames") {
+                None => Vec::new(),
+                Some(value) => {
+                    let Some(names) = value.as_array() else {
+                        return Err(materialize_error(
+                            &format!("{path}.serverNames"),
+                            "`serverNames` must be an array of names",
+                        ));
+                    };
+                    let mut parsed = Vec::with_capacity(names.len());
+                    for name in names {
+                        let Some(name) = name.as_str() else {
+                            return Err(materialize_error(
+                                &format!("{path}.serverNames"),
+                                "`serverNames` entries must be strings",
+                            ));
+                        };
+                        let Some(form) = crate::config::parse_server_name(name) else {
+                            return Err(materialize_error(
+                                &format!("{path}.serverNames"),
+                                format!("invalid stream server_name `{name}`"),
+                            ));
+                        };
+                        let Some(canonical) = form.canonical() else {
+                            return Err(materialize_error(
+                                &format!("{path}.serverNames"),
+                                "stream `serverNames` regex names are not executable",
+                            ));
+                        };
+                        parsed.push(canonical);
+                    }
+                    parsed
+                }
+            };
+            let real_ip_trusted_cidrs = match server.get("realIpTrustedCidrs") {
+                None => Vec::new(),
+                Some(value) => {
+                    let Some(cidrs) = value.as_array() else {
+                        return Err(materialize_error(
+                            &format!("{path}.realIpTrustedCidrs"),
+                            "`realIpTrustedCidrs` must be an array of addresses or CIDRs",
+                        ));
+                    };
+                    cidrs
+                        .iter()
+                        .map(|cidr| {
+                            let Some(text) = cidr.as_str() else {
+                                return Err(materialize_error(
+                                    &format!("{path}.realIpTrustedCidrs"),
+                                    "`realIpTrustedCidrs` entries must be strings",
+                                ));
+                            };
+                            Ok(text.to_owned())
+                        })
+                        .collect::<Result<Vec<_>, _>>()?
+                }
+            };
+            let optional_count = |key: &str| -> Result<Option<u64>, WebServerConfigError> {
+                match server.get(key) {
+                    None => Ok(None),
+                    Some(value) => value.as_u64().map(Some).ok_or_else(|| {
+                        materialize_error(
+                            &format!("{path}.{key}"),
+                            format!("`{key}` must be a non-negative integer"),
+                        )
+                    }),
+                }
+            };
             stream_servers.push(crate::config::model::StreamServerConfig {
                 id: format!("stream-{index}"),
                 bind: bind.to_owned(),
@@ -3256,6 +3431,38 @@ impl<'a> Materializer<'a> {
                 proxy_timeout_ms,
                 proxy_protocol,
                 tls,
+                upstream_tls,
+                bind_address,
+                half_close: server
+                    .get("halfClose")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                requests: optional_count("requests")?,
+                responses: optional_count("responses")?,
+                download_rate: optional_count("downloadRate")?,
+                upload_rate: optional_count("uploadRate")?,
+                next_upstream,
+                next_upstream_tries: match optional_count("nextUpstreamTries")? {
+                    Some(value) => Some(u8::try_from(value).map_err(|_| {
+                        materialize_error(
+                            &format!("{path}.nextUpstreamTries"),
+                            "`nextUpstreamTries` must be 0..=255",
+                        )
+                    })?),
+                    None => None,
+                },
+                next_upstream_timeout_ms,
+                server_names,
+                default_server: server
+                    .get("defaultServer")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                accept_proxy_protocol: server
+                    .get("acceptProxyProtocol")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                proxy_protocol_timeout_ms,
+                real_ip_trusted_cidrs,
             });
         }
         self.streams = stream_servers

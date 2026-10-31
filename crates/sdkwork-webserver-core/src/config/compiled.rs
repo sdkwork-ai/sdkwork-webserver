@@ -42,6 +42,8 @@ pub struct CompiledWebServerApp {
     client_auth_ca_paths: HashMap<String, Vec<PathBuf>>,
     /// Resolved stream TLS terminate `clientAuth` CA files per stream id.
     stream_client_auth_ca_paths: HashMap<String, Vec<PathBuf>>,
+    /// Resolved stream `proxy_ssl*` upstream TLS material per stream id.
+    stream_upstream_tls_paths: HashMap<String, CompiledUpstreamTlsPaths>,
     acme_webroots: HashMap<String, PathBuf>,
 }
 
@@ -286,6 +288,58 @@ impl CompiledWebServerApp {
                 .collect::<Result<Vec<_>, _>>()?;
             stream_client_auth_ca_paths.insert(stream.id.clone(), resolved);
         }
+        let mut stream_upstream_tls_paths = HashMap::new();
+        for (index, stream) in config.streams.iter().enumerate() {
+            let Some(tls) = &stream.upstream_tls else {
+                continue;
+            };
+            let ca_certificates = tls
+                .ca_certificate_files
+                .iter()
+                .enumerate()
+                .map(|(file_index, configured)| {
+                    resolve_protected_relative_file(
+                        &base_directory,
+                        configured,
+                        &format!("/streams/{index}/upstreamTls/caCertificateFiles/{file_index}"),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let client_identity = tls
+                .client_certificate_file
+                .as_deref()
+                .zip(tls.client_private_key_file.as_deref())
+                .map(|(certificate, private_key)| {
+                    Ok::<_, WebServerConfigError>((
+                        resolve_protected_relative_file(
+                            &base_directory,
+                            certificate,
+                            &format!("/streams/{index}/upstreamTls/clientCertificateFile"),
+                        )?,
+                        resolve_protected_relative_file(
+                            &base_directory,
+                            private_key,
+                            &format!("/streams/{index}/upstreamTls/clientPrivateKeyFile"),
+                        )?,
+                    ))
+                })
+                .transpose()?;
+            // The gateway builds the stream TLS client config through the
+            // shared upstream TLS builder, keyed by a synthetic upstream id, so
+            // the same resolved-material map and sandbox rules apply.
+            let paths = CompiledUpstreamTlsPaths {
+                ca_certificates: ca_certificates.clone(),
+                client_identity: client_identity.clone(),
+            };
+            stream_upstream_tls_paths.insert(stream.id.clone(), paths);
+            upstream_tls_paths.insert(
+                format!("stream-tls:{}", stream.id),
+                CompiledUpstreamTlsPaths {
+                    ca_certificates,
+                    client_identity,
+                },
+            );
+        }
         let mut acme_webroots = HashMap::new();
         for (index, listener) in config.listeners.iter().enumerate() {
             let Some(acme) = &listener.acme_http_01 else {
@@ -416,6 +470,7 @@ impl CompiledWebServerApp {
             upstream_tls_paths,
             client_auth_ca_paths,
             stream_client_auth_ca_paths,
+            stream_upstream_tls_paths,
             acme_webroots,
         };
         app.verify_acme_webroot_rendezvous()?;
@@ -570,6 +625,25 @@ impl CompiledWebServerApp {
         self.certificate_ocsp_paths
             .get(certificate_id)
             .map(PathBuf::as_path)
+    }
+
+    /// Resolved stream `proxy_ssl*` CA bundle paths for one stream server id.
+    pub fn stream_upstream_tls_ca_certificate_paths(&self, stream_id: &str) -> Option<&[PathBuf]> {
+        self.stream_upstream_tls_paths
+            .get(stream_id)
+            .map(|paths| paths.ca_certificates.as_slice())
+    }
+
+    /// Resolved stream `proxy_ssl*` client identity (certificate, key) for one
+    /// stream server id.
+    pub fn stream_upstream_tls_client_identity_paths(
+        &self,
+        stream_id: &str,
+    ) -> Option<(&Path, &Path)> {
+        self.stream_upstream_tls_paths
+            .get(stream_id)
+            .and_then(|paths| paths.client_identity.as_ref())
+            .map(|(certificate, private_key)| (certificate.as_path(), private_key.as_path()))
     }
 
     pub fn upstream_tls_ca_certificate_paths(&self, upstream_id: &str) -> Option<&[PathBuf]> {

@@ -36,7 +36,8 @@ test('nginx behavioral corpus manifest matches fixtures', () => {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.kind, 'sdkwork.webserver.nginx-behavioral-corpus.manifest');
-  assert.equal(manifest.pinnedNginx, '1.26.2');
+  // All six differential runners pin the nginx.org 1.29.6 build (oracle identity).
+  assert.equal(manifest.pinnedNginx, '1.29.6');
   assert.ok(Array.isArray(manifest.slices));
   assert.ok(manifest.slices.length >= 5);
 

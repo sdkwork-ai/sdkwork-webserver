@@ -31,6 +31,7 @@ use tokio_rustls::TlsAcceptor;
 
 use super::{
     proxy::{ProxyUpstream, StreamEndpoint},
+    stream_proxy_protocol::{read_inbound_proxy_header, InboundProxyHeader},
     tls_material::{build_sni_server_config, install_crypto_provider, load_certified_key},
     DataPlaneError, DataPlaneRuntime,
 };
@@ -44,7 +45,6 @@ pub(crate) struct PreparedStreamListener {
     proxy_timeout: Duration,
     proxy_protocol: bool,
     round_robin: Arc<AtomicUsize>,
-    tls: Option<StreamTlsMode>,
     /// Built once at listener preparation. Rebuilding the SNI resolver and
     /// re-reading the certificate files for every accepted connection put
     /// filesystem I/O on the connection path and scaled with connection rate.
@@ -56,6 +56,16 @@ pub(crate) struct PreparedStreamListener {
     preread_timeout: Duration,
     /// nginx stream `preread_buffer_size` (ClientHello peek buffer bound).
     preread_buffer_bytes: usize,
+    /// SNI virtual-server group: every stream config sharing this socket, in
+    /// authored order. `None` for an ordinary single-server listener.
+    group: Option<Vec<StreamServerConfig>>,
+    /// nginx stream `listen … proxy_protocol`: accept one inbound PROXY header.
+    accept_proxy_protocol: bool,
+    /// nginx stream `proxy_protocol_timeout`.
+    proxy_protocol_timeout: Duration,
+    /// nginx stream `set_real_ip_from`: trusted peers whose PROXY header source
+    /// replaces the connection address.
+    real_ip_trusted: Vec<ipnet::IpNet>,
 }
 
 pub(crate) async fn prepare_stream_listener(
@@ -107,11 +117,77 @@ pub(crate) async fn prepare_stream_listener(
         proxy_timeout: Duration::from_millis(config.proxy_timeout_ms),
         proxy_protocol: config.proxy_protocol,
         round_robin: Arc::new(AtomicUsize::new(0)),
-        tls: config.tls.clone(),
         tls_acceptor,
         access: config.access.clone(),
         preread_timeout: Duration::from_millis(config.preread_timeout_ms),
         preread_buffer_bytes: config.preread_buffer_bytes,
+        group: None,
+        accept_proxy_protocol: config.accept_proxy_protocol,
+        proxy_protocol_timeout: Duration::from_millis(config.proxy_protocol_timeout_ms),
+        real_ip_trusted: parse_trusted_cidrs(&config.real_ip_trusted_cidrs),
+    })
+}
+
+/// Parse the resolved `set_real_ip_from` trusted networks.
+fn parse_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
+    values
+        .iter()
+        .filter_map(|value| {
+            value.parse::<ipnet::IpNet>().ok().or_else(|| {
+                value
+                    .parse::<IpAddr>()
+                    .ok()
+                    .map(|address| ipnet::IpNet::from(address))
+            })
+        })
+        .collect()
+}
+
+/// Group stream configs sharing one listening socket (`server_name` SNI virtual
+/// servers) and bind the socket once. Every member must be an `ssl_preread`
+/// server with at least one `server_name`; the first member is the socket's
+/// default server unless one member sets `default_server`.
+pub(crate) async fn prepare_stream_listener_group(
+    configs: &[StreamServerConfig],
+    _generation: &Arc<super::runtime::RuntimeGeneration>,
+) -> Result<PreparedStreamListener, DataPlaneError> {
+    let first = &configs[0];
+    let address = format!("{}:{}", first.bind, first.port);
+    let socket = TcpListener::bind(&address)
+        .await
+        .map_err(|source| DataPlaneError::Listener {
+            listener_id: first.id.clone(),
+            source,
+        })?;
+    let default = configs
+        .iter()
+        .position(|config| config.default_server)
+        .unwrap_or(0);
+    let default_config = &configs[default];
+    tracing::info!(
+        stream_id = %first.id,
+        address = %address,
+        servers = configs.len(),
+        default_server = %default_config.id,
+        "stream SNI virtual-server listener prepared"
+    );
+    Ok(PreparedStreamListener {
+        id: default_config.id.clone(),
+        socket,
+        proxy_timeout: Duration::from_millis(default_config.proxy_timeout_ms),
+        proxy_protocol: default_config.proxy_protocol,
+        round_robin: Arc::new(AtomicUsize::new(0)),
+        tls_acceptor: None,
+        access: Vec::new(),
+        preread_timeout: Duration::from_millis(default_config.preread_timeout_ms),
+        preread_buffer_bytes: default_config.preread_buffer_bytes,
+        group: Some(configs.to_vec()),
+        accept_proxy_protocol: configs.iter().all(|config| config.accept_proxy_protocol),
+        proxy_protocol_timeout: Duration::from_millis(default_config.proxy_protocol_timeout_ms),
+        real_ip_trusted: configs
+            .iter()
+            .flat_map(|config| parse_trusted_cidrs(&config.real_ip_trusted_cidrs))
+            .collect(),
     })
 }
 
@@ -195,9 +271,83 @@ pub(crate) async fn serve_stream_listener(
                         });
                     }
                 };
+                let mut downstream = downstream;
+                // nginx stream `listen … proxy_protocol`: the header arrives
+                // before the access/preread/content phases. Its source replaces
+                // the peer only when `set_real_ip_from` trusts the connecting
+                // peer (the bounded stream realip form).
+                let inbound_header: Option<InboundProxyHeader> =
+                    if listener.accept_proxy_protocol {
+                        match read_inbound_proxy_header(
+                            &mut downstream,
+                            listener.proxy_protocol_timeout,
+                        )
+                        .await
+                        {
+                            Ok(header) => Some(header),
+                            Err(error) => {
+                                tracing::debug!(
+                                    stream_id = %listener.id,
+                                    peer = %peer,
+                                    error = %error,
+                                    "stream inbound PROXY protocol header rejected"
+                                );
+                                continue;
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                let client_peer = effective_client_peer(
+                    peer,
+                    inbound_header,
+                    &listener.real_ip_trusted,
+                );
+                // SNI virtual-server group: select the server by the
+                // ClientHello SNI inside the connection task, then run the
+                // bounded `ssl_preread` content path with the buffered
+                // preface.
+                if listener.group.is_some() {
+                    let permit = match Arc::clone(&runtime.connection_permits)
+                        .try_acquire_owned()
+                    {
+                        Ok(permit) => permit,
+                        Err(_) => {
+                            tracing::warn!(
+                                stream_id = %listener.id,
+                                peer = %peer,
+                                "stream connection rejected by admission budget"
+                            );
+                            drop(downstream);
+                            continue;
+                        }
+                    };
+                    let runtime = Arc::clone(&runtime);
+                    let group_listener = listener.group.clone().unwrap_or_default();
+                    let default_timeout = listener.preread_timeout;
+                    let default_buffer = listener.preread_buffer_bytes;
+                    let proxy_timeout = listener.proxy_timeout;
+                    tasks.spawn(async move {
+                        let result = serve_sni_group_connection(
+                            runtime,
+                            downstream,
+                            peer,
+                            group_listener,
+                            default_timeout,
+                            default_buffer,
+                            proxy_timeout,
+                            maximum_age,
+                            inbound_header,
+                        )
+                        .await;
+                        drop(permit);
+                        result
+                    });
+                    continue;
+                }
                 // nginx stream access phase and `return` handler run before
                 // any upstream connection is considered.
-                if evaluate_access_first_match_allow(peer.ip(), &listener.access)
+                if evaluate_access_first_match_allow(client_peer.ip(), &listener.access)
                     == AccessDecision::Deny
                 {
                     tracing::debug!(
@@ -231,7 +381,7 @@ pub(crate) async fn serve_stream_listener(
                     } else {
                         match generation
                             .stream_limit_conn
-                            .stream_admit(peer.ip(), &rules.0, rules.1)
+                            .stream_admit(client_peer.ip(), &rules.0, rules.1)
                         {
                             Ok((lease, dry_run_reject)) => {
                                 if dry_run_reject {
@@ -275,7 +425,6 @@ pub(crate) async fn serve_stream_listener(
                 let preread_timeout = listener.preread_timeout;
                 let preread_buffer_bytes = listener.preread_buffer_bytes;
                 let proxy_protocol = listener.proxy_protocol;
-                let tls = listener.tls.clone();
                 let tls_acceptor = listener.tls_acceptor.clone();
                 tasks.spawn(async move {
                     // Held for the whole connection: dropping it releases the
@@ -285,15 +434,18 @@ pub(crate) async fn serve_stream_listener(
                         runtime,
                         &stream_id,
                         downstream,
-                        peer,
+                        client_peer,
                         round_robin,
                         proxy_timeout,
                         proxy_protocol,
                         maximum_age,
-                        tls.as_ref(),
                         tls_acceptor.as_ref(),
                         preread_timeout,
                         preread_buffer_bytes,
+                        None,
+                        None,
+                        None,
+                        inbound_header,
                     )
                     .await;
                     drop(permit);
@@ -349,6 +501,7 @@ async fn write_stream_response<S: tokio::io::AsyncWrite + Unpin>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn serve_stream_connection(
     runtime: Arc<DataPlaneRuntime>,
     stream_id: &str,
@@ -358,21 +511,30 @@ async fn serve_stream_connection(
     proxy_timeout: Duration,
     proxy_protocol: bool,
     maximum_age: Duration,
-    tls: Option<&StreamTlsMode>,
     tls_acceptor: Option<&TlsAcceptor>,
     preread_timeout: Duration,
     preread_buffer_bytes: usize,
+    selected: Option<StreamServerConfig>,
+    preface: Option<Vec<u8>>,
+    sni: Option<String>,
+    _inbound_header: Option<InboundProxyHeader>,
 ) -> Result<(), ()> {
     let generation = runtime.current();
-    let stream_config = generation
-        .app
-        .streams()
-        .iter()
-        .find(|stream| stream.id == stream_id);
-    let Some(stream_config) = stream_config else {
+    let stream_config = match selected {
+        Some(selected) => Some(selected),
+        None => generation
+            .app
+            .streams()
+            .iter()
+            .find(|stream| stream.id == stream_id)
+            .cloned(),
+    };
+    let Some(stream_config) = stream_config.as_ref() else {
         tracing::warn!(stream_id, peer = %peer, "stream target is no longer configured");
         return Err(());
     };
+    let tls_mode = stream_config.tls.clone();
+    let relay_options = StreamRelayOptions::from_config(stream_config);
     // nginx stream `return <value>`: a content handler that writes the expanded
     // value and closes the connection. Variables are resolved from the facts the
     // plane knows at this point (`$ssl_preread_server_name` only after the
@@ -394,7 +556,7 @@ async fn serve_stream_connection(
 
     let target = stream_config.target.as_ref();
 
-    match tls {
+    match tls_mode.as_ref() {
         None => {
             if let Some(text) = stream_return_text(None) {
                 let mut downstream = downstream;
@@ -405,19 +567,26 @@ async fn serve_stream_connection(
                 tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
                 return Err(());
             };
-            let (upstream, authority, health) =
-                connect_upstream(&generation, target, peer, &round_robin).await?;
-            if proxy_protocol {
-                if let Err(error) = send_proxy_protocol_v1(&downstream, &upstream, peer).await {
-                    tracing::warn!(stream_id, peer = %peer, error = %error, "stream PROXY protocol header failed");
-                    if let Some((upstream_ref, endpoint)) = &health {
-                        upstream_ref.record_stream_failure(endpoint);
-                    }
-                    return Err(());
-                }
-            }
+            let local = downstream.local_addr().unwrap_or(peer);
+            let (upstream, authority, health) = connect_with_retry(
+                &generation,
+                stream_config,
+                target,
+                peer,
+                local,
+                proxy_protocol,
+                &round_robin,
+            )
+            .await?;
             tracing::info!(stream_id, peer = %peer, target = %authority, "stream connection established");
-            proxy_bidirectional(downstream, upstream, proxy_timeout, maximum_age).await;
+            proxy_bidirectional(
+                downstream,
+                upstream,
+                proxy_timeout,
+                maximum_age,
+                relay_options,
+            )
+            .await;
             if let Some((upstream_ref, endpoint)) = health {
                 upstream_ref.record_stream_success(&endpoint);
             }
@@ -448,24 +617,30 @@ async fn serve_stream_connection(
                 tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
                 return Err(());
             };
-            let (upstream, authority, health) =
-                connect_upstream(&generation, target, peer, &round_robin).await?;
-            if proxy_protocol {
-                if let Err(error) = send_proxy_protocol_v1_addrs(peer, local, &upstream).await {
-                    tracing::warn!(stream_id, peer = %peer, error = %error, "stream PROXY protocol header failed");
-                    if let Some((upstream_ref, endpoint)) = &health {
-                        upstream_ref.record_stream_failure(endpoint);
-                    }
-                    return Err(());
-                }
-            }
+            let (upstream, authority, health) = connect_with_retry(
+                &generation,
+                stream_config,
+                target,
+                peer,
+                local,
+                proxy_protocol,
+                &round_robin,
+            )
+            .await?;
             tracing::info!(
                 stream_id,
                 peer = %peer,
                 target = %authority,
                 "stream TLS-terminated connection established"
             );
-            proxy_bidirectional(tls_downstream, upstream, proxy_timeout, maximum_age).await;
+            proxy_bidirectional(
+                tls_downstream,
+                upstream,
+                proxy_timeout,
+                maximum_age,
+                relay_options,
+            )
+            .await;
             if let Some((upstream_ref, endpoint)) = health {
                 upstream_ref.record_stream_success(&endpoint);
             }
@@ -473,17 +648,16 @@ async fn serve_stream_connection(
         }
         Some(StreamTlsMode::Preread) => {
             let local = downstream.local_addr().unwrap_or(peer);
-            let (downstream, preface, sni) = match preread_client_hello(
-                downstream,
-                preread_timeout,
-                preread_buffer_bytes,
-            )
-            .await
-            {
-                Ok(peeked) => peeked,
-                Err(error) => {
-                    tracing::warn!(stream_id, peer = %peer, error = %error, "stream ssl_preread failed");
-                    return Err(());
+            let (downstream, preface, sni) = if let Some(preface) = preface {
+                (downstream, preface, sni)
+            } else {
+                match preread_client_hello(downstream, preread_timeout, preread_buffer_bytes).await
+                {
+                    Ok(peeked) => peeked,
+                    Err(error) => {
+                        tracing::warn!(stream_id, peer = %peer, error = %error, "stream ssl_preread failed");
+                        return Err(());
+                    }
                 }
             };
             if let Some(sni) = sni.as_deref() {
@@ -498,17 +672,16 @@ async fn serve_stream_connection(
                 tracing::warn!(stream_id, peer = %peer, "stream server has no proxy target");
                 return Err(());
             };
-            let (mut upstream, authority, health) =
-                connect_upstream(&generation, target, peer, &round_robin).await?;
-            if proxy_protocol {
-                if let Err(error) = send_proxy_protocol_v1_addrs(peer, local, &upstream).await {
-                    tracing::warn!(stream_id, peer = %peer, error = %error, "stream PROXY protocol header failed");
-                    if let Some((upstream_ref, endpoint)) = &health {
-                        upstream_ref.record_stream_failure(endpoint);
-                    }
-                    return Err(());
-                }
-            }
+            let (mut upstream, authority, health) = connect_with_retry(
+                &generation,
+                stream_config,
+                target,
+                peer,
+                local,
+                proxy_protocol,
+                &round_robin,
+            )
+            .await?;
             if let Err(error) = upstream.write_all(&preface).await {
                 tracing::warn!(stream_id, peer = %peer, error = %error, "stream ssl_preread preface write failed");
                 if let Some((upstream_ref, endpoint)) = &health {
@@ -522,7 +695,14 @@ async fn serve_stream_connection(
                 target = %authority,
                 "stream ssl_preread connection established"
             );
-            proxy_bidirectional(downstream, upstream, proxy_timeout, maximum_age).await;
+            proxy_bidirectional(
+                downstream,
+                upstream,
+                proxy_timeout,
+                maximum_age,
+                relay_options,
+            )
+            .await;
             if let Some((upstream_ref, endpoint)) = health {
                 upstream_ref.record_stream_success(&endpoint);
             }
@@ -531,44 +711,458 @@ async fn serve_stream_connection(
     }
 }
 
+/// One connected upstream stream: plain TCP or TLS over TCP when the stream
+/// server enables `proxy_ssl on`.
+pub(crate) enum UpstreamStream {
+    Plain(TcpStream),
+    Tls(Box<tokio_rustls::client::TlsStream<TcpStream>>),
+}
+
+impl AsyncRead for UpstreamStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            Self::Plain(stream) => std::pin::Pin::new(stream).poll_read(context, buffer),
+            Self::Tls(stream) => std::pin::Pin::new(stream.as_mut()).poll_read(context, buffer),
+        }
+    }
+}
+
+impl AsyncWrite for UpstreamStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+        buffer: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        match self.get_mut() {
+            Self::Plain(stream) => std::pin::Pin::new(stream).poll_write(context, buffer),
+            Self::Tls(stream) => std::pin::Pin::new(stream.as_mut()).poll_write(context, buffer),
+        }
+    }
+
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            Self::Plain(stream) => std::pin::Pin::new(stream).poll_flush(context),
+            Self::Tls(stream) => std::pin::Pin::new(stream.as_mut()).poll_flush(context),
+        }
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            Self::Plain(stream) => std::pin::Pin::new(stream).poll_shutdown(context),
+            Self::Tls(stream) => std::pin::Pin::new(stream.as_mut()).poll_shutdown(context),
+        }
+    }
+}
+
 type ConnectedUpstream = (
-    TcpStream,
+    UpstreamStream,
     String,
     Option<(Arc<ProxyUpstream>, StreamEndpoint)>,
 );
 
-async fn connect_upstream(
+/// Connect the stream server's target, applying `proxy_bind`, the emitted
+/// upstream PROXY v1 header (before TLS starts, matching nginx's ordering) and
+/// the `proxy_ssl*` upstream TLS client policy.
+async fn connect_once(
     generation: &Arc<super::runtime::RuntimeGeneration>,
+    server: &StreamServerConfig,
     target: &StreamTargetConfig,
     peer: SocketAddr,
+    local: SocketAddr,
+    proxy_protocol: bool,
     round_robin: &AtomicUsize,
-) -> Result<ConnectedUpstream, ()> {
+) -> Result<ConnectedUpstream, (ExchangeKind, Option<(Arc<ProxyUpstream>, StreamEndpoint)>)> {
     let (host, port, health) = match resolve_target(generation, target, peer.ip(), round_robin) {
         Some(resolved) => resolved,
         None => {
             tracing::warn!(peer = %peer, "stream target cannot be resolved");
-            return Err(());
+            return Err((ExchangeKind::Transport, None));
         }
     };
     let authority = format!("{host}:{port}");
-    let connect = async {
-        match TcpStream::connect(&authority).await {
-            Ok(upstream) => Ok(upstream),
+    let mut tcp = match connect_tcp(&host, port, server.bind_address).await {
+        Ok(upstream) => upstream,
+        Err(error) => {
+            tracing::warn!(peer = %peer, target = %authority, error = %error, "stream upstream connect failed");
+            return Err((ExchangeKind::Transport, health));
+        }
+    };
+    if proxy_protocol {
+        if let Err(error) = send_proxy_protocol_v1_addrs(peer, local, &mut tcp).await {
+            tracing::warn!(peer = %peer, error = %error, "stream PROXY protocol header failed");
+            return Err((ExchangeKind::Transport, health));
+        }
+    }
+    // nginx `proxy_ssl on`: the upstream handshake starts after the emitted
+    // PROXY header.
+    if server.upstream_tls.is_some() {
+        let Some(policy) = server.upstream_tls.as_ref() else {
+            unreachable!("checked above")
+        };
+        let config = match build_stream_upstream_tls(generation, server) {
+            Ok(config) => config,
+            Err(()) => return Err((ExchangeKind::Transport, health)),
+        };
+        let name = policy.server_name.clone().unwrap_or_else(|| host.clone());
+        let Ok(server_name) = rustls::pki_types::ServerName::try_from(name) else {
+            tracing::warn!(peer = %peer, target = %authority, "stream proxy_ssl server name is invalid");
+            return Err((ExchangeKind::Transport, health));
+        };
+        let connector = tokio_rustls::TlsConnector::from(config);
+        let tls = match connector.connect(server_name, tcp).await {
+            Ok(stream) => stream,
             Err(error) => {
-                tracing::warn!(peer = %peer, target = %authority, error = %error, "stream upstream connect failed");
-                Err(())
+                tracing::debug!(peer = %peer, target = %authority, error = %error, "stream proxy_ssl handshake failed");
+                return Err((ExchangeKind::Transport, health));
+            }
+        };
+        return Ok((UpstreamStream::Tls(Box::new(tls)), authority, health));
+    }
+    Ok((UpstreamStream::Plain(tcp), authority, health))
+}
+
+/// Connect a TCP upstream with an optional `proxy_bind` source address.
+async fn connect_tcp(
+    host: &str,
+    port: u16,
+    bind_address: Option<IpAddr>,
+) -> std::io::Result<TcpStream> {
+    let Some(bind_address) = bind_address else {
+        return TcpStream::connect((host, port)).await;
+    };
+    let remote = tokio::net::lookup_host((host, port))
+        .await?
+        .next()
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::AddrNotAvailable,
+                "stream upstream target resolved no address",
+            )
+        })?;
+    let socket = if remote.is_ipv4() {
+        tokio::net::TcpSocket::new_v4()?
+    } else {
+        tokio::net::TcpSocket::new_v6()?
+    };
+    socket.bind(SocketAddr::new(bind_address, 0))?;
+    socket.connect(remote).await
+}
+
+/// Build the stream server's `proxy_ssl*` client config from the shared
+/// upstream TLS policy builder. The compiled app resolves the material paths
+/// under a synthetic upstream id (`stream-tls:<id>`), so the cache and sandbox
+/// rules are the same as the HTTP proxy/gRPC adapters.
+fn build_stream_upstream_tls(
+    generation: &Arc<super::runtime::RuntimeGeneration>,
+    server: &StreamServerConfig,
+) -> Result<Arc<rustls::ClientConfig>, ()> {
+    let policy = server.upstream_tls.clone().ok_or(())?;
+    let synthetic: sdkwork_webserver_core::UpstreamConfig = serde_json::from_value(serde_json::json!({
+        "id": format!("stream-tls:{}", server.id),
+        "targets": [],
+        "tls": policy,
+    }))
+    .map_err(|error| {
+        tracing::warn!(stream_id = %server.id, error = %error, "stream upstream TLS policy is invalid");
+    })?;
+    super::upstream_tls::build_upstream_tls_config(&generation.app, &synthetic)
+        .map(Arc::new)
+        .map_err(|error| {
+            tracing::warn!(stream_id = %server.id, error = %error, "stream upstream TLS config could not be built");
+        })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExchangeKind {
+    Transport,
+    Timeout,
+}
+
+/// Connect with the nginx stream `proxy_next_upstream*` retry budget.
+///
+/// Retries apply to a declared upstream (a literal target has one server, so
+/// nginx cannot select another); the budget is bounded by
+/// `proxy_next_upstream_tries` (0 = one attempt per target, capped) and the
+/// `proxy_next_upstream_timeout` deadline.
+async fn connect_with_retry(
+    generation: &Arc<super::runtime::RuntimeGeneration>,
+    server: &StreamServerConfig,
+    target: &StreamTargetConfig,
+    peer: SocketAddr,
+    local: SocketAddr,
+    proxy_protocol: bool,
+    round_robin: &AtomicUsize,
+) -> Result<ConnectedUpstream, ()> {
+    let retry_conditions = if server.next_upstream.is_empty() {
+        vec![
+            sdkwork_webserver_core::UpstreamRetryCondition::TransportFailure,
+            sdkwork_webserver_core::UpstreamRetryCondition::Timeout,
+        ]
+    } else {
+        server.next_upstream.clone()
+    };
+    let max_attempts = match &target {
+        StreamTargetConfig::Upstream { name } => {
+            let target_count = generation
+                .upstreams
+                .get(name)
+                .map(|upstream| upstream.target_count())
+                .unwrap_or(1)
+                .max(1);
+            server
+                .next_upstream_tries
+                .map(usize::from)
+                .filter(|tries| *tries > 1)
+                .unwrap_or(target_count)
+                .min(target_count)
+        }
+        StreamTargetConfig::Literal { .. } => 1,
+    };
+    let budget = Duration::from_millis(server.next_upstream_timeout_ms.unwrap_or(30_000).max(1));
+    let started = std::time::Instant::now();
+    let mut last: Option<(ExchangeKind, Option<(Arc<ProxyUpstream>, StreamEndpoint)>)> = None;
+    for attempt in 0..max_attempts {
+        if attempt > 0 && started.elapsed() >= budget {
+            break;
+        }
+        match timeout(
+            STREAM_CONNECT_TIMEOUT,
+            connect_once(
+                generation,
+                server,
+                target,
+                peer,
+                local,
+                proxy_protocol,
+                round_robin,
+            ),
+        )
+        .await
+        {
+            Ok(Ok(connected)) => return Ok(connected),
+            Ok(Err(failure)) => {
+                if let Some((upstream, endpoint)) = &failure.1 {
+                    upstream.record_stream_failure(endpoint);
+                }
+                let retryable = match failure.0 {
+                    ExchangeKind::Transport => retry_conditions.contains(
+                        &sdkwork_webserver_core::UpstreamRetryCondition::TransportFailure,
+                    ),
+                    ExchangeKind::Timeout => retry_conditions
+                        .contains(&sdkwork_webserver_core::UpstreamRetryCondition::Timeout),
+                };
+                last = Some(failure);
+                if !retryable {
+                    break;
+                }
+            }
+            Err(_) => {
+                let retryable = retry_conditions
+                    .contains(&sdkwork_webserver_core::UpstreamRetryCondition::Timeout);
+                last = Some((ExchangeKind::Timeout, None));
+                if !retryable {
+                    break;
+                }
+            }
+        }
+    }
+    let _ = last;
+    Err(())
+}
+
+/// The effective client address for one connection: a PROXY protocol header
+/// source replaces the peer only when `set_real_ip_from` trusts the connecting
+/// peer (bounded stream realip form); otherwise the socket peer is used.
+fn effective_client_peer(
+    peer: SocketAddr,
+    header: Option<InboundProxyHeader>,
+    trusted: &[ipnet::IpNet],
+) -> SocketAddr {
+    let Some(header) = header else {
+        return peer;
+    };
+    let Some(source) = header.source else {
+        return peer;
+    };
+    if trusted.iter().any(|network| network.contains(&peer.ip())) {
+        source
+    } else {
+        peer
+    }
+}
+
+/// Relay options resolved from one stream server config.
+#[derive(Clone, Copy, Default)]
+struct StreamRelayOptions {
+    half_close: bool,
+    download_rate: u64,
+    upload_rate: u64,
+}
+
+impl StreamRelayOptions {
+    fn from_config(config: &StreamServerConfig) -> Self {
+        Self {
+            half_close: config.half_close,
+            download_rate: config.download_rate.unwrap_or(0),
+            upload_rate: config.upload_rate.unwrap_or(0),
+        }
+    }
+}
+
+/// Select the stream virtual server for one SNI value.
+fn select_sni_server<'a>(
+    group: &'a [StreamServerConfig],
+    sni: Option<&str>,
+    default_index: usize,
+) -> &'a StreamServerConfig {
+    let Some(sni) = sni else {
+        return &group[default_index];
+    };
+    let sni = sni.trim_end_matches('.').to_ascii_lowercase();
+    // Exact names outrank leading wildcards, which outrank trailing wildcards
+    // (the nginx stream `server_name` search order).
+    if let Some(exact) = group.iter().find(|server| {
+        server
+            .server_names
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(&sni))
+    }) {
+        return exact;
+    }
+    let mut best: Option<(&StreamServerConfig, usize)> = None;
+    for server in group {
+        for name in &server.server_names {
+            if let Some(suffix) = name.strip_prefix("*.") {
+                let suffix = suffix.to_ascii_lowercase();
+                if sni.len() > suffix.len()
+                    && sni.ends_with(&format!(".{suffix}"))
+                    && best.map_or(true, |(_, length)| suffix.len() > length)
+                {
+                    best = Some((server, suffix.len()));
+                }
+            }
+        }
+    }
+    if let Some((server, _)) = best {
+        return server;
+    }
+    for server in group {
+        for name in &server.server_names {
+            if let Some(prefix) = name.strip_suffix(".*") {
+                let prefix = prefix.to_ascii_lowercase();
+                if sni.starts_with(&format!("{prefix}.")) {
+                    return server;
+                }
+            }
+        }
+    }
+    &group[default_index]
+}
+
+/// Serve one connection on an SNI virtual-server (`server_name`) listener: read
+/// the ClientHello once, select the server, then run the selected server's
+/// bounded `ssl_preread` content path with the buffered preface.
+#[allow(clippy::too_many_arguments)]
+async fn serve_sni_group_connection(
+    runtime: Arc<DataPlaneRuntime>,
+    downstream: TcpStream,
+    peer: SocketAddr,
+    group: Vec<StreamServerConfig>,
+    preread_timeout: Duration,
+    preread_buffer_bytes: usize,
+    proxy_timeout: Duration,
+    maximum_age: Duration,
+    inbound_header: Option<InboundProxyHeader>,
+) -> Result<(), ()> {
+    if group.is_empty() {
+        return Err(());
+    }
+    let default_index = group
+        .iter()
+        .position(|server| server.default_server)
+        .unwrap_or(0);
+    let (downstream, preface, sni) = match preread_client_hello(
+        downstream,
+        preread_timeout,
+        preread_buffer_bytes,
+    )
+    .await
+    {
+        Ok(peeked) => peeked,
+        Err(error) => {
+            tracing::warn!(peer = %peer, error = %error, "stream SNI virtual-server preread failed");
+            return Err(());
+        }
+    };
+    let selected = select_sni_server(&group, sni.as_deref(), default_index).clone();
+    let generation = runtime.current();
+    let selected_peer = effective_client_peer(
+        peer,
+        inbound_header,
+        &parse_trusted_cidrs(&selected.real_ip_trusted_cidrs),
+    );
+    if evaluate_access_first_match_allow(selected_peer.ip(), &selected.access)
+        == AccessDecision::Deny
+    {
+        tracing::debug!(
+            stream_id = %selected.id,
+            peer = %peer,
+            "stream SNI virtual-server denied by allow/deny rules"
+        );
+        return Ok(());
+    }
+    let limit_lease = {
+        let rules = (selected.limit_conn.clone(), selected.limit_conn_dry_run);
+        if rules.0.is_empty() {
+            None
+        } else {
+            match generation
+                .stream_limit_conn
+                .stream_admit(selected_peer.ip(), &rules.0, rules.1)
+            {
+                Ok((lease, _)) => Some(lease),
+                Err(_) => {
+                    tracing::debug!(
+                        stream_id = %selected.id,
+                        peer = %peer,
+                        "stream SNI virtual-server rejected by limit_conn"
+                    );
+                    return Ok(());
+                }
             }
         }
     };
-    match timeout(STREAM_CONNECT_TIMEOUT, connect).await {
-        Ok(Ok(upstream)) => Ok((upstream, authority, health)),
-        _ => {
-            if let Some((upstream_ref, endpoint)) = &health {
-                upstream_ref.record_stream_failure(endpoint);
-            }
-            Err(())
-        }
-    }
+    let _limit_lease = limit_lease;
+    let round_robin = Arc::new(AtomicUsize::new(0));
+    let server_id = selected.id.clone();
+    serve_stream_connection(
+        runtime,
+        &server_id,
+        downstream,
+        selected_peer,
+        round_robin,
+        proxy_timeout,
+        selected.proxy_protocol,
+        maximum_age,
+        None,
+        preread_timeout,
+        preread_buffer_bytes,
+        Some(selected),
+        Some(preface),
+        sni,
+        inbound_header,
+    )
+    .await
 }
 
 fn resolve_target(
@@ -786,19 +1380,10 @@ fn try_parse_client_hello_sni(bytes: &[u8]) -> Option<(usize, Option<String>)> {
     Some((total, None))
 }
 
-async fn send_proxy_protocol_v1(
-    downstream: &TcpStream,
-    upstream: &TcpStream,
-    peer: SocketAddr,
-) -> std::io::Result<()> {
-    let local = downstream.local_addr().unwrap_or(peer);
-    send_proxy_protocol_v1_addrs(peer, local, upstream).await
-}
-
 async fn send_proxy_protocol_v1_addrs(
     peer: SocketAddr,
     local: SocketAddr,
-    upstream: &TcpStream,
+    upstream: &mut TcpStream,
 ) -> std::io::Result<()> {
     let (family, source, destination) = match (peer.ip(), local.ip()) {
         (std::net::IpAddr::V4(source), std::net::IpAddr::V4(destination)) => {
@@ -819,8 +1404,8 @@ async fn send_proxy_protocol_v1_addrs(
         peer.port(),
         local.port()
     );
-    upstream.writable().await?;
-    upstream.try_write(header.as_bytes())?;
+    upstream.write_all(header.as_bytes()).await?;
+    upstream.flush().await?;
     Ok(())
 }
 
@@ -829,45 +1414,106 @@ async fn proxy_bidirectional<D, U>(
     upstream: U,
     idle: Duration,
     maximum_age: Duration,
+    options: StreamRelayOptions,
 ) where
     D: AsyncRead + AsyncWrite + Unpin,
     U: AsyncRead + AsyncWrite + Unpin,
 {
     let (mut downstream_read, mut downstream_write) = tokio::io::split(downstream);
     let (mut upstream_read, mut upstream_write) = tokio::io::split(upstream);
-    let copy_to_upstream = copy_with_idle_timeout(&mut downstream_read, &mut upstream_write, idle);
-    let copy_to_downstream =
-        copy_with_idle_timeout(&mut upstream_read, &mut downstream_write, idle);
-    let age_limit = async {
-        if maximum_age.is_zero() {
-            std::future::pending::<()>().await
-        } else {
-            sleep(maximum_age).await
-        }
+    let mut upload = Box::pin(copy_with_idle_timeout(
+        &mut downstream_read,
+        &mut upstream_write,
+        idle,
+        options.upload_rate,
+        options.half_close,
+    ));
+    let mut download = Box::pin(copy_with_idle_timeout(
+        &mut upstream_read,
+        &mut downstream_write,
+        idle,
+        options.download_rate,
+        options.half_close,
+    ));
+    let deadline = if maximum_age.is_zero() {
+        None
+    } else {
+        Some(tokio::time::Instant::now() + maximum_age)
     };
-    tokio::select! {
-        _ = copy_to_upstream => {}
-        _ = copy_to_downstream => {}
-        _ = age_limit => {}
+    let finished = tokio::select! {
+        _ = &mut upload => Direction::Upload,
+        _ = &mut download => Direction::Download,
+        _ = wait_for_deadline(deadline) => return,
+    };
+    if !options.half_close {
+        return;
+    }
+    // nginx `proxy_half_close on`: keep the surviving direction flowing after
+    // one side reaches EOF (the pump already half-closed the dead direction).
+    let mut upload_done = matches!(finished, Direction::Upload);
+    let mut download_done = matches!(finished, Direction::Download);
+    while !(upload_done && download_done) {
+        tokio::select! {
+            _ = &mut upload, if !upload_done => upload_done = true,
+            _ = &mut download, if !download_done => download_done = true,
+            _ = wait_for_deadline(deadline) => return,
+        }
     }
 }
 
-async fn copy_with_idle_timeout<R, W>(reader: &mut R, writer: &mut W, idle: Duration)
-where
+#[derive(Clone, Copy)]
+enum Direction {
+    Upload,
+    Download,
+}
+
+async fn wait_for_deadline(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending::<()>().await,
+    }
+}
+
+/// Copy one direction with an idle deadline and an optional byte-rate cap
+/// (`proxy_download_rate` / `proxy_upload_rate`; 0 = unlimited).
+async fn copy_with_idle_timeout<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    idle: Duration,
+    rate: u64,
+    half_close: bool,
+) where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
     let mut buffer = vec![0_u8; STREAM_COPY_BUFFER_BYTES];
+    let mut transferred = 0_u64;
+    let started = std::time::Instant::now();
     loop {
+        if rate > 0 && transferred > 0 {
+            let expected = Duration::from_secs_f64(transferred as f64 / rate as f64);
+            if expected > started.elapsed() {
+                sleep(expected - started.elapsed()).await;
+            }
+        }
         let read = match timeout(idle, reader.read(&mut buffer)).await {
             Ok(Ok(read)) => read,
-            Ok(Err(_)) | Err(_) => return,
+            Ok(Err(_)) | Err(_) => {
+                if half_close {
+                    let _ = writer.shutdown().await;
+                }
+                return;
+            }
         };
         if read == 0 {
+            if half_close {
+                let _ = writer.shutdown().await;
+            }
             return;
         }
         if writer.write_all(&buffer[..read]).await.is_err() {
             return;
         }
+        transferred = transferred.saturating_add(read as u64);
     }
 }

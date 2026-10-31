@@ -70,6 +70,158 @@ class EchoUpstream(threading.Thread):
             pass
 
 
+class TLSEchoUpstream(threading.Thread):
+    """TLS-terminating echo upstream (nginx `proxy_ssl on` target)."""
+
+    def __init__(self, port: int, certificate: str, private_key: str) -> None:
+        super().__init__(daemon=True)
+        self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.context.load_cert_chain(certificate, private_key)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.bind((HOST, port))
+        self.socket.listen(32)
+        self.stopped = threading.Event()
+
+    def run(self) -> None:
+        while not self.stopped.is_set():
+            try:
+                connection, _ = self.socket.accept()
+            except OSError:
+                return
+            threading.Thread(
+                target=self._serve, args=(connection,), daemon=True
+            ).start()
+
+    def _serve(self, connection: socket.socket) -> None:
+        try:
+            tls = self.context.wrap_socket(connection, server_side=True)
+        except (ssl.SSLError, OSError):
+            connection.close()
+            return
+        try:
+            while True:
+                data = tls.recv(BUFFER)
+                if not data:
+                    return
+                tls.sendall(data)
+        except OSError:
+            return
+        finally:
+            tls.close()
+
+    def close(self) -> None:
+        self.stopped.set()
+        try:
+            self.socket.close()
+        except OSError:
+            pass
+
+
+class HalfCloseEchoUpstream(threading.Thread):
+    """Upstream that answers only after the client half-closes its write side."""
+
+    def __init__(self, port: int) -> None:
+        super().__init__(daemon=True)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.bind((HOST, port))
+        self.socket.listen(32)
+        self.stopped = threading.Event()
+
+    def run(self) -> None:
+        while not self.stopped.is_set():
+            try:
+                connection, _ = self.socket.accept()
+            except OSError:
+                return
+            threading.Thread(
+                target=self._serve, args=(connection,), daemon=True
+            ).start()
+
+    def _serve(self, connection: socket.socket) -> None:
+        try:
+            received = b""
+            while True:
+                data = connection.recv(BUFFER)
+                if not data:
+                    break
+                received += data
+            connection.sendall(f"got:{len(received)}".encode())
+        except OSError:
+            return
+        finally:
+            connection.close()
+
+    def close(self) -> None:
+        self.stopped.set()
+        try:
+            self.socket.close()
+        except OSError:
+            pass
+
+
+def exchange_with_prefix(port: int, prefix: bytes, payload: bytes) -> dict:
+    """Write a prefix (an inbound PROXY header) plus one payload, record echo."""
+    try:
+        connection = connect(port)
+    except OSError as error:
+        return {"error": type(error).__name__}
+    try:
+        connection.settimeout(4)
+        try:
+            connection.sendall(prefix + payload)
+        except OSError:
+            return {"sent": payload.decode()}
+        received = b""
+        while True:
+            try:
+                chunk = connection.recv(BUFFER)
+            except (ConnectionResetError, BrokenPipeError):
+                break
+            if not chunk:
+                break
+            received += chunk
+            if received.endswith(payload):
+                break
+        outcome = {"sent": payload.decode()}
+        if received:
+            outcome["received"] = received.decode(errors="replace")
+        return outcome
+    finally:
+        connection.close()
+
+
+def half_close_exchange(port: int, payload: bytes) -> dict:
+    """Send a payload, half-close the write side, then record the reply."""
+    try:
+        connection = connect(port)
+    except OSError as error:
+        return {"error": type(error).__name__}
+    try:
+        connection.settimeout(5)
+        try:
+            connection.sendall(payload)
+            connection.shutdown(socket.SHUT_WR)
+        except OSError:
+            return {"sent": payload.decode()}
+        received = b""
+        while True:
+            try:
+                chunk = connection.recv(BUFFER)
+            except (ConnectionResetError, BrokenPipeError):
+                break
+            if not chunk:
+                break
+            received += chunk
+        outcome = {"sent": payload.decode()}
+        if received:
+            outcome["received"] = received.decode(errors="replace")
+        return outcome
+    finally:
+        connection.close()
+
+
 def connect(port: int, deadline_seconds: float = 5.0) -> socket.socket:
     deadline = time.monotonic() + deadline_seconds
     while True:
@@ -211,12 +363,27 @@ def main() -> None:
     parser.add_argument("--port5", type=int, required=True)
     parser.add_argument("--port6", type=int, required=True)
     parser.add_argument("--port7", type=int, required=True)
+    parser.add_argument("--port8", type=int, required=True)
+    parser.add_argument("--port9", type=int, required=True)
+    parser.add_argument("--port10", type=int, required=True)
+    parser.add_argument("--port11", type=int, required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--upstream-port", type=int, required=True)
+    parser.add_argument("--tls-echo-port", type=int, required=True)
+    parser.add_argument("--tls-echo-2-port", type=int, required=True)
+    parser.add_argument("--half-close-echo-port", type=int, required=True)
+    parser.add_argument("--tls-cert", required=True)
+    parser.add_argument("--tls-key", required=True)
     args = parser.parse_args()
 
     upstream = EchoUpstream(args.upstream_port)
     upstream.start()
+    tls_upstream = TLSEchoUpstream(args.tls_echo_port, args.tls_cert, args.tls_key)
+    tls_upstream.start()
+    tls_upstream_2 = TLSEchoUpstream(args.tls_echo_2_port, args.tls_cert, args.tls_key)
+    tls_upstream_2.start()
+    half_close_upstream = HalfCloseEchoUpstream(args.half_close_echo_port)
+    half_close_upstream.start()
 
     cases: dict[str, list[dict]] = {}
 
@@ -292,7 +459,41 @@ def main() -> None:
     cases["preread.map.return-sni"] = [preread_map_return(args.port7, "a.example")]
     cases["preread.map.return-default"] = [preread_map_return(args.port7, "b.example")]
 
+    # Wave 7E: inbound PROXY protocol (`listen … proxy_protocol`). The header
+    # source is consumed (and trusted for realip in the typed configuration),
+    # then the payload is proxied byte-identically.
+    cases["proxy_protocol.inbound-v1"] = [
+        exchange_with_prefix(
+            args.port8,
+            b"PROXY TCP4 10.0.0.5 127.0.0.1 1111 80\r\n",
+            b"proxy-in-echo\n",
+        )
+    ]
+    # A listener that requires a PROXY header rejects a connection without one.
+    cases["proxy_protocol.missing-header"] = [
+        exchange_with_prefix(args.port8, b"garbage-not-a-proxy", b"payload\n")
+    ]
+
+    # Wave 7E: upstream TLS client. `proxy_ssl on` with a verified CA bundle and
+    # the `proxy_ssl_name` SNI override carries plaintext through the TLS tunnel
+    # to the echo upstream.
+    cases["proxy_ssl.verified"] = [
+        exchange_with_prefix(args.port9, b"", b"tls-echo-payload\n")
+    ]
+    # An unrelated CA bundle fails the upstream handshake; the connection closes
+    # without proxying (status-only allowance: nginx may log/close differently).
+    cases["proxy_ssl.untrusted-ca"] = [
+        exchange_with_prefix(args.port10, b"", b"must-not-arrive\n")
+    ]
+
+    # Wave 7E: `proxy_half_close on` forwards the client half-close and keeps
+    # the reverse direction alive until the upstream answers.
+    cases["half_close.on"] = [half_close_exchange(args.port11, b"half-close-payload")]
+
     upstream.close()
+    tls_upstream.close()
+    tls_upstream_2.close()
+    half_close_upstream.close()
     with open(args.out, "w", encoding="utf-8") as handle:
         json.dump({"cases": cases}, handle, indent=2, sort_keys=True)
         handle.write("\n")

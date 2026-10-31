@@ -24,7 +24,40 @@ command -v "$NGINX_BIN" >/dev/null 2>&1 || {
 }
 
 mkdir -p "$WORK"
-UPSTREAM=$((BASE + 10))
+UPSTREAM=$((BASE + 20))
+UPSTREAM_TLS=$((BASE + 21))
+UPSTREAM_HC=$((BASE + 22))
+UPSTREAM_TLS2=$((BASE + 23))
+
+# Wave 7E certificates: `proxy_ssl` needs a verified CA-signed upstream identity
+# (SAN DNS:tls-stream.test) plus an unrelated CA for the untrusted case. Mint
+# once per WORK directory with the openssl on PATH.
+OPENSSL=$(command -v openssl || true)
+[ -n "$OPENSSL" ] || { echo "oracle-unavailable: no openssl on PATH (required for proxy_ssl)" >&2; exit 3; }
+TLS_CA="$WORK/tls-ca.pem"
+OTHER_CA="$WORK/tls-other-ca.pem"
+TLS_CERT="$WORK/tls-stream.pem"
+TLS_KEY="$WORK/tls-stream.key"
+if [ ! -f "$TLS_CERT" ] || [ ! -f "$TLS_CA" ] || [ ! -f "$OTHER_CA" ]; then
+    "$OPENSSL" req -x509 -newkey rsa:2048 -nodes -keyout "$WORK/tls-ca.key" \
+        -out "$TLS_CA" -days 3 -subj /CN=stream-tls-ca >/dev/null 2>&1 || {
+        echo "oracle-unavailable: cannot mint the stream TLS CA" >&2; exit 3; }
+    "$OPENSSL" req -x509 -newkey rsa:2048 -nodes -keyout "$WORK/tls-other-ca.key" \
+        -out "$OTHER_CA" -days 3 -subj /CN=stream-tls-other-ca >/dev/null 2>&1 || {
+        echo "oracle-unavailable: cannot mint the unrelated stream TLS CA" >&2; exit 3; }
+    cat >"$WORK/tls-stream.ext" <<'EOF'
+subjectAltName=DNS:tls-stream.test
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+EOF
+    "$OPENSSL" req -newkey rsa:2048 -nodes -keyout "$TLS_KEY" \
+        -out "$WORK/tls-stream.csr" -subj /CN=tls-stream.test >/dev/null 2>&1
+    "$OPENSSL" x509 -req -in "$WORK/tls-stream.csr" -CA "$TLS_CA" \
+        -CAkey "$WORK/tls-ca.key" -CAcreateserial -days 3 \
+        -out "$TLS_CERT" -extfile "$WORK/tls-stream.ext" >/dev/null 2>&1 || {
+        echo "oracle-unavailable: cannot sign the stream TLS identity" >&2; exit 3; }
+fi
 sed \
     -e "s|@PORT0@|$BASE|g" \
     -e "s|@PORT1@|$((BASE + 1))|g" \
@@ -34,7 +67,16 @@ sed \
     -e "s|@PORT5@|$((BASE + 5))|g" \
     -e "s|@PORT6@|$((BASE + 6))|g" \
     -e "s|@PORT7@|$((BASE + 7))|g" \
+    -e "s|@PORT8@|$((BASE + 8))|g" \
+    -e "s|@PORT9@|$((BASE + 9))|g" \
+    -e "s|@PORT10@|$((BASE + 10))|g" \
+    -e "s|@PORT11@|$((BASE + 11))|g" \
     -e "s|@UPSTREAM@|$UPSTREAM|g" \
+    -e "s|@UPSTREAM_TLS@|$UPSTREAM_TLS|g" \
+    -e "s|@UPSTREAM_HC@|$UPSTREAM_HC|g" \
+    -e "s|@UPSTREAM_TLS2@|$UPSTREAM_TLS2|g" \
+    -e "s|@TLS_CA@|$TLS_CA|g" \
+    -e "s|@OTHER_CA@|$OTHER_CA|g" \
     "$HERE/nginx.conf" >"$CONF"
 
 probe() {
@@ -70,5 +112,14 @@ fi
     --port5 "$((BASE + 5))" \
     --port6 "$((BASE + 6))" \
     --port7 "$((BASE + 7))" \
+    --port8 "$((BASE + 8))" \
+    --port9 "$((BASE + 9))" \
+    --port10 "$((BASE + 10))" \
+    --port11 "$((BASE + 11))" \
     --upstream-port "$UPSTREAM" \
+    --tls-echo-port "$UPSTREAM_TLS" \
+    --half-close-echo-port "$UPSTREAM_HC" \
+    --tls-echo-2-port "$UPSTREAM_TLS2" \
+    --tls-cert "$TLS_CERT" \
+    --tls-key "$TLS_KEY" \
     --out "$OUT"

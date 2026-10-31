@@ -266,6 +266,30 @@ const RUNTIME_OWNED_MEMORY_TUNING: &[&str] = &[
     "http2_streams_index_size",
 ];
 
+/// Whether a directive name is consumed by the bounded nginx **stream**
+/// materializer (and therefore must not be reported as accepted-unenforced
+/// merely because its HTTP-plane classification differs).
+fn stream_executed_directive(name: &str) -> bool {
+    name == "proxy_ssl"
+        || name.starts_with("proxy_ssl_")
+        || matches!(
+            name,
+            "proxy_protocol_timeout"
+                | "proxy_half_close"
+                | "proxy_requests"
+                | "proxy_responses"
+                | "proxy_download_rate"
+                | "proxy_upload_rate"
+                | "proxy_bind"
+                | "proxy_next_upstream"
+                | "proxy_next_upstream_tries"
+                | "proxy_next_upstream_timeout"
+                | "set_real_ip_from"
+                | "real_ip_header"
+                | "server_name"
+        )
+}
+
 pub(crate) fn ignored_directive_diagnostics(
     directives: &[NginxDirective],
 ) -> Vec<ConfigDiagnostic> {
@@ -328,9 +352,14 @@ pub(crate) fn ignored_directive_diagnostics(
                 let _ = in_stream;
                 continue;
             }
-            if ACCEPTED_IGNORED.contains(&directive.name.as_str())
-                || (directive.name == "uwsgi_ssl_verify"
-                    && directive.args.first().is_some_and(|value| value == "off"))
+            // Some directive names are accepted-unenforced in the HTTP plane
+            // but executed by the bounded stream materializer; an
+            // accepted-ignored diagnostic there would contradict the runtime.
+            let stream_executed = in_stream && stream_executed_directive(&directive.name);
+            if !stream_executed
+                && (ACCEPTED_IGNORED.contains(&directive.name.as_str())
+                    || (directive.name == "uwsgi_ssl_verify"
+                        && directive.args.first().is_some_and(|value| value == "off")))
             {
                 push(out, directive);
             }
@@ -1588,6 +1617,12 @@ struct Mapper<'a> {
     /// nginx stream-context `limit_conn_dry_run` inherited by stream servers.
     stream_limit_conn_dry_run: bool,
     /// nginx stream-context `preread_timeout` inherited by stream servers.
+    /// stream-level `proxy_ssl*` defaults inherited by every stream server.
+    stream_proxy_ssl: StreamProxySslSettings,
+    /// stream-level `proxy_protocol_timeout` inherited by every server.
+    stream_proxy_protocol_timeout_ms: Option<u64>,
+    /// stream-level `set_real_ip_from` trusted PROXY protocol peers.
+    stream_real_ip_cidrs: Vec<String>,
     stream_preread_timeout_ms: Option<u64>,
     /// nginx stream-context `preread_buffer_size` inherited by stream servers.
     stream_preread_buffer_bytes: Option<usize>,
@@ -1691,6 +1726,9 @@ impl<'a> Mapper<'a> {
             stream_limit_conn_zones: Vec::new(),
             stream_limit_conn_zone_names: Vec::new(),
             stream_limit_conn_dry_run: false,
+            stream_proxy_ssl: StreamProxySslSettings::default(),
+            stream_proxy_protocol_timeout_ms: None,
+            stream_real_ip_cidrs: Vec::new(),
             stream_preread_timeout_ms: None,
             stream_preread_buffer_bytes: None,
         }
@@ -6081,6 +6119,69 @@ impl<'a> Mapper<'a> {
                     stream_index += 1;
                 }
                 "log_format" | "access_log" | "error_log" | "resolver" => {}
+                "proxy_ssl" => {
+                    self.stream_proxy_ssl.apply(directive)?;
+                }
+                name if name.starts_with("proxy_ssl_") => {
+                    self.stream_proxy_ssl.apply(directive)?;
+                }
+                "proxy_protocol_timeout" => {
+                    let Some(value) = directive.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "proxy_protocol_timeout requires a duration",
+                        ));
+                    };
+                    let Some(millis) = parse_nginx_time_millis(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid proxy_protocol_timeout `{value}`"),
+                        ));
+                    };
+                    self.stream_proxy_protocol_timeout_ms = Some(millis);
+                }
+                "set_real_ip_from" => {
+                    if directive.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "set_real_ip_from requires at least one address or CIDR",
+                        ));
+                    }
+                    for value in &directive.args {
+                        if value.parse::<ipnet::IpNet>().is_err()
+                            && value.parse::<std::net::IpAddr>().is_err()
+                        {
+                            return Err(NginxConfigError::unsupported(
+                                directive,
+                                format!(
+                                    "stream set_real_ip_from `{value}` must be an IP address or CIDR"
+                                ),
+                            ));
+                        }
+                        self.stream_real_ip_cidrs.push(value.clone());
+                    }
+                }
+                "real_ip_header" => {
+                    let header = directive.args.first().map(String::as_str).unwrap_or("");
+                    if header != "proxy_protocol" {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "stream `real_ip_header` only supports `proxy_protocol` (the bounded stream realip form); HTTP header rewriting is an HTTP-plane feature",
+                        ));
+                    }
+                }
+                "split_clients" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "stream `split_clients` is not executable in this round: the bounded per-connection variable engine evaluates only the fixed accept/preread vocabulary, and a stream split_clients distribution needs a per-variable hash context; no silent approximation is performed",
+                    ));
+                }
+                "pass" => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "stream `pass` (raw-address proxy handler) requires a per-connection variable-expanded dial target and the proxy handler it is embedded in; the bounded stream plane executes `proxy_pass` targets only and fails closed rather than approximating the pass module",
+                    ));
+                }
                 // nginx `stream` context `map`: executable over the bounded
                 // per-connection variable set (accept/preread facts).
                 "map" => {
@@ -6191,6 +6292,19 @@ impl<'a> Mapper<'a> {
         let mut set_variables: Vec<StreamSetVariableConfig> = Vec::new();
         let mut preread_timeout_ms: Option<u64> = None;
         let mut preread_buffer_bytes: Option<usize> = None;
+        let mut proxy_ssl = StreamProxySslSettings::default();
+        let mut proxy_protocol_timeout_ms: Option<u64> = None;
+        let mut real_ip_cidrs: Vec<String> = Vec::new();
+        let mut proxy_half_close = false;
+        let mut proxy_requests: Option<u64> = None;
+        let mut proxy_responses: Option<u64> = None;
+        let mut proxy_download_rate: Option<u64> = None;
+        let mut proxy_upload_rate: Option<u64> = None;
+        let mut proxy_bind: Option<std::net::IpAddr> = None;
+        let mut next_upstream: Vec<UpstreamRetryCondition> = Vec::new();
+        let mut next_upstream_tries: Option<u8> = None;
+        let mut next_upstream_timeout_ms: Option<u64> = None;
+        let mut server_names: Vec<String> = Vec::new();
         // Variables a `set`/`return` template may reference: stream map
         // results plus earlier `set` assignments of this server.
         let mut available_variables: Vec<String> = self.stream_map_results.clone();
@@ -6343,10 +6457,154 @@ impl<'a> Mapper<'a> {
                     preread_buffer_bytes = Some(bytes as usize);
                 }
                 "proxy_protocol_timeout" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "`proxy_protocol_timeout` bounds reading an inbound PROXY protocol header, which the runtime does not parse; the runtime emits PROXY protocol v1 to the upstream (`proxy_protocol on`) and has no inbound header to time out",
-                    ));
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "proxy_protocol_timeout requires a duration",
+                        ));
+                    };
+                    let Some(millis) = parse_nginx_time_millis(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid proxy_protocol_timeout `{value}`"),
+                        ));
+                    };
+                    proxy_protocol_timeout_ms = Some(millis);
+                }
+                "proxy_ssl" => proxy_ssl.apply(child)?,
+                name if name.starts_with("proxy_ssl_") => proxy_ssl.apply(child)?,
+                "proxy_half_close" => {
+                    proxy_half_close = parse_on_off(child, "proxy_half_close")?;
+                }
+                "proxy_requests" => {
+                    proxy_requests = Some(parse_stream_count(child, "proxy_requests")?);
+                }
+                "proxy_responses" => {
+                    proxy_responses = Some(parse_stream_count(child, "proxy_responses")?);
+                }
+                "proxy_download_rate" => {
+                    proxy_download_rate = Some(parse_stream_rate(child, "proxy_download_rate")?);
+                }
+                "proxy_upload_rate" => {
+                    proxy_upload_rate = Some(parse_stream_rate(child, "proxy_upload_rate")?);
+                }
+                "proxy_bind" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "proxy_bind requires an address or off",
+                        ));
+                    };
+                    if value == "off" {
+                        proxy_bind = None;
+                    } else if child.args.len() != 1 {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream proxy_bind supports one IP literal (no transparent/inherit/ports forms)",
+                        ));
+                    } else {
+                        let Ok(address) = value.parse::<std::net::IpAddr>() else {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!(
+                                    "stream proxy_bind `{value}` must be an IP literal; hostnames, transparent, inherit and port forms fail closed"
+                                ),
+                            ));
+                        };
+                        proxy_bind = Some(address);
+                    }
+                }
+                "proxy_next_upstream" => {
+                    next_upstream = parse_stream_next_upstream(child)?;
+                }
+                "proxy_next_upstream_tries" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "proxy_next_upstream_tries requires a number",
+                        ));
+                    };
+                    let tries = value.parse::<u8>().map_err(|_| {
+                        NginxConfigError::unsupported(
+                            child,
+                            format!("invalid proxy_next_upstream_tries `{value}` (0..=255)"),
+                        )
+                    })?;
+                    next_upstream_tries = Some(tries);
+                }
+                "proxy_next_upstream_timeout" => {
+                    let Some(value) = child.args.first() else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "proxy_next_upstream_timeout requires a duration",
+                        ));
+                    };
+                    let Some(millis) = parse_nginx_time_millis(value) else {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            format!("invalid proxy_next_upstream_timeout `{value}`"),
+                        ));
+                    };
+                    next_upstream_timeout_ms = Some(millis);
+                }
+                "set_real_ip_from" => {
+                    if child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "set_real_ip_from requires at least one address or CIDR",
+                        ));
+                    }
+                    for value in &child.args {
+                        if value.parse::<ipnet::IpNet>().is_err()
+                            && value.parse::<std::net::IpAddr>().is_err()
+                        {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!(
+                                    "stream set_real_ip_from `{value}` must be an IP address or CIDR"
+                                ),
+                            ));
+                        }
+                        real_ip_cidrs.push(value.clone());
+                    }
+                }
+                "real_ip_header" => {
+                    let header = child.args.first().map(String::as_str).unwrap_or("");
+                    if header != "proxy_protocol" {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream `real_ip_header` only supports `proxy_protocol` (the bounded stream realip form)",
+                        ));
+                    }
+                }
+                "server_name" => {
+                    if child.args.is_empty() {
+                        return Err(NginxConfigError::unsupported(
+                            child,
+                            "stream server_name requires at least one name",
+                        ));
+                    }
+                    for value in &child.args {
+                        if crate::config::server_name_is_regex(value) {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                "stream `server_name` regex names are not executable by the bounded SNI routing table; use exact or wildcard names",
+                            ));
+                        }
+                        let Some(parsed) = crate::config::parse_server_name(value) else {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                format!("invalid stream server_name `{value}`"),
+                            ));
+                        };
+                        let Some(canonical) = parsed.canonical() else {
+                            return Err(NginxConfigError::unsupported(
+                                child,
+                                "stream `server_name` regex names are not executable by the bounded SNI routing table",
+                            ));
+                        };
+                        server_names.push(canonical);
+                    }
                 }
                 "return" => {
                     // nginx stream `return <value>`: write the value to the
@@ -6557,6 +6815,81 @@ impl<'a> Mapper<'a> {
                 }
                 stream["tls"] = tls_entry;
             }
+            let effective_proxy_ssl = proxy_ssl.merge(&self.stream_proxy_ssl);
+            if let Some(tls) =
+                materialize_stream_proxy_tls(directive, &effective_proxy_ssl, self.base_dir)?
+            {
+                if target.is_none() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "stream `proxy_ssl_*` requires a `proxy_pass` target",
+                    ));
+                }
+                stream["upstreamTls"] = tls;
+            }
+            if let Some(address) = proxy_bind {
+                stream["bindAddress"] = Value::String(address.to_string());
+            }
+            if proxy_half_close {
+                stream["halfClose"] = Value::Bool(true);
+            }
+            if let Some(requests) = proxy_requests {
+                stream["requests"] = json!(requests);
+            }
+            if let Some(responses) = proxy_responses {
+                stream["responses"] = json!(responses);
+            }
+            if let Some(rate) = proxy_download_rate.filter(|rate| *rate > 0) {
+                stream["downloadRate"] = json!(rate);
+            }
+            if let Some(rate) = proxy_upload_rate.filter(|rate| *rate > 0) {
+                stream["uploadRate"] = json!(rate);
+            }
+            if !next_upstream.is_empty() {
+                stream["nextUpstream"] = Value::Array(
+                    next_upstream
+                        .iter()
+                        .map(|condition| match condition {
+                            UpstreamRetryCondition::TransportFailure => json!("error"),
+                            UpstreamRetryCondition::Timeout => json!("timeout"),
+                            _ => json!("error"),
+                        })
+                        .collect(),
+                );
+            }
+            if let Some(tries) = next_upstream_tries {
+                stream["nextUpstreamTries"] = json!(tries);
+            }
+            if let Some(timeout) = next_upstream_timeout_ms {
+                stream["nextUpstreamTimeoutMs"] = json!(timeout);
+            }
+            if !server_names.is_empty() {
+                stream["serverNames"] = Value::Array(
+                    server_names
+                        .iter()
+                        .map(|name| Value::String(name.clone()))
+                        .collect(),
+                );
+            }
+            if listen.default_server {
+                stream["defaultServer"] = Value::Bool(true);
+            }
+            if listen.accept_proxy_protocol {
+                stream["acceptProxyProtocol"] = Value::Bool(true);
+            }
+            let mut effective_real_ip = self.stream_real_ip_cidrs.clone();
+            effective_real_ip.extend(real_ip_cidrs.iter().cloned());
+            if !effective_real_ip.is_empty() {
+                stream["realIpTrustedCidrs"] = Value::Array(
+                    effective_real_ip
+                        .iter()
+                        .map(|cidr| Value::String(cidr.clone()))
+                        .collect(),
+                );
+            }
+            stream["proxyProtocolTimeoutMs"] = json!(proxy_protocol_timeout_ms
+                .or(self.stream_proxy_protocol_timeout_ms)
+                .unwrap_or(30_000));
             // Type-check against the runtime model early for clearer diagnostics.
             if let Some(target) = &target {
                 let _: StreamTargetConfig =
@@ -7231,6 +7564,301 @@ impl GrpcSslSettings {
     }
 }
 
+/// nginx stream `proxy_ssl*` upstream TLS declarations.
+///
+/// `proxy_ssl on` enables the TLS transport; the remaining forms share the
+/// upstream TLS policy shape used by the HTTP proxy, gRPC and uWSGI adapters.
+/// `proxy_ssl_verify off` is an explicit dangerous accept-any verifier (nginx's
+/// default is also off, but the runtime never disables verification implicitly).
+#[derive(Clone, Default, PartialEq)]
+struct StreamProxySslSettings {
+    enabled: Option<bool>,
+    verify: Option<bool>,
+    trusted_certificate: Option<String>,
+    certificate: Option<String>,
+    certificate_key: Option<String>,
+    server_name: Option<bool>,
+    name: Option<String>,
+    protocols: Option<SslProtocolRange>,
+}
+
+impl StreamProxySslSettings {
+    fn merge(&self, lower: &StreamProxySslSettings) -> StreamProxySslSettings {
+        StreamProxySslSettings {
+            enabled: self.enabled.or(lower.enabled),
+            verify: self.verify.or(lower.verify),
+            trusted_certificate: self
+                .trusted_certificate
+                .clone()
+                .or_else(|| lower.trusted_certificate.clone()),
+            certificate: self
+                .certificate
+                .clone()
+                .or_else(|| lower.certificate.clone()),
+            certificate_key: self
+                .certificate_key
+                .clone()
+                .or_else(|| lower.certificate_key.clone()),
+            server_name: self.server_name.or(lower.server_name),
+            name: self.name.clone().or_else(|| lower.name.clone()),
+            protocols: self.protocols.or(lower.protocols),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self == &StreamProxySslSettings::default()
+    }
+
+    fn resolve_file(&self, directive: &NginxDirective) -> Result<String, NginxConfigError> {
+        let value = directive.args.first().expect("checked argument presence");
+        if value.starts_with('/') || value.contains('\\') {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "`{}` file `{value}` must be relative to the loaded configuration directory: the runtime sandboxes stream upstream TLS material to the config directory",
+                    directive.name
+                ),
+            ));
+        }
+        Ok(value.clone())
+    }
+
+    fn apply(&mut self, directive: &NginxDirective) -> Result<(), NginxConfigError> {
+        let Some(value) = directive.args.first() else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{} requires an argument", directive.name),
+            ));
+        };
+        match directive.name.as_str() {
+            "proxy_ssl" => match value.as_str() {
+                "on" => self.enabled = Some(true),
+                "off" => self.enabled = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("stream proxy_ssl accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "proxy_ssl_verify" => match value.as_str() {
+                "on" => self.verify = Some(true),
+                "off" => self.verify = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("stream proxy_ssl_verify accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "proxy_ssl_trusted_certificate" => {
+                self.trusted_certificate = Some(self.resolve_file(directive)?);
+            }
+            "proxy_ssl_certificate" => {
+                self.certificate = Some(self.resolve_file(directive)?);
+            }
+            "proxy_ssl_certificate_key" => {
+                self.certificate_key = Some(self.resolve_file(directive)?);
+            }
+            "proxy_ssl_server_name" => match value.as_str() {
+                "on" => self.server_name = Some(true),
+                "off" => self.server_name = Some(false),
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("stream proxy_ssl_server_name accepts on|off, found `{other}`"),
+                    ))
+                }
+            },
+            "proxy_ssl_name" => {
+                if value.is_empty()
+                    || value.len() > 253
+                    || value
+                        .bytes()
+                        .any(|byte| byte.is_ascii_control() || byte == b' ' || byte == b'/')
+                {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "stream proxy_ssl_name must be a host name without controls, spaces or `/`",
+                    ));
+                }
+                self.name = Some(value.clone());
+            }
+            "proxy_ssl_protocols" => self.protocols = Some(parse_ssl_protocols(directive)?),
+            "proxy_ssl_ciphers" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_ciphers` cannot be honored: nginx cipher strings are OpenSSL-specific, while the runtime TLS stack selects policy-safe suites from its own provider; remove the directive or accept the runtime TLS policy for this upstream",
+                ))
+            }
+            "proxy_ssl_crl" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_crl` cannot be honored: the pinned rustls/webpki stack does not consume certificate revocation lists for upstream verification",
+                ))
+            }
+            "proxy_ssl_session_reuse" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_session_reuse` cannot be honored: upstream TLS session resumption is owned by the runtime TLS stack and is not configurable per stream server",
+                ))
+            }
+            "proxy_ssl_conf_command" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_conf_command` cannot be honored: it is an OpenSSL configuration command with no equivalent in the rustls-based runtime TLS stack",
+                ))
+            }
+            "proxy_ssl_password_file" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_password_file` cannot be honored: encrypted client private keys are not read by the runtime; provide an unencrypted PEM key file",
+                ))
+            }
+            "proxy_ssl_certificate_cache" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_certificate_cache` cannot be honored: dynamic client-certificate caching is a typed-plane/ACME concern, not a stream upstream client-identity setting",
+                ))
+            }
+            "proxy_ssl_verify_depth" => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`proxy_ssl_verify_depth` cannot be honored: webpki verifies the complete presented chain, so a custom chain-depth limit cannot be enforced",
+                ))
+            }
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{other}` is not executable by the bounded stream upstream TLS client; implemented: proxy_ssl on|off / proxy_ssl_verify / proxy_ssl_trusted_certificate / proxy_ssl_certificate / proxy_ssl_certificate_key / proxy_ssl_server_name / proxy_ssl_name / proxy_ssl_protocols"
+                    ),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Materialize the stream `proxy_ssl*` declarations into the runtime upstream
+/// TLS policy. A declaration without `proxy_ssl on` fails closed: nginx parses
+/// the values but only dials TLS when `proxy_ssl on` is set, and the runtime
+/// refuses an ambiguous intent instead of silently ignoring it.
+fn materialize_stream_proxy_tls(
+    location: &NginxDirective,
+    settings: &StreamProxySslSettings,
+    base_dir: &std::path::Path,
+) -> Result<Option<Value>, NginxConfigError> {
+    if settings.is_empty() {
+        return Ok(None);
+    }
+    if settings.enabled != Some(true) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "stream `proxy_ssl_*` declarations require `proxy_ssl on`; nginx parses the values but only enables upstream TLS when `proxy_ssl on` is set, and the runtime refuses an ambiguous configuration instead of silently ignoring them",
+        ));
+    }
+    if settings.verify == Some(false) && settings.trusted_certificate.is_some() {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "stream `proxy_ssl_verify off` disables peer-chain verification, so `proxy_ssl_trusted_certificate` would have no effect; remove one of the two directives",
+        ));
+    }
+    if settings.trusted_certificate.is_some() && settings.verify != Some(true) {
+        return Err(NginxConfigError::unsupported(
+            location,
+            "`proxy_ssl_trusted_certificate` requires `proxy_ssl_verify on`; the runtime enables verification by default and only uses a custom CA bundle for an explicit verifying policy",
+        ));
+    }
+    match (&settings.certificate, &settings.certificate_key) {
+        (Some(_), None) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`proxy_ssl_certificate` requires `proxy_ssl_certificate_key`",
+            ));
+        }
+        (None, Some(_)) => {
+            return Err(NginxConfigError::unsupported(
+                location,
+                "`proxy_ssl_certificate_key` requires `proxy_ssl_certificate`",
+            ));
+        }
+        _ => {}
+    }
+    let mut tls = serde_json::Map::new();
+    if let Some(ca_file) = &settings.trusted_certificate {
+        tls.insert("trustMode".to_owned(), Value::String("custom".to_owned()));
+        tls.insert(
+            "caCertificateFiles".to_owned(),
+            Value::Array(vec![Value::String(resolve_upstream_tls_file(
+                base_dir, ca_file,
+            ))]),
+        );
+    } else {
+        tls.insert("trustMode".to_owned(), Value::String("system".to_owned()));
+    }
+    if let (Some(certificate), Some(key)) = (&settings.certificate, &settings.certificate_key) {
+        tls.insert(
+            "clientCertificateFile".to_owned(),
+            Value::String(resolve_upstream_tls_file(base_dir, certificate)),
+        );
+        tls.insert(
+            "clientPrivateKeyFile".to_owned(),
+            Value::String(resolve_upstream_tls_file(base_dir, key)),
+        );
+    }
+    if let Some(protocols) = settings.protocols {
+        tls.insert(
+            "minimumVersion".to_owned(),
+            Value::String(protocols.minimum.wire().to_owned()),
+        );
+        tls.insert(
+            "maximumVersion".to_owned(),
+            Value::String(protocols.maximum.wire().to_owned()),
+        );
+    }
+    if let Some(name) = &settings.name {
+        tls.insert("serverName".to_owned(), Value::String(name.clone()));
+    }
+    if settings.server_name == Some(false) {
+        tls.insert("sendSni".to_owned(), Value::Bool(false));
+    }
+    if settings.verify == Some(false) {
+        tls.insert("dangerousAcceptAnyVerify".to_owned(), Value::Bool(true));
+    }
+    Ok(Some(Value::Object(tls)))
+}
+
+/// Parse one `proxy_next_upstream` condition list for the stream module.
+fn parse_stream_next_upstream(
+    directive: &NginxDirective,
+) -> Result<Vec<UpstreamRetryCondition>, NginxConfigError> {
+    let mut conditions = Vec::new();
+    for argument in &directive.args {
+        let condition = match argument.as_str() {
+            "error" => UpstreamRetryCondition::TransportFailure,
+            "timeout" => UpstreamRetryCondition::Timeout,
+            other => {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "stream `proxy_next_upstream` condition `{other}` is not executable; bounded conditions: error, timeout"
+                    ),
+                ))
+            }
+        };
+        if !conditions.contains(&condition) {
+            conditions.push(condition);
+        }
+    }
+    if conditions.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "proxy_next_upstream requires at least one condition",
+        ));
+    }
+    Ok(conditions)
+}
 /// nginx `uwsgi_ssl_*` upstream TLS settings.
 ///
 /// nginx's `ngx_http_uwsgi_module` accepts this family at http/server/location
@@ -7411,6 +8039,49 @@ fn reject_scgi_ssl(directive: &NginxDirective) -> NginxConfigError {
     )
 }
 
+/// Parse a non-negative stream counter (`proxy_requests`/`proxy_responses`);
+/// nginx treats `0` as "unlimited".
+fn parse_stream_count(directive: &NginxDirective, name: &str) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{name} requires a number"),
+        ));
+    };
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{name} takes exactly one number"),
+        ));
+    }
+    value
+        .parse::<u64>()
+        .map_err(|_| NginxConfigError::unsupported(directive, format!("invalid {name} `{value}`")))
+}
+
+/// Parse a bounded stream rate in bytes per second (`proxy_download_rate` /
+/// `proxy_upload_rate`); nginx treats `0` as unlimited.
+fn parse_stream_rate(directive: &NginxDirective, name: &str) -> Result<u64, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{name} requires a size or 0"),
+        ));
+    };
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("{name} takes exactly one size"),
+        ));
+    }
+    parse_size_bytes(value).ok_or_else(|| {
+        NginxConfigError::unsupported(
+            directive,
+            format!("invalid {name} `{value}` (bytes/k/m, or 0 for unlimited)"),
+        )
+    })
+}
+
 /// Split a CGI-family pass target into the dial target and whether TLS is
 /// required. nginx accepts `uwsgi://host:port` (plain) and
 /// `suwsgi://host:port` (TLS) for `uwsgi_pass`; `scgi_pass` accepts only a bare
@@ -7581,6 +8252,12 @@ struct StreamListenSpec {
     port: u16,
     ssl: bool,
     udp: bool,
+    /// nginx stream `listen … proxy_protocol`: accept an inbound PROXY protocol
+    /// header (v1 text or v2 binary) before the stream content phase.
+    accept_proxy_protocol: bool,
+    /// nginx stream `listen … default_server`: this server is the socket's
+    /// SNI-routing default when no `server_name` matches.
+    default_server: bool,
 }
 
 fn parse_stream_listen_spec(
@@ -7592,17 +8269,15 @@ fn parse_stream_listen_spec(
     })?;
     let mut ssl = false;
     let mut udp = false;
+    let mut accept_proxy_protocol = false;
+    let mut default_server = false;
     for part in parts {
         match part.as_str() {
             "ssl" => ssl = true,
             "udp" => udp = true,
             "reuseport" | "bind" | "deferred" => {}
-            "proxy_protocol" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "inbound PROXY protocol on stream listeners requires explicit trusted source CIDRs; configure the stream listener policy in the runtime app config",
-                ));
-            }
+            "proxy_protocol" => accept_proxy_protocol = true,
+            "default_server" => default_server = true,
             other
                 if other.starts_with("backlog=")
                     || other.starts_with("so_keepalive=")
@@ -7627,6 +8302,8 @@ fn parse_stream_listen_spec(
         port,
         ssl,
         udp,
+        accept_proxy_protocol,
+        default_server,
     })
 }
 
@@ -13248,6 +13925,26 @@ fn parse_access_rule(directive: &NginxDirective) -> Result<Value, NginxConfigErr
 }
 
 /// Parse nginx time suffixes (`10s`, `5m`, `1h`, `1d`) into whole seconds.
+/// Parse a duration with nginx's `ms`, `s`, `m`, `h`, `d` suffixes into
+/// milliseconds (used by the stream PROXY protocol header deadline).
+fn parse_nginx_time_millis(value: &str) -> Option<u64> {
+    let (number, unit) = value
+        .char_indices()
+        .find(|(_, character)| !character.is_ascii_digit())
+        .map(|(index, _)| value.split_at(index))
+        .unwrap_or((value, ""));
+    let number = number.parse::<u64>().ok()?;
+    let multiplier = match unit {
+        "" | "ms" => 1,
+        "s" => 1_000,
+        "m" => 60_000,
+        "h" => 3_600_000,
+        "d" => 86_400_000,
+        _ => return None,
+    };
+    number.checked_mul(multiplier)
+}
+
 fn parse_nginx_time_seconds(value: &str) -> Option<u64> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -17076,14 +17773,15 @@ stream {
                 .expect("materialize defaults");
         assert_eq!(default_config.streams[0].preread_timeout_ms, 30_000);
         assert_eq!(default_config.streams[0].preread_buffer_bytes, 16 * 1024);
-        // Fail-closed forms: inbound PROXY protocol timing has no runtime path,
-        // and the buffer bound is enforced.
+        // nginx stream `proxy_protocol_timeout` is executable (it bounds the
+        // inbound PROXY protocol header read).
+        let timed = materialize(
+            "stream { server { listen 127.0.0.1:9624; proxy_protocol_timeout 3s; proxy_pass 127.0.0.1:9721; } }",
+        )
+        .expect("proxy_protocol_timeout materializes");
+        assert_eq!(timed.streams[0].proxy_protocol_timeout_ms, 3_000);
+        // Fail-closed forms: the buffer bound is enforced.
         for (label, body, needle) in [
-            (
-                "proxy_protocol_timeout",
-                "stream { server { listen 127.0.0.1:9624; proxy_protocol_timeout 3s; proxy_pass 127.0.0.1:9721; } }",
-                "does not parse",
-            ),
             (
                 "buffer too small",
                 "stream { preread_buffer_size 100; }",
@@ -18794,5 +19492,236 @@ server {
             })
             .count();
         assert_eq!(tls_resources, 2);
+    }
+
+    // ------------------------------------------------------------------
+    // Wave 7E: stream upstream TLS, inbound PROXY, routing and relay knobs
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn stream_proxy_ssl_materializes_the_shared_upstream_tls_policy() {
+        let config = materialize(
+            r#"
+stream {
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate stream-ca.pem;
+    proxy_ssl_protocols TLSv1.2 TLSv1.3;
+    server {
+        listen 5200;
+        proxy_ssl on;
+        proxy_ssl_server_name on;
+        proxy_ssl_name stream-tls.test;
+        proxy_ssl_certificate client.pem;
+        proxy_ssl_certificate_key client.key;
+        proxy_pass 127.0.0.1:15200;
+    }
+}
+"#,
+        )
+        .expect("stream proxy_ssl materializes");
+        let server = &config.streams[0];
+        let tls = server
+            .upstream_tls
+            .as_ref()
+            .expect("stream upstream TLS policy");
+        assert_eq!(tls.trust_mode, crate::config::UpstreamTlsTrustMode::Custom);
+        assert_eq!(tls.ca_certificate_files.len(), 1);
+        assert!(tls.ca_certificate_files[0].ends_with("stream-ca.pem"));
+        assert_eq!(tls.server_name.as_deref(), Some("stream-tls.test"));
+        assert!(tls.send_sni);
+        assert!(
+            tls.client_certificate_file
+                .as_deref()
+                .is_some_and(|path| path.ends_with("client.pem")),
+            "{:?}",
+            tls.client_certificate_file
+        );
+        assert!(
+            tls.client_private_key_file
+                .as_deref()
+                .is_some_and(|path| path.ends_with("client.key")),
+            "{:?}",
+            tls.client_private_key_file
+        );
+        assert_eq!(tls.minimum_version, TlsVersion::Tls12);
+        assert_eq!(tls.maximum_version, TlsVersion::Tls13);
+    }
+
+    #[test]
+    fn stream_proxy_ssl_requires_proxy_ssl_on() {
+        let error = materialize(
+            r#"
+stream {
+    server {
+        listen 5201;
+        proxy_pass 127.0.0.1:15201;
+        proxy_ssl_verify on;
+    }
+}
+"#,
+        )
+        .expect_err("proxy_ssl without proxy_ssl on must fail closed");
+        assert!(error.to_string().contains("proxy_ssl on"), "{error}");
+    }
+
+    #[test]
+    fn stream_proxy_ssl_unsupported_knobs_fail_closed_with_precise_reasons() {
+        for (directive, expected) in [
+            ("proxy_ssl_ciphers HIGH", "OpenSSL-specific"),
+            ("proxy_ssl_crl crl.pem", "revocation lists"),
+            ("proxy_ssl_session_reuse on", "session resumption"),
+            (
+                "proxy_ssl_conf_command Options",
+                "OpenSSL configuration command",
+            ),
+            (
+                "proxy_ssl_password_file pass.txt",
+                "encrypted client private keys",
+            ),
+            (
+                "proxy_ssl_certificate_cache max=1",
+                "dynamic client-certificate caching",
+            ),
+            ("proxy_ssl_verify_depth 2", "complete presented chain"),
+        ] {
+            let text = format!(
+                "stream {{\n    server {{\n        listen 5202;\n        proxy_ssl on;\n        proxy_pass 127.0.0.1:15202;\n        {directive};\n    }}\n}}\n"
+            );
+            let error =
+                materialize(&text).expect_err("unhonoured stream proxy_ssl form fails closed");
+            assert!(
+                error.to_string().contains(expected),
+                "`{directive}` diagnostic should mention `{expected}`: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn stream_listen_proxy_protocol_and_timeout_materialize() {
+        let config = materialize(
+            r#"
+stream {
+    proxy_protocol_timeout 5s;
+    set_real_ip_from 10.0.0.0/8;
+    real_ip_header proxy_protocol;
+    server {
+        listen 5203 proxy_protocol;
+        proxy_pass 127.0.0.1:15203;
+    }
+}
+"#,
+        )
+        .expect("inbound PROXY protocol materializes");
+        let server = &config.streams[0];
+        assert!(server.accept_proxy_protocol);
+        assert_eq!(server.proxy_protocol_timeout_ms, 5_000);
+        assert_eq!(server.real_ip_trusted_cidrs, vec!["10.0.0.0/8".to_owned()]);
+        // The upstream emission flag stays independent from the inbound flag.
+        assert!(!server.proxy_protocol);
+    }
+
+    #[test]
+    fn stream_relay_and_retry_knobs_materialize() {
+        let config = materialize(
+            r#"
+stream {
+    upstream stream_pool {
+        server 127.0.0.1:15210;
+    }
+    server {
+        listen 5204;
+        proxy_pass stream_pool;
+        proxy_half_close on;
+        proxy_requests 2;
+        proxy_responses 2;
+        proxy_download_rate 4096;
+        proxy_upload_rate 1024;
+        proxy_bind 127.0.0.2;
+        proxy_next_upstream error timeout;
+        proxy_next_upstream_tries 2;
+        proxy_next_upstream_timeout 3s;
+    }
+}
+"#,
+        )
+        .expect("stream relay knobs materialize");
+        let server = &config.streams[0];
+        assert!(server.half_close);
+        assert_eq!(server.requests, Some(2));
+        assert_eq!(server.responses, Some(2));
+        assert_eq!(server.download_rate, Some(4096));
+        assert_eq!(server.upload_rate, Some(1024));
+        assert_eq!(
+            server.bind_address,
+            Some(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 2)))
+        );
+        assert_eq!(
+            server.next_upstream,
+            vec![
+                UpstreamRetryCondition::TransportFailure,
+                UpstreamRetryCondition::Timeout
+            ]
+        );
+        assert_eq!(server.next_upstream_tries, Some(2));
+        assert_eq!(server.next_upstream_timeout_ms, Some(3_000));
+    }
+
+    #[test]
+    fn stream_server_name_virtual_servers_and_default_server_materialize() {
+        let config = materialize(
+            r#"
+stream {
+    server {
+        listen 5205;
+        ssl_preread on;
+        server_name a.sni.test;
+        proxy_pass 127.0.0.1:15220;
+    }
+    server {
+        listen 5205 default_server;
+        ssl_preread on;
+        server_name *.sni.test;
+        proxy_pass 127.0.0.1:15221;
+    }
+}
+"#,
+        )
+        .expect("stream SNI virtual servers materialize");
+        assert_eq!(config.streams.len(), 2);
+        assert_eq!(config.streams[0].port, 5205);
+        assert_eq!(config.streams[1].port, 5205);
+        assert_eq!(
+            config.streams[1].server_names,
+            vec!["*.sni.test".to_owned()]
+        );
+        assert!(config.streams[1].default_server);
+    }
+
+    #[test]
+    fn stream_split_clients_and_pass_fail_closed_with_exact_blockers() {
+        let split = materialize(
+            r#"
+stream {
+    split_clients "$remote_addr" $backend {
+        50% a;
+        * b;
+    }
+}
+"#,
+        )
+        .expect_err("stream split_clients must fail closed");
+        assert!(split.to_string().contains("split_clients"), "{split}");
+        let pass = materialize(
+            r#"
+stream {
+    server {
+        listen 5206;
+        pass 127.0.0.1:15230;
+    }
+}
+"#,
+        )
+        .expect_err("stream pass must fail closed");
+        assert!(pass.to_string().contains("`pass`"), "{pass}");
     }
 }
