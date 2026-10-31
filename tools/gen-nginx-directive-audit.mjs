@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '72c77d3a';
+const AUDIT_HEAD = '9884570c';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B), the GeoIP-module wave (wave 12), the residual-closure wave (wave 13), the temp-spool + connection-control wave (wave 14A) and the mail client-certificate wave (wave 14B) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B), the GeoIP-module wave (wave 12), the residual-closure wave (wave 13), the temp-spool + connection-control wave (wave 14A), the mail client-certificate wave (wave 14B) and the nginx slice-module wave (wave 14C) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -568,6 +568,12 @@ const COMPLETED_WAVES = [
       'mail:auth_http_pass_client_cert',
     ],
   },
+  {
+    key: 'wave 14C (nginx slice module)',
+    summary:
+      'slice executes with nginx scalar inheritance, $slice_range semantics, structural per-slice cache-key variants and bounded streaming assembly of validated 206 slices into the single-range filter output (17 real-nginx differential cases; final directive implementation wave)',
+    ids: ['http:slice'],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -678,20 +684,6 @@ const REMAINING_GAP_CATEGORIES = [
     surface:
       'crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface',
-  },
-  {
-    key: 'slice',
-    label: 'slice partial-object cache',
-    priority: 'medium (deferred implementable-with-subsystem)',
-    ids: [
-      'http:slice',
-    ],
-    rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that relies on slice partial-object caching fails to activate.',
-    why: 'deferred but implementable: slice needs multi-subrequest Range assembly (the bounded subrequest engine exists, but assembling/streaming multiple range slices into the cache store is a subsystem of its own), so it is backlog rather than a blocker.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs + cache store, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'the subrequest engine and cache store exist; needs a Range-assembly differential (single/multi slice, partial-object reuse) against nginx 1.29.6',
   },
   {
     key: 'plus-modules',
@@ -1982,6 +1974,20 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the verify-on default and pass-cert-off cases compare the auth_http request headers (Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always, Auth-SSL-Cert only with the flag) with nginx escaping against real nginx 1.29.6',
   },
+  {
+    id: 'http:slice',
+    evidence: 'tests/nginx/differential-http/nginx-oracle.json::slice.range.span-cold',
+    claim: 'slice assembles validated 206 slices into nginx single-range output with per-slice caching',
+    proves:
+      '17 slice cases compare full/range/open/suffix/multi/invalid/If-Range/HEAD assembly against real nginx 1.29.6, with an upstream Range hit log proving repeats are cache hits (full=8, repeat=+0, head=1, span=2, open=3, suffix=3, multi=8, reuse=8, invalid=1)',
+  },
+  {
+    id: 'http:slice',
+    evidence: 'tests/nginx/differential-http/nginx-oracle.json::slice.hits',
+    claim: 'the structural per-slice cache key makes warm range requests reuse cached slices',
+    proves:
+      'the slice.hits case proves the repeat full request and warm ranges hit the per-slice cache instead of re-fetching, matching nginx proxy_cache_key "$slice_range" behavior',
+  },
 ];
 
 /**
@@ -2279,7 +2285,8 @@ function renderHeader(inventory, catalog) {
   bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
   userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B)
   the GeoIP-module wave (wave 12), the residual-closure wave (wave 13) and the temp-spool +
-  connection-control wave (wave 14A) and the mail client-certificate wave (wave 14B).** The code, tests, generated operator matrix and the re-synced directive
+  connection-control wave (wave 14A), the mail client-certificate wave (wave 14B) and the
+  nginx slice-module wave (wave 14C, the final directive implementation wave).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2308,8 +2315,9 @@ function renderHeader(inventory, catalog) {
   and the residual-closure wave (stream split_clients/pass, gRPC bind/keepalive, mail
   capabilities/real-IP) and the temp-spool + connection-control wave (bounded CGI spool,
   ignore_client_abort, catch_stderr; send_lowat accepted-unenforced) and the mail
-  client-certificate wave (deferred post-handshake verification for POP3/IMAP/SMTP) are
-  recorded as completed in section 3, and every one of them is asserted executable by
+  client-certificate wave (deferred post-handshake verification for POP3/IMAP/SMTP) and the
+  slice-module wave (per-slice caching and bounded Range assembly) are recorded as
+  completed in section 3, and every one of them is asserted executable by
   \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
@@ -2415,7 +2423,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave and the mail client-certificate wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave, the mail client-certificate wave and the slice-module wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2450,7 +2458,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-mail-client-cert-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-slice-wave terminal worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2524,7 +2532,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12, wave 13, wave 14A, wave 14B)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12, wave 13, wave 14A, wave 14B, wave 14C)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2562,7 +2570,8 @@ wave 12 brought GeoIP in profile (http/stream lookup directives and the \$geoip_
 wave 13 closed the remaining stream, gRPC and mail residuals (stream split_clients/pass,
 gRPC bind/keepalive, mail capability lists and trusted-PROXY real-IP); and wave 14A added
 the bounded CGI temp-spool subsystem plus ignore_client_abort/catch_stderr connection
-control; and wave 14B added the mail client-certificate verification flows.
+control; wave 14B added the mail client-certificate verification flows; and wave 14C added
+the nginx slice module, closing the last directive implementation wave.
 
 ${completedTable}
 ${completedRows}
@@ -2678,22 +2687,23 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the mail client-certificate wave (wave 14B). An accepted-unenforced row is silently ignored today; a rejected row fails
-the configuration load. Both are real migration gaps, so every row carries the
+the slice-module wave (wave 14C, the terminal directive wave). An accepted-unenforced row is
+silently ignored today; a rejected row fails the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
 
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-The remaining backlog is now the definitive 35-row list: 32 pinned-dependency rows - hyper
-HTTP/1 close-delimited framing (1, \`chunked_transfer_encoding\`; probed), OCSP dynamic
-fetch/refresh/verification (6, rustls static-only), rustls/OpenSSL TLS knobs (gRPC 6, uWSGI 7)
-and mail rustls knobs (12, after the client-certificate flows moved to executable in wave
-14B) - plus slice (1: needs multi-subrequest Range/\`$slice_range\` assembly; nginx-probed and
-fail-closed with an exact blocker) and nginx Plus degradation/degrade (2, no OSS oracle).
-fastcgi_send_lowat is accepted-unenforced and runtime-owned (BSD-only hint, Linux
-unaffected), as are the open-file-cache trio and mail error_log. Nothing else is backlog.
+The remaining backlog is the terminal 34-row ledger, and **every row is blocked by a
+pinned dependency or by nginx Plus** - no implementable directive remains. Pinned-dependency
+rows (32): hyper HTTP/1 close-delimited framing (1, \`chunked_transfer_encoding\`; probed),
+rustls static-only OCSP dynamic fetch/refresh/verification (6), rustls/OpenSSL TLS knobs for
+gRPC (6), uWSGI (7) and mail (12). nginx Plus rows (2): degradation/degrade, which have no
+OSS oracle. The slice module closed in wave 14C; fastcgi_send_lowat is accepted-unenforced
+and runtime-owned (BSD-only hint, Linux unaffected), as are the open-file-cache trio and
+mail error_log. Out-of-profile remains 5 (Perl 4 + load_module 1: an embedded interpreter
+and the nginx C ABI). This is the terminal state for the audit.
 
 Wave 7A also landed two non-directive transport capabilities recorded here for operators:
 (a) typed \`[http] unixSocketRoot\` with strict-descendant confinement for
@@ -2863,6 +2873,25 @@ rustls enforces the clientAuth EKU when present where nginx generic OpenSSL veri
 does not, and \`optional_no_ca\` without a bundle enforces only the validity window while
 recording an optional failure (never SUCCESS).
 
+Wave 14C acceptance evidence: \`slice\` executes at http/server/location with nginx scalar
+inheritance (\`slice 0\` = declared off), \`$slice_range\` available in proxy_set_header/
+add_header (ngx_http_slice_get_start semantics: multi-range/If-Range starts 0, suffix jump,
+boundary alignment), structural per-slice cache-key variants (nginx proxy_cache_key
+"$slice_range" equivalent, first slice included, Vary/freshness reuse) and bounded
+streaming assembly of validated 206 slices into nginx's single-range filter output
+(assembled 200, 206 + Content-Range, 416 bytes */complete, HEAD one slice), with
+ETag/complete-length anchoring and mid-stream abort, plus a route-scoped proxy_cache
+inheritance fix (a proxy_cache_path zone alone no longer enables caching for unrelated
+locations). differential-http grew 367 -> 384 (17 slice cases, including an upstream Range
+hit log proving the repeat is a cache hit: full=8, repeat=+0, head=1, span=2, open=3,
+suffix=3, multi=8, reuse=8, invalid=1) with the oracle re-captured from real nginx 1.29.6;
+floor/manifest 384. Bounded limitations recorded: conditional requests over assembled
+slices forward If-None-Match/If-Modified-Since upstream and return the assembled 200
+(nginx's not_modified filter answers 304; the whole-object cache path still answers 304);
+HEAD slices are not cached; non-GET/HEAD keep the one-exchange path; a malformed first
+slice answers 502 where nginx aborts the connection; slice sizes > 64 MiB fail closed
+(bounded slice buffer; nginx accepts any size).
+
 Wave 12 note: GeoIP is in profile behind a bounded MMDB runtime. Database lifecycle caveat:
 the runtime ships no GeoLite/GeoIP2 data and never downloads it; databases are
 operator-provisioned absolute MMDB paths confined by the typed \`[http] geoipDatabaseRoot\`,
@@ -2912,6 +2941,19 @@ differences: depth counts presented intermediates, rustls enforces the clientAut
 present, and optional_no_ca without a bundle checks only the validity window while recording
 an optional failure (never SUCCESS).
 
+Wave 14C note: \`slice\` now executes end-to-end. Per-slice subrequests are proxied with the
+computed \`$slice_range\` (multi-range/If-Range start 0, suffix jump, boundary alignment),
+each validated 206 slice is assembled by a bounded streaming filter into nginx's single-range
+output (assembled 200, 206 + Content-Range, 416 \`bytes */<complete>\`, HEAD one slice), and
+the per-slice cache-key variant makes repeat and range requests cache hits (proven by the
+upstream Range hit log: full=8, repeat=+0, head=1, span=2, open=3, suffix=3, multi=8,
+reuse=8, invalid=1). Bounded limitations: conditional requests over assembled slices return
+the assembled 200 rather than 304 (the whole-object path still answers 304); HEAD slices are
+not cached; non-GET/HEAD keep the one-exchange path; a malformed first slice answers 502
+where nginx aborts the connection; > 64 MiB slice sizes fail closed. A route-scoped
+proxy_cache inheritance fix also landed (a proxy_cache_path zone alone no longer enables
+caching for unrelated nginx locations). This was the final directive implementation wave.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2958,7 +3000,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave and the mail client-certificate wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave, the mail client-certificate wave and the slice-module wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -3095,7 +3137,10 @@ force_ranges, ignore_headers, pass_request_body, memcached gzip-flag and gRPC
 ignore_headers). Wave 14A added the bounded per-generation CGI temp-spool subsystem and the
 ignore_client_abort/catch_stderr connection-control forms (send_lowat is a Linux no-op,
 accepted-unenforced). The residual store-on, uWSGI TLS and gRPC TLS-library forms are
-backlog rows, not profile exclusions.
+backlog rows, not profile exclusions. Wave 14C executes the nginx slice module
+(per-slice caching and bounded Range assembly), so at the terminal state the only remaining
+behavior-gap rows are the 32 pinned-dependency rows plus the 2 nginx Plus rows (section
+3.3).
 
 Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
 \`crates/sdkwork-webserver-mail-protocol\` crate (POP3/IMAP/SMTP state machines) and the
@@ -3149,15 +3194,18 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 ### 5.5 Conclusion
 
 A "parity" target would still require: embedded Perl, a QUIC transport, embedded
-template/language filters and dynamic module loading, plus the residual protocol/gRPC/
-mail sub-families that are now backlog rather than profile exclusions. Six application
-protocols (FastCGI/uWSGI/SCGI/memcached/gRPC and the POP3/IMAP/SMTP mail proxy) and now
-GeoIP (operator-provisioned MMDB, no data redistribution) are no longer in that excluded
-set: their implemented forms execute end-to-end on the Rust data plane against nginx 1.29.6
-(mail backend TLS is a typed-plane extension, not a claimed nginx parity surface). The coherent target remains the declared
-\`${PROFILE}\` profile with the four PRD section 2 grades (parse, semantic, behavioral,
-operational), a generated directive catalog, and a versioned evidence revision. That is
-what this ledger audits.
+template/language filters and dynamic module loading. Six application protocols
+(FastCGI/uWSGI/SCGI/memcached/gRPC and the POP3/IMAP/SMTP mail proxy), GeoIP
+(operator-provisioned MMDB, no data redistribution), the userid/browser/slice modules and
+the full stream plane are no longer in that excluded set: their implemented forms execute
+end-to-end on the Rust data plane against nginx 1.29.6 (mail backend TLS is a typed-plane
+extension, not a claimed nginx parity surface). This is the terminal audit state: every
+remaining behavior-gap row (34) is blocked by a pinned dependency (hyper HTTP/1
+close-delimited framing, rustls static-only OCSP and its TLS knob surfaces) or is nginx Plus
+only (degradation/degrade), and no implementable directive remains. The coherent target
+remains the declared \`http-core-v1\` profile with the four PRD section 2 grades (parse,
+semantic, behavioral, operational), a generated directive catalog, and a versioned evidence
+revision. That is what this ledger audits.
 `;
 }
 
@@ -3193,8 +3241,10 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the mail client-certificate wave (wave 14B) landed and
-the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the slice-module wave (wave 14C) landed and the Lead
+re-synced the catalog. This is the terminal refresh: no implementable directive remains, and
+every remaining behavior-gap row is blocked by a pinned dependency or nginx Plus (section
+3.2/3.3). The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

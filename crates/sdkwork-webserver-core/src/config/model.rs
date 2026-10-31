@@ -3614,6 +3614,10 @@ impl CustomHeaderConfig {
         // request is in that class, empty otherwise.
         "modern_browser",
         "ancient_browser",
+        // nginx `ngx_http_slice_filter_module`: `bytes=<start>-<end>` for the
+        // slice the main request is currently fetching; empty when `slice` is
+        // not configured (or is `0`), exactly like nginx's not-found rendering.
+        "slice_range",
         // nginx `ngx_http_geoip_module`: resolved from the configured MMDB
         // databases for the request address; empty when the module has no
         // database or the address has no record, exactly like nginx.
@@ -3926,6 +3930,24 @@ pub struct RouteConfig {
     /// Location-level nginx `max_ranges`; `None` inherits the host value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_ranges: Option<u64>,
+    /// Effective nginx `slice <size>` (`ngx_http_slice_filter_module`)
+    /// resolved over the http → server → location chain. `None` means the
+    /// directive was never declared; `Some(0)` is an explicit `slice 0`
+    /// (slicing disabled, exactly like an undeclared directive for nginx).
+    /// A non-zero value enables the per-slice Range subrequest pipeline in
+    /// the proxy adapter when the location wires `$slice_range` into
+    /// `proxy_set_header`. Bounded by [`Self::MAXIMUM_SLICE_BYTES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice_size: Option<u64>,
+    /// Effective nginx `proxy_cache` for this route (`Some(true)` for a cache
+    /// zone, `Some(false)` for `proxy_cache off` or an nginx configuration
+    /// that never declares the directive). `None` keeps the typed-config legacy
+    /// behaviour where the application-level `proxyCache.enabled` toggle
+    /// decides. nginx only caches inside a location that declares a cache zone,
+    /// so an nginx-materialized route never caches merely because another
+    /// location declares `proxy_cache_path`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_cache: Option<bool>,
     /// nginx `internal`: the location is reachable only through an internal
     /// redirect (`rewrite … last`, `error_page`, a `try_files` named target,
     /// or `X-Accel-Redirect`). An external request that matches it is answered
@@ -3974,6 +3996,19 @@ pub struct RouteConfig {
     /// Effective nginx `mirror` subrequests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mirror: Option<MirrorConfig>,
+}
+
+impl RouteConfig {
+    /// Hard ceiling on one nginx `slice <size>` slice.
+    ///
+    /// nginx keeps one slice in its upstream buffers and streams each slice to
+    /// the client; this runtime buffers exactly one sliced representation per
+    /// in-flight fill so the assembled response stays bounded. A slice size at
+    /// or below 64 MiB keeps that buffer inside the same envelope as the
+    /// response-body limit; a larger `slice` fails closed at materialization
+    /// with a located diagnostic instead of silently allocating an unbounded
+    /// buffer.
+    pub const MAXIMUM_SLICE_BYTES: u64 = 64 * 1024 * 1024;
 }
 
 /// nginx `addition` filter (`add_before_body` / `add_after_body` /

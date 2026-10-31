@@ -193,6 +193,7 @@ export const PARSER_EXECUTED = new Map([
   ['http:memcached_next_upstream_tries', 'mapping memcached settings pipeline'],
   ['http:memcached_next_upstream_timeout', 'mapping memcached settings pipeline'],
   ['http:set', 'mapping materialize_location bounded set arm'],
+  ['http:slice', 'mapping proxy slice pipeline'],
   ['mail:ssl_verify_client', 'mapping mail client-cert settings pipeline'],
   ['mail:ssl_verify_depth', 'mapping mail client-cert settings pipeline'],
   ['mail:ssl_client_certificate', 'mapping mail client-cert settings pipeline'],

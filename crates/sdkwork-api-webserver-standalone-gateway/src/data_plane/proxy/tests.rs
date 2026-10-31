@@ -1299,6 +1299,7 @@ fn proxy_set_header_expands_geoip_variables() {
             "",
             "",
             Some(&geoip),
+            None,
         )
         .expect("expand"),
         "US/Testville/Example Org"

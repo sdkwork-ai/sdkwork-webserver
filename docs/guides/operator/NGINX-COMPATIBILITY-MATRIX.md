@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 396 |
+| executable | 397 |
 | accepted, NOT enforced | 173 |
-| rejected (fail closed) | 170 |
+| rejected (fail closed) | 169 |
 | excluded from profile | 5 |
 | **total** | **744** |
 
@@ -95,7 +95,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
 - `ngx_http_referer_module` (2) — `referer_hash_bucket_size`, `referer_hash_max_size`
 - `ngx_http_rewrite_module` (3) — `break`, `rewrite_log`, `uninitialized_variable_warn`
-- `ngx_http_slice_filter_module` (1) — `slice`
 - `ngx_http_ssi_filter_module` (7) — `ssi`, `ssi_ignore_recycled_buffers`, `ssi_last_modified`, `ssi_min_file_chunk`, `ssi_silent_errors`, `ssi_types`, `ssi_value_length`
 - `ngx_http_ssl_module` (12) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_responder`
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
@@ -906,7 +905,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `slice` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `slice` | 1 | http, http-location, http-server | executable | runtime: `routes[].sliceSize (per-slice proxied Range subrequests, $slice_range variable, structural per-slice cache-key variant, bounded streaming 200/206/416/HEAD assembly)`. conditional requests over assembled slices forward If-None-Match/If-Modified-Since upstream and return the assembled 200 (nginx not_modified filter would answer 304); the whole-object cache path still answers 304; HEAD slices are not cached (repeat HEAD re-fetches one slice; bytes identical); non-GET/HEAD requests with slice keep the one-exchange path (body replay impossible; nginx still sends the initial Range); a malformed first slice answers 502 where nginx aborts the connection; slice sizes > 64 MiB fail closed (bounded slice buffer; nginx accepts any size); route-scoped proxy_cache inheritance was added so a proxy_cache_path zone alone no longer enables caching for unrelated locations (nginx-faithful) |
 
 #### `ngx_http_split_clients_module` (1 directives)
 

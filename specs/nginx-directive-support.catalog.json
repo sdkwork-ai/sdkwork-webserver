@@ -15482,10 +15482,79 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].sliceSize (per-slice proxied Range subrequests, $slice_range variable, structural per-slice cache-key variant, bounded streaming 200/206/416/HEAD assembly)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.full"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.full.repeat"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.inside-warm"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.span-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.open-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.suffix-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.multi-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.invalid-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.if-range.match"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.if-range.mismatch"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.head"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.hits"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.zero.plain"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.absent.plain"
+        }
+      ],
+      "knownDifferences": [
+        "conditional requests over assembled slices forward If-None-Match/If-Modified-Since upstream and return the assembled 200 (nginx not_modified filter would answer 304); the whole-object cache path still answers 304",
+        "HEAD slices are not cached (repeat HEAD re-fetches one slice; bytes identical)",
+        "non-GET/HEAD requests with slice keep the one-exchange path (body replay impossible; nginx still sends the initial Range)",
+        "a malformed first slice answers 502 where nginx aborts the connection; slice sizes > 64 MiB fail closed (bounded slice buffer; nginx accepts any size)",
+        "route-scoped proxy_cache inheritance was added so a proxy_cache_path zone alone no longer enables caching for unrelated locations (nginx-faithful)"
+      ]
     },
     {
       "id": "http:source_charset",

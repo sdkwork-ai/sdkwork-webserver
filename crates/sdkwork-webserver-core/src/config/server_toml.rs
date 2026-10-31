@@ -1152,6 +1152,35 @@ fn materialize_http2_chunk_size(value: &Value, path: &str) -> Result<usize, WebS
         .min(HTTP2_MAX_FRAME_SIZE))
 }
 
+/// Typed equivalent of nginx `slice <size>` (`ngx_http_slice_filter_module`):
+/// an integer byte count or a size string (`"4k"`, `"1m"`). `0` is a valid
+/// declaration that disables slicing. The runtime's bounded slice buffer caps
+/// the accepted value; a larger declaration fails closed here with the location
+/// path.
+fn materialize_slice_size(value: &Value, path: &str) -> Result<u64, WebServerConfigError> {
+    let bytes = match value {
+        Value::Number(number) => number.as_u64(),
+        Value::String(text) => Some(materialize_size_bytes(text)),
+        _ => None,
+    };
+    let Some(bytes) = bytes else {
+        return Err(materialize_error(
+            path,
+            "slice must be a non-negative integer byte count or a size string such as \"1m\"",
+        ));
+    };
+    if bytes > crate::config::RouteConfig::MAXIMUM_SLICE_BYTES {
+        return Err(materialize_error(
+            path,
+            format!(
+                "slice size {bytes} exceeds the runtime's bounded slice buffer of {} bytes; choose a smaller slice size",
+                crate::config::RouteConfig::MAXIMUM_SLICE_BYTES
+            ),
+        ));
+    }
+    Ok(bytes)
+}
+
 fn parse_location_match<'a>(
     path: &str,
     match_value: &'a str,
@@ -2345,6 +2374,7 @@ impl<'a> Materializer<'a> {
                 "browser",
                 "randomIndex",
                 "http2ChunkSize",
+                "slice",
             ],
         )?;
         let match_value = as_str(location, &path, "match")?;
@@ -2704,6 +2734,7 @@ impl<'a> Materializer<'a> {
                 "userid",
                 "browser",
                 "http2ChunkSize",
+                "slice",
             ],
         )?;
         // Server-level `proxySetHeader` entries are inherited by every proxy
@@ -2726,6 +2757,13 @@ impl<'a> Materializer<'a> {
         for entry in &server_proxy_set_headers {
             validate_proxy_set_header_entry(&path, entry)?;
         }
+        // Server-level `slice` is the typed equivalent of nginx's server
+        // context: every location that does not declare its own inherits it
+        // (nginx scalar merge, `slice 0` included).
+        let server_slice = match server.get("slice") {
+            Some(value) => Some(materialize_slice_size(value, &format!("{path}.slice"))?),
+            None => None,
+        };
         let listen = as_array(server, &path, "listen")?;
         let server_names = as_array(server, &path, "serverName")?;
         let primary_name = server_names
@@ -2974,6 +3012,18 @@ impl<'a> Materializer<'a> {
                     ));
                 };
                 route["randomIndex"] = Value::Bool(enabled);
+            }
+            // nginx `slice` inheritance: a location declaration replaces the
+            // server value; an undeclared location keeps the server value.
+            let effective_slice = match location.get("slice") {
+                Some(value) => Some(materialize_slice_size(
+                    value,
+                    &format!("{path}.location[{location_index}].slice"),
+                )?),
+                None => server_slice,
+            };
+            if let Some(slice_size) = effective_slice {
+                route["sliceSize"] = json!(slice_size);
             }
             route_entries.push(route);
         }

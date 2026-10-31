@@ -47,6 +47,7 @@ mod resource_pressure;
 mod rewrite_phase;
 mod runtime;
 mod server;
+mod slice;
 mod smooth_weighted;
 pub(crate) mod static_file_response;
 pub(crate) mod static_files;

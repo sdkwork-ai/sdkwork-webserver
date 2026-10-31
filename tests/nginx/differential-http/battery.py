@@ -140,6 +140,13 @@ USERID_HOST = "userid.example.com"
 USERID_HTTP_HOST = "userid-http.example.com"
 BROWSER_HOST = "browser.example.com"
 BROWSER_HTTP_HOST = "browser-http.example.com"
+# Wave 14C host: nginx `slice <size>` over a deterministic range-capable mock
+# upstream (30-byte body, 4-byte slices, stable ETag). Every upstream Range
+# request is counted per path so the `slice.hits` case compares the exact
+# subrequest sequence, including the repeat GET that must stay off the wire.
+SLICE_HOST = "slice.example.com"
+SLICE_BODY = bytes(range(ord("a"), ord("a") + 26)) + b"0123"
+SLICE_ETAG = '"slice-v1"'
 # 2020-01-01T00:00:00Z. Both endpoints serve these exact files, so pinning the
 # mtime makes `ETag` and `Last-Modified` stable across checkouts (git does not
 # preserve mtimes). The battery pins it on both runs before any request.
@@ -243,6 +250,9 @@ UPSTREAM_PLACEHOLDER = 0
 # Mock-side hit counter for the `mirror` fire-and-forget subrequest cases.
 _MIRROR_HITS = 0
 _MIRROR_HITS_LOCK = threading.Lock()
+# Per-path upstream request counters for the Wave 14C `slice` cases.
+_SLICE_HITS: dict[str, int] = {}
+_SLICE_HITS_LOCK = threading.Lock()
 
 
 class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
@@ -284,6 +294,54 @@ class _MockUpstreamHandler(http.server.BaseHTTPRequestHandler):
 
     def _handle(self) -> None:
         path, _, query = self.path.partition("?")
+        if path == "/slice-hits":
+            with _SLICE_HITS_LOCK:
+                lines = "".join(
+                    "%s=%d\n" % (key, value)
+                    for key, value in sorted(_SLICE_HITS.items())
+                )
+            self._write(200, "text/plain", lines.encode())
+            return
+        if path.startswith("/slice/"):
+            with _SLICE_HITS_LOCK:
+                _SLICE_HITS[path] = _SLICE_HITS.get(path, 0) + 1
+            headers = [("Accept-Ranges", "bytes"), ("ETag", SLICE_ETAG)]
+            range_header = self.headers.get("Range")
+            if range_header and range_header.startswith("bytes="):
+                spec = range_header[len("bytes=") :]
+                start = end = None
+                if "," not in spec and not spec.startswith("-"):
+                    first, _, second = spec.partition("-")
+                    try:
+                        start = int(first)
+                    except ValueError:
+                        start = None
+                    if start is not None:
+                        end = int(second) if second else len(SLICE_BODY) - 1
+                if start is None or start >= len(SLICE_BODY):
+                    self._write(
+                        416,
+                        "text/plain",
+                        b"",
+                        extra=[("Content-Range", "bytes */%d" % len(SLICE_BODY))],
+                    )
+                    return
+                end = min(end, len(SLICE_BODY) - 1)
+                self._write(
+                    206,
+                    "application/octet-stream",
+                    SLICE_BODY[start : end + 1],
+                    extra=headers
+                    + [
+                        (
+                            "Content-Range",
+                            "bytes %d-%d/%d" % (start, end, len(SLICE_BODY)),
+                        )
+                    ],
+                )
+                return
+            self._write(200, "application/octet-stream", SLICE_BODY, extra=headers)
+            return
         if path == "/sub-main":
             self._write(200, "text/plain", b"main-body\n", extra=[("X-Upstream", "yes")])
             return
@@ -1930,6 +1988,83 @@ def main() -> int:
         )
         case("random-index.empty", "/random-index-empty/")
         case("random-index.off", "/random-plain/")
+
+        # ---- Wave 14C: nginx slice module -------------------------------
+        # `slice 4` over the mock's 30-byte body: the first full GET assembles
+        # bytes=0-3 … bytes=28-31, the repeat must be a pure cache hit, and a
+        # client Range is answered from the intersecting slice(s) with the
+        # range filter's `Content-Range`. `slice.hits` (last) records the exact
+        # upstream Range sequence, so a missing or extra subrequest fails the
+        # differential even when the response bytes happen to match.
+        case("slice.full", "/slice/full", host=SLICE_HOST)
+        case("slice.full.repeat", "/slice/full", host=SLICE_HOST)
+        case(
+            "slice.range.inside-warm",
+            "/slice/full",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=1-2")],
+        )
+        case(
+            "slice.range.span-cold",
+            "/slice/span",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=10-13")],
+        )
+        case(
+            "slice.range.open-cold",
+            "/slice/open",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=20-")],
+        )
+        case(
+            "slice.range.suffix-cold",
+            "/slice/suffix",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=-4")],
+        )
+        case(
+            "slice.range.multi-cold",
+            "/slice/multi",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=1-2,5-6")],
+        )
+        case(
+            "slice.range.invalid-cold",
+            "/slice/invalid",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=abc")],
+        )
+        case(
+            "slice.range.beyond-cold",
+            "/slice/beyond",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=100-")],
+        )
+        case(
+            "slice.if-range.match",
+            "/slice/ifrange",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=10-13"), ("If-Range", SLICE_ETAG)],
+        )
+        case(
+            "slice.if-range.mismatch",
+            "/slice/ifrange2",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=10-13"), ("If-Range", '"nope"')],
+        )
+        case("slice.head", "/slice/head", method="HEAD", host=SLICE_HOST)
+        # A cold Range fills slices 8-11 and 12-15; the following full GET must
+        # reuse them and fetch only the remaining slices.
+        case(
+            "slice.cache.range-cold",
+            "/slice/reuse",
+            host=SLICE_HOST,
+            headers=[("Range", "bytes=10-13")],
+        )
+        case("slice.cache.full-after-range", "/slice/reuse", host=SLICE_HOST)
+        case("slice.zero.plain", "/slice-zero/x", host=SLICE_HOST)
+        case("slice.absent.plain", "/slice-absent/x", host=SLICE_HOST)
+        case("slice.hits", "/slice-hits", host=SLICE_HOST)
 
         document = {
             "_server": identity,

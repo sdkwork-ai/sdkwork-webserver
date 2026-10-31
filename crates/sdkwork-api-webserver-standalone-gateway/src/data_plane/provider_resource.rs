@@ -435,6 +435,8 @@ mod tests {
             limit_req_status: None,
             limit_conn_status: None,
             max_ranges: None,
+            slice_size: None,
+            proxy_cache: None,
             internal: false,
             charset: None,
             autoindex: None,

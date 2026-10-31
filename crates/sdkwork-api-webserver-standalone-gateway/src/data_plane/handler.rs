@@ -1358,7 +1358,8 @@ async fn route_admitted_request(
             // A `return <status> "<body>"` body is a script in nginx; the
             // runtime expands the response-header variable vocabulary plus the
             // declared map results.
-            let expanded_body = response_variables.expand(body, &path, request_query.as_deref());
+            let expanded_body =
+                response_variables.expand(body, &path, request_query.as_deref(), None);
             // nginx derives a `return` body's content type from the request URI
             // extension through the resolved `types` table; the typed plane
             // keeps declaring its content type explicitly.
@@ -1652,6 +1653,9 @@ async fn route_admitted_request(
                     ancient_browser: response_variables.ancient_browser,
                     response_policy: proxy_response_policy.as_ref(),
                     proxy_method: proxy_method.as_deref(),
+                    // The ordinary proxy path has no slice context; the slice
+                    // pipeline builds its own per-slice contexts.
+                    slice_range: None,
                 },
                 request,
             )
@@ -3154,7 +3158,21 @@ pub(crate) struct ResponseHeaderVariables<'a> {
 }
 
 impl ResponseHeaderVariables<'_> {
-    fn expand(&self, template: &str, uri: &str, query: Option<&str>) -> String {
+    /// Expand an `add_header` / `return` body template.
+    ///
+    /// `slice_range` is the `ngx_http_slice_filter_module` value for this
+    /// response: the proxy slice pipeline attaches it through
+    /// [`super::slice::SliceRangeHeaderValue`] when the upstream answered with
+    /// the expected 206 slice, and `None` everywhere else (nginx leaves the
+    /// variable not-found — the empty string — when no slice context exists or
+    /// the slice filter dropped it after a non-206 response).
+    fn expand(
+        &self,
+        template: &str,
+        uri: &str,
+        query: Option<&str>,
+        slice_range: Option<&str>,
+    ) -> String {
         let mut output = String::with_capacity(template.len() + 16);
         let mut remainder = template;
         while let Some(index) = remainder.find('$') {
@@ -3227,6 +3245,11 @@ impl ResponseHeaderVariables<'_> {
                 ),
                 "modern_browser" => output.push_str(self.modern_browser),
                 "ancient_browser" => output.push_str(self.ancient_browser),
+                "slice_range" => {
+                    if let Some(value) = slice_range {
+                        output.push_str(value);
+                    }
+                }
                 _ => {
                     if let Some(value) = self.geoip.and_then(|geoip| geoip.value(variable)) {
                         output.push_str(value);
@@ -3364,6 +3387,15 @@ fn apply_nginx_response_headers(
     };
     let status = response.status().as_u16();
     let default_status = CustomHeaderConfig::NGINX_DEFAULT_STATUSES.contains(&status);
+    // nginx `$slice_range` is a response-scoped value: the proxy slice pipeline
+    // stamps the initial slice range on the assembled response, and a
+    // non-sliced response carries no stamp (nginx renders the variable as the
+    // empty string when it has no slice context). Cloning keeps the later
+    // `headers_mut()` borrow disjoint.
+    let slice_range = response
+        .extensions()
+        .get::<super::slice::SliceRangeHeaderValue>()
+        .map(|value| value.0.clone());
     for header in policy {
         if !header.always && !default_status {
             continue;
@@ -3374,7 +3406,7 @@ fn apply_nginx_response_headers(
         let Ok(name) = HeaderName::from_bytes(header.name.as_bytes()) else {
             continue;
         };
-        let value = variables.expand(&header.value, uri, query);
+        let value = variables.expand(&header.value, uri, query, slice_range.as_deref());
         // nginx omits a field whose expanded value is empty, whether the
         // emptiness is declared (`add_header X "";`) or produced by a variable
         // or map result that resolves to the empty string.
@@ -4478,6 +4510,8 @@ mod tests {
             limit_req_status: None,
             limit_conn_status: Some(503),
             max_ranges: None,
+            slice_size: None,
+            proxy_cache: None,
             internal: false,
             charset: None,
             autoindex: None,
@@ -4591,7 +4625,8 @@ mod tests {
             variables.expand(
                 "$geoip_country_code|$geoip_country_code3|$geoip_city|$geoip_region|$geoip_org",
                 "/",
-                None
+                None,
+                None,
             ),
             "US|USA|Testville|CA|"
         );
@@ -4601,7 +4636,7 @@ mod tests {
             geoip: None,
             ..response_header_variables()
         };
-        assert_eq!(empty.expand("$geoip_country_code", "/", None), "");
+        assert_eq!(empty.expand("$geoip_country_code", "/", None, None), "");
     }
 
     #[test]

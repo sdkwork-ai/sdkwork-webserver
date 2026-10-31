@@ -617,7 +617,9 @@ pub fn materialize_nginx_app(
                 )?;
             }
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
-            "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
+            "proxy_cache" => {
+                mapper.http_proxy_cache = Some(mapper.materialize_proxy_cache(directive)?);
+            }
             // Collected by the order-independent pre-scan above.
             "map" | "geo" | "split_clients" => {}
             "fastcgi_pass" => {
@@ -861,7 +863,9 @@ pub fn materialize_nginx_app(
                 mapper.http_autoindex.format = Some(parse_autoindex_format(directive)?);
             }
             "stream" | "events" | "http" | "mail" => {}
-            "slice" => return Err(slice_directive_blocker(directive)),
+            "slice" => {
+                mapper.http_slice_size = Some(parse_slice_size(directive)?);
+            }
             name if ACCEPTED_IGNORED.contains(&name) => {}
             name if UNSUPPORTED_SECURITY.contains(&name) => {
                 return Err(NginxConfigError::unsupported(
@@ -897,26 +901,41 @@ pub fn materialize_nginx_app(
     mapper.finish()
 }
 
-/// The exact blocker for nginx `slice <size>` (`ngx_http_slice_filter_module`).
+/// nginx `slice <size>` (`ngx_http_slice_filter_module`).
 ///
 /// nginx 1.29.6 spells the directive `slice <size>` (the legacy `slice on|off`
 /// plus `slice_size` form no longer exists; `slice_size` is not an nginx 1.29.6
-/// directive at all). Slice caching needs a range-subrequest pipeline: the
-/// module turns one client request into `Range: bytes=<start>-<end>`
-/// subrequests, stores each slice under `(cache key, slice range)` (the cache
-/// key must include `$slice_range`), and assembles the client response (or the
-/// requested range) from the cached slices. The shared cache key *could* carry
-/// a slice component without changing the store, but the bounded proxy adapter
-/// performs exactly one upstream exchange per client request and caches one
-/// complete body per key (`CachedResponse`): there is no multi-subrequest
-/// pipeline, no `$slice_range` variable, and no partial-object (206) assembly,
-/// so the directive fails closed instead of proxying unsliced behind an
-/// accepting parse.
-fn slice_directive_blocker(directive: &NginxDirective) -> NginxConfigError {
-    NginxConfigError::unsupported(
-        directive,
-        "`slice <size>` is not executable: the proxy adapter performs exactly one upstream exchange per client request and caches one complete response body per key (`CachedResponse`), so there is no slice-range subrequest pipeline (`$slice_range`, Range subrequests, per-slice 206 assembly); the cache key could carry a slice component, but the multi-subrequest assembly does not exist, so the directive fails closed instead of silently proxying unsliced",
-    )
+/// directive at all). `ngx_conf_set_size_slot` accepts exactly one size
+/// argument with an optional `k`/`m`/`g` multiplier; `slice 0` is a valid
+/// declaration that disables slicing (`ngx_http_slice_merge_loc_conf` merges
+/// the unset default to 0). A size above the runtime's bounded slice buffer
+/// fails closed here, with the directive's file:line, instead of allocating an
+/// unbounded per-response buffer at request time.
+fn parse_slice_size(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let [value] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "slice takes exactly one size argument (`slice <size>`); the legacy `slice on|off` form and the non-existent `slice_size` directive are not nginx 1.29.6",
+        ));
+    };
+    let Some(size) = parse_size_bytes(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "slice size `{value}` is not a byte size; use a non-negative integer with an optional k/m/g multiplier (for example `slice 1m;`)"
+            ),
+        ));
+    };
+    if size > crate::config::RouteConfig::MAXIMUM_SLICE_BYTES {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "slice size `{value}` exceeds the runtime's bounded slice buffer of {} bytes; choose a smaller slice size",
+                crate::config::RouteConfig::MAXIMUM_SLICE_BYTES
+            ),
+        ));
+    }
+    Ok(size)
 }
 
 /// When the input is a full `nginx.conf`, unwrap the `http { }` block; site
@@ -1280,6 +1299,13 @@ struct LocationExtras {
     limit_conn_status: Option<u16>,
     /// Location-level nginx `max_ranges`.
     max_ranges: Option<u64>,
+    /// Effective nginx `slice <size>`: the location declaration, else the
+    /// resolved http → server value (nginx scalar merge).
+    slice_size: Option<u64>,
+    /// Location-level nginx `proxy_cache` declaration (zone enables, `off`
+    /// disables); the effective value is resolved over http → server →
+    /// location in [`Mapper::attach_location_extras`].
+    proxy_cache: Option<bool>,
     /// nginx `internal`: reachable only through an internal redirect.
     internal: bool,
     /// Location-level proxy response-header directives.
@@ -1623,6 +1649,14 @@ struct Mapper<'a> {
     http_limit_conn_status: Option<u16>,
     /// http-level nginx `max_ranges` (default: effectively unbounded).
     http_max_ranges: Option<u64>,
+    /// http-level nginx `slice <size>` (`ngx_http_slice_filter_module`);
+    /// inherited by every server unless it declares its own.
+    http_slice_size: Option<u64>,
+    /// http-level nginx `proxy_cache` declaration: `Some(true)` for a zone,
+    /// `Some(false)` for `off`. Locations resolve it with nginx's
+    /// replace-on-declare rule; an nginx route that never declares the
+    /// directive does not cache, even though the app-level cache exists.
+    http_proxy_cache: Option<bool>,
     /// http-level proxy response-header directives (`proxy_hide_header`,
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`); each directive family inherits with nginx's
@@ -1631,6 +1665,14 @@ struct Mapper<'a> {
     /// Proxy response-header directives resolved for the server currently being
     /// materialized (http ⊕ server). Locations overlay this.
     server_proxy_response: ProxyResponseDirectives,
+    /// nginx `slice` resolved for the server currently being materialized
+    /// (http ⊕ server); locations inherit it unless they declare their own,
+    /// exactly like nginx's scalar `ngx_conf_merge_size_value`.
+    server_slice_size: Option<u64>,
+    /// nginx `proxy_cache` resolved for the server currently being
+    /// materialized (http ⊕ server); locations inherit it unless they declare
+    /// their own.
+    server_proxy_cache: Option<bool>,
     /// http-level `merge_slashes` declaration (nginx default `on`).
     http_merge_slashes: Option<bool>,
     /// http-level `underscores_in_headers` declaration (nginx default `off`).
@@ -1795,8 +1837,12 @@ impl<'a> Mapper<'a> {
             http_limit_req_status: None,
             http_limit_conn_status: None,
             http_max_ranges: None,
+            http_slice_size: None,
+            http_proxy_cache: None,
             http_proxy_response: ProxyResponseDirectives::default(),
             server_proxy_response: ProxyResponseDirectives::default(),
+            server_slice_size: None,
+            server_proxy_cache: None,
             http_merge_slashes: None,
             http_underscores_in_headers: None,
             http_ignore_invalid_headers: None,
@@ -2313,6 +2359,11 @@ impl<'a> Mapper<'a> {
         let mut server_limit_req_status: Option<u16> = None;
         let mut server_limit_conn_status: Option<u16> = None;
         let mut server_max_ranges: Option<u64> = None;
+        // nginx `slice` inherits http → server → location with nginx's scalar
+        // merge: a child that declares the directive replaces the inherited
+        // value; an undeclared child keeps it (`slice 0` is a declaration).
+        let mut server_slice_size: Option<u64> = None;
+        let mut server_proxy_cache: Option<bool> = None;
         // nginx http→server→location inheritance for the proxy
         // response-header policy and the request-boundary policies.
         let mut server_proxy_response = ProxyResponseDirectives::default();
@@ -2616,7 +2667,7 @@ impl<'a> Mapper<'a> {
                     inherited_limit_req.push(self.parse_limit_req_rule(child)?);
                 }
                 "proxy_cache" => {
-                    self.materialize_proxy_cache(child)?;
+                    server_proxy_cache = Some(self.materialize_proxy_cache(child)?);
                 }
                 "proxy_ssl_verify"
                 | "proxy_ssl_trusted_certificate"
@@ -2860,7 +2911,9 @@ impl<'a> Mapper<'a> {
                         format!("`{name}` is only allowed in the `http` block"),
                     ));
                 }
-                "slice" => return Err(slice_directive_blocker(child)),
+                "slice" => {
+                    server_slice_size = Some(parse_slice_size(child)?);
+                }
                 name => {
                     return Err(NginxConfigError::unsupported(
                         child,
@@ -3057,6 +3110,14 @@ impl<'a> Mapper<'a> {
         let effective_limit_req_status = server_limit_req_status.or(self.http_limit_req_status);
         let effective_limit_conn_status = server_limit_conn_status.or(self.http_limit_conn_status);
         let effective_max_ranges = server_max_ranges.or(self.http_max_ranges);
+        // nginx `slice` scalar merge: the server declaration replaces the
+        // http-level value; locations inherit the result unless they declare
+        // their own (handled in `materialize_location`).
+        self.server_slice_size = server_slice_size.or(self.http_slice_size);
+        // nginx `proxy_cache` (http → server → location, replace-on-declare).
+        // The default below is `false`: a location that never declares a cache
+        // zone must not serve through the application-level cache.
+        self.server_proxy_cache = server_proxy_cache.or(self.http_proxy_cache);
         // nginx http → server inheritance for the HTTP/2 DATA-frame chunk size;
         // locations inherit this value unless they declare their own.
         let effective_http2_chunk_size = server_http2_chunk_size.or(self.http_http2_chunk_size);
@@ -3692,6 +3753,16 @@ impl<'a> Mapper<'a> {
         if let Some(max_ranges) = extras.max_ranges {
             route["maxRanges"] = json!(max_ranges);
         }
+        // nginx `slice <size>` (http → server → location resolved above). The
+        // proxy adapter reads this effective value off the selected route.
+        if let Some(slice_size) = extras.slice_size {
+            route["sliceSize"] = json!(slice_size);
+        }
+        // nginx `proxy_cache`: only a route that effectively declares a cache
+        // zone uses the shared cache (an undeclared route is `false`, so one
+        // location's `proxy_cache_path` never turns caching on for the rest of
+        // the configuration).
+        route["proxyCache"] = json!(extras.proxy_cache.unwrap_or(false));
         // nginx `addition` / `auth_request` / `mirror` inheritance: the
         // effective policy is the location declaration when present, else the
         // inherited http → server one.
@@ -4463,7 +4534,7 @@ impl<'a> Mapper<'a> {
                 | "proxy_connect_timeout"
                 | "proxy_request_buffering" => {}
                 "proxy_cache" => {
-                    self.materialize_proxy_cache(child)?;
+                    extras.proxy_cache = Some(self.materialize_proxy_cache(child)?);
                 }
                 "proxy_cache_key" => {
                     self.proxy_cache_enabled = true;
@@ -4506,7 +4577,9 @@ impl<'a> Mapper<'a> {
                         format!("`{name}` cannot be enforced by the SDKWork runtime"),
                     ));
                 }
-                "slice" => return Err(slice_directive_blocker(child)),
+                "slice" => {
+                    extras.slice_size = Some(parse_slice_size(child)?);
+                }
                 name => {
                     return Err(NginxConfigError::unsupported(
                         child,
@@ -5846,6 +5919,14 @@ impl<'a> Mapper<'a> {
             client_max_body_size.or(inherited_client_max_body_size);
         self.note_client_max_body_size(effective_client_max_body_size);
         extras.max_request_body_bytes = effective_client_max_body_size;
+        // nginx `slice` handler merge: an undeclared location inherits the
+        // http → server value; a declared `slice 0` stays an explicit 0.
+        if extras.slice_size.is_none() {
+            extras.slice_size = self.server_slice_size;
+        }
+        if extras.proxy_cache.is_none() {
+            extras.proxy_cache = self.server_proxy_cache;
+        }
         extras.rewrite_phase = location_rewrite_phase;
         // nginx `mirror_request_body` defaults to `on`; the runtime cannot tee
         // request bodies into fire-and-forget subrequests, so an effective
@@ -6100,7 +6181,7 @@ impl<'a> Mapper<'a> {
     fn materialize_proxy_cache(
         &mut self,
         directive: &NginxDirective,
-    ) -> Result<(), NginxConfigError> {
+    ) -> Result<bool, NginxConfigError> {
         let Some(zone) = directive.args.first() else {
             return Err(NginxConfigError::unsupported(
                 directive,
@@ -6108,8 +6189,10 @@ impl<'a> Mapper<'a> {
             ));
         };
         if zone == "off" {
+            // The application-level cache object stays available for other
+            // locations; this declaration only turns caching off here.
             self.proxy_cache_enabled = false;
-            return Ok(());
+            return Ok(false);
         }
         if !self.proxy_cache_zone_names.contains(zone) {
             return Err(NginxConfigError::unsupported(
@@ -6120,7 +6203,7 @@ impl<'a> Mapper<'a> {
             ));
         }
         self.proxy_cache_enabled = true;
-        Ok(())
+        Ok(true)
     }
 
     fn materialize_proxy_cache_path(

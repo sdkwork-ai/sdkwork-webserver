@@ -173,6 +173,7 @@ pub(crate) async fn serve(
                 response_policy: proxy_response_policy.as_ref(),
                 proxy_method: proxy_method.as_deref(),
                 variables: None,
+                slice_range: None,
             };
             let request_uri = if query.is_empty() {
                 path.to_owned()

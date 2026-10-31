@@ -2982,6 +2982,16 @@
           "type": "integer",
           "minimum": 1
         },
+        "sliceSize": {
+          "description": "Effective nginx `slice <size>` for this route (http/server/location inheritance resolved at materialization). 0 disables slicing, exactly like nginx. A non-zero value enables the per-slice Range subrequest pipeline when the route's proxy resource wires `proxy_set_header Range $slice_range`. The maximum is the runtime's bounded slice buffer.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 67108864
+        },
+        "proxyCache": {
+          "description": "Effective nginx `proxy_cache` for this route: true when the route declares a cache zone, false for `proxy_cache off` or an nginx configuration that never declares the directive (one location's `proxy_cache_path` only creates the zone). Absent keeps the typed-config application-level `proxyCache.enabled` toggle.",
+          "type": "boolean"
+        },
         "id": {
           "$ref": "#/$defs/id"
         },

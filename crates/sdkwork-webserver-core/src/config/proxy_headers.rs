@@ -15,6 +15,11 @@ pub const SUPPORTED_PROXY_HEADER_VARS: &[&str] = &[
     "uid_set",
     "modern_browser",
     "ancient_browser",
+    // nginx `ngx_http_slice_filter_module`: `bytes=<start>-<end>` for the
+    // slice the proxy adapter is currently fetching (empty when `slice` is not
+    // configured). This is the canonical wiring
+    // `proxy_set_header Range $slice_range;`.
+    "slice_range",
     // nginx GeoIP module variables are legal in a forwarded header value.
     "geoip_country_code",
     "geoip_country_code3",

@@ -24,6 +24,10 @@ UPSTREAM=$((PORT + 2))
 DEAD=$((PORT + 5))
 WORK=${NGINX_DIFF_HTTP_WORK:-/tmp/ngx-differential-http}
 CONF="$WORK/nginx.conf"
+# Wave 14C `slice` cache: a per-run directory the oracle owns. Removing this
+# exact path (never a wildcard) keeps the upstream-request log the battery
+# compares cold for every capture.
+CACHE="$WORK/slice-cache"
 OUT=${NGINX_DIFF_HTTP_ORACLE_OUT:-$HERE/nginx-oracle.json}
 # The pinned reference build: an extracted nginx.org .deb in this environment,
 # otherwise a native `nginx` on PATH.
@@ -45,6 +49,8 @@ PY=$(command -v python3 || command -v python || true)
 [ -n "$PY" ] || oracle_unavailable "no python on PATH"
 
 mkdir -p "$WORK"
+rm -rf "$CACHE"
+mkdir -p "$CACHE"
 # Redirect the http temp paths into $WORK: an unprivileged package binary
 # otherwise resolves its compile-time defaults under /var/cache/nginx. These
 # directives never affect the response contract the battery records.
@@ -56,6 +62,7 @@ sed \
     -e "s|@PORT@|$PORT|g" \
     -e "s|@UPSTREAM@|$UPSTREAM|g" \
     -e "s|@DEAD@|$DEAD|g" \
+    -e "s|@CACHE@|$CACHE|g" \
     -e "s|@HTPASSWD@|$HERE/htpasswd|g" \
     "$HERE/nginx.conf" |
     sed "s|^http {|http {\n    client_body_temp_path $WORK/tmp/client_body;\n    proxy_temp_path $WORK/tmp/proxy;\n    fastcgi_temp_path $WORK/tmp/fastcgi;\n    uwsgi_temp_path $WORK/tmp/uwsgi;\n    scgi_temp_path $WORK/tmp/scgi;|" >"$CONF"

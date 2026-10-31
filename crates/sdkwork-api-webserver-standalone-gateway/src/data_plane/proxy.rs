@@ -392,6 +392,13 @@ pub(super) struct ProxyRequestContext<'a> {
     /// Rewrite-phase variables for request-time `proxy_pass` templates
     /// (arbitrary request variables, `${name}` braces, `$1..$9` captures).
     pub variables: Option<&'a super::request_variables::RequestVariables>,
+    /// nginx `$slice_range` for the upstream exchange currently being built
+    /// (`ngx_http_slice_filter_module`). `Some(bytes=<start>-<end>)` while the
+    /// slice pipeline fetches one slice; `None` on the ordinary one-exchange
+    /// path, where `$slice_range` expands to the empty string (nginx's
+    /// not-found rendering) and a `proxy_set_header Range $slice_range` entry
+    /// therefore drops the header.
+    pub slice_range: Option<&'a str>,
 }
 
 mod hash_lb;
@@ -417,6 +424,24 @@ pub(super) async fn proxy_request_cached(
 ) -> Response<Body> {
     if context.dynamic_target.is_some() {
         // Dynamic targets vary per request; caching would mix hosts.
+        return proxy_request(context, request).await;
+    }
+    // nginx `slice <size>` (`ngx_http_slice_filter_module`): once the operator
+    // wires `proxy_set_header Range $slice_range`, the proxy adapter turns one
+    // client request into per-slice Range exchanges and assembles the response.
+    // An unwired declaration stays on the ordinary one-exchange path, exactly
+    // like nginx (no `$slice_range` evaluation means no slice context).
+    if let Some(slice_size) = context.route.slice_size.filter(|size| *size > 0) {
+        if super::slice::slice_wired(context.request_set_headers) {
+            return super::slice::proxy_sliced(context, request, slice_size).await;
+        }
+    }
+    // nginx `proxy_cache` is a location/server/http directive: a route that
+    // never declares a cache zone must not use the shared cache, even when
+    // another location declares `proxy_cache_path` (that only creates the
+    // zone). `None` keeps the typed-config legacy app-level toggle.
+    if context.route.proxy_cache == Some(false) {
+        tracing::debug!("proxy cache not declared for route {}", context.route.id);
         return proxy_request(context, request).await;
     }
     let Some(cache) = context.cache.clone() else {
@@ -1174,6 +1199,7 @@ async fn proxy_http_request(
         context.modern_browser,
         context.ancient_browser,
         context.geoip,
+        context.slice_range,
     )
     .is_err()
     {
@@ -1552,6 +1578,7 @@ async fn proxy_websocket_request(
         context.modern_browser,
         context.ancient_browser,
         context.geoip,
+        context.slice_range,
     )
     .is_err()
     {
@@ -1955,6 +1982,7 @@ fn apply_proxy_set_headers(
         "",
         "",
         None,
+        None,
     )
 }
 
@@ -1983,6 +2011,7 @@ fn expand_proxy_header_value(
         "",
         "",
         None,
+        None,
     )
 }
 
@@ -2000,6 +2029,7 @@ fn apply_proxy_set_headers_with_variables(
     modern_browser: &str,
     ancient_browser: &str,
     geoip: Option<&GeoIpRequestState>,
+    slice_range: Option<&str>,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -2024,6 +2054,7 @@ fn apply_proxy_set_headers_with_variables(
             modern_browser,
             ancient_browser,
             geoip,
+            slice_range,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -2048,6 +2079,7 @@ fn expand_proxy_header_value_with_variables(
     modern_browser: &str,
     ancient_browser: &str,
     geoip: Option<&GeoIpRequestState>,
+    slice_range: Option<&str>,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -2127,6 +2159,16 @@ fn expand_proxy_header_value_with_variables(
             "uid_set" => out.push_str(uid_set),
             "modern_browser" => out.push_str(modern_browser),
             "ancient_browser" => out.push_str(ancient_browser),
+            // nginx `$slice_range` (`ngx_http_slice_filter_module`): the range
+            // of the slice currently being fetched. nginx registers the
+            // variable without a default, so any context where the module has
+            // no slice context (no `slice`, `slice 0`, a non-main request, or
+            // the response already started) renders it as the empty string.
+            "slice_range" => {
+                if let Some(range) = slice_range {
+                    out.push_str(range);
+                }
+            }
             "geoip_country_code"
             | "geoip_country_code3"
             | "geoip_country_name"
