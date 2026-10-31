@@ -19,6 +19,7 @@
 use std::collections::HashMap;
 
 use axum::http::{HeaderMap, Method};
+use sdkwork_webserver_core::GeoIpRequestState;
 
 /// Mutable per-request variable state.
 #[derive(Debug, Clone)]
@@ -45,6 +46,8 @@ pub(crate) struct RequestVariables {
     /// match), i.e. the request carries variables the legacy proxy-target
     /// expander does not know.
     rewrite_touched: bool,
+    /// Resolved nginx GeoIP variables for this request.
+    geoip: GeoIpRequestState,
 }
 
 impl RequestVariables {
@@ -77,7 +80,13 @@ impl RequestVariables {
             assigned: HashMap::new(),
             captures: Vec::new(),
             rewrite_touched: false,
+            geoip: GeoIpRequestState::default(),
         }
+    }
+
+    /// Seed the resolved nginx GeoIP variables for this request.
+    pub(crate) fn seed_geoip(&mut self, state: GeoIpRequestState) {
+        self.geoip = state;
     }
 
     /// Update the request facts after a rewrite changed the URI.
@@ -147,6 +156,9 @@ impl RequestVariables {
         }
         if let Some(value) = self.assigned.get(name) {
             return Some(value.clone());
+        }
+        if let Some(value) = self.geoip.value(name) {
+            return Some(value.to_owned());
         }
         if let Some(suffix) = name.strip_prefix("http_") {
             if !suffix.is_empty() {
@@ -371,6 +383,21 @@ mod tests {
         );
         assert_eq!(variables.expand("$$env"), "$env");
         assert_eq!(variables.expand("$unknown"), "");
+    }
+
+    #[test]
+    fn geoip_variables_resolve_from_the_seeded_state() {
+        let mut variables = variables();
+        assert_eq!(variables.expand("$geoip_country_code"), "");
+        variables.seed_geoip(GeoIpRequestState {
+            country_code: "US".to_owned(),
+            city: "Testville".to_owned(),
+            ..GeoIpRequestState::default()
+        });
+        assert_eq!(
+            variables.expand("$geoip_country_code/$geoip_city/$geoip_postal_code"),
+            "US/Testville/"
+        );
     }
 
     #[test]

@@ -35,10 +35,10 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 362 |
+| executable | 370 |
 | accepted, NOT enforced | 170 |
 | rejected (fail closed) | 199 |
-| excluded from profile | 13 |
+| excluded from profile | 5 |
 | **total** | **744** |
 
 ## Differences From Nginx And Migration Guide
@@ -130,9 +130,7 @@ active Rust context uses them; use typed TOML upstreams instead of CGI/uWSGI/SCG
 memcached, and do not import mail or third-party module blocks.
 
 - `ngx_core_module` (1) — `load_module`
-- `ngx_http_geoip_module` (5) — `geoip_city`, `geoip_country`, `geoip_org`, `geoip_proxy`, `geoip_proxy_recursive`
 - `ngx_http_perl_module` (4) — `perl`, `perl_modules`, `perl_require`, `perl_set`
-- `ngx_stream_geoip_module` (3) — `geoip_city`, `geoip_country`, `geoip_org`
 
 ### Typed TOML keys that are accepted but NOT enforced
 
@@ -570,11 +568,11 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `geoip_city` | 1\|2 | http | excluded from profile |  |
-| `geoip_country` | 1\|2 | http | excluded from profile |  |
-| `geoip_org` | 1\|2 | http | excluded from profile |  |
-| `geoip_proxy` | 1 | http | excluded from profile |  |
-| `geoip_proxy_recursive` | flag | http | excluded from profile |  |
+| `geoip_city` | 1\|2 | http | executable | runtime: `hosts[].geoip.cityDatabase`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
+| `geoip_country` | 1\|2 | http | executable | runtime: `hosts[].geoip.countryDatabase (absolute MMDB path, optional utf8)`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
+| `geoip_org` | 1\|2 | http | executable | runtime: `hosts[].geoip.orgDatabase`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
+| `geoip_proxy` | 1 | http | executable | runtime: `hosts[].geoip.proxies (trusted X-Forwarded-For CIDRs, max 256)`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
+| `geoip_proxy_recursive` | flag | http | executable | runtime: `hosts[].geoip.proxyRecursive (walk XFF right-to-left until an untrusted hop)`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
 
 #### `ngx_http_grpc_module` (29 directives)
 
@@ -1303,9 +1301,9 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `geoip_city` | 1\|2 | stream | excluded from profile |  |
-| `geoip_country` | 1\|2 | stream | excluded from profile |  |
-| `geoip_org` | 1\|2 | stream | excluded from profile |  |
+| `geoip_city` | 1\|2 | stream | executable | runtime: `streamServers[].geoip.cityDatabase`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
+| `geoip_country` | 1\|2 | stream | executable | runtime: `streamServers[].geoip.countryDatabase (accept-time peer address lookup)`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
+| `geoip_org` | 1\|2 | stream | executable | runtime: `streamServers[].geoip.orgDatabase`. GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load; the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation); legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2; XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such |
 
 #### `ngx_stream_limit_conn_module` (4 directives)
 

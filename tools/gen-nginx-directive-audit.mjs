@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '93900462';
+const AUDIT_HEAD = '198c0317';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) the userid/browser-module wave (wave 11A) and the HTTP/2 DATA-chunking + random_index wave (wave 11B) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B) and the GeoIP-module wave (wave 12) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -506,6 +506,21 @@ const COMPLETED_WAVES = [
       'HTTP/2 DATA-frame body re-chunker for http2_chunk_size (http/server/location; nginx 8 KiB default, 16 MiB clamp, zero rejected) proven by a raw h2 frame-capture client, and random_index directory selection (bounded sorted candidate scan, deterministic seeded SplitMix64, symlink refusal) proven by a real-nginx candidate-set differential',
     ids: ['http:http2_chunk_size', 'http:random_index'],
   },
+  {
+    key: 'wave 12 (GeoIP module)',
+    summary:
+      'http geoip_country/city/org + geoip_proxy(_recursive) and stream geoip_country/city/org execute with a bounded MMDB runtime, all 16 $geoip_* variables and an operator-provisioned database root',
+    ids: [
+      'http:geoip_country',
+      'http:geoip_city',
+      'http:geoip_org',
+      'http:geoip_proxy',
+      'http:geoip_proxy_recursive',
+      'stream:geoip_country',
+      'stream:geoip_city',
+      'stream:geoip_org',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -817,14 +832,6 @@ const OUT_OF_PROFILE_REASONS = [
   [
     /^ngx_http_perl_module$/,
     'embedded Perl execution is excluded by PRD section 4.',
-  ],
-  [
-    /^ngx_http_geoip_module$/,
-    'GeoIP database lookup is excluded by PRD section 4 (OS/database-specific surface; MaxMind database dependency).',
-  ],
-  [
-    /^ngx_stream_geoip_module$/,
-    'GeoIP database lookup is excluded by PRD section 4 (OS/database-specific surface; MaxMind database dependency).',
   ],
   [
     /^ngx_core_module$/,
@@ -1865,6 +1872,34 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       '90 browser cases (4 locations x 15 UAs + no-UA + http inheritance) compare $modern_browser/$ancient_browser and the unfilled-mask quirk against nginx 1.29.6',
   },
+  {
+    id: 'http:geoip_country',
+    evidence: 'tests/nginx/geoip-differential/nginx-oracle.json::us-record',
+    claim: 'geoip_country resolves $geoip_country_code/_code3/_name from an operator MMDB',
+    proves:
+      'the geoip-differential fixture (synthetic MMDB, variable-plumbing proxy differential because the oracle nginx lacks GeoIP) compares the wired variable values for us/de/empty records and the recursive trusted-hop walk; DB load errors fail closed',
+  },
+  {
+    id: 'http:geoip_city',
+    evidence: 'tests/nginx/geoip-differential/nginx-oracle.json::de-record',
+    claim: 'geoip_city resolves city/region/postal/lat-long variables from the city MMDB',
+    proves:
+      'the de-record case compares the city-level variable set against the fixture expectation, including the empty-record and right-to-left XFF trust walk cases',
+  },
+  {
+    id: 'http:http2_chunk_size',
+    evidence: 'crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs::http2_data_frames_respect_the_configured_chunk_size',
+    claim: 'http2_chunk_size bounds every emitted DATA frame while the body stays byte-identical',
+    proves:
+      'the raw h2 frame-capture integration test asserts every DATA frame is <= the configured chunk size and the reassembled body is unchanged; a v2 nginx config-acceptance probe checks contexts and zero-size rejection',
+  },
+  {
+    id: 'http:random_index',
+    evidence: 'tests/nginx/differential-http/battery.py::random-index.candidates',
+    claim: 'random_index serves a bounded candidate from the directory listing without affecting the visible file set',
+    proves:
+      'differential-http compares the candidate set against real nginx 1.29.6 over 192 draws plus the empty-directory and off cases; the runtime skips hidden names and symlinks',
+  },
 ];
 
 /**
@@ -2160,7 +2195,8 @@ function renderHeader(inventory, catalog) {
   wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
   CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the
   bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
-  userid/browser-module wave (wave 11A) and the HTTP/2 DATA-chunking + random_index wave (wave 11B).** The code, tests, generated operator matrix and the re-synced directive
+  userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B)
+  and the GeoIP-module wave (wave 12).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2185,8 +2221,8 @@ function renderHeader(inventory, catalog) {
   (addition/auth_request/mirror on a one-level engine) and the stream-plane wave (upstream
   TLS, inbound PROXY protocol, SNI routing, half-close, bind, counters, rates and the retry
   budget), the userid/browser-module wave (cookies, UA classification tables) and the HTTP/2 DATA-chunking + random_index wave (DATA-frame re-chunking, bounded directory selection) are
-  recorded as completed in section 3, and every one of them is asserted executable by
-  \`--verify-evidence\`.
+  and the GeoIP-module wave (MMDB lookups) are recorded as completed in section 3, and every
+  one of them is asserted executable by \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2291,7 +2327,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave and the HTTP/2 DATA-chunking + random_index wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave and the GeoIP-module wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2326,7 +2362,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-userid/browser-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-GeoIP-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2400,7 +2436,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2433,7 +2469,8 @@ addition/auth_request/auth_request_set/mirror forms; and the stream-plane wave a
 upstream TLS (shared proxy_ssl policy), inbound PROXY v1/v2 + deadline, SNI server_name
 routing, half-close, proxy_bind, counters, rates and the next_upstream retry budget; and
 wave 11A added the userid cookie module and the browser UA-classification tables; wave 11B added
-HTTP/2 DATA-frame chunking for \`http2_chunk_size\` and the \`random_index\` directory handler.
+HTTP/2 DATA-frame chunking for \`http2_chunk_size\` and the \`random_index\` directory handler;
+and wave 12 brought GeoIP in profile (http/stream lookup directives and the \$geoip_* variable set).
 
 ${completedTable}
 ${completedRows}
@@ -2549,7 +2586,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the HTTP/2 DATA-chunking + random_index wave (wave 11B). An accepted-unenforced row is silently ignored today; a rejected row fails
+the GeoIP-module wave (wave 12). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2670,6 +2707,34 @@ differential-http slice compares the candidate set against real nginx 1.29.6 (19
 plus the empty-directory and \`off\` behavior. differential-http grew 364 -> 367;
 floor/manifest 367.
 
+Wave 12 acceptance evidence: the 8 GeoIP directives execute - http geoip_country/geoip_city/
+geoip_org (absolute MMDB paths, optional utf8, operator root \`[http] geoipDatabaseRoot\`) and
+geoip_proxy/geoip_proxy_recursive, plus stream geoip_country/city/org at accept time. All 16
+nginx 1.29.6 \$geoip_* variables resolve (including deprecated \$geoip_dma_code;
+\$geoip_area_code is always empty; \$geoip_country_code3 derives from ISO alpha-2), wired into
+map/add_header/return/proxy_set_header/grpc_set_header/rewrite and stream map/set/return.
+MMDB readers are cached per runtime generation; the lookup uses the post-real_ip client
+address with a bounded nginx-shaped right-to-left XFF trust walk (64 hops / 8 KiB);
+missing/unreadable/corrupt/oversized/wrong-edition databases fail closed at config load;
+legacy .dat files are rejected; no GeoLite/GeoIP2 data is shipped and none is downloaded
+(a synthetic deterministic fixture lives at \`tests/nginx/geoip\`). PRD sections 3 and 4
+were amended (GeoIP in profile for operator-provisioned editions, no data redistribution),
+so out-of-profile is now 5 (Perl 4 + load_module 1) and the aggregate runs 7 differential
+slices. The new 5-case \`tests/nginx/geoip-differential\` slice (4 HTTP + 1 stream) is a
+**variable-plumbing proxy differential** - the oracle nginx build lacks the GeoIP modules,
+so it compares variable wiring, not GeoIP lookup results - and is labelled that way rather
+than as a true GeoIP differential.
+
+Wave 12 note: GeoIP is in profile behind a bounded MMDB runtime. Database lifecycle caveat:
+the runtime ships no GeoLite/GeoIP2 data and never downloads it; databases are
+operator-provisioned absolute MMDB paths confined by the typed \`[http] geoipDatabaseRoot\`,
+readers are cached per runtime generation (refresh requires a reload), and missing/
+unreadable/corrupt/oversized/wrong-edition files fail closed at config load while legacy
+.dat files are rejected. Licence caveat: GeoIP/GeoLite data carries MaxMind licensing terms
+that are the operator's responsibility; the audit's fixture is synthetic and the runtime
+distributes no data. The 5-case geoip-differential is a variable-plumbing proxy differential
+(oracle nginx lacks the GeoIP modules), not a true GeoIP result differential.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2716,7 +2781,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave and the HTTP/2 DATA-chunking + random_index wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave and the GeoIP-module wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2823,16 +2888,16 @@ feature below.
 
 ${excludedByModule.map(([module, count]) => `- \`${module}\` - ${count} directive(s)`).join('\n')}
 
-Only embedded Perl, GeoIP and dynamic module loading remain outside the declared
-profile. The four embedded application protocol modules and (after the PRD section 4
-amendment) the mail proxy moved **into** the profile and are audited in the ledger.
+Only embedded Perl and dynamic module loading remain outside the declared profile. The four
+embedded application protocol modules, the mail proxy (PRD section 4 amendment) and now
+GeoIP (PRD sections 3/4 amendment) moved **into** the profile and are audited in the
+ledger.
 
 What implementing each remaining group would actually require:
 
 | Group | Directives | What full parity would require |
 | --- | ---: | --- |
 | Perl | ${outOfProfile.filter((row) => row.module === 'ngx_http_perl_module').length} | an embedded Perl interpreter - executable configuration, explicitly excluded. |
-| GeoIP | ${outOfProfile.filter((row) => row.module.includes('geoip')).length} | a MaxMind database dependency plus an OS/database-specific lookup contract. |
 | Dynamic module loading | ${outOfProfile.filter((row) => row.module === 'ngx_core_module').length} | an ABI/loading contract that the static nginx OSS reference binary does not even provide; conflicts with the standalone-only deployment profile. |
 
 Substrate note: the landed \`crates/sdkwork-webserver-upstream-protocol\` substrate
@@ -2864,6 +2929,16 @@ backend TLS is a typed-plane extension (nginx mail has no proxy_ssl), so nginx p
 not claimed for it; client-certificate verification is absent and those flows remain
 fail-closed backlog (section 3.2 mail module residuals).
 
+GeoIP note (PRD sections 3/4 amendment): the 8 GeoIP directives are in profile behind a
+bounded MMDB runtime - operator-provisioned absolute MMDB paths confined by the typed
+\`[http] geoipDatabaseRoot\`, 16 \$geoip_* variables wired into the HTTP/stream variable
+planes, readers cached per runtime generation, and fail-closed load diagnostics for
+missing/unreadable/corrupt/oversized/wrong-edition databases (legacy .dat rejected). Two
+caveats stay explicit: the runtime ships no GeoLite/GeoIP2 data and never downloads it
+(no data redistribution; a synthetic deterministic fixture is used in tests), and the
+5-case geoip-differential is a variable-plumbing proxy differential because the oracle
+nginx build lacks the GeoIP modules - it is not a true GeoIP-result differential.
+
 ### 5.3 Fail-Closed Groups (${failClosed.length} directives, top modules)
 
 ${failClosedByModule.map(([module, count]) => `- \`${module}\` - ${count} directive(s)`).join('\n')}
@@ -2891,13 +2966,13 @@ on) describes what the differential oracle contains, not what http-core-v1 promi
 
 ### 5.5 Conclusion
 
-A "parity" target would still require: embedded Perl, GeoIP, a QUIC transport, embedded
+A "parity" target would still require: embedded Perl, a QUIC transport, embedded
 template/language filters and dynamic module loading, plus the residual protocol/gRPC/
 mail sub-families that are now backlog rather than profile exclusions. Six application
-protocols (FastCGI/uWSGI/SCGI/memcached/gRPC and now the POP3/IMAP/SMTP mail proxy) are
-no longer in that excluded set: their implemented forms execute end-to-end on the Rust
-data plane against nginx 1.29.6 (mail backend TLS is a typed-plane extension, not a
-claimed nginx parity surface). The coherent target remains the declared
+protocols (FastCGI/uWSGI/SCGI/memcached/gRPC and the POP3/IMAP/SMTP mail proxy) and now
+GeoIP (operator-provisioned MMDB, no data redistribution) are no longer in that excluded
+set: their implemented forms execute end-to-end on the Rust data plane against nginx 1.29.6
+(mail backend TLS is a typed-plane extension, not a claimed nginx parity surface). The coherent target remains the declared
 \`${PROFILE}\` profile with the four PRD section 2 grades (parse, semantic, behavioral,
 operational), a generated directive catalog, and a versioned evidence revision. That is
 what this ledger audits.
@@ -2936,8 +3011,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the HTTP/2 DATA-chunking + random_index wave (wave 11B)
-landed and the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the GeoIP-module wave (wave 12) landed and the Lead
+re-synced the catalog (PRD sections 3/4 amended). The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

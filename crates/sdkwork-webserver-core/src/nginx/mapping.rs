@@ -50,7 +50,7 @@ use crate::config::{
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
     AutoindexConfig, AutoindexFormat, BrowserConfig, CachePolicyConfig, CharsetConfig,
     ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig,
-    GeoEntryConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
+    GeoEntryConfig, GeoIpConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
     MapEntryConfig, MimeTypeConfig, ModernBrowserName, ModernBrowserRule,
     ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
     RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
@@ -549,6 +549,17 @@ pub fn materialize_nginx_app(
         mapper.http_browser = http_browser_declarations.resolve_over(&BrowserConfig::default());
         mapper.http_browser_declared = true;
     }
+    // nginx GeoIP declarations are also http-context-only and order
+    // independent: collect them before any server is materialized.
+    let mut http_geoip_declarations = GeoIpDeclarations::default();
+    for directive in &http_directives {
+        if GEOIP_DIRECTIVES.contains(&directive.name.as_str()) {
+            apply_geoip_directive(&mut http_geoip_declarations, directive)?;
+        }
+    }
+    if http_geoip_declarations.any() {
+        mapper.http_geoip = Some(http_geoip_declarations.resolve());
+    }
     for directive in &http_directives {
         if directive.name == "add_header" {
             let mut map_variables = mapper.map_variable_refs();
@@ -672,6 +683,8 @@ pub fn materialize_nginx_app(
             // Collected by the order-independent pre-scan above.
             "add_header" => {}
             name if USERID_DIRECTIVES.contains(&name) || BROWSER_DIRECTIVES.contains(&name) => {}
+            // Collected by the order-independent GeoIP pre-scan above.
+            name if GEOIP_DIRECTIVES.contains(&name) => {}
             "recursive_error_pages" => {
                 mapper.http_recursive_error_pages =
                     parse_on_off(directive, "recursive_error_pages")?;
@@ -1653,6 +1666,10 @@ struct Mapper<'a> {
     http_browser: BrowserConfig,
     /// Whether any browser directive was declared at the http context.
     http_browser_declared: bool,
+    /// nginx GeoIP module configuration resolved from the http context.
+    http_geoip: Option<GeoIpConfig>,
+    /// nginx stream GeoIP module configuration resolved from the stream context.
+    stream_geoip: Option<GeoIpConfig>,
     /// Userid configuration resolved for the server currently being
     /// materialized (inherited by its locations when they declare none).
     server_userid: Option<UserIdConfig>,
@@ -1779,6 +1796,8 @@ impl<'a> Mapper<'a> {
             http_userid_declared: false,
             http_browser: BrowserConfig::default(),
             http_browser_declared: false,
+            http_geoip: None,
+            stream_geoip: None,
             server_userid: None,
             server_browser: None,
             stream_access: Vec::new(),
@@ -2794,6 +2813,12 @@ impl<'a> Mapper<'a> {
                         ));
                     }
                     server_rewrite_phase.push(operation);
+                }
+                name if GEOIP_DIRECTIVES.contains(&name) => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!("`{name}` is only allowed in the `http` block"),
+                    ));
                 }
                 name => {
                     return Err(NginxConfigError::unsupported(
@@ -4426,6 +4451,12 @@ impl<'a> Mapper<'a> {
                 "proxy_cache_valid" => {
                     self.proxy_cache_enabled = true;
                     self.apply_proxy_cache_valid(child)?;
+                }
+                name if GEOIP_DIRECTIVES.contains(&name) => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!("`{name}` is only allowed in the `http` block"),
+                    ));
                 }
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name if UNSUPPORTED_SECURITY.contains(&name) => {
@@ -6295,6 +6326,29 @@ impl<'a> Mapper<'a> {
         &mut self,
         directives: &[NginxDirective],
     ) -> Result<(), NginxConfigError> {
+        // nginx stream GeoIP is an accept-time lookup from the connection
+        // address. It shares the three database directives with the HTTP
+        // module but has no proxy-trust directives.
+        let mut stream_geoip = GeoIpDeclarations::default();
+        for directive in directives {
+            // Deliberately an `if` chain rather than a `match`: the
+            // directive-matrix gate derives each context's execute set from the
+            // first `match directive.name.as_str()` arm block in this function.
+            let name = directive.name.as_str();
+            if name == "geoip_country" || name == "geoip_city" || name == "geoip_org" {
+                apply_geoip_database_directive(&mut stream_geoip, directive)?;
+            } else if name == "geoip_proxy" || name == "geoip_proxy_recursive" {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{name}` is an HTTP GeoIP directive; the stream GeoIP module resolves the accepted connection address only"
+                    ),
+                ));
+            }
+        }
+        if !stream_geoip.is_empty() {
+            self.stream_geoip = Some(stream_geoip.resolve());
+        }
         let mut stream_index = 0usize;
         for directive in directives {
             match directive.name.as_str() {
@@ -6303,6 +6357,7 @@ impl<'a> Mapper<'a> {
                     self.materialize_stream_server(directive, stream_index)?;
                     stream_index += 1;
                 }
+                name if GEOIP_DIRECTIVES.contains(&name) => {}
                 "log_format" | "access_log" | "error_log" | "resolver" => {}
                 "proxy_ssl" => {
                     self.stream_proxy_ssl.apply(directive)?;
@@ -7332,6 +7387,16 @@ impl<'a> Mapper<'a> {
             "metadata": { "source": "nginx configuration" },
         });
         let mut instance = instance;
+        if let Some(geoip) = self.http_geoip {
+            instance["geoip"] = serde_json::to_value(&geoip).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(geoip) = self.stream_geoip {
+            instance["streamGeoip"] = serde_json::to_value(&geoip).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         if self.http2_max_concurrent_streams_conflict {
             return Err(NginxConfigError::unsupported(
                 &NginxDirective {
@@ -11310,6 +11375,166 @@ fn apply_sub_filter_types(
     );
     entry["types"] = Value::Array(types);
     Ok(())
+}
+
+/// nginx `ngx_http_geoip_module` directives. All are http-context only.
+pub(crate) const GEOIP_DIRECTIVES: &[&str] = &[
+    "geoip_country",
+    "geoip_city",
+    "geoip_org",
+    "geoip_proxy",
+    "geoip_proxy_recursive",
+];
+
+/// Per-http-context nginx `geoip_*` declarations collected by the
+/// order-independent pre-scan in `materialize_nginx_app`.
+#[derive(Default)]
+struct GeoIpDeclarations {
+    country: Option<String>,
+    city: Option<String>,
+    org: Option<String>,
+    proxies: Vec<String>,
+    proxy_recursive: Option<bool>,
+}
+
+impl GeoIpDeclarations {
+    fn any(&self) -> bool {
+        self.country.is_some()
+            || self.city.is_some()
+            || self.org.is_some()
+            || !self.proxies.is_empty()
+            || self.proxy_recursive.is_some()
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.any()
+    }
+
+    fn resolve(&self) -> GeoIpConfig {
+        GeoIpConfig {
+            country: self.country.clone(),
+            city: self.city.clone(),
+            org: self.org.clone(),
+            proxies: self.proxies.clone(),
+            proxy_recursive: self.proxy_recursive.unwrap_or(false),
+        }
+    }
+}
+
+/// Validate one `geoip_country`/`geoip_city`/`geoip_org` declaration (shared by
+/// the http and stream GeoIP modules).
+fn apply_geoip_database_directive(
+    declarations: &mut GeoIpDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let slot = match directive.name.as_str() {
+        "geoip_country" => &mut declarations.country,
+        "geoip_city" => &mut declarations.city,
+        "geoip_org" => &mut declarations.org,
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("`{other}` is not a GeoIP database directive"),
+            ));
+        }
+    };
+    if slot.is_some() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("`{}` is duplicate", directive.name),
+        ));
+    }
+    if directive.args.is_empty() || directive.args.len() > 2 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` requires `<absolute-mmdb-path>` and an optional `utf8`",
+                directive.name
+            ),
+        ));
+    }
+    let path = directive.args[0].trim();
+    if directive.args.len() == 2 && directive.args[1] != "utf8" {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "invalid parameter `{}`; only `utf8` is accepted",
+                directive.args[1]
+            ),
+        ));
+    }
+    if !path.starts_with('/') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` database path `{path}` must be absolute; the runtime does not resolve nginx prefix-relative database paths",
+                directive.name
+            ),
+        ));
+    }
+    if path.contains('\\') || path.contains('\0') || path.ends_with('/') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` database path `{path}` must be a file path without backslashes, NUL, or a trailing slash",
+                directive.name
+            ),
+        ));
+    }
+    if Path::new(path).components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir | std::path::Component::CurDir
+        )
+    }) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` database path `{path}` must not contain `.` or `..` components",
+                directive.name
+            ),
+        ));
+    }
+    *slot = Some(path.to_owned());
+    Ok(())
+}
+
+fn apply_geoip_directive(
+    declarations: &mut GeoIpDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    match directive.name.as_str() {
+        "geoip_country" | "geoip_city" | "geoip_org" => {
+            apply_geoip_database_directive(declarations, directive)
+        }
+        "geoip_proxy" => {
+            let Some(value) = directive.args.first() else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`geoip_proxy` requires a network",
+                ));
+            };
+            if directive.args.len() != 1 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`geoip_proxy` takes exactly one network",
+                ));
+            }
+            crate::config::parse_geoip_proxy(value)
+                .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+            declarations.proxies.push(value.clone());
+            Ok(())
+        }
+        "geoip_proxy_recursive" => {
+            let value = parse_on_off(directive, "geoip_proxy_recursive")?;
+            declarations.proxy_recursive = Some(value);
+            Ok(())
+        }
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!("unsupported geoip directive `{other}`"),
+        )),
+    }
 }
 
 /// Directives of `ngx_http_userid_filter_module` (http/server/location).

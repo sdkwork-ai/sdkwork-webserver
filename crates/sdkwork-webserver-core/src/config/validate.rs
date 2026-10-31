@@ -288,6 +288,36 @@ impl SemanticValidator {
                 );
             }
         }
+        if let Some(geoip_root) = &config.nginx.geoip_database_root {
+            if !valid_unix_socket_root(geoip_root) {
+                self.push(
+                    "/nginx/geoipDatabaseRoot",
+                    "geoipDatabaseRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
+                );
+            }
+        }
+        if let Some(geoip) = &config.geoip {
+            for (path, message) in super::geoip::validate_geoip_config(
+                geoip,
+                config.nginx.geoip_database_root.as_deref(),
+            ) {
+                self.push(path, message);
+            }
+        }
+        if let Some(stream_geoip) = &config.stream_geoip {
+            if !stream_geoip.proxies.is_empty() || stream_geoip.proxy_recursive {
+                self.push(
+                    "/streamGeoip",
+                    "the stream GeoIP module has no geoip_proxy/geoip_proxy_recursive directives; remove them (use the http GeoIP module for X-Forwarded-For trust)",
+                );
+            }
+            for (path, message) in super::geoip::validate_geoip_config(
+                stream_geoip,
+                config.nginx.geoip_database_root.as_deref(),
+            ) {
+                self.push(path.replace("/geoip", "/streamGeoip"), message);
+            }
+        }
         for (index, prefix) in config.nginx.document_root_allowlist.iter().enumerate() {
             if !valid_document_root_allowlist_entry(prefix) {
                 self.push(
@@ -3827,6 +3857,7 @@ const REWRITE_REQUEST_VARIABLES: &[&str] = &[
 fn rewrite_variable_known(name: &str, known: &[String]) -> bool {
     is_capture_variable(name)
         || REWRITE_REQUEST_VARIABLES.contains(&name)
+        || crate::config::GEOIP_VARIABLES.contains(&name)
         || known.iter().any(|variable| variable == name)
         || name
             .strip_prefix("http_")

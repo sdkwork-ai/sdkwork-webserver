@@ -547,6 +547,7 @@ async fn serve_stream_connection(
                 peer,
                 local,
                 sni,
+                generation.stream_geoip.as_deref(),
             );
             super::stream_variables::expand_stream_value(&variables, template)
         })

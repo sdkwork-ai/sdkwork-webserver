@@ -25,6 +25,12 @@
     "nginx": {
       "$ref": "#/$defs/nginx"
     },
+    "geoip": {
+      "$ref": "#/$defs/geoIp"
+    },
+    "streamGeoip": {
+      "$ref": "#/$defs/streamGeoIp"
+    },
     "maps": {
       "description": "nginx map variables declared at http context.",
       "type": "array",
@@ -474,6 +480,75 @@
         "storeRoot": {
           "type": "string",
           "minLength": 1
+        },
+        "geoipDatabaseRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Operator-configured absolute directory that GeoIP MMDB database paths in the typed plane must be strict descendants of. The nginx plane accepts any absolute database path exactly like stock nginx."
+        }
+      }
+    },
+    "geoIp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_http_geoip_module configuration (http context only): MaxMind DB databases plus the geoip_proxy trust list.",
+      "properties": {
+        "country": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "geoip_country: absolute path to a Country-edition MMDB."
+        },
+        "city": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "geoip_city: absolute path to a City-edition MMDB."
+        },
+        "org": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "geoip_org: absolute path to an ASN/ISP/Organization/Domain/Enterprise-edition MMDB."
+        },
+        "proxies": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "default": [],
+          "description": "geoip_proxy: trusted proxy IP addresses or CIDRs whose X-Forwarded-For hops are walked, right to left."
+        },
+        "proxyRecursive": {
+          "type": "boolean",
+          "default": false,
+          "description": "geoip_proxy_recursive: keep walking X-Forwarded-For through trusted hops until an untrusted address is reached."
+        }
+      }
+    },
+    "streamGeoIp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_stream_geoip_module configuration (stream context only): MaxMind DB databases resolved from the accepted connection address. The stream module has no geoip_proxy directives.",
+      "properties": {
+        "country": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
+        },
+        "city": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
+        },
+        "org": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
         }
       }
     },

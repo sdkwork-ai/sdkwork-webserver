@@ -135,6 +135,18 @@
       "cases": 9,
       "orchestrator": "tools/run-nginx-differential-mail.mjs",
       "notes": "Wave 9B mail-proxy slice: one nginx `mail {}` fixture is rendered for real nginx 1.29.6 (built --with-mail --with-mail_ssl_module) and for the gateway; a deterministic mock auth_http service plus mock POP3/IMAP/SMTP backends record the three observable flows per case: the client-visible byte transcript, every backend line (including the backend authentication sequence, SMTP XCLIENT with the `[UNAVAILABLE]` client host, the replayed client EHLO and relayed commands) and every auth_http request header. Cases: POP3 USER/PASS + relay, POP3 AUTH LOGIN dialog, POP3 auth failure, IMAP LOGIN + relay, IMAP auth failure, SMTP AUTH PLAIN with XCLIENT + relay, SMTP auth failure with Auth-Error-Code, implicit-TLS SMTP session, and STARTTLS (greeting, EHLO with STARTTLS capability, STARTTLS 220, TLS handshake, no re-greeting, AUTH). TLS cases compare decrypted application bytes; `Auth-SSL-Cipher` is normalised because nginx reports an OpenSSL cipher name while rustls reports its own suite label. The slice owns its oracle and orchestrator; `cases` is the executed-case floor enforced by tools/run-nginx-differential-mail.mjs."
+    },
+    {
+      "id": "geoip-differential",
+      "req": "REQ-2026-0073",
+      "dir": "geoip-differential",
+      "nginxConf": "nginx.conf",
+      "probe": "probe.mjs",
+      "oracle": "nginx-oracle.json",
+      "listenPort": 21096,
+      "cases": 5,
+      "orchestrator": "tools/run-nginx-geoip-differential.mjs",
+      "notes": "Wave 12 GeoIP variable-plumbing proxy differential. The pinned nginx 1.29.6 oracle is NOT built with --with-http_geoip_module, so a real GeoIP lookup differential is unavailable and is not faked here. The oracle fixture fixes the sixteen $geoip_* variables with `set` and exercises them through a `return` body, a `map` result and `add_header`; the gateway fixture declares geoip_country/geoip_city/geoip_org/geoip_proxy/geoip_proxy_recursive against the synthetic MMDB fixtures in tests/nginx/geoip and renders the same template. Four HTTP cases (US record, DE record, empty record, recursive trusted-hop walk) plus one stream `return` case must be byte-identical; the stream fixture records 127.0.0.1/32 as the US test record because the stream plane resolves the accepted peer address (no X-Forwarded-For). This proves nginx-compatible variable plumbing and empty-string rendering, not the MMDB field mapping against a GeoIP-enabled nginx (covered by Rust unit/integration tests). `cases` is the executed-case floor."
     }
   ]
 }

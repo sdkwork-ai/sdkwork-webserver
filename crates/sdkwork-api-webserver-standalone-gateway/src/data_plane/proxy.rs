@@ -22,9 +22,9 @@ use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use sdkwork_webserver_core::{
-    CompiledWebServerApp, ProxyResponsePolicyConfig, RouteConfig, UpstreamActiveHealthConfig,
-    UpstreamActiveHealthMethod, UpstreamConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy,
-    UpstreamRetryCondition,
+    CompiledWebServerApp, GeoIpRequestState, ProxyResponsePolicyConfig, RouteConfig,
+    UpstreamActiveHealthConfig, UpstreamActiveHealthMethod, UpstreamConfig, UpstreamHashKeyVar,
+    UpstreamLoadBalancingStrategy, UpstreamRetryCondition,
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
@@ -381,6 +381,8 @@ pub(super) struct ProxyRequestContext<'a> {
     /// nginx browser module variables (`$modern_browser` / `$ancient_browser`).
     pub modern_browser: &'a str,
     pub ancient_browser: &'a str,
+    /// nginx GeoIP module variables (`$geoip_*`) for `proxy_set_header`.
+    pub geoip: Option<&'a GeoIpRequestState>,
     /// nginx proxy response-header policy (`proxy_hide_header`,
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`) resolved for this proxy resource.
@@ -1171,6 +1173,7 @@ async fn proxy_http_request(
         context.uid_set,
         context.modern_browser,
         context.ancient_browser,
+        context.geoip,
     )
     .is_err()
     {
@@ -1548,6 +1551,7 @@ async fn proxy_websocket_request(
         context.uid_set,
         context.modern_browser,
         context.ancient_browser,
+        context.geoip,
     )
     .is_err()
     {
@@ -1950,6 +1954,7 @@ fn apply_proxy_set_headers(
         "",
         "",
         "",
+        None,
     )
 }
 
@@ -1977,6 +1982,7 @@ fn expand_proxy_header_value(
         "",
         "",
         "",
+        None,
     )
 }
 
@@ -1993,6 +1999,7 @@ fn apply_proxy_set_headers_with_variables(
     uid_set: &str,
     modern_browser: &str,
     ancient_browser: &str,
+    geoip: Option<&GeoIpRequestState>,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -2016,6 +2023,7 @@ fn apply_proxy_set_headers_with_variables(
             uid_set,
             modern_browser,
             ancient_browser,
+            geoip,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -2039,6 +2047,7 @@ fn expand_proxy_header_value_with_variables(
     uid_set: &str,
     modern_browser: &str,
     ancient_browser: &str,
+    geoip: Option<&GeoIpRequestState>,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -2118,6 +2127,26 @@ fn expand_proxy_header_value_with_variables(
             "uid_set" => out.push_str(uid_set),
             "modern_browser" => out.push_str(modern_browser),
             "ancient_browser" => out.push_str(ancient_browser),
+            "geoip_country_code"
+            | "geoip_country_code3"
+            | "geoip_country_name"
+            | "geoip_org"
+            | "geoip_city_continent_code"
+            | "geoip_city_country_code"
+            | "geoip_city_country_code3"
+            | "geoip_city_country_name"
+            | "geoip_region"
+            | "geoip_region_name"
+            | "geoip_city"
+            | "geoip_postal_code"
+            | "geoip_latitude"
+            | "geoip_longitude"
+            | "geoip_dma_code"
+            | "geoip_area_code" => {
+                if let Some(value) = geoip.and_then(|geoip| geoip.value(var)) {
+                    out.push_str(value);
+                }
+            }
             _ if var.starts_with("http_") => {
                 // nginx `$http_<name>`: the inbound request field, `_` standing
                 // for `-`; absent is the empty string.

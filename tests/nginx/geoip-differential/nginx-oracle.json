@@ -1,0 +1,41 @@
+{
+  "_server": "nginx/1.29.6",
+  "_cases": 5,
+  "http": {
+    "us-record": {
+      "status": 200,
+      "body": "US|USA|United States|US|USA|United States|CA|California|Testville|90210|NA|34.0522|-118.2437|Example Org|807||zone-us",
+      "headers": {
+        "x-geoip-country": "US",
+        "x-geoip-zone": "zone-us"
+      }
+    },
+    "de-record": {
+      "status": 200,
+      "body": "DE|DEU|Germany|DE|DEU|Germany|BE|Berlin|Testburg|10115|EU|52.5200|13.4050|Beispiel GmbH|0||zone-de",
+      "headers": {
+        "x-geoip-country": "DE",
+        "x-geoip-zone": "zone-de"
+      }
+    },
+    "empty-record": {
+      "status": 200,
+      "body": "||||||||||||||||zone-other",
+      "headers": {
+        "x-geoip-country": null,
+        "x-geoip-zone": "zone-other"
+      }
+    },
+    "recursive-trusted-hop": {
+      "status": 200,
+      "body": "US|USA|United States|US|USA|United States|CA|California|Testville|90210|NA|34.0522|-118.2437|Example Org|807||zone-us",
+      "headers": {
+        "x-geoip-country": "US",
+        "x-geoip-zone": "zone-us"
+      }
+    }
+  },
+  "stream": {
+    "body": "US|USA|United States|US|USA|United States|CA|California|Testville|90210|NA|34.0522|-118.2437|Example Org|807||zone-us"
+  }
+}

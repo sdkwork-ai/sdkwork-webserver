@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::browser::BrowserConfig;
+use super::geoip::GeoIpConfig;
 use super::userid::UserIdConfig;
 
 fn default_profile() -> String {
@@ -462,6 +463,25 @@ pub struct WebServerAppConfig {
     /// nginx `geo` address-variable blocks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub geo: Vec<GeoConfig>,
+    /// nginx GeoIP module configuration (http context only).
+    ///
+    /// The databases are MaxMind DB files; the runtime opens them once per
+    /// configuration generation and resolves `$geoip_*` from the request
+    /// address. A missing/unreadable/invalid/wrong-edition database is a
+    /// located configuration diagnostic. See `config::geoip`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geoip: Option<GeoIpConfig>,
+    /// nginx stream GeoIP module configuration (`stream { geoip_country …; }`).
+    ///
+    /// The stream module has only the three database directives (no
+    /// `geoip_proxy`/`geoip_proxy_recursive`); every connection is resolved
+    /// from its accepted peer address.
+    #[serde(
+        rename = "streamGeoip",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stream_geoip: Option<GeoIpConfig>,
     /// nginx `split_clients` buckets.
     #[serde(
         rename = "splitClients",
@@ -675,6 +695,15 @@ pub struct NginxConfig {
     /// be a strict descendant of this absolute directory (no `..`, no NUL).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub store_root: Option<String>,
+    /// Typed-TOML `[http] geoipDatabaseRoot`: the operator-configured directory
+    /// that GeoIP MMDB database paths must live under.
+    ///
+    /// The nginx plane accepts any absolute database path exactly like stock
+    /// nginx (the file is operator-owned); the typed plane can additionally
+    /// confine every database to this root. When present, each configured path
+    /// must be a strict lexical descendant of this absolute directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geoip_database_root: Option<String>,
     /// Typed `[http] documentRootAllowlist`: absolute directory prefixes a
     /// request-time `root $variable;` / `alias $variable;` may resolve to.
     ///
@@ -926,6 +955,7 @@ impl Default for NginxConfig {
             unknown_directive_policy: default_unknown_directive_policy(),
             unix_socket_root: None,
             store_root: None,
+            geoip_database_root: None,
             document_root_allowlist: Vec::new(),
             native_compatibility: false,
         }
@@ -3403,6 +3433,25 @@ impl CustomHeaderConfig {
         // request is in that class, empty otherwise.
         "modern_browser",
         "ancient_browser",
+        // nginx `ngx_http_geoip_module`: resolved from the configured MMDB
+        // databases for the request address; empty when the module has no
+        // database or the address has no record, exactly like nginx.
+        "geoip_country_code",
+        "geoip_country_code3",
+        "geoip_country_name",
+        "geoip_org",
+        "geoip_city_continent_code",
+        "geoip_city_country_code",
+        "geoip_city_country_code3",
+        "geoip_city_country_name",
+        "geoip_region",
+        "geoip_region_name",
+        "geoip_city",
+        "geoip_postal_code",
+        "geoip_latitude",
+        "geoip_longitude",
+        "geoip_dma_code",
+        "geoip_area_code",
     ];
 
     /// Maximum header value length. nginx places no comparable bound; this is

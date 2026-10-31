@@ -83,10 +83,15 @@ hyper = { version = "1", features = ["client", "http1", "http2", "server"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "server-auto", "tokio"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["aws-lc-rs", "http1", "http2", "tls12", "webpki-roots"] }
 ipnet = { version = "2", features = ["serde"] }
+# Pure-Rust MaxMind DB reader for the nginx GeoIP module (no libmaxminddb C
+# dependency). ISC licensed.
+maxminddb = "0.32.0"
 futures-util = "0.3"
 hashlink = "0.12"
 hickory-resolver = "0.26"
 mime_guess = "2"
+# Test-only pure-Rust MMDB writer for deterministic GeoIP fixtures.
+mmdb-writer = "0.1.0"
 percent-encoding = "2"
 # Registrable-root-domain folding (`psl::domain_str`). The same crate
 # `sdkwork-deployments` standardizes on, so a served hostname folds to its apex

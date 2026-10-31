@@ -1689,6 +1689,10 @@ struct Materializer<'a> {
     /// `map` model (`WebServerAppConfig.maps`). The legacy string-array `map`
     /// key stays accepted-but-unenforced with its diagnostic.
     maps: Vec<Value>,
+    /// `[http.geoip]` materialized into `WebServerAppConfig.geoip`.
+    geoip: Option<Value>,
+    /// `[stream.geoip]` materialized into `WebServerAppConfig.stream_geoip`.
+    stream_geoip: Option<Value>,
 }
 
 impl<'a> Materializer<'a> {
@@ -1712,6 +1716,8 @@ impl<'a> Materializer<'a> {
             limit_conn_zones: Vec::new(),
             limit_conn_zone_names: Vec::new(),
             maps: Vec::new(),
+            geoip: None,
+            stream_geoip: None,
         }
     }
 
@@ -3096,6 +3102,7 @@ impl<'a> Materializer<'a> {
         let Some(stream) = root.get("stream").and_then(Value::as_object) else {
             return Ok(());
         };
+        self.materialize_stream_geoip(stream)?;
         let Some(servers) = stream.get("server").and_then(Value::as_array) else {
             return Ok(());
         };
@@ -4657,7 +4664,7 @@ impl<'a> Materializer<'a> {
         mime_types: Option<Value>,
         default_type: Option<Value>,
     ) -> Result<WebServerAppConfig, WebServerConfigError> {
-        let instance = json!({
+        let mut instance = json!({
             "schemaVersion": 1,
             "kind": "sdkwork.webserver.app",
             "appKey": self.app_key,
@@ -4681,6 +4688,12 @@ impl<'a> Materializer<'a> {
             "tunnel": tunnel,
             "metadata": { "source": "deployments/webserver/server.toml" },
         });
+        if let Some(geoip) = self.geoip {
+            instance["geoip"] = geoip;
+        }
+        if let Some(geoip) = self.stream_geoip {
+            instance["streamGeoip"] = geoip;
+        }
         let config: WebServerAppConfig = serde_json::from_value(instance).map_err(|source| {
             WebServerConfigError::Materialize(format!(
                 "runtime model deserialization failed: {source}"
@@ -4688,6 +4701,94 @@ impl<'a> Materializer<'a> {
         })?;
         validate_webserver_config(&config)?;
         Ok(config)
+    }
+
+    /// Materialize the `[http.geoip]` table into the executable GeoIP model.
+    ///
+    /// The table mirrors the nginx http-context directives:
+    /// `country`, `city`, `org`, `proxies` (repeatable `geoip_proxy`) and
+    /// `proxyRecursive` (`geoip_proxy_recursive`). Path confinement and MMDB
+    /// edition checks run in semantic validation, so this function only checks
+    /// the typed shape.
+    fn materialize_geoip(&mut self, http: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+        let Some(geoip) = http.get("geoip") else {
+            return Ok(());
+        };
+        let path = "server.toml.http.geoip";
+        let geoip = geoip
+            .as_object()
+            .ok_or_else(|| materialize_error(path, "`geoip` must be a table"))?;
+        check_supported_keys(
+            geoip,
+            path,
+            &["country", "city", "org", "proxies", "proxyRecursive"],
+        )?;
+        for field in ["country", "city", "org"] {
+            if let Some(value) = geoip.get(field) {
+                if value.as_str().is_none() {
+                    return Err(materialize_error(
+                        &format!("{path}.{field}"),
+                        format!("`{field}` must be an absolute database path string"),
+                    ));
+                }
+            }
+        }
+        if let Some(proxies) = geoip.get("proxies") {
+            let Some(proxies) = proxies.as_array() else {
+                return Err(materialize_error(
+                    &format!("{path}.proxies"),
+                    "`proxies` must be an array of IP addresses or CIDRs",
+                ));
+            };
+            for (index, proxy) in proxies.iter().enumerate() {
+                if proxy.as_str().is_none() {
+                    return Err(materialize_error(
+                        &format!("{path}.proxies[{index}]"),
+                        "each proxy entry must be a string",
+                    ));
+                }
+            }
+        }
+        if let Some(recursive) = geoip.get("proxyRecursive") {
+            if !recursive.is_boolean() {
+                return Err(materialize_error(
+                    &format!("{path}.proxyRecursive"),
+                    "`proxyRecursive` must be a boolean",
+                ));
+            }
+        }
+        self.geoip = Some(Value::Object(geoip.clone()));
+        Ok(())
+    }
+
+    /// Materialize the `[stream.geoip]` table into the stream GeoIP model.
+    ///
+    /// The stream module has only the three database directives; proxy trust
+    /// is an HTTP GeoIP feature and fails closed here.
+    fn materialize_stream_geoip(
+        &mut self,
+        stream: &Map<String, Value>,
+    ) -> Result<(), WebServerConfigError> {
+        let Some(geoip) = stream.get("geoip") else {
+            return Ok(());
+        };
+        let path = "server.toml.stream.geoip";
+        let geoip = geoip
+            .as_object()
+            .ok_or_else(|| materialize_error(path, "`geoip` must be a table"))?;
+        check_supported_keys(geoip, path, &["country", "city", "org"])?;
+        for field in ["country", "city", "org"] {
+            if let Some(value) = geoip.get(field) {
+                if value.as_str().is_none() {
+                    return Err(materialize_error(
+                        &format!("{path}.{field}"),
+                        format!("`{field}` must be an absolute database path string"),
+                    ));
+                }
+            }
+        }
+        self.stream_geoip = Some(Value::Object(geoip.clone()));
+        Ok(())
     }
 
     fn materialize_limit_conn_zones(
@@ -5435,7 +5536,7 @@ pub fn materialize_app(
         }
     }
     if let Some(stream) = root.get("stream").and_then(Value::as_object) {
-        check_supported_keys(stream, "server.toml.stream", &["server"])?;
+        check_supported_keys(stream, "server.toml.stream", &["server", "geoip"])?;
     }
     if let Some(cache) = root.get("proxyCache").and_then(Value::as_object) {
         check_supported_keys(
@@ -5484,6 +5585,8 @@ pub fn materialize_app(
             "limitConnZone",
             "limitReqZone",
             "maps",
+            "geoip",
+            "geoipDatabaseRoot",
             "server",
             "unixSocketRoot",
             "storeRoot",
@@ -5499,10 +5602,23 @@ pub fn materialize_app(
     if let Some(store_root) = http.get("storeRoot").and_then(Value::as_str) {
         nginx["storeRoot"] = Value::String(store_root.to_owned());
     }
+    // `[http] geoipDatabaseRoot` confines GeoIP MMDB database paths in the
+    // typed plane (the nginx plane uses the declared absolute path exactly
+    // like stock nginx).
+    if let Some(geoip_root) = http.get("geoipDatabaseRoot") {
+        let geoip_root = geoip_root.as_str().ok_or_else(|| {
+            materialize_error(
+                "server.toml.http.geoipDatabaseRoot",
+                "geoipDatabaseRoot must be a string path",
+            )
+        })?;
+        nginx["geoipDatabaseRoot"] = Value::String(geoip_root.to_owned());
+    }
     let defaults_tls = materialize_http_defaults(http)?;
     materializer.materialize_limit_req_zones(http)?;
     materializer.materialize_limit_conn_zones(http)?;
     materializer.materialize_maps(http)?;
+    materializer.materialize_geoip(http)?;
     materializer.materialize_certificates(http)?;
     materializer.materialize_upstreams(http)?;
     if let Some(servers) = http.get("server").and_then(Value::as_array) {

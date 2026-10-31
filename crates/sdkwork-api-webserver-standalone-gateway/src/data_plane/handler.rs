@@ -20,10 +20,11 @@ use sdkwork_webserver_core::{
     apply_rewrites_with, browser_variable_values, evaluate_access, evaluate_auth_basic,
     evaluate_userid, normalize_authority_host, prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
-    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, RedirectPolicyConfig,
-    ResourceConfig, RewriteOutcome, RoutePathType, SecureLinkFailure, SecurityHeadersConfig,
-    SelectedRoute, UserIdRequestState, XFrameOptions, DEFAULT_HTTP2_CHUNK_SIZE, DEFAULT_MAX_RANGES,
-    HTTP2_MAX_FRAME_SIZE, MAX_REWRITE_INTERNAL_REDIRECTS,
+    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, GeoIpRequestState,
+    RedirectPolicyConfig, ResourceConfig, RewriteOutcome, RoutePathType, SecureLinkFailure,
+    SecurityHeadersConfig, SelectedRoute, UserIdRequestState, XFrameOptions,
+    DEFAULT_HTTP2_CHUNK_SIZE, DEFAULT_MAX_RANGES, HTTP2_MAX_FRAME_SIZE,
+    MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -200,6 +201,7 @@ fn subrequest_env<'a>(
     method: &'a Method,
     headers: &'a HeaderMap,
     map_results: &'a super::map_variables::MapResults,
+    geoip: &'a GeoIpRequestState,
 ) -> super::subrequest::SubrequestEnv<'a> {
     let cap = generation
         .app
@@ -218,6 +220,7 @@ fn subrequest_env<'a>(
         method,
         headers,
         map_results,
+        geoip,
         max_body_bytes: cap,
     }
 }
@@ -335,6 +338,23 @@ async fn route_admitted_request(
             return invalid_forwarded_scheme_response(request.version());
         }
     };
+    // nginx GeoIP: resolve `$geoip_*` once per request from the client address
+    // after real_ip handling. The MMDB readers live on the configuration
+    // generation, so this never reopens a database file. The X-Forwarded-For
+    // trust walk (`geoip_proxy` / `geoip_proxy_recursive`) is applied inside
+    // the lookup.
+    let x_forwarded_for: Vec<&str> = request
+        .headers()
+        .get_all("x-forwarded-for")
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    let geoip_state = generation
+        .geoip
+        .as_ref()
+        .map_or_else(GeoIpRequestState::default, |geoip| {
+            geoip.lookup(client_ip, &x_forwarded_for)
+        });
     if content_length_exceeds(
         request.headers(),
         generation.app.config().limits.max_request_body_bytes,
@@ -392,6 +412,7 @@ async fn route_admitted_request(
             method: &method,
             server_name: &host_server_name,
             headers: request.headers(),
+            geoip: Some(&geoip_state),
         };
         super::map_variables::MapResults::evaluate(generation.app.config(), &facts)
     };
@@ -677,6 +698,7 @@ async fn route_admitted_request(
         &phase_server_name,
         server_protocol,
     );
+    request_variables.seed_geoip(geoip_state.clone());
     // Declared `map` results are variables too: seed them so `set`/`if`/
     // dynamic targets can reference them through the same lookup.
     for (name, value) in map_results.pairs() {
@@ -768,6 +790,7 @@ async fn route_admitted_request(
                         scheme: scheme.as_str(),
                         authority: &authority,
                         client_ip,
+                        geoip: Some(&geoip_state),
                         server_port: listener_port,
                         method: &method,
                         request_uri: &raw_request_uri,
@@ -844,6 +867,7 @@ async fn route_admitted_request(
                 scheme: scheme.as_str(),
                 authority: &authority,
                 client_ip,
+                geoip: Some(&geoip_state),
                 server_port: listener_port,
                 method: &method,
                 request_uri: &raw_request_uri,
@@ -1034,6 +1058,7 @@ async fn route_admitted_request(
                     scheme: scheme.as_str(),
                     authority: &authority,
                     client_ip,
+                    geoip: Some(&geoip_state),
                     server_port: listener_port,
                     method: &method,
                     request_uri: &raw_request_uri,
@@ -1096,6 +1121,7 @@ async fn route_admitted_request(
         scheme: scheme.as_str(),
         authority: &authority,
         client_ip,
+        geoip: Some(&geoip_state),
         server_port: listener_port,
         method: &method,
         request_uri: &raw_request_uri,
@@ -1279,6 +1305,7 @@ async fn route_admitted_request(
             request.method(),
             &request_headers,
             &map_results,
+            &geoip_state,
         );
         if let super::subrequest::AuthOutcome::Reject(response) =
             super::subrequest::authorize(&subrequest, &auth_request).await
@@ -1614,6 +1641,7 @@ async fn route_admitted_request(
                     metrics: &state.runtime.metrics,
                     cache: generation.proxy_cache.clone(),
                     map_results: &map_results,
+                    geoip: Some(&geoip_state),
                     uid_got: response_variables
                         .userid
                         .map_or("", |state| state.got_value()),
@@ -2055,6 +2083,7 @@ async fn route_admitted_request(
                                 .map(|listener| listener.port)
                                 .unwrap_or(0),
                             maps: &map_results,
+                            geoip: Some(&geoip_state),
                             uid_got: response_variables
                                 .userid
                                 .map_or("", |state| state.got_value()),
@@ -2376,6 +2405,7 @@ async fn route_admitted_request(
             &Method::GET,
             &request_headers,
             &map_results,
+            &geoip_state,
         );
         response = super::subrequest::apply_addition(response, &subrequest, &addition).await;
     }
@@ -2441,6 +2471,7 @@ async fn route_admitted_request(
             &Method::GET,
             &request_headers,
             &map_results,
+            &geoip_state,
         );
         super::subrequest::fire_mirror(&subrequest, &mirror);
     }
@@ -3085,6 +3116,8 @@ pub(crate) struct ResponseHeaderVariables<'a> {
     pub(crate) modern_browser: &'a str,
     /// nginx `$ancient_browser` expansion.
     pub(crate) ancient_browser: &'a str,
+    /// Resolved nginx GeoIP variables for this request.
+    pub(crate) geoip: Option<&'a GeoIpRequestState>,
 }
 
 impl ResponseHeaderVariables<'_> {
@@ -3161,7 +3194,11 @@ impl ResponseHeaderVariables<'_> {
                 ),
                 "modern_browser" => output.push_str(self.modern_browser),
                 "ancient_browser" => output.push_str(self.ancient_browser),
-                _ => {}
+                _ => {
+                    if let Some(value) = self.geoip.and_then(|geoip| geoip.value(variable)) {
+                        output.push_str(value);
+                    }
+                }
             }
             remainder = &rest[variable.len()..];
         }
@@ -4225,6 +4262,7 @@ mod tests {
             userid: None,
             modern_browser: "",
             ancient_browser: "",
+            geoip: None,
         }
     }
 
@@ -4261,6 +4299,7 @@ mod tests {
             userid: None,
             modern_browser: "",
             ancient_browser: "",
+            geoip: None,
         }
     }
 
@@ -4499,6 +4538,37 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(duplicates, vec!["one", "two"]);
         assert_eq!(response.headers()["x-other"], "middle");
+    }
+
+    #[test]
+    fn geoip_variables_expand_in_add_header_and_return_bodies() {
+        let geoip = GeoIpRequestState {
+            country_code: "US".to_owned(),
+            country_code3: "USA".to_owned(),
+            country_name: "United States".to_owned(),
+            city: "Testville".to_owned(),
+            region: "CA".to_owned(),
+            ..GeoIpRequestState::default()
+        };
+        let variables = ResponseHeaderVariables {
+            geoip: Some(&geoip),
+            ..response_header_variables()
+        };
+        assert_eq!(
+            variables.expand(
+                "$geoip_country_code|$geoip_country_code3|$geoip_city|$geoip_region|$geoip_org",
+                "/",
+                None
+            ),
+            "US|USA|Testville|CA|"
+        );
+        // An unconfigured GeoIP module renders the nginx not_found empty
+        // string, never a literal `$geoip_…`.
+        let empty = ResponseHeaderVariables {
+            geoip: None,
+            ..response_header_variables()
+        };
+        assert_eq!(empty.expand("$geoip_country_code", "/", None), "");
     }
 
     #[test]

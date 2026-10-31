@@ -13,6 +13,9 @@ pub enum DataPlaneError {
     #[error(transparent)]
     Config(#[from] WebServerConfigError),
 
+    #[error("GeoIP configuration is invalid: {0}")]
+    GeoIp(#[from] sdkwork_webserver_core::GeoIpDatabaseError),
+
     #[error("resolution cache error: {0}")]
     ResolverCache(String),
 

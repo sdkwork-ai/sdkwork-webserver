@@ -54,6 +54,23 @@ pub const MAP_SOURCE_VARIABLES: &[&str] = &[
     "is_args",
     "request_method",
     "server_name",
+    // nginx GeoIP module variables (empty when no record/database).
+    "geoip_country_code",
+    "geoip_country_code3",
+    "geoip_country_name",
+    "geoip_org",
+    "geoip_city_continent_code",
+    "geoip_city_country_code",
+    "geoip_city_country_code3",
+    "geoip_city_country_name",
+    "geoip_region",
+    "geoip_region_name",
+    "geoip_city",
+    "geoip_postal_code",
+    "geoip_latitude",
+    "geoip_longitude",
+    "geoip_dma_code",
+    "geoip_area_code",
 ];
 
 /// Suffixes that introduce a per-request variable family (`$http_<name>`,

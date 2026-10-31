@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "GeoIP module (Wave 12, 2026-10-31): all 8 ngx_http/stream_geoip directives execute with 16 variables and a bounded MMDB runtime; PRD section 3/4 amended (GeoIP in profile for operator-provisioned MMDB editions, no data redistribution). Out-of-profile is now 5 (Perl 4, load_module 1). Catalog: 370 executable / 170 accepted-unenforced / 199 fail-closed / 5 excluded. New geoip-differential slice (5 cases) is the 7th aggregate slice.",
     "Wave 11B (2026-10-31): http2_chunk_size and random_index execute; differential-http 364->367 (random-index candidate set/empty/off); h2 frame-capture test proves DATA frames <= configured chunk with byte-identical reassembly; nginx config-acceptance probe for http2_chunk_size. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Slice remains fail-closed (shared store whole-representation contract); next: GeoIP + residual closure.",
     "Wave 11B (2026-10-31): `http2_chunk_size` executes at http/server/location through an outermost response-body re-chunker (nginx 8 KiB default, 16 MiB clamp, zero rejected; hyper/h2 exposes no server-side DATA-frame knob), proven by a raw h2 frame-capture test plus a real v2-enabled nginx config-acceptance probe; `random_index` executes at location with a bounded sorted candidate scan, hidden/symlink exclusion and a deterministic seeded SplitMix64 selection, proven by a real-nginx candidate-set differential (192 draws), empty-directory and off cases. differential-http grew 364->367. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Remaining module-sized gaps: slice, degradation/degrade (nginx Plus).",
     "userid + browser modules (Wave 11A, 2026-10-31): 13 directives executable with 90 new real-nginx differential-http cases (274->364). Catalog: 360 executable / 170 accepted-unenforced / 201 fail-closed / 13 excluded. Remaining module-sized gaps: random_index, slice, degradation/degrade (nginx Plus). Wave 11B (http2_chunk_size/random_index/slice) is next.",
@@ -646,6 +647,12 @@
       "group": "core",
       "status": "implemented",
       "summary": "random_index (Wave 11B): location-context directive + typed routes[].randomIndex; bounded 4096 sorted visible-regular-file scan, deterministic seeded SplitMix64 selection (path-derived seed), empty-set fall-through to index/autoindex, symlinks intentionally skipped, 403 above cap; differential-http candidate-set cases (192 draws exact set comparison), empty and off cases (REQ-2026-0073 wave 11B)"
+    },
+    {
+      "id": "geoip.mmdb",
+      "group": "core",
+      "status": "implemented",
+      "summary": "nginx GeoIP module (Wave 12): geoip_country/geoip_city/geoip_org at http and stream context, geoip_proxy/geoip_proxy_recursive at http; all 16 $geoip_* variables (incl. nginx's deprecated geoip_dma_code; geoip_area_code always empty), MMDB readers cached per runtime generation, post-real_ip client address with a bounded nginx-shaped right-to-left XFF trust walk (64 hops/8 KiB); operator-provisioned absolute MMDB paths confined by [http] geoipDatabaseRoot; no GeoLite data shipped; synthetic deterministic fixture at tests/nginx/geoip; new geoip-differential slice (4 HTTP + 1 stream case, labelled variable-plumbing proxy differential because the oracle lacks the GeoIP modules); out-of-profile 13 -> 5 (Perl 4 + load_module 1) (REQ-2026-0073 wave 12)"
     }
   ]
 }

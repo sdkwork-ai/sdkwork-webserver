@@ -15,6 +15,23 @@ pub const SUPPORTED_PROXY_HEADER_VARS: &[&str] = &[
     "uid_set",
     "modern_browser",
     "ancient_browser",
+    // nginx GeoIP module variables are legal in a forwarded header value.
+    "geoip_country_code",
+    "geoip_country_code3",
+    "geoip_country_name",
+    "geoip_org",
+    "geoip_city_continent_code",
+    "geoip_city_country_code",
+    "geoip_city_country_code3",
+    "geoip_city_country_name",
+    "geoip_region",
+    "geoip_region_name",
+    "geoip_city",
+    "geoip_postal_code",
+    "geoip_latitude",
+    "geoip_longitude",
+    "geoip_dma_code",
+    "geoip_area_code",
 ];
 
 /// Validate one `"Name value"` entry. Unknown `$…` variables fail closed.
@@ -68,7 +85,7 @@ pub fn validate_proxy_set_header_entry_with_maps(
             && !generic_request_header
         {
             return Err(format!(
-                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_<request-header>/$server_port/$uid_got/$uid_set/$modern_browser/$ancient_browser or a literal"
+                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_<request-header>/$server_port/$uid_got/$uid_set/$modern_browser/$ancient_browser/$geoip_<field> or a literal"
             ));
         }
         rest = &after[end..];

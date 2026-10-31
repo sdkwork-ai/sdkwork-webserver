@@ -39,8 +39,8 @@ use h2::client;
 use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Response, StatusCode};
 use http_body::Frame;
 use sdkwork_webserver_core::{
-    ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamConfig, UpstreamRetryCondition,
-    UpstreamRetryConfig,
+    GeoIpRequestState, ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamConfig,
+    UpstreamRetryCondition, UpstreamRetryConfig,
 };
 use sdkwork_webserver_upstream_protocol::grpc::{grpc_request_headers, TE_HEADER_VALUE};
 use sdkwork_webserver_upstream_protocol::limits::Limits;
@@ -101,6 +101,8 @@ pub(crate) struct GrpcRequestFacts<'a> {
     /// nginx browser module variables for `grpc_set_header` values.
     pub modern_browser: &'a str,
     pub ancient_browser: &'a str,
+    /// nginx GeoIP module variables for `grpc_set_header` values.
+    pub geoip: Option<&'a GeoIpRequestState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -696,6 +698,26 @@ fn expand_header_template(
             "uid_set" => output.push_str(facts.uid_set),
             "modern_browser" => output.push_str(facts.modern_browser),
             "ancient_browser" => output.push_str(facts.ancient_browser),
+            "geoip_country_code"
+            | "geoip_country_code3"
+            | "geoip_country_name"
+            | "geoip_org"
+            | "geoip_city_continent_code"
+            | "geoip_city_country_code"
+            | "geoip_city_country_code3"
+            | "geoip_city_country_name"
+            | "geoip_region"
+            | "geoip_region_name"
+            | "geoip_city"
+            | "geoip_postal_code"
+            | "geoip_latitude"
+            | "geoip_longitude"
+            | "geoip_dma_code"
+            | "geoip_area_code" => {
+                if let Some(value) = facts.geoip.and_then(|geoip| geoip.value(variable)) {
+                    output.push_str(value);
+                }
+            }
             _ => {}
         }
     }
@@ -828,7 +850,32 @@ mod tests {
             uid_set: "",
             modern_browser: "",
             ancient_browser: "",
+            geoip: None,
         }
+    }
+
+    #[test]
+    fn grpc_set_header_expands_geoip_variables() {
+        let maps = MapResults::default();
+        let geoip = GeoIpRequestState {
+            country_code: "US".to_owned(),
+            city: "Testville".to_owned(),
+            ..GeoIpRequestState::default()
+        };
+        let facts = GrpcRequestFacts {
+            geoip: Some(&geoip),
+            ..facts(&maps)
+        };
+        let headers = HeaderMap::new();
+        assert_eq!(
+            expand_header_template(
+                "$geoip_country_code|$geoip_city|$geoip_postal_code",
+                &facts,
+                &headers,
+                "app.example.com"
+            ),
+            "US|Testville|"
+        );
     }
 
     #[test]

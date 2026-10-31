@@ -16,10 +16,10 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **362** | 可承诺 |
+| executable（真实执行且有测试证据） | 79 | **370** | 可承诺 |
 | accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **170** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
 | rejected (fail closed)（活跃出现即报错） | 253 | **199** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
-| excluded from profile（明确排除） | 229 | **13** | 仅 GeoIP 8 / Perl 4 / 动态模块 1；HTTP/3 为 fail-closed 规划项 |
+| excluded from profile（明确排除） | 229 | **5** | 仅 Perl 4 / 动态模块 1；GeoIP 已进档位，HTTP/3 为 fail-closed 规划项 |
 | **合计** | 744 | **744** | |
 
 判定：

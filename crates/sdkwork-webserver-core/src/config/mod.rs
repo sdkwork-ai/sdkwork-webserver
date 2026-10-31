@@ -7,6 +7,8 @@ mod compiled;
 mod discovery;
 mod error;
 pub mod geo;
+mod geoip;
+mod geoip_country_codes;
 mod gzip_disable;
 mod limit_conn;
 mod limit_req;
@@ -49,6 +51,11 @@ pub use error::{ConfigDiagnostic, WebServerConfigError};
 pub use geo::{
     evaluate_geo, evaluate_split_clients, murmur_hash2, parse_split_percent, validate_geo_config,
     validate_split_clients_config,
+};
+pub use geoip::{
+    parse_geoip_proxy, validate_geoip_config, GeoIpConfig, GeoIpDatabaseError, GeoIpDatabaseKind,
+    GeoIpDatabaseMetadata, GeoIpDatabases, GeoIpRequestState, GEOIP_VARIABLES,
+    MAX_GEOIP_DATABASE_BYTES, MAX_GEOIP_PROXIES, MAX_GEOIP_XFF_BYTES, MAX_GEOIP_XFF_HOPS,
 };
 pub use gzip_disable::{
     gzip_disabled_for_user_agent, user_agent_is_msie6, user_agent_matches_disable_patterns,

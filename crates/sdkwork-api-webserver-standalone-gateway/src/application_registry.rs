@@ -718,6 +718,8 @@ mod tests {
             nginx: Default::default(),
             maps: Vec::new(),
             geo: Vec::new(),
+            geoip: None,
+            stream_geoip: None,
             split_clients: Vec::new(),
             mime_types: None,
             default_type: None,
