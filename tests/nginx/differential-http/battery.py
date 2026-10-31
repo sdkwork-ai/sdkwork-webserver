@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime
+from email.utils import parsedate_to_datetime
 import gzip
 import hashlib
 import http.server
@@ -133,6 +134,12 @@ GEOSPLIT_HOST = "geosplit.example.com"
 # Twenty-second host: the Wave 8 bounded subrequest engine (`addition`,
 # `auth_request`, `mirror`).
 SUB_HOST = "sub.example.com"
+# Twenty-third host family: the Wave 11A userid and browser modules, plus the
+# http-level inheritance witnesses for both.
+USERID_HOST = "userid.example.com"
+USERID_HTTP_HOST = "userid-http.example.com"
+BROWSER_HOST = "browser.example.com"
+BROWSER_HTTP_HOST = "browser-http.example.com"
 # 2020-01-01T00:00:00Z. Both endpoints serve these exact files, so pinning the
 # mtime makes `ETag` and `Last-Modified` stable across checkouts (git does not
 # preserve mtimes). The battery pins it on both runs before any request.
@@ -147,6 +154,72 @@ UPSTREAM_FRAMING_HEADERS = frozenset({"connection", "te", "transfer-encoding"})
 
 # Response headers whose values are normalised per side before comparison.
 SIDE_PORTS = ("port", "upstream", "dead")
+
+# Cookie names the nginx userid module owns in this fixture. Their values carry
+# a random identifier, so the deterministic prefix (the service/local-address
+# word) and the mark-bearing suffix are compared while the random middle is
+# canonicalised.
+USERID_COOKIE_NAMES = frozenset({"uid", "SVCUID", "MYUID"})
+# nginx userid issue mode stamps a fixed maximum expiry; every other expiry is
+# `now + duration` and is compared as a rounded delta from the response `Date`.
+USERID_MAX_EXPIRY = "Thu, 31-Dec-37 23:55:55 GMT"
+
+
+def canonicalize_userid_set_cookie(value: str, response_date: str | None) -> str:
+    """Mask the random identifier bytes of a userid `Set-Cookie` value.
+
+    A 16-byte identifier encodes to 24 base64 characters; the last two carry
+    `==` (or the configured `userid_mark` in the first of them), which is the
+    only part of the value with a stable meaning. The service/local-address
+    word is compared through `$uid_set` (`X-Uid-Set`), where it occupies a
+    whole deterministic hexadecimal word.
+    """
+    name, separator, rest = value.partition("=")
+    if not separator or name not in USERID_COOKIE_NAMES:
+        return value
+    cookie_value, semicolon, attributes = rest.partition(";")
+    cookie_value = cookie_value.strip()
+    if len(cookie_value) == 24:
+        canonical = "<uid>" + cookie_value[-2:]
+    else:
+        canonical = "<uid>"
+    masked = f"{name}={canonical}"
+    if semicolon:
+        masked += ";" + canonicalize_userid_expiry(attributes, response_date)
+    return masked
+
+
+def canonicalize_userid_expiry(attributes: str, response_date: str | None) -> str:
+    """Render a relative `expires` attribute as a rounded lifetime in seconds."""
+    match = re.search(r"(?i)(expires=)([^;]+)", attributes)
+    if match is None:
+        return attributes
+    token = match.group(2).strip()
+    if token == USERID_MAX_EXPIRY:
+        return attributes
+    delta = "<expires>"
+    if response_date:
+        try:
+            expires = parsedate_to_datetime(token)
+            issued = parsedate_to_datetime(response_date)
+            seconds = round((expires - issued).total_seconds() / 60.0) * 60
+            delta = f"<+{int(seconds)}s>"
+        except (TypeError, ValueError):
+            delta = "<expires>"
+    return attributes[: match.start(2)] + delta + attributes[match.end(2) :]
+
+
+def canonicalize_userid_variable(value: str) -> str:
+    """Keep the deterministic first identifier word, mask the random tail.
+
+    nginx formats `$uid_got` / `$uid_set` as `name=` plus four upper-case
+    hexadecimal words. The first word is the service word (or the listener's
+    local address); the remaining three carry the time and random bits.
+    """
+    match = re.fullmatch(r"([A-Za-z0-9_.-]+)=([0-9A-F]{32})", value)
+    if match is None:
+        return value
+    return f"{match.group(1)}={match.group(2)[:8]}<uid>"
 
 
 def sha256_hex(payload: bytes) -> str:
@@ -641,9 +714,18 @@ def canonicalize(port: int, upstream_port: int, dead_port: int, status, headers,
         ":" + str(upstream_port): ":<upstream>",
         ":" + str(dead_port): ":<dead>",
     }
+    response_date = headers.get("date", [None])[0]
     normalized_headers = {}
     for name, values in headers.items():
-        joined = "\n".join(values)
+        if name == "set-cookie":
+            joined = "\n".join(
+                canonicalize_userid_set_cookie(value, response_date)
+                for value in values
+            )
+        elif name in ("x-uid-got", "x-uid-set"):
+            joined = "\n".join(canonicalize_userid_variable(value) for value in values)
+        else:
+            joined = "\n".join(values)
         for needle, replacement in replacements.items():
             joined = joined.replace(needle, replacement)
         normalized_headers[name] = joined
@@ -1648,6 +1730,146 @@ def main() -> int:
             request(port, "/sub/mirror", host=SUB_HOST)
         time.sleep(0.5)
         case("sub.mirror.hits", "/sub/mirror-count", host=SUB_HOST)
+
+        # ---- Wave 11A: userid module -----------------------------------
+        # The fixture owns the cookie: a first request mints an identifier and
+        # the second presents it back, so issue and echo are compared from the
+        # same value (the random middle is canonicalised in `canonicalize`).
+        def userid_cookie(path):
+            _, headers, _ = request(port, path, host=USERID_HOST)
+            return headers["set-cookie"][0].split(";")[0]
+
+        case("userid.first.on", "/uid/on", host=USERID_HOST)
+        on_cookie = userid_cookie("/uid/on")
+        case("userid.second.on", "/uid/on", host=USERID_HOST, headers=[("Cookie", on_cookie)])
+        case("userid.first.inherit", "/uid/inherit", host=USERID_HOST)
+        inherit_cookie = userid_cookie("/uid/inherit")
+        case(
+            "userid.second.inherit",
+            "/uid/inherit",
+            host=USERID_HOST,
+            headers=[("Cookie", inherit_cookie)],
+        )
+        # log mode: $uid_got is populated but no cookie is issued.
+        case("userid.first.log", "/uid/log", host=USERID_HOST)
+        case(
+            "userid.log.echo",
+            "/uid/log",
+            host=USERID_HOST,
+            headers=[("Cookie", inherit_cookie)],
+        )
+        case(
+            "userid.off.ignores-cookie",
+            "/uid/off",
+            host=USERID_HOST,
+            headers=[("Cookie", inherit_cookie)],
+        )
+        case("userid.first.v1", "/uid/v1", host=USERID_HOST)
+        v1_cookie = userid_cookie("/uid/v1")
+        case(
+            "userid.second.v1",
+            "/uid/v1",
+            host=USERID_HOST,
+            headers=[("Cookie", v1_cookie)],
+        )
+        case("userid.first.attrs", "/uid/attrs", host=USERID_HOST)
+        attrs_cookie = userid_cookie("/uid/attrs")
+        case(
+            "userid.second.attrs",
+            "/uid/attrs",
+            host=USERID_HOST,
+            headers=[("Cookie", attrs_cookie)],
+        )
+        case("userid.first.flags", "/uid/flags", host=USERID_HOST)
+        case("userid.first.expires-day", "/uid/expires-day", host=USERID_HOST)
+        case("userid.first.mark", "/uid/mark", host=USERID_HOST)
+        mark_cookie = userid_cookie("/uid/mark")
+        case(
+            "userid.second.mark",
+            "/uid/mark",
+            host=USERID_HOST,
+            headers=[("Cookie", mark_cookie)],
+        )
+        case("userid.first.mark-digit", "/uid/mark-digit", host=USERID_HOST)
+        mark_digit_cookie = userid_cookie("/uid/mark-digit")
+        case(
+            "userid.mark-digit.marked",
+            "/uid/mark-digit",
+            host=USERID_HOST,
+            headers=[("Cookie", mark_digit_cookie)],
+        )
+        # Replace the mark with the canonical padding: nginx echoes the first
+        # 22 characters and restores the configured mark.
+        unmarked_digit = mark_digit_cookie[:-2] + "=="
+        case(
+            "userid.mark-digit.unmarked",
+            "/uid/mark-digit",
+            host=USERID_HOST,
+            headers=[("Cookie", unmarked_digit)],
+        )
+        case("userid.first.service", "/uid/service", host=USERID_HOST)
+        case("userid.first.service-v1", "/uid/service-v1", host=USERID_HOST)
+        case("userid.first.p3p-none", "/uid/p3p-none", host=USERID_HOST)
+        case("userid.not-found", "/uid/not-found", host=USERID_HOST)
+        # http-level userid inheritance (no server/location declaration).
+        case("userid.first.http", "/uid/http", host=USERID_HTTP_HOST)
+
+        # ---- Wave 11A: browser module -----------------------------------
+        browser_agents = (
+            ("msie7", "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)"),
+            ("msie5", "Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)"),
+            ("opera9", "Opera/9.80 (X11; Linux i686; U; en) Presto/2.2.15"),
+            ("opera7", "Opera/7.50 (X11; FreeBSD i386; U) [en]"),
+            ("gecko19", "Mozilla/5.0 (Windows; U; Windows NT 5.1; ru-RU; rv:1.9) Gecko/20031006"),
+            ("gecko18", "Mozilla/5.0 (Windows; U; Windows NT 5.1; ru-RU; rv:1.8) Gecko/20031006"),
+            (
+                "safari500",
+                "Mozilla/5.0 (Macintosh; U; PPC Mac OS X; en) AppleWebKit/418 "
+                "(KHTML, like Gecko) Safari/500.1",
+            ),
+            (
+                "safari125",
+                "Mozilla/5.0 (Macintosh; U; PPC Mac OS X; en) AppleWebKit/418 "
+                "(KHTML, like Gecko) Safari/125.7",
+            ),
+            ("konqueror42", "Mozilla/5.0 (compatible; Konqueror/4.2; Linux) KHTML/4.2"),
+            ("konqueror31", "Mozilla/5.0 (compatible; Konqueror/3.1; Linux)"),
+            (
+                "firefox3",
+                "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9) "
+                "Gecko/2008052906 Firefox/3.0",
+            ),
+            (
+                "chrome",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            ),
+            ("curl", "curl/8.0"),
+            ("netscape4", "Mozilla/4.72 [en] (X11; U; Linux i686)"),
+            ("msie-word", "SomeBrowser MSIE 9.0"),
+        )
+        for location in ("inherit", "override", "unlisted", "values"):
+            for label, agent in browser_agents:
+                case(
+                    f"browser.{location}.{label}",
+                    f"/browser/{location}",
+                    host=BROWSER_HOST,
+                    headers=[("User-Agent", agent)],
+                )
+        # No User-Agent header: nginx treats the request as ancient unless
+        # `modern_browser unlisted` is configured.
+        case("browser.inherit.no-ua", "/browser/inherit", host=BROWSER_HOST)
+        case("browser.unlisted.no-ua", "/browser/unlisted", host=BROWSER_HOST)
+        # http-level browser inheritance: only the http-level msie rule exists.
+        for label, agent in browser_agents:
+            if label in ("msie7", "msie5", "opera9", "curl"):
+                case(
+                    f"browser.http.{label}",
+                    "/browser/http",
+                    host=BROWSER_HTTP_HOST,
+                    headers=[("User-Agent", agent)],
+                )
+        case("browser.http.no-ua", "/browser/http", host=BROWSER_HTTP_HOST)
 
         document = {
             "_server": identity,

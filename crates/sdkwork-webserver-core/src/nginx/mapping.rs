@@ -48,13 +48,15 @@ use crate::config::{
     format_proxy_set_header_entry_with_maps, hostname_upstream_allowed_cidrs,
     map_variables::{map_result_name, validate_map_definitions, validate_map_source},
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
-    AutoindexConfig, AutoindexFormat, CachePolicyConfig, CharsetConfig, ConfigDiagnostic,
-    CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig, GeoEntryConfig,
-    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig, MapEntryConfig,
-    MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
+    AutoindexConfig, AutoindexFormat, BrowserConfig, CachePolicyConfig, CharsetConfig,
+    ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig,
+    GeoEntryConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
+    MapEntryConfig, MimeTypeConfig, ModernBrowserName, ModernBrowserRule,
+    ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
     RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
     SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
-    UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig, WebServerConfigError,
+    UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig, UserIdExpires, UserIdFlags,
+    UserIdMode, UserIdSameSite, WebServerAppConfig, WebServerConfigError,
     ACME_HTTP_01_CHALLENGE_PREFIX,
 };
 
@@ -526,6 +528,27 @@ pub fn materialize_nginx_app(
     // `auth_request_set` variables declared in the same context are request
     // variables for header expansion.
     let http_auth_request_variables = subrequest_set_variables(&http_directives);
+    // nginx resolves these two module configurations at merge time, so
+    // directive order inside `http {}` does not matter: collect the http-level
+    // declarations before any server is materialized.
+    let mut http_userid_declarations = UserIdDeclarations::default();
+    let mut http_browser_declarations = BrowserDeclarations::default();
+    for directive in &http_directives {
+        if USERID_DIRECTIVES.contains(&directive.name.as_str()) {
+            apply_userid_directive(&mut http_userid_declarations, directive)?;
+        }
+        if BROWSER_DIRECTIVES.contains(&directive.name.as_str()) {
+            apply_browser_directive(&mut http_browser_declarations, directive)?;
+        }
+    }
+    if http_userid_declarations.any() {
+        mapper.http_userid = http_userid_declarations.resolve_over(&UserIdConfig::default());
+        mapper.http_userid_declared = true;
+    }
+    if http_browser_declarations.any() {
+        mapper.http_browser = http_browser_declarations.resolve_over(&BrowserConfig::default());
+        mapper.http_browser_declared = true;
+    }
     for directive in &http_directives {
         if directive.name == "add_header" {
             let mut map_variables = mapper.map_variable_refs();
@@ -648,6 +671,7 @@ pub fn materialize_nginx_app(
             }
             // Collected by the order-independent pre-scan above.
             "add_header" => {}
+            name if USERID_DIRECTIVES.contains(&name) || BROWSER_DIRECTIVES.contains(&name) => {}
             "recursive_error_pages" => {
                 mapper.http_recursive_error_pages =
                     parse_on_off(directive, "recursive_error_pages")?;
@@ -1230,6 +1254,16 @@ struct LocationExtras {
     stub_status: bool,
     /// Location-level nginx `valid_referers` policy (replaces the server one).
     referer: Option<RefererConfig>,
+    /// Location-level nginx userid declarations collected while walking the
+    /// block; resolved over the server configuration when the walk ends.
+    userid_declarations: UserIdDeclarations,
+    /// Effective location userid configuration (resolved).
+    userid: Option<UserIdConfig>,
+    /// Location-level nginx browser declarations collected while walking the
+    /// block; resolved over the server configuration when the walk ends.
+    browser_declarations: BrowserDeclarations,
+    /// Effective location browser configuration (resolved).
+    browser: Option<BrowserConfig>,
     /// Ordered location-level `set` / `if` rewrite-phase instructions.
     rewrite_phase: Vec<Value>,
     /// Effective location `client_max_body_size` (inherited when undeclared).
@@ -1605,6 +1639,20 @@ struct Mapper<'a> {
     /// materialized (nginx allows the directive at server/location only, so
     /// there is no http-level inheritance).
     server_referer: Option<RefererConfig>,
+    /// nginx userid module configuration resolved from the http context.
+    http_userid: UserIdConfig,
+    /// Whether any `userid*` directive was declared at the http context.
+    http_userid_declared: bool,
+    /// nginx browser module configuration resolved from the http context.
+    http_browser: BrowserConfig,
+    /// Whether any browser directive was declared at the http context.
+    http_browser_declared: bool,
+    /// Userid configuration resolved for the server currently being
+    /// materialized (inherited by its locations when they declare none).
+    server_userid: Option<UserIdConfig>,
+    /// Browser configuration resolved for the server currently being
+    /// materialized (inherited by its locations when they declare none).
+    server_browser: Option<BrowserConfig>,
     /// Ordered nginx stream-context `allow`/`deny` rules inherited by every
     /// stream server that declares none.
     stream_access: Vec<Value>,
@@ -1720,6 +1768,12 @@ impl<'a> Mapper<'a> {
             http_proxy_method: None,
             server_proxy_method: None,
             server_referer: None,
+            http_userid: UserIdConfig::default(),
+            http_userid_declared: false,
+            http_browser: BrowserConfig::default(),
+            http_browser_declared: false,
+            server_userid: None,
+            server_browser: None,
             stream_access: Vec::new(),
             stream_maps: Vec::new(),
             stream_map_results: Vec::new(),
@@ -2211,6 +2265,12 @@ impl<'a> Mapper<'a> {
         let mut server_autoindex = AutoindexDeclarations::default();
         // nginx `valid_referers` has no http context; each server starts unset.
         self.server_referer = None;
+        // Userid/browser declarations collected for the server currently being
+        // walked; resolved after the walk so directive order does not matter.
+        let mut server_userid_declarations = UserIdDeclarations::default();
+        let mut server_browser_declarations = BrowserDeclarations::default();
+        self.server_userid = None;
+        self.server_browser = None;
         let mut server_proxy_method: Option<String> = None;
         // nginx http-level gzip state snapshot: server-level `gzip*`
         // directives overlay it (single-value on/off inherits; the type list
@@ -2420,6 +2480,12 @@ impl<'a> Mapper<'a> {
                 }
                 "valid_referers" => {
                     self.server_referer = Some(parse_valid_referers(child)?);
+                }
+                name if USERID_DIRECTIVES.contains(&name) => {
+                    apply_userid_directive(&mut server_userid_declarations, child)?;
+                }
+                name if BROWSER_DIRECTIVES.contains(&name) => {
+                    apply_browser_directive(&mut server_browser_declarations, child)?;
                 }
                 "http2_max_concurrent_streams" => {
                     self.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
@@ -2733,6 +2799,32 @@ impl<'a> Mapper<'a> {
             }
         }
 
+        self.server_userid = if server_userid_declarations.any() {
+            Some(server_userid_declarations.resolve_over(&self.http_userid))
+        } else if self.http_userid_declared {
+            Some(self.http_userid.clone())
+        } else {
+            None
+        };
+        self.server_browser = if server_browser_declarations.any() {
+            Some(server_browser_declarations.resolve_over(&self.http_browser))
+        } else if self.http_browser_declared {
+            Some(self.http_browser.clone())
+        } else {
+            None
+        };
+        // nginx fills the modern-browser masks only for a list declared at the
+        // level being merged. A list inherited from `http` keeps its raw
+        // declaration slots (see `BrowserConfig::modern_masks_filled`).
+        if !server_browser_declarations.modern_declared()
+            && self.http_browser_declared
+            && !self.http_browser.modern.is_empty()
+        {
+            if let Some(browser) = self.server_browser.as_mut() {
+                browser.modern_masks_filled = false;
+            }
+        }
+
         validate_server_names(directive, &server_names)?;
         // The ACME challenge namespace is a listener property, not a route, so
         // it is extracted before locations are materialized.
@@ -2760,6 +2852,23 @@ impl<'a> Mapper<'a> {
             }
             None => None,
         };
+        let mut catch_all_return = catch_all_return;
+        if let Some((route, _resource)) = catch_all_return.as_mut() {
+            if let Some(userid) = self.server_userid.as_ref() {
+                route["userid"] = serde_json::to_value(userid).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(browser) = self.server_browser.as_ref() {
+                route["browser"] = serde_json::to_value(browser).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+        }
         let catch_all_iterations = if catch_all_return.is_none() {
             usize::MAX
         } else {
@@ -3224,6 +3333,16 @@ impl<'a> Mapper<'a> {
                 NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
+        if let Some(userid) = self.server_userid.as_ref() {
+            virtual_host["userid"] = serde_json::to_value(userid).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(browser) = self.server_browser.as_ref() {
+            virtual_host["browser"] = serde_json::to_value(browser).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         // Named locations are materialized after the path locations so their
         // resource ids never collide; they are appended to `routes` with an
         // exact `@name` matcher (unreachable by request path).
@@ -3539,6 +3658,16 @@ impl<'a> Mapper<'a> {
         // policy; otherwise the server policy applies.
         if let Some(referer) = extras.referer.as_ref().or(self.server_referer.as_ref()) {
             route["referer"] = serde_json::to_value(referer).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(userid) = extras.userid.as_ref() {
+            route["userid"] = serde_json::to_value(userid).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(browser) = extras.browser.as_ref() {
+            route["browser"] = serde_json::to_value(browser).map_err(|error| {
                 NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
@@ -3940,6 +4069,12 @@ impl<'a> Mapper<'a> {
                 }
                 "valid_referers" => {
                     extras.referer = Some(parse_valid_referers(child)?);
+                }
+                name if USERID_DIRECTIVES.contains(&name) => {
+                    apply_userid_directive(&mut extras.userid_declarations, child)?;
+                }
+                name if BROWSER_DIRECTIVES.contains(&name) => {
+                    apply_browser_directive(&mut extras.browser_declarations, child)?;
                 }
                 "empty_gif" => {
                     if !child.args.is_empty() {
@@ -5600,6 +5735,31 @@ impl<'a> Mapper<'a> {
         extras.addition = location_addition;
         extras.auth_request = location_auth;
         extras.mirror = location_mirror;
+        // nginx merges each userid field independently over http → server →
+        // location; the browser module merges the modern family, the ancient
+        // family and the two values separately.
+        extras.userid = if extras.userid_declarations.any() {
+            Some(
+                extras.userid_declarations.resolve_over(
+                    self.server_userid
+                        .as_ref()
+                        .unwrap_or(&UserIdConfig::default()),
+                ),
+            )
+        } else {
+            self.server_userid.clone()
+        };
+        extras.browser = if extras.browser_declarations.any() {
+            Some(
+                extras.browser_declarations.resolve_over(
+                    self.server_browser
+                        .as_ref()
+                        .unwrap_or(&BrowserConfig::default()),
+                ),
+            )
+        } else {
+            self.server_browser.clone()
+        };
         let _ = (server_name, client_max_body_size);
         Ok(extras)
     }
@@ -6252,12 +6412,6 @@ impl<'a> Mapper<'a> {
                         ));
                     }
                     self.stream_preread_buffer_bytes = Some(bytes as usize);
-                }
-                "proxy_protocol_timeout" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "`proxy_protocol_timeout` bounds reading an inbound PROXY protocol header, which the runtime does not parse; the runtime emits PROXY protocol v1 to the upstream (`proxy_protocol on`) and has no inbound header to time out",
-                    ));
                 }
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name => {
@@ -11130,6 +11284,446 @@ fn apply_sub_filter_types(
         || json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false }),
     );
     entry["types"] = Value::Array(types);
+    Ok(())
+}
+
+/// Directives of `ngx_http_userid_filter_module` (http/server/location).
+const USERID_DIRECTIVES: &[&str] = &[
+    "userid",
+    "userid_name",
+    "userid_domain",
+    "userid_path",
+    "userid_expires",
+    "userid_p3p",
+    "userid_flags",
+    "userid_mark",
+    "userid_service",
+];
+
+/// Directives of `ngx_http_browser_module` (http/server/location).
+const BROWSER_DIRECTIVES: &[&str] = &[
+    "modern_browser",
+    "ancient_browser",
+    "modern_browser_value",
+    "ancient_browser_value",
+];
+
+/// Per-context `userid*` declarations. Every scalar directive is single-use in
+/// nginx (`is duplicate`), while `userid_flags` may repeat (bitmask OR).
+#[derive(Debug, Clone, Default)]
+struct UserIdDeclarations {
+    mode: Option<UserIdMode>,
+    name: Option<String>,
+    /// `Some(None)` represents an explicit `userid_domain none`: the declared
+    /// value is empty, and nginx's merge keeps the empty value (it checks the
+    /// string pointer, not its length), so it overrides an inherited domain.
+    domain: Option<Option<String>>,
+    path: Option<String>,
+    expires: Option<Option<UserIdExpires>>,
+    p3p: Option<Option<String>>,
+    flags: Option<UserIdFlags>,
+    mark: Option<Option<char>>,
+    service: Option<u64>,
+}
+
+impl UserIdDeclarations {
+    fn any(&self) -> bool {
+        self.mode.is_some()
+            || self.name.is_some()
+            || self.domain.is_some()
+            || self.path.is_some()
+            || self.expires.is_some()
+            || self.p3p.is_some()
+            || self.flags.is_some()
+            || self.mark.is_some()
+            || self.service.is_some()
+    }
+
+    fn resolve_over(&self, parent: &UserIdConfig) -> UserIdConfig {
+        UserIdConfig {
+            mode: self.mode.unwrap_or(parent.mode),
+            name: self.name.clone().unwrap_or_else(|| parent.name.clone()),
+            domain: match &self.domain {
+                Some(domain) => domain.clone(),
+                None => parent.domain.clone(),
+            },
+            path: self.path.clone().unwrap_or_else(|| parent.path.clone()),
+            expires: match self.expires {
+                Some(expires) => expires,
+                None => parent.expires,
+            },
+            p3p: match &self.p3p {
+                Some(p3p) => p3p.clone(),
+                None => parent.p3p.clone(),
+            },
+            flags: self.flags.unwrap_or(parent.flags),
+            mark: match self.mark {
+                Some(mark) => mark,
+                None => parent.mark,
+            },
+            service: self.service.or(parent.service),
+        }
+    }
+}
+
+/// Per-context `modern_browser` / `ancient_browser` declarations. The modern
+/// rule list and `unlisted` are one merge family, as are the ancient list and
+/// `netscape4`; the two `*_browser_value` strings merge independently.
+#[derive(Debug, Clone, Default)]
+struct BrowserDeclarations {
+    modern: Option<Vec<ModernBrowserRule>>,
+    modern_unlisted: Option<bool>,
+    ancient: Option<Vec<String>>,
+    netscape4: Option<bool>,
+    modern_value: Option<String>,
+    ancient_value: Option<String>,
+}
+
+impl BrowserDeclarations {
+    /// Whether this level declares the modern rule family (a list or
+    /// `unlisted`), which is the condition nginx uses to stop inheriting and
+    /// to fill the masks.
+    fn modern_declared(&self) -> bool {
+        self.modern.is_some() || self.modern_unlisted == Some(true)
+    }
+
+    fn any(&self) -> bool {
+        self.modern.is_some()
+            || self.modern_unlisted.is_some()
+            || self.ancient.is_some()
+            || self.netscape4.is_some()
+            || self.modern_value.is_some()
+            || self.ancient_value.is_some()
+    }
+
+    fn resolve_over(&self, parent: &BrowserConfig) -> BrowserConfig {
+        let modern_declared = self.modern.is_some() || self.modern_unlisted == Some(true);
+        let (modern, modern_unlisted) = if modern_declared {
+            (
+                self.modern.clone().unwrap_or_default(),
+                self.modern_unlisted.unwrap_or(false),
+            )
+        } else {
+            (parent.modern.clone(), parent.modern_unlisted)
+        };
+        let ancient_declared = self.ancient.is_some() || self.netscape4 == Some(true);
+        let (ancient, netscape4) = if ancient_declared {
+            (
+                self.ancient.clone().unwrap_or_default(),
+                self.netscape4.unwrap_or(false),
+            )
+        } else {
+            (parent.ancient.clone(), parent.netscape4)
+        };
+        BrowserConfig {
+            modern,
+            modern_masks_filled: if modern_declared {
+                true
+            } else {
+                parent.modern_masks_filled
+            },
+            modern_unlisted,
+            ancient,
+            netscape4,
+            modern_value: self
+                .modern_value
+                .clone()
+                .unwrap_or_else(|| parent.modern_value.clone()),
+            ancient_value: self
+                .ancient_value
+                .clone()
+                .unwrap_or_else(|| parent.ancient_value.clone()),
+        }
+    }
+}
+
+/// Parse one `userid*` directive into the current context's declarations.
+fn apply_userid_directive(
+    declarations: &mut UserIdDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let one = || -> Result<&String, NginxConfigError> {
+        if directive.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{} takes exactly one argument", directive.name),
+            ));
+        }
+        Ok(&directive.args[0])
+    };
+    match directive.name.as_str() {
+        "userid" => {
+            if declarations.mode.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid is duplicate",
+                ));
+            }
+            declarations.mode = Some(match one()?.as_str() {
+                "off" => UserIdMode::Off,
+                "log" => UserIdMode::Log,
+                "v1" => UserIdMode::V1,
+                "on" => UserIdMode::On,
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("userid accepts off|log|v1|on, found `{other}`"),
+                    ))
+                }
+            });
+        }
+        "userid_service" => {
+            if declarations.service.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_service is duplicate",
+                ));
+            }
+            let value = one()?;
+            let service = value.parse::<u64>().map_err(|_| {
+                NginxConfigError::unsupported(
+                    directive,
+                    format!("userid_service requires a non-negative integer, found `{value}`"),
+                )
+            })?;
+            if service > u64::from(u32::MAX) {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_service exceeds the 32-bit service field",
+                ));
+            }
+            declarations.service = Some(service);
+        }
+        "userid_name" => {
+            if declarations.name.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_name is duplicate",
+                ));
+            }
+            let value = one()?;
+            if value.is_empty() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_name must not be empty",
+                ));
+            }
+            declarations.name = Some(value.clone());
+        }
+        "userid_domain" => {
+            if declarations.domain.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_domain is duplicate",
+                ));
+            }
+            let value = one()?;
+            declarations.domain = Some(if value == "none" || value.is_empty() {
+                None
+            } else {
+                Some(value.clone())
+            });
+        }
+        "userid_path" => {
+            if declarations.path.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_path is duplicate",
+                ));
+            }
+            declarations.path = Some(one()?.clone());
+        }
+        "userid_expires" => {
+            if declarations.expires.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_expires is duplicate",
+                ));
+            }
+            let value = one()?;
+            let expires = match value.as_str() {
+                "max" => Some(UserIdExpires::Max),
+                "off" => None,
+                other => match crate::config::cache_policy::parse_nginx_time(other) {
+                    Some(seconds) if seconds > 0 => Some(UserIdExpires::Seconds {
+                        seconds: seconds as u64,
+                    }),
+                    Some(_) => None,
+                    None => {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid userid_expires value `{other}`"),
+                        ))
+                    }
+                },
+            };
+            declarations.expires = Some(expires);
+        }
+        "userid_p3p" => {
+            if declarations.p3p.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_p3p is duplicate",
+                ));
+            }
+            let value = one()?;
+            declarations.p3p = Some(if value == "none" || value.is_empty() {
+                None
+            } else {
+                Some(value.clone())
+            });
+        }
+        "userid_flags" => {
+            if directive.args.is_empty() || directive.args.len() > 3 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_flags takes one to three flags",
+                ));
+            }
+            let flags = declarations.flags.get_or_insert_with(UserIdFlags::default);
+            for argument in &directive.args {
+                match argument.to_ascii_lowercase().as_str() {
+                    // nginx's `off` bit suppresses inheritance but has no
+                    // attribute effect; the other flags in the same directive
+                    // still apply.
+                    "off" => {}
+                    "secure" => flags.secure = true,
+                    "httponly" => flags.httponly = true,
+                    "samesite=strict" => flags.samesite = Some(UserIdSameSite::Strict),
+                    "samesite=lax" => flags.samesite = Some(UserIdSameSite::Lax),
+                    "samesite=none" => flags.samesite = Some(UserIdSameSite::None),
+                    other => {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!(
+                                "invalid userid_flags value `{other}`; supported values are off, secure, httponly, samesite=strict|lax|none"
+                            ),
+                        ))
+                    }
+                }
+            }
+        }
+        "userid_mark" => {
+            if declarations.mark.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_mark is duplicate",
+                ));
+            }
+            let value = one()?;
+            if value == "off" {
+                declarations.mark = Some(None);
+            } else {
+                let mut characters = value.chars();
+                let mark = characters.next();
+                let valid = characters.next().is_none()
+                    && mark.is_some_and(|mark| mark.is_ascii_alphanumeric() || mark == '=');
+                if !valid {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "userid_mark value must be \"off\" or a single letter, digit or \"=\"",
+                    ));
+                }
+                declarations.mark = Some(mark);
+            }
+        }
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("unsupported directive `{other}`"),
+            ))
+        }
+    }
+    Ok(())
+}
+
+/// Parse one browser-module directive into the current context's declarations.
+fn apply_browser_directive(
+    declarations: &mut BrowserDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    match directive.name.as_str() {
+        "modern_browser" => {
+            if directive.args.len() == 1 && directive.args[0] == "unlisted" {
+                declarations.modern_unlisted = Some(true);
+                return Ok(());
+            }
+            if directive.args.len() != 2 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "modern_browser requires `<browser> <version>` or `unlisted`",
+                ));
+            }
+            let name = &directive.args[0];
+            let Some(browser) = ModernBrowserName::parse(name) else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "unknown browser name `{name}`; supported names are opera, msie, gecko, safari, konqueror"
+                    ),
+                ));
+            };
+            let version = crate::config::parse_browser_version(&directive.args[1])
+                .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+            declarations
+                .modern
+                .get_or_insert_with(Vec::new)
+                .push(ModernBrowserRule { browser, version });
+        }
+        "ancient_browser" => {
+            if directive.args.is_empty() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "ancient_browser requires at least one matcher",
+                ));
+            }
+            if directive.args.len() > 64 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "ancient_browser supports at most 64 matchers",
+                ));
+            }
+            let ancient = declarations.ancient.get_or_insert_with(Vec::new);
+            for argument in &directive.args {
+                if argument == "netscape4" {
+                    declarations.netscape4 = Some(true);
+                    continue;
+                }
+                if argument.len() > 512 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "ancient_browser matcher exceeds 512 bytes",
+                    ));
+                }
+                ancient.push(argument.clone());
+            }
+        }
+        "modern_browser_value" | "ancient_browser_value" => {
+            if directive.args.len() != 1 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("{} takes exactly one value", directive.name),
+                ));
+            }
+            if directive.args[0].len() > 512 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("{} value exceeds 512 bytes", directive.name),
+                ));
+            }
+            if directive.name == "modern_browser_value" {
+                declarations.modern_value = Some(directive.args[0].clone());
+            } else {
+                declarations.ancient_value = Some(directive.args[0].clone());
+            }
+        }
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("unsupported directive `{other}`"),
+            ))
+        }
+    }
     Ok(())
 }
 
@@ -17485,6 +18079,301 @@ server {
     }
 
     #[test]
+    fn materializes_userid_policy_with_nginx_field_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    userid_path /http;
+    userid_expires 1h;
+    server {
+        listen 80;
+        server_name userid.example.test;
+        userid_name SVCUID;
+        userid_path /srv;
+        userid_expires max;
+        userid_flags httponly;
+        userid_p3p "CP=\"SERVER\"";
+        location = /inherit { userid on; return 200 "ok"; }
+        location = /own {
+            userid v1;
+            userid_name uid;
+            userid_path /;
+            userid_expires off;
+            userid_flags off;
+            userid_p3p none;
+            return 200 "ok";
+        }
+        location = /mark { userid on; userid_mark a; return 200 "ok"; }
+        location = /service { userid on; userid_service 12345; return 200 "ok"; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_userid = host.userid.as_ref().expect("host userid config");
+        assert_eq!(host_userid.mode, UserIdMode::Off);
+        assert_eq!(host_userid.name, "SVCUID");
+        assert_eq!(host_userid.path, "/srv");
+        assert_eq!(host_userid.expires, Some(UserIdExpires::Max));
+        assert!(host_userid.flags.httponly);
+        assert_eq!(host_userid.p3p.as_deref(), Some("CP=\"SERVER\""));
+
+        // A location that declares only `userid on` inherits every other
+        // field from the server block.
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit")
+            .expect("inherit route");
+        let inherit_userid = inherit.userid.as_ref().expect("inherit userid");
+        assert_eq!(inherit_userid.mode, UserIdMode::On);
+        assert_eq!(inherit_userid.name, "SVCUID");
+        assert_eq!(inherit_userid.path, "/srv");
+        assert_eq!(inherit_userid.expires, Some(UserIdExpires::Max));
+        assert!(inherit_userid.flags.httponly);
+
+        // A location declaration replaces each field it names.
+        let own = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/own")
+            .expect("own route");
+        let own_userid = own.userid.as_ref().expect("own userid");
+        assert_eq!(own_userid.mode, UserIdMode::V1);
+        assert_eq!(own_userid.name, "uid");
+        assert_eq!(own_userid.path, "/");
+        assert_eq!(own_userid.expires, None);
+        assert!(own_userid.flags.is_empty());
+        assert_eq!(own_userid.p3p, None);
+
+        let mark = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/mark")
+            .expect("mark route")
+            .userid
+            .as_ref()
+            .expect("mark userid");
+        assert_eq!(mark.mark, Some('a'));
+
+        let service = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/service")
+            .expect("service route")
+            .userid
+            .as_ref()
+            .expect("service userid");
+        assert_eq!(service.service, Some(12_345));
+    }
+
+    #[test]
+    fn materializes_userid_http_level_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    userid_path /http;
+    userid_expires 1h;
+    server {
+        listen 80;
+        server_name userid-http.example.test;
+        location = /inherit { userid on; return 200 "ok"; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        // With no server declaration the host carries the http-level values.
+        let host_userid = host.userid.as_ref().expect("inherited host userid");
+        assert_eq!(host_userid.path, "/http");
+        assert_eq!(
+            host_userid.expires,
+            Some(UserIdExpires::Seconds { seconds: 3600 })
+        );
+        let route = &host.routes[0];
+        let route_userid = route.userid.as_ref().expect("route userid");
+        assert_eq!(route_userid.mode, UserIdMode::On);
+        assert_eq!(route_userid.path, "/http");
+        assert_eq!(
+            route_userid.expires,
+            Some(UserIdExpires::Seconds { seconds: 3600 })
+        );
+    }
+
+    #[test]
+    fn userid_invalid_forms_fail_closed() {
+        for (label, body, needle) in [
+            (
+                "unknown mode",
+                "userid maybe;",
+                "userid accepts off|log|v1|on",
+            ),
+            (
+                "duplicate mode",
+                "userid on; userid on;",
+                "userid is duplicate",
+            ),
+            (
+                "invalid mark",
+                "userid on; userid_mark ab;",
+                "single letter, digit",
+            ),
+            (
+                "invalid expiry",
+                "userid_expires nope;",
+                "invalid userid_expires value",
+            ),
+            (
+                "invalid flag",
+                "userid_flags samesite=maybe;",
+                "invalid userid_flags value",
+            ),
+            (
+                "duplicate name",
+                "userid_name a; userid_name b;",
+                "userid_name is duplicate",
+            ),
+            (
+                "service overflow",
+                "userid_service 4294967296;",
+                "32-bit service field",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name userid.example.test; {body} location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_browser_policy_with_nginx_family_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    modern_browser msie 6.0;
+    modern_browser_value "http-modern";
+    server {
+        listen 80;
+        server_name browser.example.test;
+        modern_browser opera 8.0;
+        ancient_browser "MSIE 5" netscape4;
+        ancient_browser_value "srv-ancient";
+        location = /inherit { return 200 "ok"; }
+        location = /override {
+            modern_browser gecko 1.9;
+            modern_browser safari 400;
+            modern_browser konqueror 3.5;
+            return 200 "ok";
+        }
+        location = /unlisted { modern_browser unlisted; return 200 "ok"; }
+        location = /values { modern_browser_value "v-modern"; return 200 "ok"; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_browser = host.browser.as_ref().expect("host browser config");
+        // The server's modern list replaces the http one (it names Opera),
+        // the values inherit independently.
+        assert_eq!(host_browser.modern.len(), 1);
+        assert_eq!(host_browser.modern[0].browser, ModernBrowserName::Opera);
+        assert_eq!(host_browser.modern_value, "http-modern");
+        assert_eq!(host_browser.ancient_value, "srv-ancient");
+        assert!(host_browser.netscape4);
+        assert_eq!(host_browser.ancient, vec!["MSIE 5".to_owned()]);
+
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit")
+            .expect("inherit route");
+        assert_eq!(inherit.browser.as_ref(), Some(host_browser));
+
+        let override_route = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/override")
+            .expect("override route");
+        let override_browser = override_route.browser.as_ref().expect("override browser");
+        assert_eq!(override_browser.modern.len(), 3);
+        // The ancient family and the values still inherit from the server.
+        assert_eq!(override_browser.ancient, vec!["MSIE 5".to_owned()]);
+        assert!(override_browser.netscape4);
+        assert_eq!(override_browser.modern_value, "http-modern");
+
+        let unlisted = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/unlisted")
+            .expect("unlisted route")
+            .browser
+            .as_ref()
+            .expect("unlisted browser");
+        // `unlisted` replaces the modern family entirely; the ancient family
+        // still inherits.
+        assert!(unlisted.modern.is_empty());
+        assert!(unlisted.modern_unlisted);
+        assert!(unlisted.netscape4);
+
+        let values = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/values")
+            .expect("values route")
+            .browser
+            .as_ref()
+            .expect("values browser");
+        // Value-only declarations inherit both rule families.
+        assert_eq!(values.modern, host_browser.modern);
+        assert_eq!(values.modern_value, "v-modern");
+        assert_eq!(values.ancient_value, "srv-ancient");
+    }
+
+    #[test]
+    fn browser_invalid_forms_fail_closed() {
+        for (label, body, needle) in [
+            (
+                "unknown browser name",
+                "modern_browser firefox 3.0;",
+                "unknown browser name",
+            ),
+            (
+                "invalid version",
+                "modern_browser msie 6.x;",
+                "invalid browser version",
+            ),
+            (
+                "too many version components",
+                "modern_browser msie 1.2.3.4.5;",
+                "invalid browser version",
+            ),
+            (
+                "missing browser version",
+                "modern_browser msie;",
+                "requires `<browser> <version>`",
+            ),
+            (
+                "empty ancient matcher list",
+                "ancient_browser;",
+                "requires at least one matcher",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name browser.example.test; {body} location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
     fn materializes_geo_and_split_clients_blocks() {
         let config = materialize(
             r#"
@@ -18655,8 +19544,6 @@ http {
         }
     }
 
-    #[test]
-    #[test]
     #[test]
     fn materializes_subrequest_filters_with_inheritance() {
         let config = materialize(

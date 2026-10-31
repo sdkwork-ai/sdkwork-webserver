@@ -1403,10 +1403,14 @@ const FAIL_CLOSED_STREAM: &[(&str, &str, &str)] = &[
         "proxy_protocol v2;",
         "proxy_protocol v2",
     ),
+    // `listen … proxy_protocol` is implemented by the bounded stream plane
+    // (Wave 7E): the inbound header is parsed and only trusted as a source
+    // address under `set_real_ip_from`, exactly like nginx. The fail-closed
+    // form that remains is a TLS listen without certificate material.
     (
-        "stream listen inbound proxy_protocol",
-        "listen 5100 proxy_protocol;",
-        "trusted source CIDRs",
+        "stream listen ssl without certificate",
+        "listen 5100 ssl;",
+        "requires ssl_certificate",
     ),
     (
         "stream listen unsupported parameter",

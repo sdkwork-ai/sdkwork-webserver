@@ -4,6 +4,9 @@ use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::browser::BrowserConfig;
+use super::userid::UserIdConfig;
+
 fn default_profile() -> String {
     "http-core-v1".to_owned()
 }
@@ -3058,6 +3061,14 @@ pub struct VirtualHostConfig {
     /// declared it (`$invalid_referer` is empty).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referer: Option<RefererConfig>,
+    /// Server-level nginx userid module configuration resolved for this host;
+    /// `None` means no level declared a userid directive (the module is off).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub userid: Option<UserIdConfig>,
+    /// Server-level nginx browser module configuration resolved for this host;
+    /// `None` leaves nginx's defaults (no modern rule, no ancient matcher).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<BrowserConfig>,
 }
 
 /// `true` is the serde default for the nginx `merge_slashes` /
@@ -3367,6 +3378,15 @@ impl CustomHeaderConfig {
         // nginx `ngx_http_referer_module`: "1" when `valid_referers` rejects
         // the request's Referer, empty otherwise.
         "invalid_referer",
+        // nginx `ngx_http_userid_filter_module`: the inbound identifier and
+        // the identifier issued for this request (`name=` + four upper-case
+        // hexadecimal words), empty when nginx reports them not found.
+        "uid_got",
+        "uid_set",
+        // nginx `ngx_http_browser_module`: the configured value when the
+        // request is in that class, empty otherwise.
+        "modern_browser",
+        "ancient_browser",
     ];
 
     /// Maximum header value length. nginx places no comparable bound; this is
@@ -3680,6 +3700,15 @@ pub struct RouteConfig {
     /// value (a location declaration replaces the inherited list).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referer: Option<RefererConfig>,
+    /// Location-level nginx userid configuration resolved over the host value
+    /// (nginx merges each `userid_*` field independently).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub userid: Option<UserIdConfig>,
+    /// Location-level nginx browser configuration resolved over the host value
+    /// (a level that declares the modern or ancient family replaces that
+    /// family; the values inherit independently).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<BrowserConfig>,
     /// Effective nginx `addition` filter policy (http/server/location
     /// inheritance resolved at materialization).
     #[serde(default, skip_serializing_if = "Option::is_none")]

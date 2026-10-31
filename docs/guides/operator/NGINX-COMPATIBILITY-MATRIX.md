@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 347 |
+| executable | 360 |
 | accepted, NOT enforced | 170 |
-| rejected (fail closed) | 214 |
+| rejected (fail closed) | 201 |
 | excluded from profile | 13 |
 | **total** | **744** |
 
@@ -79,7 +79,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 
 - `ngx_core_module` (1) — `debug_points`
 - `ngx_google_perftools_module` (1) — `google_perftools_profiles`
-- `ngx_http_browser_module` (4) — `ancient_browser`, `ancient_browser_value`, `modern_browser`, `modern_browser_value`
 - `ngx_http_core_module` (16) — `aio`, `aio_write`, `auth_delay`, `client_body_in_file_only`, `client_body_in_single_buffer`, `client_body_temp_path`, `early_hints`, `keepalive_min_timeout`, `limit_except`, `limit_rate`, `limit_rate_after`, `open_file_cache_errors`, `open_file_cache_events`, `post_action`, `satisfy`, `subrequest_output_buffer_size`
 - `ngx_http_dav_module` (4) — `create_full_put_path`, `dav_access`, `dav_methods`, `min_delete_depth`
 - `ngx_http_degradation_module` (2) — `degradation`, `degrade`
@@ -104,7 +103,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_ssl_module` (12) — `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_early_data`, `ssl_ech_file`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_responder`
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
 - `ngx_http_upstream_zone_module` (1) — `zone`
-- `ngx_http_userid_filter_module` (9) — `userid`, `userid_domain`, `userid_expires`, `userid_flags`, `userid_mark`, `userid_name`, `userid_p3p`, `userid_path`, `userid_service`
 - `ngx_http_uwsgi_module` (11) — `uwsgi_ignore_client_abort`, `uwsgi_max_temp_file_size`, `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_password_file`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_verify_depth`, `uwsgi_temp_file_write_size`, `uwsgi_temp_path`
 - `ngx_http_v2_module` (1) — `http2_chunk_size`
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
@@ -371,10 +369,10 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `ancient_browser` | 1+ | http, http-location, http-server | rejected (fail closed) |  |
-| `ancient_browser_value` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `modern_browser` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
-| `modern_browser_value` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `ancient_browser` | 1+ | http, http-location, http-server | executable | runtime: `hosts[].browser.ancient (nginx UA tables + netscape4/literal/regex semantics)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `ancient_browser_value` | 1 | http, http-location, http-server | executable | runtime: `hosts[].browser.ancientValue (default "1")`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `modern_browser` | 1\|2 | http, http-location, http-server | executable | runtime: `hosts[].browser.modern (nginx UA tables + config order; first matching slot decides)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `modern_browser_value` | 1 | http, http-location, http-server | executable | runtime: `hosts[].browser.modernValue (default "1")`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
 
 #### `ngx_http_charset_filter_module` (5 directives)
 
@@ -1051,15 +1049,15 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `userid` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_domain` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_expires` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_flags` | 1\|2\|3 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_mark` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_name` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_p3p` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_path` | 1 | http, http-location, http-server | rejected (fail closed) |  |
-| `userid_service` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `userid` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.mode (on\|v1\|log\|off)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_domain` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.domain (cookie Domain; none clears inheritance)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_expires` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.expires (cookie Expires; max renders the fixed 2037 date; off = session cookie)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_flags` | 1\|2\|3 | http, http-location, http-server | executable | runtime: `hosts[].userid.flags (cookie attribute serialization order: expires/domain/path/secure/httponly/samesite)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_mark` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.mark (mark suffix placement, no reissue for marked cookies, re-mark for unmarked)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_name` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.name (cookie name, default uid)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_p3p` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.p3p (P3P header emitted after Set-Cookie when a cookie is issued)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_path` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.path (cookie Path, default /)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
+| `userid_service` | 1 | http, http-location, http-server | executable | runtime: `hosts[].userid.service (service word in the identifier; on = network order, v1 = host order)`. userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable) |
 
 #### `ngx_http_uwsgi_module` (61 directives)
 

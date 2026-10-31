@@ -10,12 +10,13 @@ use url::Url;
 use super::{
     is_capture_variable, is_supported_upstream_allowed_cidr, parse_server_name,
     server_name_is_regex, template_variables, upstream_ip_is_allowed, AppDomainFallbackLookup,
-    CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig, ExpiresMode,
-    IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig, RewritePhaseOpConfig,
-    RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm, StreamTargetConfig,
-    TlsCertificateResolution, TlsVersion, UpstreamConfig, UpstreamLoadBalancingStrategy,
-    UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig, WebServerConfigError,
-    WebServerLimits, MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
+    BrowserConfig, CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig,
+    ExpiresMode, IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig,
+    RewritePhaseOpConfig, RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm,
+    StreamTargetConfig, TlsCertificateResolution, TlsVersion, UpstreamConfig,
+    UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel, UserIdConfig,
+    UserIdExpires, WebServerAppConfig, WebServerConfigError, WebServerLimits,
+    MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -3204,12 +3205,36 @@ impl SemanticValidator {
                     referer,
                 );
             }
+            if let Some(userid) = &virtual_host.userid {
+                validate_userid_config(self, &format!("/virtualHosts/{host_index}/userid"), userid);
+            }
+            if let Some(browser) = &virtual_host.browser {
+                validate_browser_config(
+                    self,
+                    &format!("/virtualHosts/{host_index}/browser"),
+                    browser,
+                );
+            }
             for (route_index, route) in virtual_host.routes.iter().enumerate() {
                 if let Some(referer) = &route.referer {
                     validate_referer_policy(
                         self,
                         &format!("/virtualHosts/{host_index}/routes/{route_index}/referer"),
                         referer,
+                    );
+                }
+                if let Some(userid) = &route.userid {
+                    validate_userid_config(
+                        self,
+                        &format!("/virtualHosts/{host_index}/routes/{route_index}/userid"),
+                        userid,
+                    );
+                }
+                if let Some(browser) = &route.browser {
+                    validate_browser_config(
+                        self,
+                        &format!("/virtualHosts/{host_index}/routes/{route_index}/browser"),
+                        browser,
                     );
                 }
             }
@@ -3250,6 +3275,154 @@ impl SemanticValidator {
             Err(WebServerConfigError::Validation {
                 diagnostics: self.diagnostics,
             })
+        }
+    }
+}
+
+/// Validate an nginx userid module configuration.
+///
+/// The runtime serialises every field into a `Set-Cookie` header, so a value
+/// that could break the cookie grammar (a semicolon, whitespace, or a control
+/// character) fails closed at load instead of producing a malformed field.
+fn validate_userid_config(validator: &mut SemanticValidator, path: &str, config: &UserIdConfig) {
+    let valid_cookie_token = |value: &str| {
+        !value.is_empty()
+            && value.len() <= 128
+            && value.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric()
+                    || matches!(
+                        byte,
+                        b'!' | b'#'
+                            | b'$'
+                            | b'%'
+                            | b'&'
+                            | b'\''
+                            | b'*'
+                            | b'+'
+                            | b'-'
+                            | b'.'
+                            | b'^'
+                            | b'_'
+                            | b'`'
+                            | b'|'
+                            | b'~'
+                    )
+            })
+    };
+    if !valid_cookie_token(&config.name) {
+        validator.push(
+            format!("{path}/name"),
+            "userid_name must be an RFC 9110 token of at most 128 bytes",
+        );
+    }
+    if let Some(domain) = &config.domain {
+        let valid = !domain.is_empty()
+            && domain.len() <= 253
+            && !domain
+                .bytes()
+                .any(|byte| byte <= b' ' || byte == 0x7f || matches!(byte, b';' | b',' | b'='));
+        if !valid {
+            validator.push(
+                format!("{path}/domain"),
+                "userid_domain must be a 1..=253 byte cookie domain without separators or control characters",
+            );
+        }
+    }
+    let valid_path = config.path.len() <= 512
+        && !config
+            .path
+            .bytes()
+            .any(|byte| byte <= b' ' || byte == 0x7f || byte == b';');
+    if !valid_path {
+        validator.push(
+            format!("{path}/path"),
+            "userid_path must be at most 512 bytes without separators or control characters",
+        );
+    }
+    if let Some(UserIdExpires::Seconds { seconds }) = config.expires {
+        if seconds == 0 {
+            validator.push(
+                format!("{path}/expires/seconds"),
+                "a zero userid_expires lifetime is nginx `off`; omit the field",
+            );
+        } else if seconds > 2_147_483_647 {
+            validator.push(
+                format!("{path}/expires/seconds"),
+                "userid_expires exceeds the 32-bit lifetime bound",
+            );
+        }
+    }
+    if let Some(p3p) = &config.p3p {
+        let valid = !p3p.is_empty()
+            && p3p.len() <= 512
+            && !p3p
+                .bytes()
+                .any(|byte| byte == b'\r' || byte == b'\n' || byte == 0);
+        if !valid {
+            validator.push(
+                format!("{path}/p3p"),
+                "userid_p3p must be a 1..=512 byte header value without CR/LF/NUL",
+            );
+        }
+    }
+    if let Some(mark) = config.mark {
+        if !(mark.is_ascii_alphanumeric() || mark == '=') {
+            validator.push(
+                format!("{path}/mark"),
+                "userid_mark must be a single letter, digit or `=`",
+            );
+        }
+    }
+    if let Some(service) = config.service {
+        if service > u64::from(u32::MAX) {
+            validator.push(
+                format!("{path}/service"),
+                "userid_service exceeds the 32-bit service field",
+            );
+        }
+    }
+}
+
+/// Validate an nginx browser module configuration. Values end up in headers
+/// and `return` bodies, so CR/LF is rejected.
+fn validate_browser_config(validator: &mut SemanticValidator, path: &str, config: &BrowserConfig) {
+    if config.modern.len() > 64 {
+        validator.push(
+            format!("{path}/modern"),
+            "at most 64 modern_browser rules are supported",
+        );
+    }
+    for (index, rule) in config.modern.iter().enumerate() {
+        if rule.version > 4_000_999_999 {
+            validator.push(
+                format!("{path}/modern/{index}/version"),
+                "browser version exceeds 4000.99.99.99",
+            );
+        }
+    }
+    if config.ancient.len() > 64 {
+        validator.push(
+            format!("{path}/ancient"),
+            "at most 64 ancient_browser matchers are supported",
+        );
+    }
+    for (index, matcher) in config.ancient.iter().enumerate() {
+        if matcher.len() > 512 {
+            validator.push(
+                format!("{path}/ancient/{index}"),
+                "ancient_browser matcher exceeds 512 bytes",
+            );
+        }
+    }
+    for (field, value) in [
+        ("modernValue", config.modern_value.as_str()),
+        ("ancientValue", config.ancient_value.as_str()),
+    ] {
+        if value.len() > 512 || value.bytes().any(|byte| byte == b'\r' || byte == b'\n') {
+            validator.push(
+                format!("{path}/{field}"),
+                "browser value must be at most 512 bytes without CR/LF",
+            );
         }
     }
 }

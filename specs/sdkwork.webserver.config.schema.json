@@ -2731,6 +2731,12 @@
         },
         "referer": {
           "$ref": "#/$defs/referer"
+        },
+        "userid": {
+          "$ref": "#/$defs/userid"
+        },
+        "browser": {
+          "$ref": "#/$defs/browser"
         }
       }
     },
@@ -2954,6 +2960,12 @@
         },
         "referer": {
           "$ref": "#/$defs/referer"
+        },
+        "userid": {
+          "$ref": "#/$defs/userid"
+        },
+        "browser": {
+          "$ref": "#/$defs/browser"
         },
         "addition": {
           "$ref": "#/$defs/additionConfig"
@@ -4600,6 +4612,180 @@
             "minLength": 1,
             "maxLength": 512
           }
+        }
+      }
+    },
+    "useridFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "userid_flags attribute set. `userid_flags off` is modelled by the empty object.",
+      "properties": {
+        "secure": {
+          "type": "boolean",
+          "default": false
+        },
+        "httponly": {
+          "type": "boolean",
+          "default": false
+        },
+        "samesite": {
+          "enum": [
+            "strict",
+            "lax",
+            "none"
+          ]
+        }
+      }
+    },
+    "userid": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_http_userid_filter_module configuration resolved for a host or route.",
+      "properties": {
+        "mode": {
+          "description": "userid off|log|v1|on (default off).",
+          "enum": [
+            "off",
+            "log",
+            "v1",
+            "on"
+          ],
+          "default": "off"
+        },
+        "name": {
+          "description": "userid_name cookie name (default uid).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+          "default": "uid"
+        },
+        "domain": {
+          "description": "userid_domain; absent means nginx none (no Domain attribute).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "path": {
+          "description": "userid_path (default /).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "default": "/"
+        },
+        "expires": {
+          "description": "userid_expires; \"max\" is nginx's fixed 2037 date, {\"seconds\": N} is now + N.",
+          "oneOf": [
+            {
+              "const": "max"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seconds"
+              ],
+              "properties": {
+                "seconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              }
+            }
+          ]
+        },
+        "p3p": {
+          "description": "userid_p3p header value; absent means nginx none.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "flags": {
+          "$ref": "#/$defs/useridFlags"
+        },
+        "mark": {
+          "description": "userid_mark: one letter, digit or =.",
+          "type": "string",
+          "pattern": "^[0-9A-Za-z=]$"
+        },
+        "service": {
+          "description": "userid_service word; absent uses the listener's local address.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "modernBrowserRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browser",
+        "version"
+      ],
+      "properties": {
+        "browser": {
+          "enum": [
+            "opera",
+            "msie",
+            "gecko",
+            "safari",
+            "konqueror"
+          ]
+        },
+        "version": {
+          "description": "Encoded version (X*1000000 + X*10000 + X*100 + X), at most 4000.99.99.99.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4000999999
+        }
+      }
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_http_browser_module configuration resolved for a host or route.",
+      "properties": {
+        "modern": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/modernBrowserRule"
+          },
+          "default": []
+        },
+        "modernUnlisted": {
+          "description": "modern_browser unlisted.",
+          "type": "boolean",
+          "default": false
+        },
+        "ancient": {
+          "description": "ancient_browser literal case-sensitive User-Agent substrings (netscape4 is separate).",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "default": []
+        },
+        "netscape4": {
+          "description": "ancient_browser netscape4.",
+          "type": "boolean",
+          "default": false
+        },
+        "modernValue": {
+          "description": "modern_browser_value (default 1).",
+          "type": "string",
+          "maxLength": 512,
+          "default": "1"
+        },
+        "ancientValue": {
+          "description": "ancient_browser_value (default 1).",
+          "type": "string",
+          "maxLength": 512,
+          "default": "1"
         }
       }
     },

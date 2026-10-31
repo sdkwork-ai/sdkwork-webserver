@@ -9,6 +9,12 @@ pub const SUPPORTED_PROXY_HEADER_VARS: &[&str] = &[
     "proxy_add_x_forwarded_for",
     "http_upgrade",
     "server_port",
+    // nginx userid / browser module variables are legal in a forwarded
+    // request header value exactly like a response header value.
+    "uid_got",
+    "uid_set",
+    "modern_browser",
+    "ancient_browser",
 ];
 
 /// Validate one `"Name value"` entry. Unknown `$…` variables fail closed.
@@ -62,7 +68,7 @@ pub fn validate_proxy_set_header_entry_with_maps(
             && !generic_request_header
         {
             return Err(format!(
-                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_<request-header>/$server_port or a literal"
+                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_<request-header>/$server_port/$uid_got/$uid_set/$modern_browser/$ancient_browser or a literal"
             ));
         }
         rest = &after[end..];

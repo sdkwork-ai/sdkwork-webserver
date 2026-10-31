@@ -2261,6 +2261,8 @@ impl<'a> Materializer<'a> {
                 "secureLinkExpires",
                 "expires",
                 "etag",
+                "userid",
+                "browser",
             ],
         )?;
         let match_value = as_str(location, &path, "match")?;
@@ -2617,6 +2619,8 @@ impl<'a> Materializer<'a> {
                 "proxySetHeader",
                 "addHeader",
                 "location",
+                "userid",
+                "browser",
             ],
         )?;
         // Server-level `proxySetHeader` entries are inherited by every proxy
@@ -2803,6 +2807,16 @@ impl<'a> Materializer<'a> {
                 virtual_host["securityHeaders"] = json!({ "customHeaders": custom_headers });
             }
         }
+        // The userid and browser tables carry nginx-parallel module settings;
+        // copying them verbatim lets the typed model deserializer validate
+        // their shape (`deny_unknown_fields`) instead of silently dropping a
+        // misspelled field here.
+        if let Some(userid) = server.get("userid") {
+            virtual_host["userid"] = userid.clone();
+        }
+        if let Some(browser) = server.get("browser") {
+            virtual_host["browser"] = browser.clone();
+        }
         // Build routes with their match metadata (the materialize_location
         // helper already pushed resources; attach route objects here).
         let mut route_entries = Vec::new();
@@ -2848,6 +2862,12 @@ impl<'a> Materializer<'a> {
             }
             if let Some(cache_policy) = materialize_cache_policy(location, &path)? {
                 route["cachePolicy"] = cache_policy_json(&cache_policy);
+            }
+            if let Some(userid) = location.get("userid") {
+                route["userid"] = userid.clone();
+            }
+            if let Some(browser) = location.get("browser") {
+                route["browser"] = browser.clone();
             }
             route_entries.push(route);
         }
@@ -5466,7 +5486,10 @@ pub fn materialize_app(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ExpiresMode, IfModifiedSinceMode};
+    use crate::config::{
+        ExpiresMode, IfModifiedSinceMode, ModernBrowserName, UserIdExpires, UserIdMode,
+        UserIdSameSite,
+    };
     use std::path::PathBuf;
 
     fn examples_dir() -> PathBuf {
@@ -6584,6 +6607,86 @@ tcpmux_port = 8444
             sdkwork_webserver_tunnel_core::TunnelGatewayConfig::default().tcpmux_port,
             None
         );
+    }
+
+    #[test]
+    fn typed_userid_and_browser_tables_materialize() {
+        let toml_text = r#"
+[http]
+[[http.server]]
+listen = ["8080"]
+serverName = ["typed.example.test"]
+
+[http.server.userid]
+mode = "on"
+name = "TYPEDUID"
+expires = { seconds = 60 }
+flags = { secure = true, samesite = "lax" }
+p3p = "CP=\"TYPED\""
+
+[http.server.browser]
+modern = [{ browser = "msie", version = 6000000 }]
+ancient = ["MSIE 5"]
+netscape4 = true
+modernValue = "typed-modern"
+ancientValue = "typed-ancient"
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+
+[http.server.location.userid]
+mode = "log"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let userid = host.userid.as_ref().expect("host userid");
+        assert_eq!(userid.mode, UserIdMode::On);
+        assert_eq!(userid.name, "TYPEDUID");
+        assert_eq!(userid.expires, Some(UserIdExpires::Seconds { seconds: 60 }));
+        assert!(userid.flags.secure);
+        assert_eq!(userid.flags.samesite, Some(UserIdSameSite::Lax));
+        assert_eq!(userid.p3p.as_deref(), Some("CP=\"TYPED\""));
+        let browser = host.browser.as_ref().expect("host browser");
+        assert_eq!(browser.modern.len(), 1);
+        assert_eq!(browser.modern[0].browser, ModernBrowserName::Msie);
+        assert_eq!(browser.modern[0].version, 6_000_000);
+        assert_eq!(browser.ancient, vec!["MSIE 5".to_owned()]);
+        assert!(browser.netscape4);
+        assert_eq!(browser.modern_value, "typed-modern");
+        assert_eq!(browser.ancient_value, "typed-ancient");
+        // The location overrides only `mode`; the remaining fields are its own
+        // table (the typed plane is a resolved model, not a partial overlay).
+        let route = &host.routes[0];
+        let route_userid = route.userid.as_ref().expect("route userid");
+        assert_eq!(route_userid.mode, UserIdMode::Log);
+        assert_eq!(route_userid.name, "uid");
+    }
+
+    #[test]
+    fn typed_userid_unknown_fields_fail_closed() {
+        let toml_text = r#"
+[http]
+[[http.server]]
+listen = ["8080"]
+serverName = ["typed.example.test"]
+
+[http.server.userid]
+mode = "on"
+unknownKnob = 1
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("unknown field fails");
+        assert!(format!("{error}").contains("unknownKnob"), "got: {error}");
     }
 
     #[test]

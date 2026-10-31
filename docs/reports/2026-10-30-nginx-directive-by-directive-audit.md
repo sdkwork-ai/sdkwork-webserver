@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `8f749607` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8) and the stream-plane wave (wave 7E) (code plus the re-synced directive catalog), on top of HEAD 8f749607 |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `93900462` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the userid/browser-module wave (wave 11A) (code plus the re-synced directive catalog), on top of HEAD 93900462 |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `196213027f018157d4479893d896491e1bdb11f2bcae2958aedb3cd272c05919` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `1b737e4ab1d446a6dad74d94878b88b017bbbf7257477ef75de87148200de91b` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -29,9 +29,10 @@
   stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
   wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
   CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the
-  bounded subrequest-engine wave (wave 8) and the stream-plane wave (wave 7E).** The code, tests, generated operator matrix and the re-synced directive
+  bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
+  userid/browser-module wave (wave 11A).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `8f749607`; the audit is regenerated against that post-wave catalog (evidence
+  `93900462`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
@@ -53,8 +54,9 @@
   force_ranges, ignore_headers, pass_request_body) and the bounded subrequest-engine wave
   (addition/auth_request/mirror on a one-level engine) and the stream-plane wave (upstream
   TLS, inbound PROXY protocol, SNI routing, half-close, bind, counters, rates and the retry
-  budget) are recorded as completed in section 3, and every one of them is asserted
-  executable by `--verify-evidence`.
+  budget) and the userid/browser-module wave (cookies, UA classification tables) are
+  recorded as completed in section 3, and every one of them is asserted executable by
+  `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` are generated/checked by
@@ -83,15 +85,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 347 | 46.6% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `enforced` | 360 | 48.4% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
 | `runtime-owned` | 146 | 19.6% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 79 | 10.6% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `behavior-gap` | 66 | 8.9% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 13 | 1.7% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
 | `fail-closed` | 142 | 19.1% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 347 + 146 + 17 + 79 + 13 + 142 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 360 + 146 + 17 + 66 + 13 + 142 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -103,11 +105,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 347 | 347 | 0 | 0 | 0 | 0 | 0 |
+| `executable` | 360 | 360 | 0 | 0 | 0 | 0 | 0 |
 | `accepted-unenforced` | 170 | 0 | 146 | 17 | 7 | 0 | 0 |
-| `unsupported-fail-closed` | 214 | 0 | 0 | 0 | 72 | 0 | 142 |
+| `unsupported-fail-closed` | 201 | 0 | 0 | 0 | 59 | 0 | 142 |
 | `excluded` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
-| **total** | **744** | 347 | 146 | 17 | 79 | 13 | 142 |
+| **total** | **744** | 360 | 146 | 17 | 66 | 13 | 142 |
 
 ### 1.3 Wave Completion Status
 
@@ -131,8 +133,9 @@ wave-3 backlog entries that are currently rejected.
 | `wave 7D (protocol response policy)` | 30 | done - CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body plus memcached buffer/gzip-flag and gRPC ignore_headers (catalog: executable) |
 | `wave 8 (bounded subrequest engine)` | 7 | done - addition splice, auth_request/auth_request_set access-phase checks and detached mirror, on a one-level bounded re-entrant subrequest engine (4 MiB body cap; targets return/empty_gif/proxy_pass) (catalog: executable) |
 | `wave 7E (stream plane)` | 19 | done - stream upstream TLS via the shared proxy_ssl policy (including the six per-knob identity/verification rows), inbound PROXY v1/v2 with proxy_protocol_timeout and trusted real-IP peers, SNI server_name routing, half-close, proxy_bind, rate/counting knobs and the next_upstream retry budget (catalog: executable) |
-| remaining backlog | 79 | open - 10 categories, see section 3.2 |
-| **total planned work** | **347** | 268 completed, 79 remaining |
+| `wave 11A (userid + browser modules)` | 13 | done - userid cookie issuance/echo (mode, name, domain, path, expires, P3P, flags, mark, service; $uid_got/$uid_set) and the browser UA-classification tables ($modern_browser/$ancient_browser) with nginx merge semantics (catalog: executable) |
+| remaining backlog | 66 | open - 10 categories, see section 3.2 |
+| **total planned work** | **347** | 281 completed, 66 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -144,16 +147,16 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 275 | 89 | 9 | 51 | 9 | 114 |
+| `http` | 547 | 288 | 89 | 9 | 38 | 9 | 114 |
 | `mail` | 51 | 27 | 1 | 0 | 23 | 0 | 0 |
 | `stream` | 105 | 44 | 22 | 8 | 5 | 3 | 23 |
-| **total** | **744** | 347 | 146 | 17 | 79 | 13 | 142 |
+| **total** | **744** | 360 | 146 | 17 | 66 | 13 | 142 |
 
 ### 1.5 Headline Findings
 
-1. **347 of 744 directives (46.6%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave and the stream-plane wave landed 268 directives. 146 more are deliberately runtime-owned (19.6%) and 17 are intentional, spec-justified security differences.
-2. **79 behavior-gap directives remain in the remaining backlog** (10.6% of the surface): HTTP/1 framing policy (1), module-sized functional modules (17), HTTP/2 DATA chunking (1), OCSP dynamic fetch / refresh / verification (6), stream advanced gaps (2), gRPC residual forms (8), FastCGI residual forms (6), uWSGI residual forms (11), SCGI residual forms (4), mail module residuals (23).
+1. **360 of 744 directives (48.4%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave and the userid/browser-module wave landed 281 directives. 146 more are deliberately runtime-owned (19.6%) and 17 are intentional, spec-justified security differences.
+2. **66 behavior-gap directives remain in the remaining backlog** (8.9% of the surface): HTTP/1 framing policy (1), module-sized functional modules (4), HTTP/2 DATA chunking (1), OCSP dynamic fetch / refresh / verification (6), stream advanced gaps (2), gRPC residual forms (8), FastCGI residual forms (6), uWSGI residual forms (11), SCGI residual forms (4), mail module residuals (23).
 3. **155 of 744 directives (20.8%) are excluded or rejected, not silently emulated.** 13 are explicit PRD section 4 profile exclusions and 142 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
@@ -161,7 +164,7 @@ them fails the gate.
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-stream-plane-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-userid/browser-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -343,10 +346,10 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `ancient_browser` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ancient_browser_value` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `modern_browser` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `modern_browser_value` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ancient_browser` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].browser.ancient (nginx UA tables + netscape4/literal/regex semantics)`; evidence tests/nginx/differential-http/battery.py::browser.inherit.no-ua. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `ancient_browser_value` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].browser.ancientValue (default "1")`; evidence tests/nginx/differential-http/battery.py::browser.inherit.no-ua. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `modern_browser` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].browser.modern (nginx UA tables + config order; first matching slot decides)`; evidence tests/nginx/differential-http/battery.py::browser.inherit.no-ua. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `modern_browser_value` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].browser.modernValue (default "1")`; evidence tests/nginx/differential-http/battery.py::browser.inherit.no-ua. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
 
 #### `ngx_http_charset_filter_module` (5 directives)
 
@@ -1023,15 +1026,15 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 | Directive | Contexts | Catalog | Decision | Rationale |
 | --- | --- | --- | --- | --- |
-| `userid` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_domain` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_expires` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_flags` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_mark` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_name` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_p3p` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_path` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `userid_service` | http, http-location, http-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, module-sized functional modules): currently rejected at load; a stock nginx.conf that uses this module fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `userid` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.mode (on\|v1\|log\|off)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_domain` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.domain (cookie Domain; none clears inheritance)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_expires` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.expires (cookie Expires; max renders the fixed 2037 date; off = session cookie)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_flags` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.flags (cookie attribute serialization order: expires/domain/path/secure/httponly/samesite)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_mark` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.mark (mark suffix placement, no reissue for marked cookies, re-mark for unmarked)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_name` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.name (cookie name, default uid)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_p3p` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.p3p (P3P header emitted after Set-Cookie when a cookie is issued)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_path` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.path (cookie Path, default /)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
+| `userid_service` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `hosts[].userid.service (service word in the identifier; on = network order, v1 = host order)`; evidence tests/nginx/differential-http/battery.py::userid.first.attrs. Known difference: userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised; browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk; $uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable). |
 
 #### `ngx_http_uwsgi_module` (61 directives)
 
@@ -1455,7 +1458,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 ## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A)
 
 The catalog now classifies every directive below as `executable` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -1486,7 +1489,8 @@ CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body forms,
 buffer/gzip-flag and gRPC ignore_headers; and the subrequest-engine wave added the
 addition/auth_request/auth_request_set/mirror forms; and the stream-plane wave added
 upstream TLS (shared proxy_ssl policy), inbound PROXY v1/v2 + deadline, SNI server_name
-routing, half-close, proxy_bind, counters, rates and the next_upstream retry budget.
+routing, half-close, proxy_bind, counters, rates and the next_upstream retry budget; and
+wave 11A added the userid cookie module and the browser UA-classification tables.
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1758,6 +1762,19 @@ routing, half-close, proxy_bind, counters, rates and the next_upstream retry bud
 | `wave 7E (stream plane)` | `proxy_ssl_certificate_key` (`stream:proxy_ssl_certificate_key`) | `streamServers[].proxyTls.clientPrivateKeyFile` | `crates/sdkwork-webserver-core/src/nginx/mapping.rs::stream_proxy_ssl_materializes_the_shared_upstream_tls_policy` |
 | `wave 7E (stream plane)` | `proxy_ssl_name` (`stream:proxy_ssl_name`) | `streamServers[].proxyTls.serverName (SNI/verification override)` | `crates/sdkwork-webserver-core/src/nginx/mapping.rs::stream_proxy_ssl_materializes_the_shared_upstream_tls_policy` |
 | `wave 7E (stream plane)` | `proxy_ssl_server_name` (`stream:proxy_ssl_server_name`) | `streamServers[].proxyTls.serverName enable (SNI on)` | `crates/sdkwork-webserver-core/src/nginx/mapping.rs::stream_proxy_ssl_materializes_the_shared_upstream_tls_policy` |
+| `wave 11A (userid + browser modules)` | `userid` (`http:userid`) | `hosts[].userid.mode (on\|v1\|log\|off)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_name` (`http:userid_name`) | `hosts[].userid.name (cookie name, default uid)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_domain` (`http:userid_domain`) | `hosts[].userid.domain (cookie Domain; none clears inheritance)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_path` (`http:userid_path`) | `hosts[].userid.path (cookie Path, default /)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_expires` (`http:userid_expires`) | `hosts[].userid.expires (cookie Expires; max renders the fixed 2037 date; off = session cookie)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_p3p` (`http:userid_p3p`) | `hosts[].userid.p3p (P3P header emitted after Set-Cookie when a cookie is issued)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_flags` (`http:userid_flags`) | `hosts[].userid.flags (cookie attribute serialization order: expires/domain/path/secure/httponly/samesite)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_mark` (`http:userid_mark`) | `hosts[].userid.mark (mark suffix placement, no reissue for marked cookies, re-mark for unmarked)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `userid_service` (`http:userid_service`) | `hosts[].userid.service (service word in the identifier; on = network order, v1 = host order)` | `tests/nginx/differential-http/battery.py::userid.first.attrs` |
+| `wave 11A (userid + browser modules)` | `modern_browser` (`http:modern_browser`) | `hosts[].browser.modern (nginx UA tables + config order; first matching slot decides)` | `tests/nginx/differential-http/battery.py::browser.inherit.no-ua` |
+| `wave 11A (userid + browser modules)` | `ancient_browser` (`http:ancient_browser`) | `hosts[].browser.ancient (nginx UA tables + netscape4/literal/regex semantics)` | `tests/nginx/differential-http/battery.py::browser.inherit.no-ua` |
+| `wave 11A (userid + browser modules)` | `modern_browser_value` (`http:modern_browser_value`) | `hosts[].browser.modernValue (default "1")` | `tests/nginx/differential-http/battery.py::browser.inherit.no-ua` |
+| `wave 11A (userid + browser modules)` | `ancient_browser_value` (`http:ancient_browser_value`) | `hosts[].browser.ancientValue (default "1")` | `tests/nginx/differential-http/battery.py::browser.inherit.no-ua` |
 
 Wave 10 also landed engine capabilities that are not directive rows but are part of the
 claim: a bounded template grammar (`$name`, `${name}`, `$1..$9`), server/location `set`
@@ -1839,15 +1856,35 @@ proxy_protocol.inbound-v1, proxy_protocol.missing-header, half_close.on) and
 stream_tls_proxy.rs integration tests cover SNI/bind/retry/PROXY/half-close. The
 behavioral-corpus manifest pinnedNginx is now 1.29.6 (its checker enforces it).
 
+Wave 11A acceptance evidence: 13 directives execute at http/server/location with nginx
+merge semantics - the userid cookie module (userid, userid_name/domain/path/expires/p3p/
+flags/mark/service: issuance+echo, fixed attribute order expires->domain->path->secure->
+httponly->samesite, max `Thu, 31-Dec-37 23:55:55 GMT`, P3P emitted after Set-Cookie, mark
+placement/re-mark, service byte order on vs v1, log mode parsing `$uid_got` without
+issuing, off ignoring cookies; `$uid_got`/`$uid_set` expose to add_header/return/
+proxy_set_header/grpc_set_header) and the browser classification module
+(modern_browser/ancient_browser + *_value: transcribed nginx UA tables opera/msie/gecko/
+safari/konqueror, Firefox matches `rv:`, Chrome matches `Safari/`, first matching slot
+decides, the http-level inherited modern list reproduces nginx's unfilled-mask quirk,
+values default "1", `$modern_browser`/`$ancient_browser`). differential-http grew
+274 -> 364 with 90 new cases (userid issue/echo/on/v1/log/off/attrs/name/domain/path/
+expires/flags/p3p/mark/service/inheritance/404; browser 4 locations x 15 UAs + no-UA +
+http inheritance) and its oracle was regenerated from real nginx 1.29.6; floor/manifest
+364. Bounded differences recorded: the userid identifier tail is CSPRNG-derived (nginx
+uses time/pid/sequencer) while the observable 16-byte shape, service/address word, time
+position, mark placement and echo semantics match and are differentially canonicalised;
+`$uid_*` expands empty inside subrequest responses; error_page internal redirects keep the
+original location config; `$uid_reset` is not implemented.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (79 directives)
+### 3.2 Remaining Behavior-Gap Backlog (66 directives)
 
 These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
-the stream-plane wave (wave 7E). An accepted-unenforced row is silently ignored today; a rejected row fails
+the userid/browser-module wave (wave 11A). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1858,27 +1895,14 @@ have to change, and the tests to add.
 | --- | --- | --- | --- | --- | --- | --- |
 | `chunked_transfer_encoding` | medium (encoder blocker) | accepted-unenforced | chunked response encoding policy is not applied | the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited HTTP/1.1 response (nginx probe recorded), so `chunked_transfer_encoding off` has no implementation path in the current encoder; the truthful diagnostic says so and this remains a probed blocker rather than an exclusion. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/http1_wire.rs (response framing), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | framing differential (chunked/identity/HEAD) once the encoder exposes close-delimited 1.1 responses; blocked until then |
 
-### 3.2.2 module-sized functional modules - 17 directive(s)
+### 3.2.2 module-sized functional modules - 4 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `userid` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_domain` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_expires` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_flags` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_mark` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_name` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_p3p` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_path` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `userid_service` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `ancient_browser` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `ancient_browser_value` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `modern_browser` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `modern_browser_value` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `random_index` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `degradation` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `degrade` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
-| `slice` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `random_index` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | the remaining module-sized features are random_index (random directory-index selection), degradation/degrade (nginx Plus degradation limits) and slice (partial-object cache indexing); userid and browser moved to executable in wave 11A, so these are self-contained module work rather than engine work. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `degradation` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | the remaining module-sized features are random_index (random directory-index selection), degradation/degrade (nginx Plus degradation limits) and slice (partial-object cache indexing); userid and browser moved to executable in wave 11A, so these are self-contained module work rather than engine work. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `degrade` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | the remaining module-sized features are random_index (random directory-index selection), degradation/degrade (nginx Plus degradation limits) and slice (partial-object cache indexing); userid and browser moved to executable in wave 11A, so these are self-contained module work rather than engine work. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
+| `slice` | medium | unsupported-fail-closed | a stock nginx.conf that uses this module fails to activate. | the remaining module-sized features are random_index (random directory-index selection), degradation/degrade (nginx Plus degradation limits) and slice (partial-object cache indexing); userid and browser moved to executable in wave 11A, so these are self-contained module work rather than engine work. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice |
 
 ### 3.2.3 HTTP/2 DATA chunking - 1 directive(s)
 
@@ -1983,10 +2007,10 @@ have to change, and the tests to add.
 
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest surfaces are the mail module residuals (23), the
-module-sized userid/browser/random_index/degradation/slice modules (17) and the 21
+Within the backlog, the largest surfaces are the mail module residuals (23) and the 21
 residual sub-families of the landed CGI protocol modules (temp-spool blockers,
-ignore_client_abort, catch_stderr, send_lowat, uWSGI TLS leftovers). The stream plane is
+ignore_client_abort, catch_stderr, send_lowat, uWSGI TLS leftovers); the remaining
+module-sized work is random_index, degradation/degrade and slice (4 rows). The stream plane is
 nearly complete: only stream split_clients (map-style nested variable table) and stream
 pass (named-target selection) remain as explicit blockers. Eight gRPC residual
 bind/socket/TLS-library knobs come next. `chunked_transfer_encoding` is a probed blocker
@@ -2073,6 +2097,15 @@ executable; the rustls-unsupported knobs stay as the catalog classifies them
 (`proxy_ssl_crl`/`_conf_command`/`_password_file`/`_certificate_cache` fail-closed;
 `proxy_ssl_ciphers`/`_session_reuse`/`_verify_depth` accepted-unenforced).
 
+Wave 11A note: userid and browser are now executable with 90 real-nginx differential-http
+cases (oracle regenerated from nginx 1.29.6). Bounded differences recorded in the catalog
+rather than as backlog: the userid identifier tail is CSPRNG-derived (nginx uses time/
+pid/sequencer) while the observable 16-byte shape, service/address word, time position,
+mark placement and echo semantics match and are differentially canonicalised; `$uid_*`
+expands empty inside subrequest responses; error_page internal redirects keep the original
+location config; `$uid_reset` is not implemented. The module-sized backlog is now only
+random_index, degradation/degrade and slice.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and `gzip_comp_level` (the
@@ -2082,9 +2115,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 105 `executable` directive rows was drawn,
+- A sample of 108 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave and the stream-plane wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave and the userid/browser-module wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2093,7 +2126,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (105 directive rows)
+### 4.2 Verified Sample (108 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -2202,6 +2235,9 @@ compression layer owns the level).
 | `stream:proxy_bind` | `stream proxy_bind dials upstream from the configured source address` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs::proxy_bind_uses_the_configured_source_address` | the stream_tls_proxy integration test asserts the upstream peer sees the configured source address (IP literal form) | verified |
 | `stream:proxy_half_close` | `stream proxy_half_close keeps the reverse direction alive after one side closes` | `crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs::half_close_keeps_the_reverse_direction_alive` | the stream_tls_proxy integration test proves half-close relay ordering while the opposite direction keeps flowing, matching the differential-stream half_close.on case | verified |
 | `stream:proxy_ssl_verify` | `stream proxy_ssl_verify enforces upstream certificate verification against the trusted CA` | `tests/nginx/differential-stream/battery.py::proxy_ssl.verified` | the differential-stream proxy_ssl.verified/untrusted-ca cases compare the verified and rejected upstream TLS handshakes against nginx 1.29.6; the mapping and stream_tls_proxy tests prove the six per-knob rows feed the same shared policy | verified |
+| `http:userid` | `userid issues a 16-byte cookie with nginx attribute ordering and echo semantics` | `tests/nginx/differential-http/battery.py::userid.first.attrs` | the userid differential cases (issue/echo/on/v1/log/off/attrs/mark/service/inheritance) compare the cookie shape, attribute order, mark and echo against real nginx 1.29.6, with the CSPRNG tail canonicalised | verified |
+| `http:userid_flags` | `userid service byte order and flags serialization follow nginx` | `tests/nginx/differential-http/battery.py::userid.first.service-v1` | the service-v1 and flags cases compare the service word byte order, secure/httponly/samesite attribute order and P3P placement against nginx 1.29.6 | verified |
+| `http:modern_browser` | `browser classification matches nginx UA tables and the http-level inherited-list quirk` | `tests/nginx/differential-http/battery.py::browser.inherit.no-ua` | 90 browser cases (4 locations x 15 UAs + no-UA + http inheritance) compare $modern_browser/$ancient_browser and the unfilled-mask quirk against nginx 1.29.6 | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -2247,7 +2283,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-347 executable rows cite only the generic
+360 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -2258,7 +2294,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (347 <=> 347). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (360 <=> 360). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -2266,9 +2302,9 @@ Consistent: `executable` <=> `enforced` in both directions (347 <=> 347). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 347 | 46.6% |
+| `enforced` (actually nginx-compatible behavior) | 360 | 48.4% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 79 | 10.6% |
+| `behavior-gap` (planned toward compatibility) | 66 | 8.9% |
 | `runtime-owned` (deliberately not nginx value) | 146 | 19.6% |
 | `out-of-profile` (PRD section 4 exclusion) | 13 | 1.7% |
 | `fail-closed` (rejected, not planned) | 142 | 19.1% |
@@ -2276,7 +2312,7 @@ Consistent: `executable` <=> `enforced` in both directions (347 <=> 347). Every 
 301 of 744 directives (40.5%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 347 executed directives plus the 79 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 360 executed directives plus the 66 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (13 directives)
@@ -2407,8 +2443,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the stream-plane wave (wave 7E) landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the userid/browser-module wave (wave 11A) landed and
+the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |
@@ -2681,13 +2717,26 @@ current state:
 | `proxy_ssl_certificate_key` (`stream:proxy_ssl_certificate_key`) | `wave 7E (stream plane)` | completed - `enforced` |
 | `proxy_ssl_name` (`stream:proxy_ssl_name`) | `wave 7E (stream plane)` | completed - `enforced` |
 | `proxy_ssl_server_name` (`stream:proxy_ssl_server_name`) | `wave 7E (stream plane)` | completed - `enforced` |
+| `userid` (`http:userid`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_name` (`http:userid_name`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_domain` (`http:userid_domain`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_path` (`http:userid_path`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_expires` (`http:userid_expires`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_p3p` (`http:userid_p3p`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_flags` (`http:userid_flags`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_mark` (`http:userid_mark`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `userid_service` (`http:userid_service`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `modern_browser` (`http:modern_browser`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `ancient_browser` (`http:ancient_browser`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `modern_browser_value` (`http:modern_browser_value`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
+| `ancient_browser_value` (`http:ancient_browser_value`) | `wave 11A (userid + browser modules)` | completed - `enforced` |
 
-All 268 rows above were re-spot-checked (section 4.2) and are
+All 281 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 79 wave-3 backlog rows are the only behavior-gap
+The 66 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 

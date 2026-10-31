@@ -133,12 +133,10 @@ fn parse_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
     values
         .iter()
         .filter_map(|value| {
-            value.parse::<ipnet::IpNet>().ok().or_else(|| {
-                value
-                    .parse::<IpAddr>()
-                    .ok()
-                    .map(|address| ipnet::IpNet::from(address))
-            })
+            value
+                .parse::<ipnet::IpNet>()
+                .ok()
+                .or_else(|| value.parse::<IpAddr>().ok().map(ipnet::IpNet::from))
         })
         .collect()
 }
@@ -1046,7 +1044,7 @@ fn select_sni_server<'a>(
                 let suffix = suffix.to_ascii_lowercase();
                 if sni.len() > suffix.len()
                     && sni.ends_with(&format!(".{suffix}"))
-                    && best.map_or(true, |(_, length)| suffix.len() > length)
+                    && best.is_none_or(|(_, length)| suffix.len() > length)
                 {
                     best = Some((server, suffix.len()));
                 }

@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '8f749607';
+const AUDIT_HEAD = '93900462';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8) and the stream-plane wave (wave 7E) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the userid/browser-module wave (wave 11A) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -480,6 +480,26 @@ const COMPLETED_WAVES = [
       'stream:proxy_ssl_server_name',
     ],
   },
+  {
+    key: 'wave 11A (userid + browser modules)',
+    summary:
+      'userid cookie issuance/echo (mode, name, domain, path, expires, P3P, flags, mark, service; $uid_got/$uid_set) and the browser UA-classification tables ($modern_browser/$ancient_browser) with nginx merge semantics',
+    ids: [
+      'http:userid',
+      'http:userid_name',
+      'http:userid_domain',
+      'http:userid_path',
+      'http:userid_expires',
+      'http:userid_p3p',
+      'http:userid_flags',
+      'http:userid_mark',
+      'http:userid_service',
+      'http:modern_browser',
+      'http:ancient_browser',
+      'http:modern_browser_value',
+      'http:ancient_browser_value',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -511,19 +531,6 @@ const REMAINING_GAP_CATEGORIES = [
     label: 'module-sized functional modules',
     priority: 'medium',
     ids: [
-      'http:userid',
-      'http:userid_domain',
-      'http:userid_expires',
-      'http:userid_flags',
-      'http:userid_mark',
-      'http:userid_name',
-      'http:userid_p3p',
-      'http:userid_path',
-      'http:userid_service',
-      'http:ancient_browser',
-      'http:ancient_browser_value',
-      'http:modern_browser',
-      'http:modern_browser_value',
       'http:random_index',
       'http:degradation',
       'http:degrade',
@@ -531,7 +538,7 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this module fails to activate.',
-    why: 'each is a self-contained module-sized feature (userid cookies, browser classification variables, random index selection, degradation limits, slice partial-object cache indexing); none needs a new engine, but each needs its own state/variable surface and differential coverage.',
+    why: 'the remaining module-sized features are random_index (random directory-index selection), degradation/degrade (nginx Plus degradation limits) and slice (partial-object cache indexing); userid and browser moved to executable in wave 11A, so these are self-contained module work rather than engine work.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice',
@@ -863,10 +870,6 @@ const FAIL_CLOSED_REASONS = [
     'HTTP/3 and QUIC are excluded by PRD section 4; a QUIC stack would be a separate transport product.',
   ],
   [
-    /^ngx_http_userid_filter_module$/,
-    'the userid cookie filter is tracked as wave-4 backlog (module-sized work).',
-  ],
-  [
     /^ngx_http_image_filter_module$/,
     'the image transformation filter is outside the profile (libgd dependency and image codecs).',
   ],
@@ -881,10 +884,6 @@ const FAIL_CLOSED_REASONS = [
   [
     /^ngx_http_rewrite_module$/,
     '`break`/`rewrite_log`/`uninitialized_variable_warn` are outside the bounded rewrite state machine; `if`, `set`, `return`, `rewrite` and `try_files` execute.',
-  ],
-  [
-    /^ngx_http_browser_module$/,
-    'the browser/UA classification module is tracked as wave-4 backlog (module-sized work).',
   ],
   [
     /^ngx_http_dav_module$/,
@@ -1852,6 +1851,27 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the differential-stream proxy_ssl.verified/untrusted-ca cases compare the verified and rejected upstream TLS handshakes against nginx 1.29.6; the mapping and stream_tls_proxy tests prove the six per-knob rows feed the same shared policy',
   },
+  {
+    id: 'http:userid',
+    evidence: 'tests/nginx/differential-http/battery.py::userid.first.attrs',
+    claim: 'userid issues a 16-byte cookie with nginx attribute ordering and echo semantics',
+    proves:
+      'the userid differential cases (issue/echo/on/v1/log/off/attrs/mark/service/inheritance) compare the cookie shape, attribute order, mark and echo against real nginx 1.29.6, with the CSPRNG tail canonicalised',
+  },
+  {
+    id: 'http:userid_flags',
+    evidence: 'tests/nginx/differential-http/battery.py::userid.first.service-v1',
+    claim: 'userid service byte order and flags serialization follow nginx',
+    proves:
+      'the service-v1 and flags cases compare the service word byte order, secure/httponly/samesite attribute order and P3P placement against nginx 1.29.6',
+  },
+  {
+    id: 'http:modern_browser',
+    evidence: 'tests/nginx/differential-http/battery.py::browser.inherit.no-ua',
+    claim: 'browser classification matches nginx UA tables and the http-level inherited-list quirk',
+    proves:
+      '90 browser cases (4 locations x 15 UAs + no-UA + http inheritance) compare $modern_browser/$ancient_browser and the unfilled-mask quirk against nginx 1.29.6',
+  },
 ];
 
 /**
@@ -2146,7 +2166,8 @@ function renderHeader(inventory, catalog) {
   stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine
   wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
   CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the
-  bounded subrequest-engine wave (wave 8) and the stream-plane wave (wave 7E).** The code, tests, generated operator matrix and the re-synced directive
+  bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
+  userid/browser-module wave (wave 11A).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2170,8 +2191,9 @@ function renderHeader(inventory, catalog) {
   force_ranges, ignore_headers, pass_request_body) and the bounded subrequest-engine wave
   (addition/auth_request/mirror on a one-level engine) and the stream-plane wave (upstream
   TLS, inbound PROXY protocol, SNI routing, half-close, bind, counters, rates and the retry
-  budget) are recorded as completed in section 3, and every one of them is asserted
-  executable by \`--verify-evidence\`.
+  budget) and the userid/browser-module wave (cookies, UA classification tables) are
+  recorded as completed in section 3, and every one of them is asserted executable by
+  \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2276,7 +2298,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave and the stream-plane wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave and the userid/browser-module wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2311,7 +2333,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-stream-plane-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-userid/browser-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2385,7 +2407,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2416,7 +2438,8 @@ CGI buffer/store/limit_rate/force_ranges/ignore_headers/pass_request_body forms,
 buffer/gzip-flag and gRPC ignore_headers; and the subrequest-engine wave added the
 addition/auth_request/auth_request_set/mirror forms; and the stream-plane wave added
 upstream TLS (shared proxy_ssl policy), inbound PROXY v1/v2 + deadline, SNI server_name
-routing, half-close, proxy_bind, counters, rates and the next_upstream retry budget.
+routing, half-close, proxy_bind, counters, rates and the next_upstream retry budget; and
+wave 11A added the userid cookie module and the browser UA-classification tables.
 
 ${completedTable}
 ${completedRows}
@@ -2501,6 +2524,26 @@ proxy_protocol.inbound-v1, proxy_protocol.missing-header, half_close.on) and
 stream_tls_proxy.rs integration tests cover SNI/bind/retry/PROXY/half-close. The
 behavioral-corpus manifest pinnedNginx is now 1.29.6 (its checker enforces it).
 
+Wave 11A acceptance evidence: 13 directives execute at http/server/location with nginx
+merge semantics - the userid cookie module (userid, userid_name/domain/path/expires/p3p/
+flags/mark/service: issuance+echo, fixed attribute order expires->domain->path->secure->
+httponly->samesite, max \`Thu, 31-Dec-37 23:55:55 GMT\`, P3P emitted after Set-Cookie, mark
+placement/re-mark, service byte order on vs v1, log mode parsing \`$uid_got\` without
+issuing, off ignoring cookies; \`$uid_got\`/\`$uid_set\` expose to add_header/return/
+proxy_set_header/grpc_set_header) and the browser classification module
+(modern_browser/ancient_browser + *_value: transcribed nginx UA tables opera/msie/gecko/
+safari/konqueror, Firefox matches \`rv:\`, Chrome matches \`Safari/\`, first matching slot
+decides, the http-level inherited modern list reproduces nginx's unfilled-mask quirk,
+values default "1", \`$modern_browser\`/\`$ancient_browser\`). differential-http grew
+274 -> 364 with 90 new cases (userid issue/echo/on/v1/log/off/attrs/name/domain/path/
+expires/flags/p3p/mark/service/inheritance/404; browser 4 locations x 15 UAs + no-UA +
+http inheritance) and its oracle was regenerated from real nginx 1.29.6; floor/manifest
+364. Bounded differences recorded: the userid identifier tail is CSPRNG-derived (nginx
+uses time/pid/sequencer) while the observable 16-byte shape, service/address word, time
+position, mark placement and echo semantics match and are differentially canonicalised;
+\`$uid_*\` expands empty inside subrequest responses; error_page internal redirects keep the
+original location config; \`$uid_reset\` is not implemented.
+
 The wave notes also record bounded remaining differences (for example map evaluation
 timing, orphan \`.gz\` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catalog entry's
@@ -2512,7 +2555,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the stream-plane wave (wave 7E). An accepted-unenforced row is silently ignored today; a rejected row fails
+the userid/browser-module wave (wave 11A). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2520,10 +2563,10 @@ have to change, and the tests to add.
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-Within the backlog, the largest surfaces are the mail module residuals (23), the
-module-sized userid/browser/random_index/degradation/slice modules (17) and the 21
+Within the backlog, the largest surfaces are the mail module residuals (23) and the 21
 residual sub-families of the landed CGI protocol modules (temp-spool blockers,
-ignore_client_abort, catch_stderr, send_lowat, uWSGI TLS leftovers). The stream plane is
+ignore_client_abort, catch_stderr, send_lowat, uWSGI TLS leftovers); the remaining
+module-sized work is random_index, degradation/degrade and slice (4 rows). The stream plane is
 nearly complete: only stream split_clients (map-style nested variable table) and stream
 pass (named-target selection) remain as explicit blockers. Eight gRPC residual
 bind/socket/TLS-library knobs come next. \`chunked_transfer_encoding\` is a probed blocker
@@ -2610,6 +2653,15 @@ executable; the rustls-unsupported knobs stay as the catalog classifies them
 (\`proxy_ssl_crl\`/\`_conf_command\`/\`_password_file\`/\`_certificate_cache\` fail-closed;
 \`proxy_ssl_ciphers\`/\`_session_reuse\`/\`_verify_depth\` accepted-unenforced).
 
+Wave 11A note: userid and browser are now executable with 90 real-nginx differential-http
+cases (oracle regenerated from nginx 1.29.6). Bounded differences recorded in the catalog
+rather than as backlog: the userid identifier tail is CSPRNG-derived (nginx uses time/
+pid/sequencer) while the observable 16-byte shape, service/address word, time position,
+mark placement and echo semantics match and are differentially canonicalised; \`$uid_*\`
+expands empty inside subrequest responses; error_page internal redirects keep the original
+location config; \`$uid_reset\` is not implemented. The module-sized backlog is now only
+random_index, degradation/degrade and slice.
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and \`gzip_comp_level\` (the
@@ -2656,7 +2708,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave and the stream-plane wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave and the userid/browser-module wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2876,8 +2928,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the stream-plane wave (wave 7E) landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the userid/browser-module wave (wave 11A) landed and
+the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

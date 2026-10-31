@@ -700,6 +700,8 @@ mod tests {
             charset: None,
             autoindex: None,
             referer: None,
+            userid: None,
+            browser: None,
         }
     }
 

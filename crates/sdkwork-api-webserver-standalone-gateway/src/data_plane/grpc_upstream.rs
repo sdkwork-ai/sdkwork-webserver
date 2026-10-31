@@ -95,6 +95,12 @@ pub(crate) struct GrpcRequestFacts<'a> {
     pub external_scheme: &'a str,
     pub listener_port: u16,
     pub maps: &'a MapResults,
+    /// nginx userid module variables for `grpc_set_header` values.
+    pub uid_got: &'a str,
+    pub uid_set: &'a str,
+    /// nginx browser module variables for `grpc_set_header` values.
+    pub modern_browser: &'a str,
+    pub ancient_browser: &'a str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -686,6 +692,10 @@ fn expand_header_template(
                     output.push_str(value);
                 }
             }
+            "uid_got" => output.push_str(facts.uid_got),
+            "uid_set" => output.push_str(facts.uid_set),
+            "modern_browser" => output.push_str(facts.modern_browser),
+            "ancient_browser" => output.push_str(facts.ancient_browser),
             _ => {}
         }
     }
@@ -814,6 +824,10 @@ mod tests {
             external_scheme: "http",
             listener_port: 21093,
             maps,
+            uid_got: "",
+            uid_set: "",
+            modern_browser: "",
+            ancient_browser: "",
         }
     }
 

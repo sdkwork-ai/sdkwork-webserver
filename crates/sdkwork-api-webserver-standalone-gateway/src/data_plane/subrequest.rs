@@ -115,6 +115,9 @@ pub(crate) async fn serve(
                     .map_or("", String::as_str),
                 maps: Some(env.map_results),
                 invalid_referer: false,
+                userid: None,
+                modern_browser: "",
+                ancient_browser: "",
             };
             Ok(finalize_response_headers(
                 response,
@@ -156,6 +159,10 @@ pub(crate) async fn serve(
                 metrics: &env.state.runtime.metrics,
                 cache: env.generation.proxy_cache.clone(),
                 map_results: env.map_results,
+                uid_got: "",
+                uid_set: "",
+                modern_browser: "",
+                ancient_browser: "",
                 response_policy: proxy_response_policy.as_ref(),
                 proxy_method: proxy_method.as_deref(),
                 variables: None,
@@ -186,6 +193,9 @@ pub(crate) async fn serve(
                     .map_or("", String::as_str),
                 maps: Some(env.map_results),
                 invalid_referer: false,
+                userid: None,
+                modern_browser: "",
+                ancient_browser: "",
             };
             Ok(finalize_response_headers(
                 response,

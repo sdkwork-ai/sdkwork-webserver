@@ -374,6 +374,13 @@ pub(super) struct ProxyRequestContext<'a> {
     /// nginx `map` results for this request, expandable in
     /// `proxy_set_header` values and variable `proxy_pass` targets.
     pub map_results: &'a super::map_variables::MapResults,
+    /// nginx userid module variables for this main request, expandable in
+    /// `proxy_set_header` values (`$uid_got` / `$uid_set`).
+    pub uid_got: &'a str,
+    pub uid_set: &'a str,
+    /// nginx browser module variables (`$modern_browser` / `$ancient_browser`).
+    pub modern_browser: &'a str,
+    pub ancient_browser: &'a str,
     /// nginx proxy response-header policy (`proxy_hide_header`,
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`) resolved for this proxy resource.
@@ -1151,7 +1158,7 @@ async fn proxy_http_request(
                 return text_response(StatusCode::BAD_REQUEST, "invalid Trailer declaration\n");
             }
         };
-    if apply_proxy_set_headers(
+    if apply_proxy_set_headers_with_variables(
         &mut headers,
         context.request_set_headers,
         &request_parts.headers,
@@ -1160,6 +1167,10 @@ async fn proxy_http_request(
         context.external_authority,
         context.listener_port,
         context.map_results,
+        context.uid_got,
+        context.uid_set,
+        context.modern_browser,
+        context.ancient_browser,
     )
     .is_err()
     {
@@ -1524,7 +1535,7 @@ async fn proxy_websocket_request(
             ));
         }
     };
-    if apply_proxy_set_headers(
+    if apply_proxy_set_headers_with_variables(
         &mut headers,
         context.request_set_headers,
         &parts.headers,
@@ -1533,6 +1544,10 @@ async fn proxy_websocket_request(
         context.external_authority,
         context.listener_port,
         context.map_results,
+        context.uid_got,
+        context.uid_set,
+        context.modern_browser,
+        context.ancient_browser,
     )
     .is_err()
     {
@@ -1910,6 +1925,8 @@ fn forwarded_request_headers(
 /// Apply nginx-style `proxy_set_header` entries onto the upstream request map.
 /// Empty list keeps the fixed safe forwarding defaults from
 /// [`forwarded_request_headers`].
+/// Test-only wrapper preserving the pre-Wave-11A call shape.
+#[cfg(test)]
 fn apply_proxy_set_headers(
     target: &mut HeaderMap,
     entries: &[String],
@@ -1919,6 +1936,63 @@ fn apply_proxy_set_headers(
     external_authority: &str,
     listener_port: u16,
     maps: &super::map_variables::MapResults,
+) -> Result<(), ()> {
+    apply_proxy_set_headers_with_variables(
+        target,
+        entries,
+        source,
+        client_ip,
+        external_scheme,
+        external_authority,
+        listener_port,
+        maps,
+        "",
+        "",
+        "",
+        "",
+    )
+}
+
+/// Test-only wrapper preserving the pre-Wave-11A call shape.
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+fn expand_proxy_header_value(
+    template: &str,
+    source: &HeaderMap,
+    client_ip: IpAddr,
+    external_scheme: &str,
+    external_authority: &str,
+    listener_port: u16,
+    maps: &super::map_variables::MapResults,
+) -> Result<String, ()> {
+    expand_proxy_header_value_with_variables(
+        template,
+        source,
+        client_ip,
+        external_scheme,
+        external_authority,
+        listener_port,
+        maps,
+        "",
+        "",
+        "",
+        "",
+    )
+}
+
+fn apply_proxy_set_headers_with_variables(
+    target: &mut HeaderMap,
+    entries: &[String],
+    source: &HeaderMap,
+    client_ip: IpAddr,
+    external_scheme: &str,
+    external_authority: &str,
+    listener_port: u16,
+    maps: &super::map_variables::MapResults,
+    uid_got: &str,
+    uid_set: &str,
+    modern_browser: &str,
+    ancient_browser: &str,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -1930,7 +2004,7 @@ fn apply_proxy_set_headers(
             .map(|(n, v)| (n.trim(), v.trim()))
             .unwrap_or((trimmed, ""));
         let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| ())?;
-        let expanded = expand_proxy_header_value(
+        let expanded = expand_proxy_header_value_with_variables(
             value_template,
             source,
             client_ip,
@@ -1938,6 +2012,10 @@ fn apply_proxy_set_headers(
             external_authority,
             listener_port,
             maps,
+            uid_got,
+            uid_set,
+            modern_browser,
+            ancient_browser,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -1949,7 +2027,7 @@ fn apply_proxy_set_headers(
     Ok(())
 }
 
-fn expand_proxy_header_value(
+fn expand_proxy_header_value_with_variables(
     template: &str,
     source: &HeaderMap,
     client_ip: IpAddr,
@@ -1957,6 +2035,10 @@ fn expand_proxy_header_value(
     external_authority: &str,
     listener_port: u16,
     maps: &super::map_variables::MapResults,
+    uid_got: &str,
+    uid_set: &str,
+    modern_browser: &str,
+    ancient_browser: &str,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -2032,6 +2114,10 @@ fn expand_proxy_header_value(
                     out.push_str(port);
                 }
             }
+            "uid_got" => out.push_str(uid_got),
+            "uid_set" => out.push_str(uid_set),
+            "modern_browser" => out.push_str(modern_browser),
+            "ancient_browser" => out.push_str(ancient_browser),
             _ if var.starts_with("http_") => {
                 // nginx `$http_<name>`: the inbound request field, `_` standing
                 // for `-`; absent is the empty string.

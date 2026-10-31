@@ -1,6 +1,7 @@
 mod access;
 mod acme_webroot;
 mod auth_basic;
+mod browser;
 pub mod cache_policy;
 mod compiled;
 mod discovery;
@@ -25,6 +26,7 @@ pub mod stream_variables;
 mod sub_filter;
 mod upstream_params;
 mod uri;
+mod userid;
 mod validate;
 mod variables;
 
@@ -32,6 +34,10 @@ pub use access::{evaluate_access, evaluate_access_first_match_allow, AccessDecis
 pub use acme_webroot::{AcmeWebrootReport, AcmeWebrootVerdict};
 pub use auth_basic::{
     apr1_hash, evaluate_auth_basic, parse_htpasswd, AuthBasicDecision, HtpasswdParseError,
+};
+pub use browser::{
+    browser_variable_values, classify_browser, parse_browser_version, BrowserClass, BrowserConfig,
+    ModernBrowserName, ModernBrowserRule, UNREACHABLE_OPERA_VERSION,
 };
 pub use compiled::{normalize_authority_host, CompiledWebServerApp, SelectedRoute};
 pub use discovery::{
@@ -139,6 +145,10 @@ pub use upstream_params::{
     validate_param_name, validate_param_value, UPSTREAM_PARAM_PREFIXES, UPSTREAM_PARAM_VARIABLES,
 };
 pub use uri::{normalize_uri_path, normalize_uri_path_with_options, UriPathNormalizationError};
+pub use userid::{
+    evaluate_userid, format_cookie_time, UserIdConfig, UserIdExpires, UserIdFlags, UserIdMode,
+    UserIdRequestState, UserIdSameSite,
+};
 pub use validate::{
     normalize_server_name, normalize_tls_server_name, server_name_covers, unix_path_is_confined,
     unix_target_path, wildcard_server_name_covers,

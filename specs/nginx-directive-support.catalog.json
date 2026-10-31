@@ -1513,10 +1513,33 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.ancient (nginx UA tables + netscape4/literal/regex semantics)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:ancient_browser_value",
@@ -1529,10 +1552,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.ancientValue (default \"1\")",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:auth_basic",
@@ -9762,10 +9808,33 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.modern (nginx UA tables + config order; first matching slot decides)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:modern_browser_value",
@@ -9778,10 +9847,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.modernValue (default \"1\")",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:mp4",
@@ -16165,10 +16257,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.mode (on|v1|log|off)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_domain",
@@ -16181,10 +16308,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.domain (cookie Domain; none clears inheritance)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_expires",
@@ -16197,10 +16359,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.expires (cookie Expires; max renders the fixed 2037 date; off = session cookie)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_flags",
@@ -16213,10 +16410,45 @@
         "http-server"
       ],
       "grammar": "1|2|3",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.flags (cookie attribute serialization order: expires/domain/path/secure/httponly/samesite)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_mark",
@@ -16229,10 +16461,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.mark (mark suffix placement, no reissue for marked cookies, re-mark for unmarked)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_name",
@@ -16245,10 +16512,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.name (cookie name, default uid)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_p3p",
@@ -16261,10 +16563,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.p3p (P3P header emitted after Set-Cookie when a cookie is issued)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_path",
@@ -16277,10 +16614,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.path (cookie Path, default /)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_service",
@@ -16293,10 +16665,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.service (service word in the identifier; on = network order, v1 = host order)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:uwsgi_bind",
