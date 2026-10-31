@@ -5591,6 +5591,9 @@ pub fn materialize_app(
             "server",
             "unixSocketRoot",
             "storeRoot",
+            "tempRoot",
+            "tempSpoolBudgetBytes",
+            "tempSpoolMaxFiles",
             "upstream",
         ],
     )?;
@@ -5602,6 +5605,32 @@ pub fn materialize_app(
     // exactly like stock nginx).
     if let Some(store_root) = http.get("storeRoot").and_then(Value::as_str) {
         nginx["storeRoot"] = Value::String(store_root.to_owned());
+    }
+    // Wave 14A: `[http] tempRoot` confines the CGI-family temp-spool tier
+    // (`*_temp_path` and the per-generation spool directory). The typed plane
+    // requires an absolute directory; the nginx plane uses the declared
+    // absolute path exactly like stock nginx.
+    if let Some(temp_root) = http.get("tempRoot").and_then(Value::as_str) {
+        nginx["tempRoot"] = Value::String(temp_root.to_owned());
+    }
+    // Overall spool budget knobs: total in-flight bytes and open files.
+    if let Some(budget) = http.get("tempSpoolBudgetBytes") {
+        let budget = budget.as_u64().ok_or_else(|| {
+            materialize_error(
+                "server.toml.http.tempSpoolBudgetBytes",
+                "tempSpoolBudgetBytes must be a non-negative integer",
+            )
+        })?;
+        nginx["tempSpoolBudgetBytes"] = json!(budget);
+    }
+    if let Some(max_files) = http.get("tempSpoolMaxFiles") {
+        let max_files = max_files.as_u64().ok_or_else(|| {
+            materialize_error(
+                "server.toml.http.tempSpoolMaxFiles",
+                "tempSpoolMaxFiles must be a non-negative integer",
+            )
+        })?;
+        nginx["tempSpoolMaxFiles"] = json!(max_files);
     }
     // `[http] geoipDatabaseRoot` confines GeoIP MMDB database paths in the
     // typed plane (the nginx plane uses the declared absolute path exactly
@@ -6977,6 +7006,95 @@ returnBody = "ok"
             diagnostics
                 .iter()
                 .any(|message| message.contains("unixSocketRoot")),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn typed_http_temp_spool_root_and_budget_materialize_and_validate() {
+        let toml_text = r#"
+[http]
+tempRoot = "/var/cache/sdkwork/temp"
+tempSpoolBudgetBytes = 67108864
+tempSpoolMaxFiles = 8
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["temp.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        assert_eq!(
+            config.nginx.temp_root.as_deref(),
+            Some("/var/cache/sdkwork/temp"),
+            "`[http] tempRoot` must reach the runtime model"
+        );
+        assert_eq!(config.nginx.temp_spool_budget_bytes, 64 * 1024 * 1024);
+        assert_eq!(config.nginx.temp_spool_max_files, 8);
+
+        // A relative root is not a confinement root: the shared semantic
+        // validation rejects it with a located diagnostic.
+        let invalid = r#"
+[http]
+tempRoot = "relative/temp"
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["temp.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(invalid).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("relative root fails");
+        let diagnostics: Vec<String> = error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| format!("{}: {}", diagnostic.path, diagnostic.message))
+            .collect();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.contains("tempRoot")),
+            "{diagnostics:?}"
+        );
+
+        // A zero budget disables the whole spool tier silently, which is a
+        // configuration mistake: the typed plane requires a positive budget.
+        let zero_budget = r#"
+[http]
+tempSpoolBudgetBytes = 0
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["temp.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(zero_budget).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("zero budget fails");
+        let diagnostics: Vec<String> = error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| format!("{}: {}", diagnostic.path, diagnostic.message))
+            .collect();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.contains("tempSpoolBudgetBytes")),
             "{diagnostics:?}"
         );
     }

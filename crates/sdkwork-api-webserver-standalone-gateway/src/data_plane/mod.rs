@@ -55,6 +55,7 @@ mod stream_proxy_protocol;
 mod stream_variables;
 mod sub_filter;
 mod subrequest;
+pub(crate) mod temp_spool;
 mod tls;
 mod tls_material;
 mod tls_resolver;

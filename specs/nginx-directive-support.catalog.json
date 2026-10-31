@@ -4039,10 +4039,27 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_catch_stderr` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].catchStderrPatterns (nginx trimmed-message substring match -> 502, no retry)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-catch-stderr"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-catch-nomatch"
+        }
+      ],
+      "knownDifferences": [
+        "stderr messages are logged through tracing; a match makes the response invalid -> 502 like nginx; *_next_upstream invalid_header remains fail-closed (retry enum lacks it)"
+      ]
     },
     {
       "id": "http:fastcgi_connect_timeout",
@@ -4219,10 +4236,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_ignore_client_abort` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].ignoreClientAbort (fastcgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-ignore-client-abort"
+        }
+      ],
+      "knownDifferences": [
+        "on detaches each upstream attempt on a bounded task; the upstream admission permit stays owned by the request handler, so a client abort releases the permit while the detached exchange still runs (one in-flight exchange under-counted)"
+      ]
     },
     {
       "id": "http:fastcgi_ignore_headers",
@@ -4478,10 +4508,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_max_temp_file_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (fastcgi_max_temp_file_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:fastcgi_next_upstream",
@@ -5161,10 +5225,19 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "`fastcgi_send_lowat` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "diagnostics": "accepted for compatibility but not enforced: SO_SNDLOWAT is not settable through the runtime socket seam (Linux ignores it, nginx documents it as BSD-only)",
+      "migrationImpact": "SO_SNDLOWAT is BSD-only and ignored by Linux (nginx logs \"not supported, ignored\"); the runtime accepts the value without faking a low-water mark",
+      "knownDifferences": [
+        "no effect on Linux, matching nginx which zeroes the value at config time"
+      ],
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:fastcgi_send_lowat` (specs/nginx-gap.catalog.json)."
     },
     {
       "id": "http:fastcgi_send_timeout",
@@ -5388,10 +5461,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_temp_file_write_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (fastcgi_temp_file_write_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:fastcgi_temp_path",
@@ -5404,10 +5511,44 @@
         "http-server"
       ],
       "grammar": "1|2|3|4",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_temp_path` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (fastcgi_temp_path; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:flv",
@@ -14035,10 +14176,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_ignore_client_abort` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].ignoreClientAbort (scgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-ignore-client-abort"
+        }
+      ],
+      "knownDifferences": [
+        "on detaches each upstream attempt on a bounded task; the upstream admission permit stays owned by the request handler, so a client abort releases the permit while the detached exchange still runs (one in-flight exchange under-counted)"
+      ]
     },
     {
       "id": "http:scgi_ignore_headers",
@@ -14152,10 +14306,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_max_temp_file_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (scgi_max_temp_file_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:scgi_next_upstream",
@@ -14785,10 +14973,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_temp_file_write_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (scgi_temp_file_write_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:scgi_temp_path",
@@ -14801,10 +15023,44 @@
         "http-server"
       ],
       "grammar": "1|2|3|4",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_temp_path` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (scgi_temp_path; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:secure_link",
@@ -18485,10 +18741,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ignore_client_abort` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].ignoreClientAbort (uwsgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-ignore-client-abort"
+        }
+      ],
+      "knownDifferences": [
+        "on detaches each upstream attempt on a bounded task; the upstream admission permit stays owned by the request handler, so a client abort releases the permit while the detached exchange still runs (one in-flight exchange under-counted)"
+      ]
     },
     {
       "id": "http:uwsgi_ignore_headers",
@@ -18602,10 +18871,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_max_temp_file_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (uwsgi_max_temp_file_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:uwsgi_modifier1",
@@ -19743,10 +20046,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_temp_file_write_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (uwsgi_temp_file_write_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:uwsgi_temp_path",
@@ -19759,10 +20096,44 @@
         "http-server"
       ],
       "grammar": "1|2|3|4",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_temp_path` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (uwsgi_temp_path; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:valid_referers",
@@ -21017,8 +21388,9 @@
       ],
       "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution",
-      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied"
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `mail:resolver` (specs/nginx-gap.catalog.json).",
+      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied",
+      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution"
     },
     {
       "id": "mail:resolver_timeout",
@@ -21036,8 +21408,9 @@
       ],
       "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution",
-      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied"
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `mail:resolver_timeout` (specs/nginx-gap.catalog.json).",
+      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied",
+      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution"
     },
     {
       "id": "mail:server",

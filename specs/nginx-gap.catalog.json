@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Wave 14A (2026-10-31): temp-spool subsystem (9 directives) and connection control (5: ignore_client_abort x3, catch_stderr, send_lowat accepted-unenforced) execute; differential-protocols 77->89. Probe correction: nginx does NOT 502 when a body exceeds *_max_temp_file_size (ngx_event_pipe stops spooling and passes the remainder); implemented the probed semantics with byte-identical 200. Catalog: 391 executable / 173 accepted-unenforced / 175 fail-closed / 5 excluded. Remaining implementable rows: mail client-cert flows 5 + slice 1; all other behavior gaps are pinned-dependency/Plus blocked.",
     "Wave 13 residual closure (2026-10-31): stream split_clients/pass and mail capabilities/real_ip execute with new real-nginx extra fixtures (stream 14+9, mail 9+8); gRPC bind/keepalive execute with real-socket integration tests (no grpc differential possible: oracle lacks http_v2). Still blocked with exact diagnostics: OCSP dynamic (rustls), rustls/OpenSSL TLS knobs (grpc/uwsgi/mail), mail client-cert flows, temp-spool family (no bounded spool), hyper HTTP/1 close-delimited framing, nginx Plus degradation/degrade, and deferred slice/ignore_client_abort/catch_stderr/send_lowat. Catalog: 378 executable / 172 accepted-unenforced / 189 fail-closed / 5 excluded; out-of-profile 5 (Perl 4 + load_module 1).",
     "GeoIP module (Wave 12, 2026-10-31): all 8 ngx_http/stream_geoip directives execute with 16 variables and a bounded MMDB runtime; PRD section 3/4 amended (GeoIP in profile for operator-provisioned MMDB editions, no data redistribution). Out-of-profile is now 5 (Perl 4, load_module 1). Catalog: 370 executable / 170 accepted-unenforced / 199 fail-closed / 5 excluded. New geoip-differential slice (5 cases) is the 7th aggregate slice.",
     "Wave 11B (2026-10-31): http2_chunk_size and random_index execute; differential-http 364->367 (random-index candidate set/empty/off); h2 frame-capture test proves DATA frames <= configured chunk with byte-identical reassembly; nginx config-acceptance probe for http2_chunk_size. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Slice remains fail-closed (shared store whole-representation contract); next: GeoIP + residual closure.",
@@ -672,6 +673,12 @@
       "group": "upstreams",
       "status": "implemented",
       "summary": "gRPC grpc_bind/grpc_socket_keepalive (Wave 13): per-Grpc-resource bindAddress/socketKeepalive with http/server/location inheritance, applied in the h2 connector (TcpSocket source bind, socket2 SO_KEEPALIVE); variable/transparent bind forms fail closed; covered by real-socket integration tests because the pinned oracle lacks --with-http_v2_module (REQ-2026-0073 wave 13)"
+    },
+    {
+      "id": "upstream.temp-spool",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "bounded temp-spool subsystem + connection control (Wave 14A): per-generation spool dir ([http] tempRoot or system temp, 0700, symlink-refusing), 0600 unique files with Drop-unlink, global byte/file budget, in-memory tier = response buffer bank, per-file cap and write-chunk bound honoring fastcgi/uwsgi/scgi *_max_temp_file_size/_temp_file_write_size/_temp_path (single absolute confined path); oversized upstream bodies served byte-identically, ranges read from the spool slice, *_store stream-copies, *_limit_rate paces from disk, cache stays functional; *_ignore_client_abort on detaches the bounded exchange, off aborts; fastcgi_catch_stderr trimmed-message substring match -> 502 (nginx-probed); fastcgi_send_lowat accepted-unenforced (BSD-only SO_SNDLOWAT, Linux ignores). differential-protocols 77->89 (12 cases) (REQ-2026-0073 wave 14A)"
     }
   ]
 }

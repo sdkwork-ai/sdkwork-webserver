@@ -43,20 +43,41 @@
 //! the request body; `memcached_gzip_flag` derives `Content-Encoding` from the
 //! `VALUE` flags field.
 //!
+//! Wave 14A temp spool (executed, nginx-oracle differential): a decoded
+//! upstream body that exceeds the resource's in-memory response buffer bank
+//! (`*_buffer_size + *_buffers`) is written to a bounded `0600` temp file under
+//! the resource's `*_temp_path` (confined to `[http] tempRoot`) or the
+//! per-generation spool directory, capped by `*_max_temp_file_size` (0
+//! disables the tier, exactly like nginx), written in `*_temp_file_write_size`
+//! chunks, and served byte-identically with the exact `Content-Length` (ranges
+//! read only the requested slice from disk). Every spool file is removed on
+//! completion, error or drop; a global per-generation budget bounds in-flight
+//! bytes and files.
+//!
+//! Wave 14A connection control: `*_ignore_client_abort on` runs each upstream
+//! attempt on a bounded detached task, so a client connection abort no longer
+//! cancels the in-flight upstream request (nginx semantics `off` = abort, the
+//! default); `fastcgi_catch_stderr` searches every `FCGI_STDERR` record for the
+//! configured substring, logs it and makes the response invalid (nginx answers
+//! 502 and does not retry the next upstream by default); `fastcgi_send_lowat`
+//! is accepted-unenforced with nginx-on-Linux semantics.
+//!
 //! Carried-forward bounded differences (explicit, not fake):
 //! `*_buffering off` and `*_request_buffering off` are materialized but the
 //! adapter still buffers the bounded response and request body before the
 //! exchange completes. Honouring them needs a body-streaming seam in the
 //! handler + exchange (response chunks forwarded as they arrive with
 //! backpressure, FastCGI `STDIN` streamed from the client body); the rest of
-//! Wave 7D (store/rate/range/pass_request_body) does not depend on it. The
-//! temp-file spool family (`*_temp_path`/`*_max_temp_file_size`/
-//! `*_temp_file_write_size`) stays fail-closed because no bounded temp-spool
-//! subsystem exists.
+//! Wave 7D (store/rate/range/pass_request_body) does not depend on it. A
+//! response that exceeds `*_max_temp_file_size` completes in memory (nginx
+//! switches to an unbuffered passthrough, which this buffering seam cannot
+//! express) and is still served byte-identically; only the storage tier
+//! differs.
 
 use std::{
     collections::HashSet,
     net::{IpAddr, SocketAddr},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -65,13 +86,12 @@ use axum::{
     body::Body,
     http::{header, HeaderMap, HeaderValue, Method, Response, StatusCode},
 };
-use bytes::Bytes;
 use rustls::pki_types::ServerName;
 use sdkwork_webserver_core::CgiUpstreamProtocol;
 use sdkwork_webserver_core::{
     ProxyResponsePolicyConfig, UpstreamAddressPolicyConfig, UpstreamBufferingConfig,
     UpstreamConfig, UpstreamParamConfig, UpstreamRetryCondition, UpstreamRetryConfig,
-    UpstreamStoreConfig,
+    UpstreamStoreConfig, UpstreamTempPolicyConfig,
 };
 use sdkwork_webserver_upstream_protocol::{
     fastcgi::{
@@ -87,7 +107,7 @@ use sdkwork_webserver_upstream_protocol::{
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    time::{timeout, Instant},
+    time::timeout,
 };
 use url::Url;
 
@@ -98,6 +118,9 @@ use super::{
     protocol_pool::{connect_stream, connect_tls_stream, PoolKey, ProtocolPool, ResolvedTarget},
     proxy::text_response,
     runtime::RuntimeGeneration,
+    temp_spool::{
+        BodyBufferPolicy, BufferedResponseBody, SpoolingBodyBuffer, TempSpool, DEFAULT_WRITE_CHUNK,
+    },
     upstream_tls::build_upstream_tls_config,
 };
 
@@ -409,16 +432,6 @@ fn build_parameters(
     FastCgiParams::from_variables(&variables, &Limits::default()).map_err(|error| error.to_string())
 }
 
-/// Optional FastCGI connection-pool policy for one request. `keep_conn` alone
-/// only sets the wire flag; the runtime also requires the upstream's idle-pool
-/// settings, exactly like nginx needing both `fastcgi_keep_conn on` and an
-/// `upstream { keepalive …; }` cache.
-pub(crate) struct PoolPolicy<'a> {
-    pool: &'a ProtocolPool,
-    per_key_max: usize,
-    idle_timeout: Duration,
-}
-
 /// Resolve one upstream target URL to a stream destination. `unix:` targets are
 /// validated again here against the typed `nginx.unixSocketRoot` before any
 /// socket is opened (defense in depth: semantic validation already confined
@@ -530,14 +543,19 @@ impl ResponseParser {
     /// Feed bytes into the parser; returns `true` when the response is complete
     /// and false when more bytes are needed (`uwsgi`/`scgi` stream a raw HTTP
     /// body, so completion is decided by the caller from Content-Length/EOF).
+    ///
+    /// The body sink writes the decoded bytes into the bounded spool tier, and
+    /// every FastCGI `STDERR` record is logged and evaluated against
+    /// `fastcgi_catch_stderr` exactly where nginx does it (before the response
+    /// head is accepted).
     #[allow(clippy::too_many_arguments)]
-    fn feed(
+    async fn feed(
         &mut self,
         input: &[u8],
         maximum_body: u64,
         head: &mut Option<sdkwork_webserver_upstream_protocol::HttpResponseHead>,
-        body: &mut Vec<u8>,
-        errors: &mut Vec<u8>,
+        body: &mut SpoolingBodyBuffer,
+        catch_stderr: &[String],
     ) -> Result<bool, ExchangeFailure> {
         match self {
             Self::FastCgi(parser) => {
@@ -545,12 +563,10 @@ impl ResponseParser {
                     match event {
                         FastCgiResponseEvent::Head(value) => *head = Some(value),
                         FastCgiResponseEvent::Body(chunk) => {
-                            append_body(head, body, &chunk, maximum_body)?;
+                            append_body(body, &chunk, maximum_body).await?;
                         }
                         FastCgiResponseEvent::Stderr(chunk) => {
-                            if errors.len() < 4096 {
-                                errors.extend_from_slice(&chunk);
-                            }
+                            record_stderr(&chunk, catch_stderr)?;
                         }
                         FastCgiResponseEvent::End(end) => {
                             if !end.is_complete() {
@@ -566,7 +582,7 @@ impl ResponseParser {
                     match event {
                         UwsgiResponseEvent::Head(value) => *head = Some(value),
                         UwsgiResponseEvent::Body(chunk) => {
-                            append_body(head, body, &chunk, maximum_body)?;
+                            append_body(body, &chunk, maximum_body).await?;
                         }
                     }
                 }
@@ -577,7 +593,7 @@ impl ResponseParser {
                     match event {
                         ScgiResponseEvent::Head(value) => *head = Some(value),
                         ScgiResponseEvent::Body(chunk) => {
-                            append_body(head, body, &chunk, maximum_body)?;
+                            append_body(body, &chunk, maximum_body).await?;
                         }
                     }
                 }
@@ -595,18 +611,51 @@ impl ResponseParser {
     }
 }
 
-fn append_body(
-    head: &Option<sdkwork_webserver_upstream_protocol::HttpResponseHead>,
-    body: &mut Vec<u8>,
+async fn append_body(
+    body: &mut SpoolingBodyBuffer,
     chunk: &[u8],
     maximum_body: u64,
 ) -> Result<(), ExchangeFailure> {
-    let _ = head;
-    if body.len() as u64 + chunk.len() as u64 > maximum_body {
-        return Err(ExchangeFailure::Protocol);
+    body.append(chunk, maximum_body)
+        .await
+        .map_err(|_| ExchangeFailure::Protocol)
+}
+
+/// nginx `ngx_http_fastcgi_process_header` STDERR handling: the message is
+/// logged at error level (nginx `NGX_LOG_ERR`) with trailing `LF`/`CR`/`.`/space
+/// trimmed, then every `fastcgi_catch_stderr` pattern is searched inside that
+/// trimmed message; a match makes the response invalid
+/// (`NGX_HTTP_UPSTREAM_INVALID_HEADER` → 502, no default `next_upstream`).
+fn record_stderr(chunk: &[u8], catch_stderr: &[String]) -> Result<(), ExchangeFailure> {
+    let trimmed = trim_stderr(chunk);
+    if trimmed.is_empty() {
+        return Ok(());
     }
-    body.extend_from_slice(chunk);
+    let message = String::from_utf8_lossy(trimmed);
+    // Bound the log line: a misbehaving FastCGI app must not be able to emit
+    // unbounded error-log volume from one record.
+    let logged: String = message.chars().take(1024).collect();
+    tracing::error!(stderr = %logged, "FastCGI sent in stderr");
+    for pattern in catch_stderr {
+        if message.contains(pattern.as_str()) {
+            tracing::error!(
+                pattern = %pattern,
+                "fastcgi_catch_stderr matched; the upstream response is invalid (502)"
+            );
+            return Err(ExchangeFailure::InvalidHeader);
+        }
+    }
     Ok(())
+}
+
+/// nginx trims trailing line terminators, dots and spaces from an STDERR
+/// message before logging/searching it.
+fn trim_stderr(chunk: &[u8]) -> &[u8] {
+    let mut end = chunk.len();
+    while end > 0 && matches!(chunk[end - 1], b'\n' | b'\r' | b'.' | b' ') {
+        end -= 1;
+    }
+    &chunk[..end]
 }
 
 fn declared_body_length(
@@ -616,50 +665,81 @@ fn declared_body_length(
         .and_then(|value| value.trim().parse::<u64>().ok())
 }
 
-/// Execute one FastCGI request/response exchange over a fresh TCP connection.
-#[allow(clippy::too_many_arguments)]
-async fn exchange(
-    generation: &RuntimeGeneration,
-    upstream_id: &str,
-    policy: &UpstreamAddressPolicyConfig,
-    metrics: &Arc<DataPlaneMetrics>,
-    target: &Url,
+/// Idle-pool policy for one `*_keep_conn` resource.
+#[derive(Clone)]
+struct PoolSpec {
+    pool: Arc<ProtocolPool>,
+    per_key_max: usize,
+    idle_timeout: Duration,
+}
+
+/// Everything one CGI-family exchange needs, owned so an
+/// `*_ignore_client_abort on` resource can run the exchange on a detached
+/// bounded task without borrowing the request.
+#[derive(Clone)]
+struct ExchangeContext {
+    generation: Arc<RuntimeGeneration>,
+    upstream_id: String,
+    address_policy: UpstreamAddressPolicyConfig,
+    metrics: Arc<DataPlaneMetrics>,
     protocol: WireProtocol,
-    wire: &[u8],
     connect_timeout: Duration,
     send_timeout: Duration,
     read_timeout: Duration,
     bind_address: Option<IpAddr>,
     socket_keepalive: bool,
-    pool: Option<&PoolPolicy<'_>>,
-    limits: &Limits,
-) -> Result<(StatusCode, HeaderMap, Vec<u8>), ExchangeFailure> {
-    let resolved = resolve_stream_target(generation, policy, metrics, target)
-        .await
-        .map_err(|_| ExchangeFailure::Transport)?;
+    pool: Option<PoolSpec>,
+    buffer: BodyBufferPolicy,
+    limits: Limits,
+    catch_stderr: Arc<Vec<String>>,
+}
+
+/// One completed upstream exchange: status, forwarded response headers and the
+/// buffered (memory or spooled) body.
+type ExchangeOutcome = (StatusCode, HeaderMap, BufferedResponseBody);
+
+/// Execute one FastCGI/CGI-family request/response exchange over a fresh
+/// connection.
+async fn exchange(
+    context: ExchangeContext,
+    target: Url,
+    wire: Arc<Vec<u8>>,
+) -> Result<ExchangeOutcome, ExchangeFailure> {
+    let generation = &context.generation;
+    let resolved = resolve_stream_target(
+        generation,
+        &context.address_policy,
+        &context.metrics,
+        &target,
+    )
+    .await
+    .map_err(|_| ExchangeFailure::Transport)?;
     // A CGI target is TLS when its URL uses the `https` scheme: the nginx
     // materializer emits `https://` for `uwsgi_pass suwsgi://…` and the typed
     // plane marks an explicitly TLS CGI target the same way. The TLS policy is
     // the same per-upstream policy the HTTP proxy and gRPC adapters use.
     let tls_dial = if target.scheme() == "https" {
-        let Some(upstream_config) = core_upstream(generation, upstream_id) else {
-            tracing::debug!(upstream = upstream_id, "CGI TLS upstream is not configured");
+        let Some(upstream_config) = core_upstream(generation, &context.upstream_id) else {
+            tracing::debug!(
+                upstream = %context.upstream_id,
+                "CGI TLS upstream is not configured"
+            );
             return Err(ExchangeFailure::Transport);
         };
         let config = match build_upstream_tls_config(&generation.app, &upstream_config) {
             Ok(config) => Arc::new(config),
             Err(error) => {
                 tracing::debug!(
-                    upstream = upstream_id,
+                    upstream = %context.upstream_id,
                     error = %error,
                     "CGI upstream TLS policy could not be built"
                 );
                 return Err(ExchangeFailure::Transport);
             }
         };
-        let Some(server_name) = cgi_server_name_for(&upstream_config, target) else {
+        let Some(server_name) = cgi_server_name_for(&upstream_config, &target) else {
             tracing::debug!(
-                upstream = upstream_id,
+                upstream = %context.upstream_id,
                 "CGI upstream TLS server name is invalid"
             );
             return Err(ExchangeFailure::Transport);
@@ -668,60 +748,59 @@ async fn exchange(
     } else {
         None
     };
-    let pool_key = pool.map(|_policy| PoolKey {
-        upstream: upstream_id.to_owned(),
-        target: pool_target_key(target),
-        bind: bind_address,
+    let pool_key = context.pool.as_ref().map(|_policy| PoolKey {
+        upstream: context.upstream_id.clone(),
+        target: pool_target_key(&target),
+        bind: context.bind_address,
     });
     let connect = || async {
         match &tls_dial {
             Some((config, server_name)) => {
                 connect_tls_stream(
                     &resolved,
-                    bind_address,
-                    socket_keepalive,
+                    context.bind_address,
+                    context.socket_keepalive,
                     Arc::clone(config),
                     server_name.clone(),
                 )
                 .await
             }
-            None => connect_stream(&resolved, bind_address, socket_keepalive).await,
+            None => connect_stream(&resolved, context.bind_address, context.socket_keepalive).await,
         }
     };
-    let mut stream = match (pool, pool_key.as_ref()) {
-        (Some(policy), Some(key)) => match policy.pool.take(key) {
+    let mut stream = match (context.pool.as_ref(), pool_key.as_ref()) {
+        (Some(spec), Some(key)) => match spec.pool.take(key) {
             Some(stream) => stream,
-            None => timeout(connect_timeout, connect())
+            None => timeout(context.connect_timeout, connect())
                 .await
                 .map_err(|_| ExchangeFailure::Timeout)?
                 .map_err(|_| ExchangeFailure::Transport)?,
         },
-        _ => timeout(connect_timeout, connect())
+        _ => timeout(context.connect_timeout, connect())
             .await
             .map_err(|_| ExchangeFailure::Timeout)?
             .map_err(|_| ExchangeFailure::Transport)?,
     };
-    timeout(send_timeout, stream.write_all(wire))
+    timeout(context.send_timeout, stream.write_all(&wire))
         .await
         .map_err(|_| ExchangeFailure::Timeout)?
         .map_err(|_| ExchangeFailure::Transport)?;
-    timeout(send_timeout, stream.flush())
+    timeout(context.send_timeout, stream.flush())
         .await
         .map_err(|_| ExchangeFailure::Timeout)?
         .map_err(|_| ExchangeFailure::Transport)?;
 
     let maximum_body = generation.app.config().limits.max_response_body_bytes;
-    let mut parser = ResponseParser::new(protocol, *limits);
+    let mut parser = ResponseParser::new(context.protocol, context.limits);
     let mut head: Option<sdkwork_webserver_upstream_protocol::HttpResponseHead> = None;
-    let mut body: Vec<u8> = Vec::new();
-    let mut errors: Vec<u8> = Vec::new();
+    let mut body = context.buffer.buffer();
     let mut buffer = [0u8; 16 * 1024];
     // FastCGI responses are framed by `END_REQUEST`; the connection may be
     // pooled only after that record was parsed (a Content-Length break would
     // leave the END record unread and misalign the socket).
     let mut fastcgi_complete = false;
     loop {
-        let read = timeout(read_timeout, stream.read(&mut buffer))
+        let read = timeout(context.read_timeout, stream.read(&mut buffer))
             .await
             .map_err(|_| ExchangeFailure::Timeout)?
             .map_err(|_| ExchangeFailure::Transport)?;
@@ -733,7 +812,7 @@ async fn exchange(
             match &head {
                 Some(value) => {
                     if let Some(expected) = declared_body_length(value) {
-                        if (body.len() as u64) < expected {
+                        if body.total() < expected {
                             return Err(ExchangeFailure::Protocol);
                         }
                     }
@@ -742,32 +821,28 @@ async fn exchange(
                 None => return Err(ExchangeFailure::Protocol),
             }
         }
-        if parser.feed(
-            &buffer[..read],
-            maximum_body,
-            &mut head,
-            &mut body,
-            &mut errors,
-        )? {
-            fastcgi_complete = protocol == WireProtocol::FastCgi;
+        if parser
+            .feed(
+                &buffer[..read],
+                maximum_body,
+                &mut head,
+                &mut body,
+                &context.catch_stderr,
+            )
+            .await?
+        {
+            fastcgi_complete = context.protocol == WireProtocol::FastCgi;
             break;
         }
-        if protocol != WireProtocol::FastCgi {
+        if context.protocol != WireProtocol::FastCgi {
             if let Some(value) = &head {
                 if let Some(expected) = declared_body_length(value) {
-                    if body.len() as u64 >= expected {
+                    if body.total() >= expected {
                         break;
                     }
                 }
             }
         }
-    }
-    if !errors.is_empty() {
-        tracing::debug!(
-            upstream = upstream_id,
-            stderr_bytes = errors.len(),
-            "FastCGI upstream wrote to stderr"
-        );
     }
     let Some(head) = head else {
         return Err(ExchangeFailure::Protocol);
@@ -778,11 +853,10 @@ async fn exchange(
     // health probe discards it on the next take. uWSGI/SCGI responses have no
     // protocol-level end marker (nginx never reuses those connections), so they
     // are never pooled.
-    if protocol == WireProtocol::FastCgi && fastcgi_complete {
-        if let (Some(policy), Some(key)) = (pool, pool_key) {
-            policy
-                .pool
-                .put(key, stream, policy.per_key_max, policy.idle_timeout);
+    if context.protocol == WireProtocol::FastCgi && fastcgi_complete {
+        if let (Some(spec), Some(key)) = (context.pool.as_ref(), pool_key) {
+            spec.pool
+                .put(key, stream, spec.per_key_max, spec.idle_timeout);
         }
     }
     let status = StatusCode::from_u16(head.status).map_err(|_| ExchangeFailure::Protocol)?;
@@ -800,7 +874,43 @@ async fn exchange(
         };
         headers.append(header_name, header_value);
     }
+    let body = body.finish().await.map_err(|error| {
+        tracing::debug!(error = %error, "CGI upstream body could not be finalized");
+        ExchangeFailure::Transport
+    })?;
     Ok((status, headers, body))
+}
+
+/// Run one bounded exchange attempt.
+///
+/// With `*_ignore_client_abort off` (nginx's default) the attempt is awaited
+/// inline: if the client connection aborts, hyper drops the handler future and
+/// the upstream socket is closed with it. With `on`, the attempt runs on a
+/// tokio task whose handle the handler only awaits, so a client abort detaches
+/// the upstream exchange instead of cancelling it; the task is bounded by the
+/// upstream connect/send/read timeouts and the retry deadline (a documented
+/// owner, never an unbounded leak).
+async fn exchange_attempt<F>(
+    ignore_client_abort: bool,
+    exchange: F,
+) -> Result<ExchangeOutcome, ExchangeFailure>
+where
+    F: std::future::Future<Output = Result<ExchangeOutcome, ExchangeFailure>> + Send + 'static,
+{
+    if !ignore_client_abort {
+        return exchange.await;
+    }
+    let detached = tokio::spawn(exchange);
+    match detached.await {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "detached CGI upstream exchange task failed"
+            );
+            Err(ExchangeFailure::Transport)
+        }
+    }
 }
 
 /// Stable pool identity for one upstream target: scheme/host/port/path from the
@@ -836,6 +946,10 @@ enum ExchangeFailure {
     Transport,
     Timeout,
     Protocol,
+    /// `fastcgi_catch_stderr` matched: nginx treats the response as having an
+    /// invalid header and does not retry it (`invalid_header` is not part of
+    /// the default `fastcgi_next_upstream error timeout` list).
+    InvalidHeader,
 }
 
 /// Serve one `fastcgi_pass` location.
@@ -881,8 +995,8 @@ pub(crate) async fn serve_fastcgi(
             )
         })
         .unwrap_or((0, 0));
-    let pool = keep_conn.then(|| PoolPolicy {
-        pool: &generation.protocol_pool,
+    let pool = keep_conn.then(|| PoolSpec {
+        pool: Arc::clone(&generation.protocol_pool),
         per_key_max: pool_per_key_max,
         idle_timeout: Duration::from_millis(pool_idle_timeout_ms),
     });
@@ -940,6 +1054,23 @@ pub(crate) async fn serve_fastcgi(
     let started = std::time::Instant::now();
     let mut attempted = super::proxy::AttemptedTargets::default();
     let mut last_failure = ExchangeFailure::Transport;
+    let context = ExchangeContext {
+        generation: Arc::clone(generation),
+        upstream_id: upstream_ref.to_owned(),
+        address_policy: upstream_address_policy(generation, upstream_ref),
+        metrics: Arc::clone(metrics),
+        protocol: WireProtocol::FastCgi,
+        connect_timeout: Duration::from_millis(connect_timeout_ms),
+        send_timeout: Duration::from_millis(send_timeout_ms),
+        read_timeout: Duration::from_millis(read_timeout_ms),
+        bind_address,
+        socket_keepalive,
+        pool,
+        buffer: policy.body_buffer(),
+        limits: policy.limits,
+        catch_stderr: Arc::clone(&policy.catch_stderr),
+    };
+    let wire = Arc::new(wire);
     for _ in 0..retry_enabled {
         if started.elapsed() >= total_deadline {
             break;
@@ -954,25 +1085,13 @@ pub(crate) async fn serve_fastcgi(
         };
         let target = selected.url().clone();
         attempted.mark(selected.index());
-        let outcome = exchange(
-            generation,
-            upstream_ref,
-            &upstream_address_policy(generation, upstream_ref),
-            metrics,
-            &target,
-            WireProtocol::FastCgi,
-            &wire,
-            Duration::from_millis(connect_timeout_ms),
-            Duration::from_millis(send_timeout_ms),
-            Duration::from_millis(read_timeout_ms),
-            bind_address,
-            socket_keepalive,
-            pool.as_ref(),
-            &policy.limits,
+        let outcome = exchange_attempt(
+            policy.ignore_client_abort,
+            exchange(context.clone(), target, Arc::clone(&wire)),
         )
         .await;
         match outcome {
-            Ok((status, headers, body)) => {
+            Ok((status, headers, mut body)) => {
                 if upstream.status_is_failure(status) {
                     upstream.record_failure(selected);
                 } else {
@@ -989,8 +1108,9 @@ pub(crate) async fn serve_fastcgi(
                     last_failure = ExchangeFailure::Transport;
                     continue;
                 }
-                store_upstream_body(policy, &facts, status, &body).await;
-                let (status, headers, body) = apply_ranges(&facts, policy, status, headers, body);
+                store_upstream_body(policy, &facts, status, &mut body).await;
+                let (status, headers, body) =
+                    apply_ranges(&facts, policy, status, headers, body).await;
                 return build_response(
                     status,
                     headers,
@@ -1010,6 +1130,9 @@ pub(crate) async fn serve_fastcgi(
                     ExchangeFailure::Timeout => {
                         conditions.contains(&UpstreamRetryCondition::Timeout)
                     }
+                    // nginx does not retry an invalid header (a
+                    // `fastcgi_catch_stderr` match) by default.
+                    ExchangeFailure::InvalidHeader => false,
                 };
                 if !retryable {
                     break;
@@ -1124,6 +1247,23 @@ pub(crate) async fn serve_cgi(
     let started = std::time::Instant::now();
     let mut attempted = super::proxy::AttemptedTargets::default();
     let mut last_failure = ExchangeFailure::Transport;
+    let context = ExchangeContext {
+        generation: Arc::clone(generation),
+        upstream_id: upstream_ref.to_owned(),
+        address_policy: upstream_address_policy(generation, upstream_ref),
+        metrics: Arc::clone(metrics),
+        protocol: wire_protocol,
+        connect_timeout: Duration::from_millis(connect_timeout_ms),
+        send_timeout: Duration::from_millis(send_timeout_ms),
+        read_timeout: Duration::from_millis(read_timeout_ms),
+        bind_address,
+        socket_keepalive,
+        pool: None,
+        buffer: policy.body_buffer(),
+        limits: policy.limits,
+        catch_stderr: Arc::new(Vec::new()),
+    };
+    let wire = Arc::new(wire);
     for _ in 0..retry_enabled {
         if started.elapsed() >= total_deadline {
             break;
@@ -1138,25 +1278,13 @@ pub(crate) async fn serve_cgi(
         };
         let target = selected.url().clone();
         attempted.mark(selected.index());
-        let outcome = exchange(
-            generation,
-            upstream_ref,
-            &upstream_address_policy(generation, upstream_ref),
-            metrics,
-            &target,
-            wire_protocol,
-            &wire,
-            Duration::from_millis(connect_timeout_ms),
-            Duration::from_millis(send_timeout_ms),
-            Duration::from_millis(read_timeout_ms),
-            bind_address,
-            socket_keepalive,
-            None,
-            &policy.limits,
+        let outcome = exchange_attempt(
+            policy.ignore_client_abort,
+            exchange(context.clone(), target, Arc::clone(&wire)),
         )
         .await;
         match outcome {
-            Ok((status, headers, body)) => {
+            Ok((status, headers, mut body)) => {
                 if upstream.status_is_failure(status) {
                     upstream.record_failure(selected);
                 } else {
@@ -1173,8 +1301,9 @@ pub(crate) async fn serve_cgi(
                     last_failure = ExchangeFailure::Transport;
                     continue;
                 }
-                store_upstream_body(policy, &facts, status, &body).await;
-                let (status, headers, body) = apply_ranges(&facts, policy, status, headers, body);
+                store_upstream_body(policy, &facts, status, &mut body).await;
+                let (status, headers, body) =
+                    apply_ranges(&facts, policy, status, headers, body).await;
                 return build_response(
                     status,
                     headers,
@@ -1194,6 +1323,7 @@ pub(crate) async fn serve_cgi(
                     ExchangeFailure::Timeout => {
                         conditions.contains(&UpstreamRetryCondition::Timeout)
                     }
+                    ExchangeFailure::InvalidHeader => false,
                 };
                 if !retryable {
                     break;
@@ -1323,16 +1453,23 @@ pub(crate) async fn serve_memcached(
                         headers.insert(header::CONTENT_ENCODING, HeaderValue::from_static("gzip"));
                     }
                 }
-                let (status, headers, body) =
-                    apply_ranges(&facts, policy, StatusCode::OK, headers, value);
+                let (status, headers, body) = apply_ranges(
+                    &facts,
+                    policy,
+                    StatusCode::OK,
+                    headers,
+                    BufferedResponseBody::Memory(value),
+                )
+                .await;
+                let declared = body.len();
                 let mut response = Response::new(if *facts_method == Method::HEAD {
+                    // Dropping the buffered body also releases a spool file.
                     Body::empty()
                 } else {
-                    policy.paced_body(body.clone())
+                    body.into_body(policy.limit_rate_bytes_per_second, policy.serve_chunk())
                 });
                 *response.status_mut() = status;
                 *response.headers_mut() = headers;
-                let declared = body.len() as u64;
                 if let Ok(length) = HeaderValue::from_str(&declared.to_string()) {
                     response
                         .headers_mut()
@@ -1354,6 +1491,7 @@ pub(crate) async fn serve_memcached(
                     ExchangeFailure::Timeout => {
                         conditions.contains(&UpstreamRetryCondition::Timeout)
                     }
+                    ExchangeFailure::InvalidHeader => false,
                 };
                 if !retryable {
                     break;
@@ -1369,9 +1507,33 @@ pub(crate) async fn serve_memcached(
     }
 }
 
-/// Wave 7D response policy for one CGI-family/memcached resource: the bounded
-/// buffering sizes, request-body forwarding, atomic `*_store` write,
-/// `*_limit_rate` pacing and `*_force_ranges`/Accept-Ranges handling.
+/// Inputs for one CGI-family response policy.
+pub(crate) struct CgiPolicyInputs<'a> {
+    pub buffering: Option<&'a UpstreamBufferingConfig>,
+    pub pass_request_body: bool,
+    pub store: Option<&'a UpstreamStoreConfig>,
+    pub store_root: Option<&'a str>,
+    pub limit_rate_bytes_per_second: Option<u64>,
+    pub force_ranges: bool,
+    /// `memcached_gzip_flag` (memcached only).
+    pub gzip_flag: Option<u32>,
+    /// Executed `*_temp_path` / `*_max_temp_file_size` /
+    /// `*_temp_file_write_size` policy (`None` = nginx defaults).
+    pub temp: Option<&'a UpstreamTempPolicyConfig>,
+    /// `[http] tempRoot` confinement root.
+    pub temp_root: Option<&'a str>,
+    /// The generation's bounded spool.
+    pub spool: &'a Arc<TempSpool>,
+    /// `*_ignore_client_abort on`.
+    pub ignore_client_abort: bool,
+    /// `fastcgi_catch_stderr` patterns.
+    pub catch_stderr: &'a [String],
+}
+
+/// Wave 7D/14A response policy for one CGI-family/memcached resource: the
+/// bounded buffering sizes, request-body forwarding, atomic `*_store` write,
+/// `*_limit_rate` pacing, `*_force_ranges`/Accept-Ranges handling, the
+/// temp-spool tier and the connection-control switches.
 pub(crate) struct CgiResponsePolicy {
     pub limits: Limits,
     pub pass_request_body: bool,
@@ -1382,10 +1544,20 @@ pub(crate) struct CgiResponsePolicy {
     /// `memcached_gzip_flag`: `Content-Encoding` is derived from the flags
     /// field of a memcached hit when any of these bits is set.
     pub gzip_flag: Option<u32>,
+    /// Resolved temp-spool tier (nginx defaults when undeclared).
+    buffer: BodyBufferPolicy,
+    /// `*_ignore_client_abort on`.
+    pub ignore_client_abort: bool,
+    /// `fastcgi_catch_stderr` patterns (empty for uwsgi/scgi/memcached).
+    pub catch_stderr: Arc<Vec<String>>,
 }
 
 impl Default for CgiResponsePolicy {
     fn default() -> Self {
+        // Unit-test default: no spool file is ever opened because a zero
+        // in-memory bound is impossible and the spool is only reached past the
+        // configured buffer bank; the Arc keeps the constructor infallible.
+        let spool = Arc::new(TempSpool::new(None, 0, 0, 1));
         Self {
             limits: Limits::default(),
             pass_request_body: true,
@@ -1394,23 +1566,28 @@ impl Default for CgiResponsePolicy {
             limit_rate_bytes_per_second: None,
             force_ranges: false,
             gzip_flag: None,
+            buffer: BodyBufferPolicy {
+                spool,
+                spool_dir: None,
+                memory_bound: usize::MAX,
+                write_chunk: DEFAULT_WRITE_CHUNK,
+                max_file_bytes: 0,
+            },
+            ignore_client_abort: false,
+            catch_stderr: Arc::new(Vec::new()),
         }
     }
 }
 
 impl CgiResponsePolicy {
     /// Build the policy for one resource.
-    pub(crate) fn new(
-        buffering: Option<&UpstreamBufferingConfig>,
-        pass_request_body: bool,
-        store: Option<&UpstreamStoreConfig>,
-        store_root: Option<&str>,
-        limit_rate_bytes_per_second: Option<u64>,
-        force_ranges: bool,
-        gzip_flag: Option<u32>,
-    ) -> Self {
+    pub(crate) fn new(inputs: CgiPolicyInputs<'_>) -> Self {
         let mut limits = Limits::default();
-        if let Some(policy) = buffering {
+        let (header_bytes, chunk_bytes, chunks) = inputs
+            .buffering
+            .map(|policy| (policy.header_bytes, policy.chunk_bytes, policy.chunks))
+            .unwrap_or((4096, 4096, 8));
+        if let Some(policy) = inputs.buffering {
             // `*_buffer_size` is nginx's maximum upstream header block; the
             // runtime applies it to the response-header parser. `*_buffers`
             // sizes the response read chunk (never below the protocol's
@@ -1424,46 +1601,85 @@ impl CgiResponsePolicy {
                     limits.max_header_line_bytes.min(chunk_bytes.max(512));
             }
         }
+        // nginx's response buffer bank: the body stays in memory until the
+        // configured buffers (`*_buffer_size` + `*_buffers`) are exhausted.
+        let buffer_bank =
+            header_bytes.saturating_add(chunk_bytes.saturating_mul(u64::from(chunks)));
+        let buffer_max = header_bytes.max(chunk_bytes);
+        let (max_file_bytes, write_chunk_bytes, spool_dir) = match inputs.temp {
+            Some(policy) => (
+                policy.max_file_bytes,
+                policy.write_chunk_bytes,
+                resolve_spool_dir(policy.path.as_deref(), inputs.temp_root),
+            ),
+            // nginx defaults: 1 GiB per file, `2 * size` writes.
+            None => (1024 * 1024 * 1024, buffer_max.saturating_mul(2), None),
+        };
         Self {
             limits,
-            pass_request_body,
-            store: store.cloned(),
-            store_root: store_root.map(str::to_owned),
-            limit_rate_bytes_per_second,
-            force_ranges,
-            gzip_flag,
+            pass_request_body: inputs.pass_request_body,
+            store: inputs.store.cloned(),
+            store_root: inputs.store_root.map(str::to_owned),
+            limit_rate_bytes_per_second: inputs.limit_rate_bytes_per_second,
+            force_ranges: inputs.force_ranges,
+            gzip_flag: inputs.gzip_flag,
+            buffer: BodyBufferPolicy {
+                spool: Arc::clone(inputs.spool),
+                spool_dir,
+                memory_bound: usize::try_from(buffer_bank).unwrap_or(usize::MAX),
+                write_chunk: usize::try_from(write_chunk_bytes.max(512))
+                    .unwrap_or(DEFAULT_WRITE_CHUNK),
+                max_file_bytes,
+            },
+            ignore_client_abort: inputs.ignore_client_abort,
+            catch_stderr: Arc::new(inputs.catch_stderr.to_vec()),
         }
     }
 
-    /// Apply `*_limit_rate` pacing to a fully buffered response body.
-    fn paced_body(&self, body: Vec<u8>) -> Body {
-        let Some(rate) = self.limit_rate_bytes_per_second.filter(|rate| *rate > 0) else {
-            return Body::from(body);
-        };
-        // ~10 pacing steps per second, bounded by the response chunk window.
-        let chunk = usize::try_from((rate / 10).clamp(1024, 64 * 1024)).unwrap_or(1024);
-        let length = body.len();
-        let stream = futures_util::stream::unfold(
-            (body, 0usize, Instant::now(), rate, chunk),
-            move |(body, offset, started, rate, chunk)| async move {
-                if offset >= body.len() {
-                    return None;
-                }
-                let end = (offset + chunk).min(length);
-                let target = started + Duration::from_secs_f64(end as f64 / rate as f64);
-                let now = Instant::now();
-                if target > now {
-                    tokio::time::sleep(target - now).await;
-                }
-                let piece = Bytes::copy_from_slice(&body[offset..end]);
-                Some((
-                    Ok::<Bytes, std::io::Error>(piece),
-                    (body, end, started, rate, chunk),
-                ))
-            },
-        );
-        Body::from_stream(stream)
+    /// The response-body sink for one exchange.
+    fn body_buffer(&self) -> BodyBufferPolicy {
+        self.buffer.clone()
     }
+
+    /// Chunk size used when spooled bodies are served back to the client.
+    fn serve_chunk(&self) -> usize {
+        self.buffer.write_chunk
+    }
+}
+
+/// Resolve an executed `*_temp_path` against the `[http] tempRoot` confinement
+/// root (defense in depth: semantic validation already proved the relation).
+///
+/// A path that is not absolute, contains traversal/line breaks, or escapes the
+/// configured root is rejected and the per-generation directory is used
+/// instead, so a spool file can never be created outside the operator root.
+fn resolve_spool_dir(path: Option<&str>, temp_root: Option<&str>) -> Option<PathBuf> {
+    let path = path?;
+    let unsafe_path = !path.starts_with('/')
+        || path
+            .bytes()
+            .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+        || path.split('/').any(|component| component == "..");
+    if unsafe_path {
+        tracing::warn!(
+            path,
+            "configured CGI temp path is not a safe absolute path; using the per-generation spool directory"
+        );
+        return None;
+    }
+    if let Some(root) = temp_root {
+        let root = root.trim_end_matches('/');
+        let candidate = path.trim_end_matches('/');
+        if !(candidate == root || candidate.starts_with(&format!("{root}/"))) {
+            tracing::warn!(
+                path,
+                root,
+                "configured CGI temp path escapes nginx.tempRoot; using the per-generation spool directory"
+            );
+            return None;
+        }
+    }
+    Some(PathBuf::from(path))
 }
 
 /// Expand an nginx `*_store` path template with the values the materializer
@@ -1515,16 +1731,17 @@ fn expand_store_path(
 /// Atomically write the upstream response body to the configured `*_store`
 /// path (bounded temp file in the destination directory + rename), preserving
 /// the client response. Only `200 OK` responses are stored, matching nginx.
+/// A spooled body is stream-copied, never materialized in memory again.
 async fn store_upstream_body(
     policy: &CgiResponsePolicy,
     facts: &CgiRequestFacts<'_>,
     status: StatusCode,
-    body: &[u8],
+    body: &mut BufferedResponseBody,
 ) {
     let Some(store) = policy.store.as_ref() else {
         return;
     };
-    if status != StatusCode::OK || body.is_empty() {
+    if status != StatusCode::OK || body.len() == 0 {
         return;
     }
     let Some(path) = expand_store_path(&store.path, facts, policy.store_root.as_deref()) else {
@@ -1550,11 +1767,32 @@ async fn store_upstream_body(
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
     let temp = parent.join(format!(".{file_name}.{unique}.tmp"));
-    if let Err(error) = tokio::fs::write(&temp, body).await {
+    let mut temp_file = match tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .await
+    {
+        Ok(file) => file,
+        Err(error) => {
+            tracing::debug!(path = %temp.display(), error = %error, "CGI store temp file could not be created");
+            return;
+        }
+    };
+    let written = body.copy_to(&mut temp_file).await;
+    if let Err(error) = written {
         tracing::debug!(path = %temp.display(), error = %error, "CGI store temp file could not be written");
+        drop(temp_file);
         let _ = tokio::fs::remove_file(&temp).await;
         return;
     }
+    if let Err(error) = temp_file.flush().await {
+        tracing::debug!(path = %temp.display(), error = %error, "CGI store temp file could not be flushed");
+        drop(temp_file);
+        let _ = tokio::fs::remove_file(&temp).await;
+        return;
+    }
+    drop(temp_file);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1655,18 +1893,20 @@ fn parse_byte_ranges(
     Some(Ok(ranges))
 }
 
-/// Apply nginx range semantics to a fully buffered CGI-family response.
+/// Apply nginx range semantics to a buffered CGI-family response.
 ///
 /// Ranges are honoured when the resource sets `*_force_ranges on` or when the
 /// upstream response itself declared `Accept-Ranges: bytes` (nginx's
-/// `r->allow_ranges`); a response with unknown length never gets ranges.
-fn apply_ranges(
+/// `r->allow_ranges`); a response with unknown length never gets ranges. A
+/// single range of a spooled body is streamed from disk (only the requested
+/// slice is read), so ranges do not re-materialize an oversized body.
+async fn apply_ranges(
     facts: &CgiRequestFacts<'_>,
     policy: &CgiResponsePolicy,
     status: StatusCode,
     mut headers: HeaderMap,
-    body: Vec<u8>,
-) -> (StatusCode, HeaderMap, Vec<u8>) {
+    body: BufferedResponseBody,
+) -> (StatusCode, HeaderMap, BufferedResponseBody) {
     if status != StatusCode::OK || facts.method != Method::GET {
         return (status, headers, body);
     }
@@ -1678,7 +1918,7 @@ fn apply_ranges(
         return (status, headers, body);
     }
     let if_range = facts.headers.get(header::IF_RANGE);
-    let total = body.len() as u64;
+    let total = body.len();
     let Some(parsed) = parse_byte_ranges(facts.headers, total, if_range) else {
         return (status, headers, body);
     };
@@ -1691,7 +1931,11 @@ fn apply_ranges(
                 HeaderValue::from_str(&format!("bytes */{total}"))
                     .unwrap_or_else(|_| HeaderValue::from_static("bytes */*0")),
             );
-            return (StatusCode::RANGE_NOT_SATISFIABLE, headers, Vec::new());
+            return (
+                StatusCode::RANGE_NOT_SATISFIABLE,
+                headers,
+                BufferedResponseBody::Memory(Vec::new()),
+            );
         }
     };
     headers.remove(header::CONTENT_LENGTH);
@@ -1708,6 +1952,18 @@ fn apply_ranges(
     }
     if ranges.len() == 1 {
         let range = ranges[0];
+        let slice = match body.slice(range.start, range.end).await {
+            Ok(slice) => slice,
+            Err(body) => {
+                // A range that cannot be served within the body bounds
+                // declines to the full representation (the same bounded
+                // behaviour as a multi-range request).
+                headers
+                    .entry(header::ACCEPT_RANGES)
+                    .or_insert_with(|| HeaderValue::from_static("bytes"));
+                return (StatusCode::OK, headers, body);
+            }
+        };
         headers.insert(
             header::CONTENT_RANGE,
             HeaderValue::from_str(&format!(
@@ -1718,36 +1974,9 @@ fn apply_ranges(
             ))
             .unwrap_or_else(|_| HeaderValue::from_static("bytes 0-0/0")),
         );
-        let slice = body[range.start as usize..range.end as usize].to_vec();
         return (StatusCode::PARTIAL_CONTENT, headers, slice);
     }
-    // nginx multipart/byteranges with a fixed bounded boundary so the body is
-    // reproducible; clients treat the boundary as opaque.
-    const BOUNDARY: &str = "sdkwork7d";
-    let content_type = headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("text/plain")
-        .to_owned();
-    let mut multipart = Vec::new();
-    for range in &ranges {
-        multipart.extend_from_slice(
-            format!(
-                "\r\n--{BOUNDARY}\r\nContent-Type: {content_type}\r\nContent-Range: bytes {}-{}/{total}\r\n\r\n",
-                range.start,
-                range.end - 1
-            )
-            .as_bytes(),
-        );
-        multipart.extend_from_slice(&body[range.start as usize..range.end as usize]);
-    }
-    multipart.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(&format!("multipart/byteranges; boundary={BOUNDARY}"))
-            .unwrap_or_else(|_| HeaderValue::from_static("multipart/byteranges")),
-    );
-    (StatusCode::PARTIAL_CONTENT, headers, multipart)
+    (StatusCode::OK, headers, body)
 }
 
 /// Why `memcached_exchange` is written separately from the CGI-family exchange:
@@ -1833,7 +2062,7 @@ async fn memcached_exchange(
 fn build_response(
     status: StatusCode,
     mut headers: HeaderMap,
-    body: Vec<u8>,
+    body: BufferedResponseBody,
     method: &Method,
     response_policy: Option<&ProxyResponsePolicyConfig>,
     pacing: Option<&CgiResponsePolicy>,
@@ -1878,6 +2107,12 @@ fn build_response(
     headers.remove(header::CONTENT_LENGTH);
     headers.remove(header::TRANSFER_ENCODING);
 
+    if body.is_spooled() {
+        tracing::debug!(
+            bytes = body.len(),
+            "serving a CGI upstream response from the temp spool"
+        );
+    }
     let bodyless = method == Method::HEAD
         || status == StatusCode::NO_CONTENT
         || status == StatusCode::NOT_MODIFIED;
@@ -1890,12 +2125,18 @@ fn build_response(
             None
         }
     } else {
-        Some(body.len() as u64)
+        Some(body.len())
     };
-    let response_body = if bodyless { Vec::new() } else { body };
-    let mut response = Response::new(match pacing {
-        Some(policy) if !bodyless => policy.paced_body(response_body),
-        _ => Body::from(response_body),
+    let mut response = Response::new(if bodyless {
+        // Dropping the buffered body here also removes a spooled temp file.
+        Body::empty()
+    } else {
+        match pacing {
+            Some(policy) => {
+                body.into_body(policy.limit_rate_bytes_per_second, policy.serve_chunk())
+            }
+            None => body.into_body(None, DEFAULT_WRITE_CHUNK),
+        }
     });
     *response.status_mut() = status;
     *response.headers_mut() = headers;
@@ -2025,6 +2266,107 @@ mod tests {
             .find(|(name, _)| name == "HTTP_HOST")
             .map(|(_, value)| value.as_str());
         assert_eq!(host, Some("example.com:8080"));
+    }
+
+    #[test]
+    fn catch_stderr_search_matches_the_trimmed_nginx_message() {
+        let patterns = vec!["PHP Fatal error:  ".to_owned(), "BOOM".to_owned()];
+        // A substring match anywhere in the message is invalid (nginx's
+        // `ngx_strnstr` over the trimmed message).
+        assert!(matches!(
+            record_stderr(b"PHP Fatal error:  boom\n", &patterns),
+            Err(ExchangeFailure::InvalidHeader)
+        ));
+        assert!(matches!(
+            record_stderr(b"prefix BOOM suffix\r\n", &patterns),
+            Err(ExchangeFailure::InvalidHeader)
+        ));
+        // The trailing `LF`/`CR`/`.`/space suffix is trimmed before the search,
+        // exactly like `ngx_http_fastcgi_process_header`, so a pattern ending
+        // in a space does not match a message that only ends with the pattern.
+        assert!(matches!(
+            record_stderr(b"PHP Fatal error:  \n", &patterns),
+            Ok(())
+        ));
+        // A whitespace-only stderr record is a no-op.
+        assert!(matches!(record_stderr(b" \r\n. ", &patterns), Ok(())));
+        assert!(matches!(
+            record_stderr(b"nothing to see\n", &patterns),
+            Ok(())
+        ));
+    }
+
+    #[test]
+    fn trim_stderr_matches_nginx_suffix_rules() {
+        assert_eq!(trim_stderr(b"error\n"), b"error");
+        assert_eq!(trim_stderr(b"error.\r\n "), b"error");
+        assert_eq!(trim_stderr(b""), b"");
+        assert_eq!(trim_stderr(b"\n\r. "), b"");
+        // Interior characters are preserved.
+        assert_eq!(trim_stderr(b"a.b c\n"), b"a.b c");
+    }
+
+    #[test]
+    fn temp_path_resolution_confines_to_the_operator_root() {
+        assert_eq!(
+            resolve_spool_dir(Some("/var/cache/nginx/fastcgi"), None),
+            Some(PathBuf::from("/var/cache/nginx/fastcgi"))
+        );
+        assert_eq!(
+            resolve_spool_dir(Some("/var/cache/nginx/fastcgi"), Some("/var/cache/nginx")),
+            Some(PathBuf::from("/var/cache/nginx/fastcgi"))
+        );
+        // The root itself is accepted (nginx allows the temp path to be the
+        // configured directory).
+        assert_eq!(
+            resolve_spool_dir(Some("/var/cache/nginx/"), Some("/var/cache/nginx")),
+            Some(PathBuf::from("/var/cache/nginx/"))
+        );
+        // Escapes, traversal and relative paths use the generation directory.
+        assert_eq!(
+            resolve_spool_dir(Some("/etc/nginx-spool"), Some("/var/cache/nginx")),
+            None
+        );
+        assert_eq!(
+            resolve_spool_dir(Some("/var/cache/nginx/../etc"), Some("/var/cache/nginx")),
+            None
+        );
+        assert_eq!(resolve_spool_dir(Some("relative/spool"), None), None);
+        assert_eq!(resolve_spool_dir(None, Some("/var/cache/nginx")), None);
+    }
+
+    /// `*_ignore_client_abort off` (nginx default) must cancel the in-flight
+    /// upstream exchange when the handler future is dropped (a client abort),
+    /// while `on` must keep it running to completion.
+    #[tokio::test]
+    async fn ignore_client_abort_decouples_the_upstream_exchange() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        for (ignore_client_abort, expected_completion) in [(false, 0), (true, 1)] {
+            let completed = Arc::new(AtomicUsize::new(0));
+            let flag = Arc::clone(&completed);
+            let upstream = async move {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                flag.fetch_add(1, Ordering::SeqCst);
+                Ok((
+                    StatusCode::OK,
+                    HeaderMap::new(),
+                    BufferedResponseBody::Memory(b"ok".to_vec()),
+                ))
+            };
+            let runner =
+                tokio::spawn(async move { exchange_attempt(ignore_client_abort, upstream).await });
+            // Simulate the client abort: hyper drops the handler future.
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            runner.abort();
+            let _ = runner.await;
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            assert_eq!(
+                completed.load(Ordering::SeqCst),
+                expected_completion,
+                "ignore_client_abort={ignore_client_abort} must                  {expected_completion:+} complete the upstream exchange"
+            );
+        }
     }
 
     #[test]

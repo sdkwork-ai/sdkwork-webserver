@@ -157,8 +157,17 @@ impl CgiCachePlan {
         }
         // The adapter always buffers the bounded upstream body, so the exact
         // size is known before consuming it; oversized bodies pass through
-        // uncached (the store's object limit applies).
-        let Some(body_size) = response.body().size_hint().exact() else {
+        // uncached (the store's object limit applies). A temp-spooled body is
+        // served as a stream (no `size_hint`), but `build_response` always
+        // declares the exact `Content-Length`, so that is the size contract
+        // there.
+        let Some(body_size) = response.body().size_hint().exact().or_else(|| {
+            response
+                .headers()
+                .get(axum::http::header::CONTENT_LENGTH)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+        }) else {
             return Some(suppress_body_for_head(response, convert_client_head));
         };
         if body_size > self.cache.maximum_object_bytes() {

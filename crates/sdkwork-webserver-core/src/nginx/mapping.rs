@@ -167,6 +167,12 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_max_temp_file_size",
     "proxy_temp_file_write_size",
     "proxy_send_lowat",
+    // `fastcgi_send_lowat` is accepted-unenforced exactly like nginx on Linux:
+    // the reference build is not compiled with SO_SNDLOWAT support, so nginx
+    // warns "'fastcgi_send_lowat' is not supported, ignored" and zeroes the
+    // value (`ngx_http_fastcgi_lowat_check`). The runtime never fakes a
+    // low-water mark the kernel would ignore.
+    "fastcgi_send_lowat",
     "ssl_conf_command",
     "proxy_pass_header",
     "accept_mutex_delay",
@@ -325,6 +331,8 @@ pub(crate) fn ignored_directive_diagnostics(
                 "`{}` cannot be honored by the pinned hyper HTTP/1.1 encoder: hyper emits a close-delimited body only for HTTP/1.0 responses, so an HTTP/1.1 response with an unknown body length always uses `Transfer-Encoding: chunked`; the value is accepted but has no effect",
                 directive.name
             )
+        } else if directive.name == "fastcgi_send_lowat" {
+            "`fastcgi_send_lowat` is accepted-unenforced, which is exactly nginx 1.29.6 on Linux: the reference build is not compiled with SO_SNDLOWAT support, so nginx logs \"\'fastcgi_send_lowat\' is not supported, ignored\" and zeroes the value at configuration time. Linux ignores a socket send low-water mark (nginx documents the directive as BSD-only), and the pinned socket seam cannot set it, so the runtime never fakes enforcement".to_string()
         } else if RUNTIME_OWNED_MEMORY_TUNING.contains(&directive.name.as_str()) {
             format!(
                 "`{}` is accepted for nginx compatibility; the runtime owns its buffer and hash-table sizing, so the imported value has no effect",
@@ -4985,6 +4993,25 @@ impl<'a> Mapper<'a> {
             if let Some(ignore_headers) = &effective_fastcgi.ignore_headers {
                 resource["ignoreHeaders"] = json!(ignore_headers);
             }
+            // The temp-spool tier is always materialized with nginx's defaults
+            // (spool enabled, 1 GiB per-file cap) so an oversized upstream body
+            // is spilled under the per-generation temp directory even when the
+            // configuration declares no `fastcgi_temp_*` directive.
+            if let Some(policy) = effective_fastcgi
+                .temp
+                .resolve(effective_fastcgi.buffering_policy.buffer_max(), location)?
+            {
+                resource["tempPolicy"] = serde_json::to_value(policy).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            resource["ignoreClientAbort"] =
+                json!(effective_fastcgi.ignore_client_abort.unwrap_or(false));
+            if let Some(patterns) = &effective_fastcgi.catch_stderr {
+                resource["catchStderr"] = json!(patterns);
+            }
             if let Some(cache) = cache_policy {
                 resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
                     NginxConfigError::ValidationFailed(format!(
@@ -5271,6 +5298,18 @@ impl<'a> Mapper<'a> {
             if let Some(ignore_headers) = &effective_cgi.ignore_headers {
                 resource["ignoreHeaders"] = json!(ignore_headers);
             }
+            if let Some(policy) = effective_cgi
+                .temp
+                .resolve(effective_cgi.buffering_policy.buffer_max(), location)?
+            {
+                resource["tempPolicy"] = serde_json::to_value(policy).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            resource["ignoreClientAbort"] =
+                json!(effective_cgi.ignore_client_abort.unwrap_or(false));
             if let Some(cache) = cache_policy {
                 resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
                     NginxConfigError::ValidationFailed(format!(
@@ -12882,6 +12921,8 @@ struct CgiSettings {
     limit_rate_bytes_per_second: Option<Option<u64>>,
     force_ranges: Option<bool>,
     ignore_headers: Option<Vec<String>>,
+    temp: TempSettings,
+    ignore_client_abort: Option<bool>,
 }
 
 impl CgiSettings {
@@ -12931,6 +12972,8 @@ impl CgiSettings {
                 .ignore_headers
                 .clone()
                 .or_else(|| self.ignore_headers.clone()),
+            temp: self.temp.overlay(&inner.temp),
+            ignore_client_abort: inner.ignore_client_abort.or(self.ignore_client_abort),
         }
     }
 
@@ -13051,22 +13094,10 @@ impl CgiSettings {
                 self.buffering_policy.apply(suffix, directive)?;
             }
             "max_temp_file_size" | "temp_path" | "temp_file_write_size" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "`{}` requires nginx's temp-file spool: oversized upstream responses are written to the configured temp path. The bounded runtime has no temp-spool subsystem (every response is buffered in bounded memory or streamed), so the directive fails closed instead of silently disabling the spill",
-                        directive.name
-                    ),
-                ))
+                self.temp.apply(suffix, directive)?;
             }
             "ignore_client_abort" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "`{}` needs a client-disconnect signal delivered while the upstream exchange is in flight; the bounded adapter buffers the upstream response before replying, so it cannot observe a mid-exchange abort and fails closed instead of silently applying the wrong lifetime",
-                        directive.name
-                    ),
-                ))
+                self.ignore_client_abort = Some(parse_on_off(directive, &directive.name)?);
             }
             "modifier1" | "modifier2" if kind == CgiKind::Uwsgi => {
                 let Some(value) = directive.args.first() else {
@@ -13582,10 +13613,227 @@ fn validate_cgi_cache_condition_variable(
     Ok(())
 }
 
+/// One nginx size-valued directive together with the file:line that declared
+/// it, so a merge-time (nginx validates these after the whole block is parsed)
+/// relationship error is still reported at the authored location.
+#[derive(Clone)]
+struct SizeDirective {
+    value: u64,
+    source: std::path::PathBuf,
+    line: usize,
+}
+
+impl SizeDirective {
+    fn from(directive: &NginxDirective, value: u64) -> Self {
+        Self {
+            value,
+            source: directive.source.clone(),
+            line: directive.line,
+        }
+    }
+
+    fn unsupported(&self, message: impl std::fmt::Display) -> NginxConfigError {
+        NginxConfigError::Unsupported {
+            path: self.source.clone(),
+            line: self.line,
+            message: message.to_string(),
+        }
+    }
+}
+
+/// nginx `*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`
+/// accumulated over the http → server → location inheritance chain.
+///
+/// The three values describe nginx's temp-file spool tier: an upstream response
+/// that no longer fits in the configured response buffers is written to a temp
+/// file under `temp_path`, at most `max_temp_file_size` bytes (0 disables the
+/// tier) and in writes of at most `temp_file_write_size` bytes. The runtime
+/// executes the same tier through its bounded per-generation spool
+/// (`config::UpstreamTempPolicyConfig`); see the crate documentation for the
+/// one bounded difference (exceeding the per-file limit degrades to the
+/// in-memory path instead of a true unbuffered pass-through).
+#[derive(Clone, Default)]
+struct TempSettings {
+    path: Option<String>,
+    max_file_bytes: Option<SizeDirective>,
+    write_chunk_bytes: Option<SizeDirective>,
+}
+
+impl TempSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            path: inner.path.clone().or_else(|| self.path.clone()),
+            max_file_bytes: inner
+                .max_file_bytes
+                .clone()
+                .or_else(|| self.max_file_bytes.clone()),
+            write_chunk_bytes: inner
+                .write_chunk_bytes
+                .clone()
+                .or_else(|| self.write_chunk_bytes.clone()),
+        }
+    }
+
+    /// Apply one of the three temp-spool directives; returns `false` when the
+    /// suffix is not part of this group.
+    fn apply(
+        &mut self,
+        suffix: &str,
+        directive: &NginxDirective,
+    ) -> Result<bool, NginxConfigError> {
+        match suffix {
+            "temp_path" => {
+                let [value] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{}` is executable only in the single-path form `{} /absolute/dir`; nginx's optional `level1 [level2 [level3]]` hashing arguments change the on-disk layout, which the bounded spool does not emulate",
+                            directive.name, directive.name
+                        ),
+                    ));
+                };
+                if value.contains('$') {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{}` cannot contain variables: the confined spool root is resolved once per generation, so a per-request temp directory is not executable",
+                            directive.name
+                        ),
+                    ));
+                }
+                if !value.starts_with('/')
+                    || value
+                        .bytes()
+                        .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+                    || value.split('/').any(|component| component == "..")
+                {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{}` requires an absolute path under the spool root without `..` segments or line breaks, got `{value}`",
+                            directive.name
+                        ),
+                    ));
+                }
+                self.path = Some(value.trim_end_matches('/').to_owned());
+            }
+            "max_temp_file_size" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a size", directive.name),
+                    ));
+                };
+                if directive.args.len() != 1 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} takes exactly one size", directive.name),
+                    ));
+                }
+                let Some(bytes) = parse_size_bytes(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} size `{value}`", directive.name),
+                    ));
+                };
+                self.max_file_bytes = Some(SizeDirective::from(directive, bytes));
+            }
+            "temp_file_write_size" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a size", directive.name),
+                    ));
+                };
+                if directive.args.len() != 1 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} takes exactly one size", directive.name),
+                    ));
+                }
+                let Some(bytes) = parse_size_bytes(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} size `{value}`", directive.name),
+                    ));
+                };
+                self.write_chunk_bytes = Some(SizeDirective::from(directive, bytes));
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    /// Resolve the inherited values into the runtime policy, applying nginx's
+    /// merge-time relationships (`max_temp_file_size` is 0 or at least the
+    /// largest response buffer; `temp_file_write_size` is at least that size).
+    ///
+    /// nginx defaults: `max_temp_file_size` 1 GiB, `temp_file_write_size`
+    /// `2 * size` where `size` is the larger of `*_buffer_size` and one
+    /// `*_buffers` entry.
+    fn resolve(
+        &self,
+        buffer_max: u64,
+        location: &NginxDirective,
+    ) -> Result<Option<crate::config::UpstreamTempPolicyConfig>, NginxConfigError> {
+        let max_file_bytes = self
+            .max_file_bytes
+            .as_ref()
+            .map(|directive| directive.value)
+            .unwrap_or(1024 * 1024 * 1024);
+        if max_file_bytes != 0 && max_file_bytes < buffer_max {
+            let message = format!(
+                "`{}_max_temp_file_size` must be zero (disable the spool tier) or at least the largest response buffer ({buffer_max} bytes, the maximum of `{}_buffer_size` and one `{}_buffers` entry)",
+                protocol_prefix(location),
+                protocol_prefix(location),
+                protocol_prefix(location),
+            );
+            return match &self.max_file_bytes {
+                Some(directive) => Err(directive.unsupported(message)),
+                None => Err(NginxConfigError::unsupported(location, message)),
+            };
+        }
+        let write_chunk_bytes = self
+            .write_chunk_bytes
+            .as_ref()
+            .map(|directive| directive.value)
+            .unwrap_or(buffer_max.saturating_mul(2));
+        if write_chunk_bytes < buffer_max {
+            let message = format!(
+                "`{}_temp_file_write_size` must be at least the largest response buffer ({buffer_max} bytes, the maximum of `{}_buffer_size` and one `{}_buffers` entry)",
+                protocol_prefix(location),
+                protocol_prefix(location),
+                protocol_prefix(location),
+            );
+            return match &self.write_chunk_bytes {
+                Some(directive) => Err(directive.unsupported(message)),
+                None => Err(NginxConfigError::unsupported(location, message)),
+            };
+        }
+        Ok(Some(crate::config::UpstreamTempPolicyConfig {
+            path: self.path.clone(),
+            max_file_bytes,
+            write_chunk_bytes,
+        }))
+    }
+}
+
+/// `fastcgi` / `uwsgi` / `scgi` prefix of a CGI-family directive, used to name
+/// the sibling directives in a merge-time diagnostic.
+fn protocol_prefix(directive: &NginxDirective) -> &str {
+    let name = directive.name.as_str();
+    for prefix in ["fastcgi", "uwsgi", "scgi", "memcached"] {
+        if name.starts_with(prefix) {
+            return prefix;
+        }
+    }
+    "fastcgi"
+}
+
 /// nginx `*_buffer_size` / `*_buffers` / `*_busy_buffers_size` accumulated over
 /// the inheritance chain. The runtime maps these onto the adapter's bounded
 /// in-memory response buffering (header block bound + read chunk sizing); the
-/// temp-file spool family is a separate, fail-closed group.
+/// temp-file spool tier is layered on top once that bound is exceeded.
 #[derive(Clone, Default)]
 struct BufferingSettings {
     header_bytes: Option<u64>,
@@ -13640,6 +13888,14 @@ impl BufferingSettings {
             _ => return Ok(false),
         }
         Ok(true)
+    }
+
+    /// nginx's merge-time `size` for this resource: the larger of
+    /// `*_buffer_size` and one `*_buffers` entry (defaults 4 KiB / 4 KiB).
+    fn buffer_max(&self) -> u64 {
+        let header = self.header_bytes.unwrap_or(4096);
+        let chunk = self.buffers.map(|(_, size)| size).unwrap_or(4096);
+        header.max(chunk)
     }
 
     fn resolve(&self) -> Option<crate::config::UpstreamBufferingConfig> {
@@ -13974,6 +14230,9 @@ struct FastCgiSettings {
     limit_rate_bytes_per_second: Option<Option<u64>>,
     force_ranges: Option<bool>,
     ignore_headers: Option<Vec<String>>,
+    temp: TempSettings,
+    ignore_client_abort: Option<bool>,
+    catch_stderr: Option<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -14031,6 +14290,14 @@ impl FastCgiSettings {
                 .ignore_headers
                 .clone()
                 .or_else(|| self.ignore_headers.clone()),
+            temp: self.temp.overlay(&inner.temp),
+            ignore_client_abort: inner.ignore_client_abort.or(self.ignore_client_abort),
+            // nginx merges `catch_stderr` with `ngx_conf_merge_ptr_value`, so a
+            // level that declares any pattern replaces the inherited list.
+            catch_stderr: inner
+                .catch_stderr
+                .clone()
+                .or_else(|| self.catch_stderr.clone()),
         }
     }
 
@@ -14212,31 +14479,45 @@ impl FastCgiSettings {
             "fastcgi_max_temp_file_size"
             | "fastcgi_temp_path"
             | "fastcgi_temp_file_write_size" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "`{}` requires nginx's temp-file spool: oversized upstream responses are written to the configured temp path. The bounded runtime has no temp-spool subsystem (every response is buffered in bounded memory or streamed), so the directive fails closed instead of silently disabling the spill",
-                        directive.name
-                    ),
-                ))
+                let suffix = directive
+                    .name
+                    .strip_prefix("fastcgi_")
+                    .unwrap_or_default();
+                self.temp.apply(suffix, directive)?;
             }
             "fastcgi_ignore_client_abort" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`fastcgi_ignore_client_abort` needs a client-disconnect signal delivered while the upstream exchange is in flight; the bounded adapter buffers the upstream response before replying, so it cannot observe a mid-exchange abort and fails closed instead of silently applying the wrong lifetime",
-                ))
+                self.ignore_client_abort =
+                    Some(parse_on_off(directive, "fastcgi_ignore_client_abort")?)
             }
             "fastcgi_catch_stderr" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`fastcgi_catch_stderr` scans the FastCGI stderr stream for error signatures; the bounded adapter parses `FCGI_STDERR` but has no error-log channel to evaluate the string against",
-                ))
+                let [pattern] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "`fastcgi_catch_stderr` takes exactly one string; declare the directive repeatedly to match several patterns",
+                    ));
+                };
+                self.catch_stderr
+                    .get_or_insert_with(Vec::new)
+                    .push(pattern.clone());
             }
+            // Accepted-unenforced, exactly like nginx 1.29.6 on Linux: the
+            // reference build has no `SO_SNDLOWAT` support, so nginx logs
+            // "'fastcgi_send_lowat' is not supported, ignored" and zeroes the
+            // value. The runtime emits the same diagnostic and never fakes a
+            // kernel low-water mark (the pinned socket seam cannot set it).
             "fastcgi_send_lowat" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`fastcgi_send_lowat` tunes the socket send low-water mark, which is not settable through the runtime's socket seam (and is ignored by Linux); the directive fails closed",
-                ))
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "`fastcgi_send_lowat` requires a size",
+                    ));
+                };
+                if directive.args.len() != 1 || parse_size_bytes(value).is_none() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid `fastcgi_send_lowat` size `{value}`"),
+                    ));
+                }
             }
             other => {
                 return Err(NginxConfigError::unsupported(
@@ -19811,6 +20092,7 @@ server { listen 80; server_name stapling.example.test; location / { return 200 "
             ("proxy_max_temp_file_size", "1g"),
             ("proxy_temp_file_write_size", "8k"),
             ("proxy_send_lowat", "0"),
+            ("fastcgi_send_lowat", "12000"),
             ("ssl_conf_command", "Options PrioritizeChaCha"),
             ("proxy_pass_header", "X-Bar"),
             ("accept_mutex_delay", "500ms"),

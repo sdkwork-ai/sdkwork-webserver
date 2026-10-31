@@ -77,6 +77,22 @@ def handle(connection: socket.socket) -> None:
             method = by_name.get("REQUEST_METHOD", "GET")
             connection.sendall(head + (payload if method != "HEAD" else b""))
             return
+        if request_uri.startswith("/scgi-d14a/"):
+            # Wave 14A: a 48 KiB body exceeds the 8x4k response buffers so the
+            # SCGI temp-spool tier is exercised.
+            payload = b""
+            for index in range(48):
+                payload += f"{index:04d}:".encode() + b"S" * 1015
+            head = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "X-Mock-Scgi: yes\r\n"
+                f"Content-Length: {len(payload)}\r\n"
+                "\r\n"
+            ).encode()
+            method = by_name.get("REQUEST_METHOD", "GET")
+            connection.sendall(head + (payload if method != "HEAD" else b""))
+            return
         status = 404 if "errors" in request_uri else 200
         reason = "Not Found" if status == 404 else "OK"
         response = json.dumps(

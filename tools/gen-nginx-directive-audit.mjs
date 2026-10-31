@@ -53,11 +53,11 @@ const REPORT_PATH = path.join(
 );
 
 const AUDIT_DATE = '2026-10-30';
-const AUDIT_HEAD = '9b54171d';
+const AUDIT_HEAD = '1a5e2513';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B), the GeoIP-module wave (wave 12) and the residual-closure wave (wave 13) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B), the GeoIP-module wave (wave 12), the residual-closure wave (wave 13) and the temp-spool + connection-control wave (wave 14A) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -536,6 +536,26 @@ const COMPLETED_WAVES = [
       'mail:set_real_ip_from',
     ],
   },
+  {
+    key: 'wave 14A (temp-spool + connection control)',
+    summary:
+      'bounded per-generation CGI temp-spool subsystem (9 fields: byte/file budget, 0700 symlink-refusing dir, 0600 unlink files, in-memory response-buffer tier) plus ignore_client_abort and fastcgi_catch_stderr; fastcgi_send_lowat accepted-unenforced (Linux unaffected)',
+    ids: [
+      'http:fastcgi_max_temp_file_size',
+      'http:fastcgi_temp_file_write_size',
+      'http:fastcgi_temp_path',
+      'http:uwsgi_max_temp_file_size',
+      'http:uwsgi_temp_file_write_size',
+      'http:uwsgi_temp_path',
+      'http:scgi_max_temp_file_size',
+      'http:scgi_temp_file_write_size',
+      'http:scgi_temp_path',
+      'http:fastcgi_ignore_client_abort',
+      'http:uwsgi_ignore_client_abort',
+      'http:scgi_ignore_client_abort',
+      'http:fastcgi_catch_stderr',
+    ],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -597,9 +617,9 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'the directive is rejected at load; a stock nginx.conf that uses this gRPC TLS-library form fails to activate.',
-    why: 'the gRPC h2 client now executes the request/response, header (including ignore_headers), timeout, buffer, retry, intercept, TLS-identity, bind and socket_keepalive forms; bind/keepalive are covered by real-socket integration tests because the pinned oracle lacks --with-http_v2_module (no gRPC differential is possible). The six residual rustls-unsupported TLS knobs (certificate_cache, ciphers, conf_command, crl, password_file, session_reuse) are the only remaining gRPC rows.',
+    why: 'the gRPC h2 client executes request/response, headers, timeouts, buffers, retry, intercept, TLS identity, bind and socket_keepalive; only the six rustls-unsupported TLS knobs (certificate_cache, ciphers, conf_command, crl, password_file, session_reuse) remain, blocked by the pinned rustls surface.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs (codec/limits), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs (gRPC adapter), crates/sdkwork-webserver-upstream-protocol/src/grpc.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'real-socket integration tests cover bind/keepalive; the residual TLS-library knobs need a rustls/OpenSSL surface that does not exist',
   },
   {
@@ -617,20 +637,18 @@ const REMAINING_GAP_CATEGORIES = [
     ],
     rejectedLoss:
       'the directive is rejected at load; a stock nginx.conf that uses this uWSGI TLS-library form fails to activate.',
-    why: 'uWSGI request/response, transport, cache, response-policy and upstream TLS identity/verification forms all execute end-to-end; only the seven rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth) remain.',
+    why: 'uWSGI request/response, transport, cache, response policy and upstream TLS identity/verification all execute; only the seven rustls-unsupported SSL knobs (ciphers, CRL, session reuse, conf_command, password_file, certificate_cache, verify_depth) remain, blocked by the pinned rustls surface.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/uwsgi.rs + limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'uWSGI TLS identity is differential-proven; the residual TLS-library knobs need a rustls/OpenSSL surface that does not exist',
   },
   {
-    key: 'mail-residual',
-    label: 'mail module residuals',
-    priority: 'medium',
+    key: 'mail-rustls',
+    label: 'mail rustls-unsupported TLS knobs',
+    priority: 'medium (rustls surface)',
     ids: [
-      'mail:auth_http_pass_client_cert',
       'mail:ssl_certificate_compression',
       'mail:ssl_ciphers',
-      'mail:ssl_client_certificate',
       'mail:ssl_conf_command',
       'mail:ssl_crl',
       'mail:ssl_dhparam',
@@ -641,38 +659,45 @@ const REMAINING_GAP_CATEGORIES = [
       'mail:ssl_session_ticket_key',
       'mail:ssl_session_tickets',
       'mail:ssl_session_timeout',
+    ],
+    rejectedLoss:
+      'the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate.',
+    why: 'the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface.',
+    surface:
+      'crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface',
+  },
+  {
+    key: 'mail-client-cert',
+    label: 'mail client-certificate verification flows',
+    priority: 'medium (deferred implementable-with-subsystem)',
+    ids: [
+      'mail:auth_http_pass_client_cert',
+      'mail:ssl_client_certificate',
       'mail:ssl_trusted_certificate',
       'mail:ssl_verify_client',
       'mail:ssl_verify_depth',
     ],
     rejectedLoss:
-      'the directive is rejected at load; a stock nginx `mail {}` sidecar that uses this TLS/client-certificate form fails to activate.',
-    why: 'the mail module is in profile and its POP3/IMAP/SMTP planes, custom capability lists and trusted-PROXY real-IP handling execute end-to-end against nginx 1.29.6; resolver/resolver_timeout are accepted-unenforced because the runtime resolver owns mail name resolution. The residual 17 rows are the 12 rustls-unsupported ssl_* policy knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) and the 5 client-certificate verification flows.',
+      'the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate.',
+    why: 'deferred implementable work: the mail protocol planes execute, but client-certificate verification (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/auth_http_pass_client_cert) needs a bounded client-certificate verification subsystem wired through the mail listener and auth_http exchange; it is not blocked by a dependency.',
     surface:
       'crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'extend tests/nginx/differential-mail with client-certificate and TLS-library cases once rustls/backend support lands',
+    tests: 'needs client-certificate integration tests plus a real-nginx mail differential fixture with verify_client on',
   },
   {
-    key: 'temp-spool',
-    label: 'temp-spool family',
-    priority: 'low (no bounded spool subsystem, deferred)',
+    key: 'slice',
+    label: 'slice partial-object cache',
+    priority: 'medium (deferred implementable-with-subsystem)',
     ids: [
-      'http:fastcgi_max_temp_file_size',
-      'http:fastcgi_temp_file_write_size',
-      'http:fastcgi_temp_path',
-      'http:scgi_max_temp_file_size',
-      'http:scgi_temp_file_write_size',
-      'http:scgi_temp_path',
-      'http:uwsgi_max_temp_file_size',
-      'http:uwsgi_temp_file_write_size',
-      'http:uwsgi_temp_path',
+      'http:slice',
     ],
     rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that relies on disk temp spooling fails to activate.',
-    why: 'deferred until a bounded temp-spool subsystem exists: the runtime streams and buffers bodies in memory and has no nginx-shaped temp files (max_temp_file_size/temp_file_write_size/temp_path) for the three CGI protocols, so these nine rows stay fail-closed rather than silently approximated.',
+      'the directive is rejected at load; a stock nginx.conf that relies on slice partial-object caching fails to activate.',
+    why: 'deferred but implementable: slice needs multi-subrequest Range assembly (the bounded subrequest engine exists, but assembling/streaming multiple range slices into the cache store is a subsystem of its own), so it is backlog rather than a blocker.',
     surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/limits.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'needs a bounded spool subsystem first; then a differential fixture that exercises oversized bodies and temp cleanup',
+      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs + cache store, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
+    tests: 'the subrequest engine and cache store exist; needs a Range-assembly differential (single/multi slice, partial-object reuse) against nginx 1.29.6',
   },
   {
     key: 'plus-modules',
@@ -688,38 +713,6 @@ const REMAINING_GAP_CATEGORIES = [
     surface:
       'not planned against the OSS reference; if emulated, crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/limit.rs + handler.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
     tests: 'no OSS oracle exists; would need synthetic behavior tests, not a real-nginx differential',
-  },
-  {
-    key: 'slice',
-    label: 'slice partial-object cache',
-    priority: 'medium (deferred implementable-with-subsystem)',
-    ids: [
-      'http:slice',
-    ],
-    rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that relies on slice partial-object caching fails to activate.',
-    why: 'deferred but implementable: slice needs multi-subrequest Range assembly (bounded subrequest engine exists, but assembling/streaming multiple range slices into the cache store is a subsystem of its own), so it is backlog rather than a blocker.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs + cache store, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'the subrequest engine and cache store exist; needs a Range-assembly differential (single/multi slice, partial-object reuse) against nginx 1.29.6',
-  },
-  {
-    key: 'deferred-control',
-    label: 'deferred connection-control forms',
-    priority: 'low (deferred, implementable)',
-    ids: [
-      'http:fastcgi_ignore_client_abort',
-      'http:uwsgi_ignore_client_abort',
-      'http:scgi_ignore_client_abort',
-      'http:fastcgi_catch_stderr',
-      'http:fastcgi_send_lowat',
-    ],
-    rejectedLoss:
-      'the directive is rejected at load; a stock nginx.conf that uses this connection-control form fails to activate.',
-    why: 'deferred but implementable: ignore_client_abort (fastcgi/uwsgi/scgi), fastcgi_catch_stderr and fastcgi_send_lowat need a bounded connection-control seam (client-abort detection and upstream-write error streaming); the current CGI transport deliberately fails these closed instead of silently ignoring them.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/cgi_upstream.rs, crates/sdkwork-webserver-upstream-protocol/src/fastcgi.rs, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'needs abort/error-stream integration tests per protocol plus a differential case for catch_stderr visibility',
   },
 ];
 
@@ -838,6 +831,10 @@ const RUNTIME_OWNED_NOTES = new Map([
   [
     'mail:resolver_timeout',
     'runtime-owned: the runtime resolver owns mail name resolution and its timeout; the directive is validated but intentionally accepted-unenforced.',
+  ],
+  [
+    'http:fastcgi_send_lowat',
+    'runtime-owned: fastcgi_send_lowat is a BSD-only SO_SNDLOWAT hint that nginx zeroes at config time on Linux (it logs "not supported, ignored"), so the runtime has no client-visible surface for it and keeps the accepted-unenforced diagnostic.',
   ],
 ]);
 
@@ -1942,6 +1939,34 @@ const VERIFIED_SPOT_CHECKS = [
     proves:
       'the capabilities fixture compares custom and default capability lines (EHLO/CAPABILITY/CAPA) against real nginx 1.29.6, along with the trusted/untrusted real-IP cases',
   },
+  {
+    id: 'http:fastcgi_max_temp_file_size',
+    evidence: 'tests/nginx/differential-protocols/nginx-oracle.json::d14a-spool-max-size',
+    claim: 'temp-spool honors the byte budget while oversized bodies stay byte-identical',
+    proves:
+      'the d14a-spool cases (default/head/max-size/range/path/disabled, plus uWSGI/SCGI) compare spooled and passthrough responses against real nginx 1.29.6; the probe correction (nginx passes the remainder instead of 502) is implemented byte-identically',
+  },
+  {
+    id: 'http:fastcgi_temp_path',
+    evidence: 'tests/nginx/differential-protocols/nginx-oracle.json::d14a-spool-path',
+    claim: 'temp_path confines the per-generation spool directory',
+    proves:
+      'the spool-path case compares responses with an explicit temp path against nginx 1.29.6; only the single absolute form is supported, multi-arg level/variable forms fail closed',
+  },
+  {
+    id: 'http:fastcgi_catch_stderr',
+    evidence: 'tests/nginx/differential-protocols/nginx-oracle.json::d14a-catch-stderr',
+    claim: 'catch_stderr turns a matching upstream stderr message into a 502 without retry',
+    proves:
+      'the catch_stderr match/no-match cases compare the response status and log behavior against nginx 1.29.6 (trimmed-message substring match)',
+  },
+  {
+    id: 'http:fastcgi_ignore_client_abort',
+    evidence: 'tests/nginx/differential-protocols/nginx-oracle.json::d14a-ignore-client-abort',
+    claim: 'ignore_client_abort on keeps the upstream exchange running after a client abort',
+    proves:
+      'the ignore-client-abort case compares the observed upstream exchange behavior against nginx 1.29.6; the bounded admission under-count for the detached exchange is a documented bounded difference',
+  },
 ];
 
 /**
@@ -2238,7 +2263,8 @@ function renderHeader(inventory, catalog) {
   CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the
   bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
   userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B)
-  the GeoIP-module wave (wave 12) and the residual-closure wave (wave 13).** The code, tests, generated operator matrix and the re-synced directive
+  the GeoIP-module wave (wave 12), the residual-closure wave (wave 13) and the temp-spool +
+  connection-control wave (wave 14A).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2265,8 +2291,10 @@ function renderHeader(inventory, catalog) {
   budget), the userid/browser-module wave (cookies, UA classification tables) and the HTTP/2 DATA-chunking + random_index wave (DATA-frame re-chunking, bounded directory selection) are
   and the GeoIP-module wave (MMDB lookups) are recorded as completed in section 3, and every
   and the residual-closure wave (stream split_clients/pass, gRPC bind/keepalive, mail
-  capabilities/real-IP) are recorded as completed in section 3, and every one of them is
-  asserted executable by \`--verify-evidence\`.
+  capabilities/real-IP) and the temp-spool + connection-control wave (bounded CGI spool,
+  ignore_client_abort, catch_stderr; send_lowat accepted-unenforced) are recorded as
+  completed in section 3, and every one of them is asserted executable by
+  \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
   \`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md\` are generated/checked by
@@ -2371,7 +2399,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave and the residual-closure wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave and the temp-spool + connection-control wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2406,7 +2434,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-residual-closure-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-temp-spool-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 `;
 }
@@ -2480,7 +2508,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12, wave 13)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12, wave 13, wave 14A)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2515,8 +2543,10 @@ routing, half-close, proxy_bind, counters, rates and the next_upstream retry bud
 wave 11A added the userid cookie module and the browser UA-classification tables; wave 11B added
 HTTP/2 DATA-frame chunking for \`http2_chunk_size\` and the \`random_index\` directory handler;
 wave 12 brought GeoIP in profile (http/stream lookup directives and the \$geoip_* variable set);
-and wave 13 closed the remaining stream, gRPC and mail residuals (stream split_clients/pass,
-gRPC bind/keepalive, mail capability lists and trusted-PROXY real-IP).
+wave 13 closed the remaining stream, gRPC and mail residuals (stream split_clients/pass,
+gRPC bind/keepalive, mail capability lists and trusted-PROXY real-IP); and wave 14A added
+the bounded CGI temp-spool subsystem plus ignore_client_abort/catch_stderr connection
+control.
 
 ${completedTable}
 ${completedRows}
@@ -2632,7 +2662,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the residual-closure wave (wave 13). An accepted-unenforced row is silently ignored today; a rejected row fails
+the temp-spool + connection-control wave (wave 14A). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2640,17 +2670,15 @@ have to change, and the tests to add.
 ${backlogSections}
 ### 3.3 Backlog Sequencing Note
 
-The remaining backlog is now the definitive 54-row list, and every row has a named blocker
-or a deferred subsystem: pinned-dependency blockers - OCSP dynamic fetch/refresh/verification
-(6, rustls static-only), rustls/OpenSSL TLS knobs (gRPC 6, uWSGI 7 - certificate_cache,
-ciphers, conf_command, crl, password_file, session_reuse/verify_depth), mail rustls knobs
-(12) plus mail client-certificate flows (5), the temp-spool family (9, no bounded spool
-subsystem) and hyper HTTP/1 close-delimited framing (1, \`chunked_transfer_encoding\`; probed);
-nginx Plus degradation/degrade (2, no OSS oracle); and deferred implementable-with-subsystem
-work - slice (1, needs multi-subrequest Range assembly), ignore_client_abort (3),
-fastcgi_catch_stderr (1) and fastcgi_send_lowat (1). The open-file-cache trio and mail
-error_log are accepted-unenforced and runtime-owned, not backlog. The stream plane and the
-mail protocol plane are otherwise complete.
+The remaining backlog is now the definitive 40-row list: 32 pinned-dependency rows - OCSP
+dynamic fetch/refresh/verification (6, rustls static-only), hyper HTTP/1 close-delimited
+framing (1, \`chunked_transfer_encoding\`; probed), rustls/OpenSSL TLS knobs (gRPC 6, uWSGI 7)
+and mail rustls knobs (12) - plus mail client-certificate flows (5, deferred
+implementable-with-subsystem), slice (1, needs multi-subrequest Range assembly) and nginx
+Plus degradation/degrade (2, no OSS oracle). The temp-spool family, ignore_client_abort and
+fastcgi_catch_stderr are closed by wave 14A; fastcgi_send_lowat is accepted-unenforced and
+runtime-owned (BSD-only hint, Linux unaffected), as are the open-file-cache trio and mail
+error_log. Nothing else is backlog.
 
 Wave 7A also landed two non-directive transport capabilities recorded here for operators:
 (a) typed \`[http] unixSocketRoot\` with strict-descendant confinement for
@@ -2784,6 +2812,23 @@ pass cases) and mail 9 -> 17 (capabilities fixture: 8 cases), all against real n
 mail resolver/resolver_timeout are accepted-unenforced, not executable, because the runtime
 resolver owns mail name resolution.
 
+Wave 14A acceptance evidence: the bounded per-generation CGI temp-spool subsystem makes the
+nine fastcgi/uwsgi/scgi \`*_max_temp_file_size\`/\`*_temp_file_write_size\`/\`*_temp_path\`
+directives executable - \`[http] tempRoot\`, a 0700 symlink-refusing directory, 0600
+drop-unlink files, a combined byte/file budget, and an in-memory tier equivalent to the
+response-buffer bank; oversized bodies stay byte-identical, ranges are served from the spool
+slice, \`*_store\` stream-copies and \`*_limit_rate\` paces from disk. Connection control:
+\`*_ignore_client_abort\` executes (on = detached bounded exchange, off = abort) and
+\`fastcgi_catch_stderr\` matches nginx's trimmed-message substring semantics (match -> 502, no
+retry); \`fastcgi_send_lowat\` is accepted-unenforced because it is a BSD-only SO_SNDLOWAT
+hint that nginx zeroes on Linux and logs "not supported, ignored". Probe correction
+recorded: nginx does NOT 502 when a body exceeds \`*_max_temp_file_size\` - \`ngx_event_pipe\`
+stops spooling and passes the remainder - and the runtime implements the probed byte-identical
+semantics. Differential-protocols grew 77 -> 89 (12 cases: spool default/head/max-size/range/
+path/disabled, uWSGI/SCGI spool, catch_stderr match/no-match, ignore_client_abort,
+send_lowat) with the oracle re-captured from real nginx 1.29.6 (all 77 prior values
+byte-identical); floor/manifest 89.
+
 Wave 12 note: GeoIP is in profile behind a bounded MMDB runtime. Database lifecycle caveat:
 the runtime ships no GeoLite/GeoIP2 data and never downloads it; databases are
 operator-provisioned absolute MMDB paths confined by the typed \`[http] geoipDatabaseRoot\`,
@@ -2804,8 +2849,21 @@ real-socket integration tests because the pinned oracle lacks --with-http_v2_mod
 differential is possible - this is stated rather than faked); mail capability lists render
 nginx's exact line protocol and mail \`set_real_ip_from\` trusts PROXY peers. mail
 \`resolver\`/\`resolver_timeout\` are accepted-unenforced and runtime-owned because the runtime
-resolver owns mail name resolution. The remaining 54 behavior-gap rows are enumerated in the
-sequencing paragraph above; nothing else is backlog.
+resolver owns mail name resolution.
+
+Wave 14A note: the bounded CGI temp-spool subsystem and connection-control forms close the
+last implementable transport rows. Spool design: per-generation spool under \`[http] tempRoot\`
+(or the system temp dir when unset - a recorded bounded difference), 0700 symlink-refusing
+directory, 0600 Drop-unlink files, byte/file budget, in-memory tier = response-buffer bank,
+ranges served from the spool slice, \`*_store\` stream-copies, \`*_limit_rate\` paces from disk.
+Bounded differences recorded: spool default-enabled in the system temp dir when
+\`[http] tempRoot\` is unset; \`ignore_client_abort on\` keeps the admission permit with the
+handler (one in-flight detached exchange is under-counted); multi-arg \`*_temp_path\` level
+forms and variable paths fail closed. Probe correction: nginx does NOT 502 on bodies over
+\`*_max_temp_file_size\` (ngx_event_pipe stops spooling and passes the remainder), and the
+runtime implements the probed byte-identical semantics (oversized bodies complete in memory,
+bounded by max_response_body_bytes). The remaining 40 behavior-gap rows are enumerated in
+the sequencing paragraph above; nothing else is backlog.
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -2853,7 +2911,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave and the residual-closure wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave and the temp-spool + connection-control wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2987,9 +3045,10 @@ directives. Wave 7C executes the fastcgi/uwsgi/scgi response-cache family on the
 HTTP cache store (nginx has no default caching time). Wave 7D executes the protocol
 response policy (header-block/read-chunk buffers, store with path templates, limit_rate,
 force_ranges, ignore_headers, pass_request_body, memcached gzip-flag and gRPC
-ignore_headers). The residual temp-spool, ignore_client_abort, catch_stderr, send_lowat,
-store-on, uWSGI TLS and gRPC bind/keepalive/TLS-library forms are backlog rows, not
-profile exclusions.
+ignore_headers). Wave 14A added the bounded per-generation CGI temp-spool subsystem and the
+ignore_client_abort/catch_stderr connection-control forms (send_lowat is a Linux no-op,
+accepted-unenforced). The residual store-on, uWSGI TLS and gRPC TLS-library forms are
+backlog rows, not profile exclusions.
 
 Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile. The
 \`crates/sdkwork-webserver-mail-protocol\` crate (POP3/IMAP/SMTP state machines) and the
@@ -3085,8 +3144,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the residual-closure wave (wave 13) landed and the Lead
-re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the temp-spool + connection-control wave (wave 14A)
+landed and the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

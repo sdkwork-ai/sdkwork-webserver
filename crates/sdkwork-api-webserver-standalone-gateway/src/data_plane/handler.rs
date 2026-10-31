@@ -1709,17 +1709,26 @@ async fn route_admitted_request(
             store,
             limit_rate_bytes_per_second,
             force_ranges,
+            temp_policy,
+            ignore_client_abort,
+            catch_stderr,
             ..
         } => {
-            let fastcgi_policy = super::cgi_upstream::CgiResponsePolicy::new(
-                buffer_policy.as_ref(),
-                *pass_request_body,
-                store.as_ref(),
-                generation.app.config().nginx.store_root.as_deref(),
-                *limit_rate_bytes_per_second,
-                *force_ranges,
-                None,
-            );
+            let fastcgi_policy =
+                super::cgi_upstream::CgiResponsePolicy::new(super::cgi_upstream::CgiPolicyInputs {
+                    buffering: buffer_policy.as_ref(),
+                    pass_request_body: *pass_request_body,
+                    store: store.as_ref(),
+                    store_root: generation.app.config().nginx.store_root.as_deref(),
+                    limit_rate_bytes_per_second: *limit_rate_bytes_per_second,
+                    force_ranges: *force_ranges,
+                    gzip_flag: None,
+                    temp: temp_policy.as_ref(),
+                    temp_root: generation.app.config().nginx.temp_root.as_deref(),
+                    spool: &generation.temp_spool,
+                    ignore_client_abort: *ignore_client_abort,
+                    catch_stderr,
+                });
             let fastcgi_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -1885,17 +1894,25 @@ async fn route_admitted_request(
             store,
             limit_rate_bytes_per_second,
             force_ranges,
+            temp_policy,
+            ignore_client_abort,
             ..
         } => {
-            let cgi_policy = super::cgi_upstream::CgiResponsePolicy::new(
-                buffer_policy.as_ref(),
-                *pass_request_body,
-                store.as_ref(),
-                generation.app.config().nginx.store_root.as_deref(),
-                *limit_rate_bytes_per_second,
-                *force_ranges,
-                None,
-            );
+            let cgi_policy =
+                super::cgi_upstream::CgiResponsePolicy::new(super::cgi_upstream::CgiPolicyInputs {
+                    buffering: buffer_policy.as_ref(),
+                    pass_request_body: *pass_request_body,
+                    store: store.as_ref(),
+                    store_root: generation.app.config().nginx.store_root.as_deref(),
+                    limit_rate_bytes_per_second: *limit_rate_bytes_per_second,
+                    force_ranges: *force_ranges,
+                    gzip_flag: None,
+                    temp: temp_policy.as_ref(),
+                    temp_root: generation.app.config().nginx.temp_root.as_deref(),
+                    spool: &generation.temp_spool,
+                    ignore_client_abort: *ignore_client_abort,
+                    catch_stderr: &[],
+                });
             let cgi_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -2152,9 +2169,21 @@ async fn route_admitted_request(
         } => {
             // The upstream exchange is GET/HEAD only; the bounded adapter
             // answers other methods with 405 before touching the network.
-            let mut memcached_policy = super::cgi_upstream::CgiResponsePolicy::new(
-                None, true, None, None, None, false, *gzip_flag,
-            );
+            let mut memcached_policy =
+                super::cgi_upstream::CgiResponsePolicy::new(super::cgi_upstream::CgiPolicyInputs {
+                    buffering: None,
+                    pass_request_body: true,
+                    store: None,
+                    store_root: None,
+                    limit_rate_bytes_per_second: None,
+                    force_ranges: false,
+                    gzip_flag: *gzip_flag,
+                    temp: None,
+                    temp_root: None,
+                    spool: &generation.temp_spool,
+                    ignore_client_abort: false,
+                    catch_stderr: &[],
+                });
             if let Some(bytes) = buffer_bytes {
                 if let Ok(bytes) = usize::try_from(*bytes) {
                     memcached_policy.limits.max_header_block_bytes = bytes;

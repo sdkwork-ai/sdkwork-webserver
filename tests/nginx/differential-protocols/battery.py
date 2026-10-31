@@ -220,6 +220,36 @@ CASES = [
     ("d7-passbody", "SPECIAL", "", {}, None),
     ("d7-memcached-gzip-on", "SPECIAL", "", {}, None),
     ("d7-memcached-gzip-off", "SPECIAL", "", {}, None),
+
+    # ---- Wave 14A: bounded temp-spool tier (`*_temp_path` /
+    # `*_max_temp_file_size` / `*_temp_file_write_size`) and the
+    # connection-control residual directives. The responder answers a 96 KiB
+    # body, larger than the 8x4k response buffers, so the temp-file tier is
+    # exercised on both sides and the response contract (status, headers and
+    # every byte) must match. `d14a-catch-stderr` is the fastcgi_catch_stderr
+    # match: nginx treats the response as invalid and answers its generated 502
+    # page, so the status is the contract (status-only allowance).
+    ("d14a-spool-default", "GET", "/d14a/spool/big", {"X-Sent": "spool"}, None),
+    ("d14a-spool-head", "HEAD", "/d14a/spool/big", {}, None),
+    ("d14a-spool-max-size", "GET", "/d14a/maxsize/big", {"X-Sent": "spool"}, None),
+    ("d14a-spool-disabled", "GET", "/d14a/zerotemp/big", {"X-Sent": "spool"}, None),
+    ("d14a-spool-path", "GET", "/d14a/spoolpath/big", {"X-Sent": "spool"}, None),
+    # A range request on a spooled response: nginx serves the single range from
+    # its buffered/temp-file response and the runtime reads only that slice from
+    # the spool file, so status, Content-Range and body must match exactly.
+    (
+        "d14a-spool-range",
+        "GET",
+        "/d14a/range/big",
+        {"X-Sent": "spool", "Range": "bytes=1000-1999"},
+        None,
+    ),
+    ("d14a-catch-stderr", "GET", "/d14a/catch/match", {"X-Sent": "catch"}, None),
+    ("d14a-catch-nomatch", "GET", "/d14a/catch/nomatch", {"X-Sent": "catch"}, None),
+    ("d14a-ignore-client-abort", "GET", "/d14a/abort/plain", {"X-Sent": "abort"}, None),
+    ("d14a-send-lowat", "GET", "/d14a/lowat/plain", {"X-Sent": "lowat"}, None),
+    ("d14a-uwsgi-spool", "GET", "/uwsgi-d14a/big", {"X-Sent": "uwsgi-spool"}, None),
+    ("d14a-scgi-spool", "GET", "/scgi-d14a/big", {"X-Sent": "scgi-spool"}, None),
 ]
 
 

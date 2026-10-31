@@ -493,6 +493,26 @@
           "pattern": "^/",
           "maxLength": 4096,
           "description": "Operator-configured absolute directory that GeoIP MMDB database paths in the typed plane must be strict descendants of. The nginx plane accepts any absolute database path exactly like stock nginx."
+        },
+        "tempRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Operator-configured absolute directory for the CGI-family temp-spool tier. A configured `*_temp_path` must be a strict descendant of this root; when unset, spool files live in a per-process, per-generation directory under the system temp directory."
+        },
+        "tempSpoolBudgetBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1099511627776,
+          "default": 134217728,
+          "description": "Overall disk budget for in-flight spool files. A response that would exceed it completes in memory (nginx's unbuffered pass-through degradation), bounded by the runtime response-body ceiling."
+        },
+        "tempSpoolMaxFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536,
+          "default": 32,
+          "description": "Maximum number of simultaneously open spool files per runtime generation."
         }
       }
     },
@@ -1804,6 +1824,24 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "tempPolicy": {
+          "$ref": "#/$defs/upstreamTempPolicy"
+        },
+        "ignoreClientAbort": {
+          "type": "boolean",
+          "default": false,
+          "description": "fastcgi_ignore_client_abort on: keep the in-flight upstream exchange alive when the client connection aborts."
+        },
+        "catchStderr": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "description": "fastcgi_catch_stderr patterns; a match in an FCGI_STDERR record makes the response invalid (502, no default retry)."
         }
       }
     },
@@ -1934,6 +1972,14 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "tempPolicy": {
+          "$ref": "#/$defs/upstreamTempPolicy"
+        },
+        "ignoreClientAbort": {
+          "type": "boolean",
+          "default": false,
+          "description": "uwsgi_/scgi_ignore_client_abort on: keep the in-flight upstream exchange alive when the client connection aborts."
         }
       }
     },
@@ -5174,6 +5220,35 @@
         "maxRangeOffset": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "upstreamTempPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Executed nginx CGI-family temp-spool tier: `*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`. An upstream body larger than the in-memory response buffers is written to a 0600 uniquely named file under the spool directory and served from there, then deleted.",
+      "required": [
+        "maxFileBytes",
+        "writeChunkBytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Absolute spool directory (`*_temp_path`, single-path form)."
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1099511627776,
+          "description": "`*_max_temp_file_size`: per-file spool cap; 0 disables the spool tier (nginx semantics)."
+        },
+        "writeChunkBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 16777216,
+          "description": "`*_temp_file_write_size`: upper bound of one spool write call."
         }
       }
     },

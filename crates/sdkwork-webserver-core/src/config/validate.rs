@@ -36,13 +36,15 @@ fn validate_upstream_buffering_store(
     path: &str,
     resource: &ResourceConfig,
     store_root: Option<&str>,
+    temp_root: Option<&str>,
 ) {
-    let (buffering, store, limit_rate, ignore_headers) = match resource {
+    let (buffering, store, limit_rate, ignore_headers, temp_policy) = match resource {
         ResourceConfig::FastCgi {
             buffer_policy,
             store,
             limit_rate_bytes_per_second,
             ignore_headers,
+            temp_policy,
             ..
         }
         | ResourceConfig::CgiUpstream {
@@ -50,15 +52,17 @@ fn validate_upstream_buffering_store(
             store,
             limit_rate_bytes_per_second,
             ignore_headers,
+            temp_policy,
             ..
         } => (
             *buffer_policy,
             store.as_ref(),
             *limit_rate_bytes_per_second,
             ignore_headers.as_slice(),
+            temp_policy.as_ref(),
         ),
         ResourceConfig::Grpc { ignore_headers, .. } => {
-            (None, None, None, ignore_headers.as_slice())
+            (None, None, None, ignore_headers.as_slice(), None)
         }
         ResourceConfig::Memcached {
             buffer_bytes,
@@ -183,6 +187,72 @@ fn validate_upstream_buffering_store(
         }
     }
 
+    if let Some(temp) = temp_policy {
+        // nginx's merge-time `size`: the larger of `*_buffer_size` and one
+        // `*_buffers` entry (defaults 4 KiB / 4 KiB).
+        let buffer_max = buffering
+            .map(|policy| policy.header_bytes.max(policy.chunk_bytes))
+            .unwrap_or(4096);
+        if temp.max_file_bytes != 0 && temp.max_file_bytes < buffer_max {
+            validator.push(
+                format!("{path}/tempPolicy/maxFileBytes"),
+                format!(
+                    "maxFileBytes must be zero (disable the spool tier) or at least the largest response buffer ({buffer_max} bytes)"
+                ),
+            );
+        }
+        if temp.write_chunk_bytes < buffer_max {
+            validator.push(
+                format!("{path}/tempPolicy/writeChunkBytes"),
+                format!(
+                    "writeChunkBytes must be at least the largest response buffer ({buffer_max} bytes)"
+                ),
+            );
+        }
+        if temp.write_chunk_bytes > 16 * 1024 * 1024 {
+            validator.push(
+                format!("{path}/tempPolicy/writeChunkBytes"),
+                "writeChunkBytes must not exceed 16 MiB",
+            );
+        }
+        if let Some(spool_path) = &temp.path {
+            if !spool_path.starts_with('/') {
+                validator.push(
+                    format!("{path}/tempPolicy/path"),
+                    "temp path must be absolute",
+                );
+            }
+            if spool_path
+                .bytes()
+                .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+            {
+                validator.push(
+                    format!("{path}/tempPolicy/path"),
+                    "temp path must not contain NUL or line breaks",
+                );
+            } else if spool_path.split('/').any(|component| component == "..") {
+                validator.push(
+                    format!("{path}/tempPolicy/path"),
+                    "temp path must not contain `..` segments",
+                );
+            }
+            if let Some(root) = temp_root {
+                if !root.starts_with('/') {
+                    validator.push("/nginx/tempRoot", "tempRoot must be an absolute path");
+                } else {
+                    let root = root.trim_end_matches('/');
+                    let spool_path = spool_path.trim_end_matches('/');
+                    if !(spool_path == root || spool_path.starts_with(&format!("{root}/"))) {
+                        validator.push(
+                            format!("{path}/tempPolicy/path"),
+                            format!("temp path must be a descendant of nginx.tempRoot `{root}`"),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     if let Some(rate) = limit_rate {
         if rate > 1024 * 1024 * 1024 {
             validator.push(
@@ -287,6 +357,26 @@ impl SemanticValidator {
                     "unixSocketRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
                 );
             }
+        }
+        if let Some(temp_root) = &config.nginx.temp_root {
+            if !valid_unix_socket_root(temp_root) {
+                self.push(
+                    "/nginx/tempRoot",
+                    "tempRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
+                );
+            }
+        }
+        if config.nginx.temp_spool_budget_bytes == 0 {
+            self.push(
+                "/nginx/tempSpoolBudgetBytes",
+                "tempSpoolBudgetBytes must be greater than 0; disable the spool tier per resource with `*_max_temp_file_size 0`",
+            );
+        }
+        if config.nginx.temp_spool_max_files == 0 {
+            self.push(
+                "/nginx/tempSpoolMaxFiles",
+                "tempSpoolMaxFiles must be greater than 0; disable the spool tier per resource with `*_max_temp_file_size 0`",
+            );
         }
         if let Some(geoip_root) = &config.nginx.geoip_database_root {
             if !valid_unix_socket_root(geoip_root) {
@@ -855,6 +945,7 @@ impl SemanticValidator {
                 &path,
                 resource,
                 config.nginx.store_root.as_deref(),
+                config.nginx.temp_root.as_deref(),
             );
             match resource {
                 ResourceConfig::Static {

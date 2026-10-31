@@ -98,6 +98,10 @@ pub(crate) struct RuntimeGeneration {
     pub geoip: Option<Arc<GeoIpDatabases>>,
     /// nginx **stream** GeoIP MMDB readers (accept-time lookup).
     pub stream_geoip: Option<Arc<GeoIpDatabases>>,
+    /// Bounded CGI-family temp-spool tier for this generation. It belongs to
+    /// the generation, so a reload starts a fresh budget and a per-generation
+    /// directory; every spool file is removed on completion/error/drop.
+    pub temp_spool: Arc<super::temp_spool::TempSpool>,
 }
 
 impl RuntimeGeneration {
@@ -171,6 +175,12 @@ impl RuntimeGeneration {
                     .map(Arc::new)
             })
             .transpose()?;
+        let temp_spool = Arc::new(super::temp_spool::TempSpool::new(
+            app.config().nginx.temp_root.as_deref(),
+            id,
+            app.config().nginx.temp_spool_budget_bytes,
+            app.config().nginx.temp_spool_max_files,
+        ));
         Ok(Arc::new(Self {
             id,
             revision,
@@ -187,6 +197,7 @@ impl RuntimeGeneration {
             cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters::default(),
             geoip,
             stream_geoip,
+            temp_spool,
         }))
     }
 

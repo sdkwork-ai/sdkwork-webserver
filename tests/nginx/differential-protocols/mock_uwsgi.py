@@ -90,6 +90,26 @@ def handle(connection: socket.socket) -> None:
             method = by_name.get("REQUEST_METHOD", "GET")
             connection.sendall(head + (payload if method != "HEAD" else b""))
             return
+        # Wave 14A: the uWSGI PARAMS block is compared as raw bytes by this
+        # fixture (the responder's own packet cursor keeps the whole block in
+        # `payload`), so the big-body mode is keyed on the request bytes rather
+        # than on a parsed `REQUEST_URI`.
+        if b"/uwsgi-d14a/big" in payload:
+            # A 48 KiB body exceeds the 8x4k response buffers so the uWSGI
+            # temp-spool tier is exercised.
+            payload = b""
+            for index in range(48):
+                payload += f"{index:04d}:".encode() + b"U" * 1015
+            head = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "X-Mock-Uwsgi: yes\r\n"
+                f"Content-Length: {len(payload)}\r\n"
+                "\r\n"
+            ).encode()
+            method = by_name.get("REQUEST_METHOD", "GET")
+            connection.sendall(head + (payload if method != "HEAD" else b""))
+            return
         status = 404 if "errors" in request_uri else 200
         reason = "Not Found" if status == 404 else "OK"
         response = json.dumps(

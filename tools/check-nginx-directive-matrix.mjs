@@ -193,6 +193,20 @@ export const PARSER_EXECUTED = new Map([
   ['http:memcached_next_upstream_tries', 'mapping memcached settings pipeline'],
   ['http:memcached_next_upstream_timeout', 'mapping memcached settings pipeline'],
   ['http:set', 'mapping materialize_location bounded set arm'],
+  ['http:fastcgi_max_temp_file_size', 'mapping cgi temp/connection-control pipeline'],
+  ['http:fastcgi_temp_file_write_size', 'mapping cgi temp/connection-control pipeline'],
+  ['http:fastcgi_temp_path', 'mapping cgi temp/connection-control pipeline'],
+  ['http:fastcgi_ignore_client_abort', 'mapping cgi temp/connection-control pipeline'],
+  ['http:uwsgi_max_temp_file_size', 'mapping cgi temp/connection-control pipeline'],
+  ['http:uwsgi_temp_file_write_size', 'mapping cgi temp/connection-control pipeline'],
+  ['http:uwsgi_temp_path', 'mapping cgi temp/connection-control pipeline'],
+  ['http:uwsgi_ignore_client_abort', 'mapping cgi temp/connection-control pipeline'],
+  ['http:scgi_max_temp_file_size', 'mapping cgi temp/connection-control pipeline'],
+  ['http:scgi_temp_file_write_size', 'mapping cgi temp/connection-control pipeline'],
+  ['http:scgi_temp_path', 'mapping cgi temp/connection-control pipeline'],
+  ['http:scgi_ignore_client_abort', 'mapping cgi temp/connection-control pipeline'],
+  ['http:fastcgi_catch_stderr', 'mapping cgi temp/connection-control pipeline'],
+  ['http:fastcgi_send_lowat', 'mapping cgi temp/connection-control pipeline'],
   ['stream:split_clients', 'mapping stream split_clients pipeline'],
   ['stream:pass', 'mapping stream pass pipeline'],
   ['http:grpc_bind', 'mapping grpc settings pipeline'],
@@ -399,6 +413,7 @@ export const PARTIAL_ENFORCEMENT = {
   'http:keepalive_time': 'the nginx upstream keepalive connection lifetime is not carried into the nginx materializer (the typed TOML path owns the upstream pool)',
   'mail:resolver': 'the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; a custom nginx resolver block is validated and accepted but not applied',
   'mail:resolver_timeout': 'the mail plane uses the runtime resolver timeouts; the nginx resolver_timeout value is validated and accepted but not applied',
+  'http:fastcgi_send_lowat': 'SO_SNDLOWAT is BSD-only and ignored by Linux (nginx itself logs "not supported, ignored"); the bounded adapter accepts the value and does not fake a low-water mark',
 };
 
 function stripRustComments(text) {
@@ -771,6 +786,17 @@ export function recommendClassification(entry, implementation) {
   if (nginxContexts.has('events')) acceptedContexts.add('events');
   let classification;
   if (PARSER_EXECUTED.has(entry.name) || PARSER_EXECUTED.has(entry.id)) {
+    // Partial-enforcement entries are accepted-unenforced even when the parser
+    // recognizes them (e.g. mail resolver: validated, runtime resolver owns the
+    // actual name resolution).
+    if (PARTIAL_ENFORCEMENT[entry.id]) {
+      return {
+        classification: 'accepted-unenforced',
+        supportedContexts: [...nginxContexts].sort(),
+        enforcedContexts: [],
+        unenforcedContexts: [...nginxContexts].sort(),
+      };
+    }
     return {
       classification: 'executable',
       supportedContexts: [...nginxContexts].sort(),

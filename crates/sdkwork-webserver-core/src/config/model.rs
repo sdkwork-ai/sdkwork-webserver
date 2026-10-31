@@ -708,6 +708,27 @@ pub struct NginxConfig {
     /// be a strict descendant of this absolute directory (no `..`, no NUL).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub store_root: Option<String>,
+    /// Typed-TOML `[http] tempRoot`: the operator-configured directory that
+    /// the CGI-family temp-spool tier (and any `*_temp_path`) must live under.
+    ///
+    /// The nginx plane accepts an absolute `*_temp_path` exactly like stock
+    /// nginx (the configuration file is operator-owned); the typed plane
+    /// requires this root for confinement, and every configured temp path must
+    /// be a strict descendant of it. When unset, spool files are created in a
+    /// per-process, per-generation directory under the system temp directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temp_root: Option<String>,
+    /// Overall disk budget for in-flight spool files (`[http]
+    /// tempSpoolBudgetBytes`). A body that would exceed it stops spooling and
+    /// is completed in memory (nginx's "pass the response without buffering"
+    /// degradation), bounded by the runtime response-body ceiling.
+    #[serde(default = "default_temp_spool_budget_bytes")]
+    pub temp_spool_budget_bytes: u64,
+    /// Maximum number of simultaneously open spool files (`[http]
+    /// tempSpoolMaxFiles`). Exceeding it degrades the same bounded way as the
+    /// byte budget.
+    #[serde(default = "default_temp_spool_max_files")]
+    pub temp_spool_max_files: usize,
     /// Typed-TOML `[http] geoipDatabaseRoot`: the operator-configured directory
     /// that GeoIP MMDB database paths must live under.
     ///
@@ -968,6 +989,9 @@ impl Default for NginxConfig {
             unknown_directive_policy: default_unknown_directive_policy(),
             unix_socket_root: None,
             store_root: None,
+            temp_root: None,
+            temp_spool_budget_bytes: default_temp_spool_budget_bytes(),
+            temp_spool_max_files: default_temp_spool_max_files(),
             geoip_database_root: None,
             document_root_allowlist: Vec::new(),
             native_compatibility: false,
@@ -1009,6 +1033,32 @@ pub struct UpstreamBufferingConfig {
 pub struct UpstreamStoreConfig {
     pub path: String,
     pub access_mode: u32,
+}
+
+/// Executed nginx CGI-family temp-spool policy
+/// (`*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`).
+///
+/// nginx switches an oversized buffered upstream response to a temp file once
+/// its response buffers are exhausted. The runtime mirrors that tier with a
+/// bounded per-generation spool directory: an upstream body larger than the
+/// in-memory bound is written to a `0600` uniquely named file in `path` and
+/// served from there, then deleted on completion, error or drop.
+/// `max_file_bytes` is nginx's `*_max_temp_file_size`; `0` disables the spool
+/// tier, exactly like nginx (the response is then delivered without a temp
+/// file, bounded by the runtime's response-body ceiling).
+/// `write_chunk_bytes` is nginx's `*_temp_file_write_size`, the upper bound of
+/// one write call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpstreamTempPolicyConfig {
+    /// `*_temp_path`: absolute spool directory. `None` uses the per-generation
+    /// directory under `nginx.tempRoot` (or the system temp directory).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// `*_max_temp_file_size` in bytes (`0` disables the spool tier).
+    pub max_file_bytes: u64,
+    /// `*_temp_file_write_size` in bytes.
+    pub write_chunk_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1492,6 +1542,17 @@ fn default_upstream_pass_request_headers() -> bool {
     true
 }
 
+/// Default overall CGI-family temp-spool disk budget: 128 MiB of in-flight
+/// spool files per runtime generation.
+fn default_temp_spool_budget_bytes() -> u64 {
+    128 * 1024 * 1024
+}
+
+/// Default maximum number of simultaneously open spool files per generation.
+fn default_temp_spool_max_files() -> usize {
+    32
+}
+
 fn default_grpc_buffer_size() -> u64 {
     // nginx `grpc_buffer_size` default.
     4096
@@ -1688,6 +1749,25 @@ pub enum ResourceConfig {
         /// is exactly the ignored state the directive requests).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ignore_headers: Vec<String>,
+        /// `fastcgi_temp_path` / `fastcgi_max_temp_file_size` /
+        /// `fastcgi_temp_file_write_size`: the bounded temp-spool tier for an
+        /// upstream body larger than the in-memory response buffers. `None`
+        /// uses nginx's defaults (spool enabled, 1 GiB per-file limit, write
+        /// chunk derived from the buffer sizes).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        temp_policy: Option<UpstreamTempPolicyConfig>,
+        /// `fastcgi_ignore_client_abort on`: decouple the upstream exchange
+        /// from the client connection, so a client abort does not terminate
+        /// the in-flight upstream request. `off` (nginx default) aborts it.
+        #[serde(default)]
+        ignore_client_abort: bool,
+        /// `fastcgi_catch_stderr`: substrings searched in every FastCGI
+        /// `STDERR` record. A match makes the response invalid (nginx answers
+        /// 502 and does not retry the next upstream by default). The directive
+        /// may appear multiple times; the list accumulates in declaration
+        /// order.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        catch_stderr: Vec<String>,
     },
     /// nginx `memcached_pass` location handler: bounded text-protocol GET/HEAD
     /// against one memcached upstream. The request key is the expansion of the
@@ -1805,6 +1885,14 @@ pub enum ResourceConfig {
         /// `*_ignore_headers` resolved field list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ignore_headers: Vec<String>,
+        /// `*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`:
+        /// the bounded temp-spool tier. `None` uses nginx's defaults.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        temp_policy: Option<UpstreamTempPolicyConfig>,
+        /// `*_ignore_client_abort on`: decouple the upstream exchange from the
+        /// client connection (`off` is nginx's default and aborts it).
+        #[serde(default)]
+        ignore_client_abort: bool,
     },
     /// nginx `grpc_pass` location handler: gRPC over HTTP/2. The transport is
     /// cleartext h2c for `grpc://` targets and TLS for `grpcs://` targets (the
