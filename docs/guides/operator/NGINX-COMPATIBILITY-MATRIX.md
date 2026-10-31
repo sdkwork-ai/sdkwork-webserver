@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 328 |
-| accepted, NOT enforced | 171 |
-| rejected (fail closed) | 232 |
+| executable | 347 |
+| accepted, NOT enforced | 170 |
+| rejected (fail closed) | 214 |
 | excluded from profile | 13 |
 | **total** | **744** |
 
@@ -62,7 +62,6 @@ states what is lost and what to configure instead.
 | `ssl_stapling` | http, http-server | OCSP stapling is not performed (catalog capability tls.ocsp-stapling is missing) | No enforced typed equivalent: typed TOML key `http.server.tls.stapling` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:ssl_stapling` (specs/nginx-gap.catalog.json). |
 | `ssl_stapling_verify` | http, http-server | OCSP stapling verification does not run | No enforced equivalent is catalogued for this directive; remove it or track capability `http:ssl_stapling_verify` (specs/nginx-gap.catalog.json). |
 | `ssl_trusted_certificate` | http, http-server | the OCSP/verification trust chain is not used | Import renders the enforced typed key `http.certificates.chainFile`; verify it with `--write-toml`. |
-| `proxy_next_upstream` | stream, stream-server | the upstream retry condition list is not applied; the runtime uses its own retry policy | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_next_upstream` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_ciphers` | stream, stream-server | the upstream TLS cipher policy is not applied | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_ssl_ciphers` (specs/nginx-gap.catalog.json). |
 | `proxy_ssl_protocols` | stream, stream-server | the upstream TLS protocol window is not applied from nginx.conf (typed TOML owns upstream TLS) | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_ssl_protocols` (specs/nginx-gap.catalog.json). |
 | `ssl_ciphers` | stream, stream-server | the cipher policy is not applied; the rustls TLS policy is used instead | No enforced equivalent is catalogued for this directive; remove it or track capability `stream:ssl_ciphers` (specs/nginx-gap.catalog.json). |
@@ -119,12 +118,10 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_mail_ssl_module` (16) — `ssl_certificate_compression`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`
 - `ngx_openssl_cache_module` (1) — `ssl_object_cache_inheritable`
 - `ngx_quic_bpf_module` (1) — `quic_bpf`
-- `ngx_stream_core_module` (2) — `proxy_protocol_timeout`, `server_name`
 - `ngx_stream_geo_module` (1) — `geo`
 - `ngx_stream_log_module` (1) — `open_log_file_cache`
 - `ngx_stream_pass_module` (1) — `pass`
-- `ngx_stream_proxy_module` (21) — `proxy_bind`, `proxy_download_rate`, `proxy_downstream_buffer`, `proxy_half_close`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_requests`, `proxy_responses`, `proxy_ssl`, `proxy_ssl_certificate`, `proxy_ssl_certificate_cache`, `proxy_ssl_certificate_key`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_ssl_server_name`, `proxy_ssl_trusted_certificate`, `proxy_ssl_verify`, `proxy_upload_rate`, `proxy_upstream_buffer`
-- `ngx_stream_realip_module` (1) — `set_real_ip_from`
+- `ngx_stream_proxy_module` (6) — `proxy_downstream_buffer`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_password_file`, `proxy_upstream_buffer`
 - `ngx_stream_split_clients_module` (1) — `split_clients`
 - `ngx_stream_ssl_module` (14) — `ssl_alpn`, `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_ech_file`, `ssl_handshake_timeout`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
 - `ngx_stream_upstream_zone_module` (1) — `zone`
@@ -1289,11 +1286,11 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `listen` | 1+ | stream-server | executable | runtime: `streams[].bind/port/protocol` |
 | `preread_buffer_size` | 1 | stream, stream-server | executable | runtime: `streamServers[].prereadBufferBytes (bounded 512 B..1 MiB) feeding the ClientHello peek` |
 | `preread_timeout` | 1 | stream, stream-server | executable | runtime: `streamServers[].prereadTimeoutMs feeding the preread deadline` |
-| `proxy_protocol_timeout` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_protocol_timeout` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyProtocolTimeoutMs (inbound PROXY header deadline)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `resolver` | 1+ | stream, stream-server, stream-upstream | accepted, NOT enforced | the nginx resolver configuration is not used; the runtime resolves hostnames itself |
 | `resolver_timeout` | 1 | stream, stream-server, stream-upstream | accepted, NOT enforced | the nginx resolver timeout is not applied |
 | `server` | 1+\|no-args | stream, stream-upstream | executable | runtime: `streams[]` |
-| `server_name` | 1+ | stream-server | rejected (fail closed) |  |
+| `server_name` | 1+ | stream-server | executable | runtime: `streamServers[].serverNames (SNI virtual-server selection)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `server_names_hash_bucket_size` | 1 | stream | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `server_names_hash_max_size` | 1 | stream | accepted, NOT enforced | hash-table sizing is ignored (runtime-owned data structures) |
 | `tcp_nodelay` | flag | stream, stream-server | accepted, NOT enforced | the imported nginx value has no effect; the equivalent runtime behavior must be configured explicitly |
@@ -1355,44 +1352,44 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `proxy_bind` | 1\|2 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_bind` | 1\|2 | stream, stream-server | executable | runtime: `streamServers[].proxyBind (IP literal source address)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `proxy_buffer_size` | 1 | stream, stream-server | accepted, NOT enforced | the configured buffer sizing is ignored; the runtime owns bounded buffering |
 | `proxy_connect_timeout` | 1 | stream, stream-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
-| `proxy_download_rate` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_download_rate` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyDownloadRate (token-bucket downstream pacing)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `proxy_downstream_buffer` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `proxy_half_close` | flag | stream, stream-server | rejected (fail closed) |  |
-| `proxy_next_upstream` | flag | stream, stream-server | accepted, NOT enforced | the upstream retry condition list is not applied; the runtime uses its own retry policy |
-| `proxy_next_upstream_timeout` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `proxy_next_upstream_tries` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_half_close` | flag | stream, stream-server | executable | runtime: `streamServers[].proxyHalfClose (per-direction shutdown ordering)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
+| `proxy_next_upstream` | flag | stream, stream-server | executable | runtime: `streamServers[].nextUpstream conditions`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
+| `proxy_next_upstream_timeout` | 1 | stream, stream-server | executable | runtime: `streamServers[].nextUpstreamTimeoutMs`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
+| `proxy_next_upstream_tries` | 1 | stream, stream-server | executable | runtime: `streamServers[].nextUpstreamTries`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `proxy_pass` | 1 | stream-server | executable | runtime: `streams[].target` |
 | `proxy_protocol` | flag | stream, stream-server | executable | runtime: `streams[].proxyProtocol` |
-| `proxy_requests` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `proxy_responses` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_requests` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyRequests (per-connection request counter)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
+| `proxy_responses` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyResponses (per-connection response counter)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `proxy_socket_keepalive` | flag | stream, stream-server | accepted, NOT enforced | the nginx proxy tuning value is ignored; the runtime proxy policy applies |
-| `proxy_ssl` | flag | stream, stream-server | rejected (fail closed) |  |
-| `proxy_ssl_certificate` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_ssl` | flag | stream, stream-server | executable | runtime: `streamServers[].proxyTls (upstream TLS policy: verify/trusted CA/client identity/server_name/name/protocols; always verified unless verify off)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
+| `proxy_ssl_certificate` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyTls.clientCertificateFile`. these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed |
 | `proxy_ssl_certificate_cache` | 1\|2\|3 | stream, stream-server | rejected (fail closed) |  |
-| `proxy_ssl_certificate_key` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_ssl_certificate_key` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyTls.clientPrivateKeyFile`. these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed |
 | `proxy_ssl_ciphers` | 1 | stream, stream-server | accepted, NOT enforced | the upstream TLS cipher policy is not applied |
 | `proxy_ssl_conf_command` | 2 | stream, stream-server | rejected (fail closed) |  |
 | `proxy_ssl_crl` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `proxy_ssl_name` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_ssl_name` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyTls.serverName (SNI/verification override)`. these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed |
 | `proxy_ssl_password_file` | 1 | stream, stream-server | rejected (fail closed) |  |
 | `proxy_ssl_protocols` | 1+ | stream, stream-server | accepted, NOT enforced | the upstream TLS protocol window is not applied from nginx.conf (typed TOML owns upstream TLS) |
-| `proxy_ssl_server_name` | flag | stream, stream-server | rejected (fail closed) |  |
+| `proxy_ssl_server_name` | flag | stream, stream-server | executable | runtime: `streamServers[].proxyTls.serverName enable (SNI on)`. these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed |
 | `proxy_ssl_session_reuse` | flag | stream, stream-server | accepted, NOT enforced | upstream TLS session reuse policy is not applied |
-| `proxy_ssl_trusted_certificate` | 1 | stream, stream-server | rejected (fail closed) |  |
-| `proxy_ssl_verify` | flag | stream, stream-server | rejected (fail closed) |  |
+| `proxy_ssl_trusted_certificate` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyTls.trustedCertificateFiles`. these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed |
+| `proxy_ssl_verify` | flag | stream, stream-server | executable | runtime: `streamServers[].proxyTls.verify (on\|off; off is an explicit dangerous verifier)`. these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed |
 | `proxy_ssl_verify_depth` | 1 | stream, stream-server | accepted, NOT enforced | the upstream certificate chain depth is not applied |
 | `proxy_timeout` | 1 | stream, stream-server | executable | runtime: `streams[].proxyTimeoutMs` |
-| `proxy_upload_rate` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `proxy_upload_rate` | 1 | stream, stream-server | executable | runtime: `streamServers[].proxyUploadRate (token-bucket upstream pacing)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 | `proxy_upstream_buffer` | 1 | stream, stream-server | rejected (fail closed) |  |
 
 #### `ngx_stream_realip_module` (1 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `set_real_ip_from` | 1 | stream, stream-server | rejected (fail closed) |  |
+| `set_real_ip_from` | 1 | stream, stream-server | executable | runtime: `inbound PROXY protocol trust peers (client address rewritten from the header)`. stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics |
 
 #### `ngx_stream_return_module` (1 directives)
 
