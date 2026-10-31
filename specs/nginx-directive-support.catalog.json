@@ -5672,10 +5672,27 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "resources[].type=\"grpc\" bindAddress (IP literal source address for the h2 connector)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_bind_connects_from_the_configured_source_address"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_without_bind_connects_from_the_default_loopback_address"
+        }
+      ],
+      "knownDifferences": [
+        "applied in the h2 client connector (source bind / SO_KEEPALIVE); the pinned oracle lacks --with-http_v2_module so no grpc_pass differential is possible — covered by real-socket integration tests instead"
+      ]
     },
     {
       "id": "http:grpc_buffer_size",
@@ -6664,10 +6681,27 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "resources[].type=\"grpc\" socketKeepalive (SO_KEEPALIVE on the h2 TCP socket)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_bind_connects_from_the_configured_source_address"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_without_bind_connects_from_the_default_loopback_address"
+        }
+      ],
+      "knownDifferences": [
+        "applied in the h2 client connector (source bind / SO_KEEPALIVE); the pinned oracle lacks --with-http_v2_module so no grpc_pass differential is possible — covered by real-socket integration tests instead"
+      ]
     },
     {
       "id": "http:grpc_ssl_certificate",
@@ -20197,10 +20231,34 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "custom IMAP capability lists are not implemented"
+      "runtimeField": "mailServers[].capabilities.imap (custom IMAP CAPABILITY list)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "imap.capability-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "pop3.capa-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-default"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:imap_client_buffer",
@@ -20503,10 +20561,34 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "custom POP3 capability lists are not implemented"
+      "runtimeField": "mailServers[].capabilities.pop3 (custom POP3 CAPA list)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "imap.capability-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "pop3.capa-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-default"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:protocol",
@@ -20929,10 +21011,14 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "mail listeners resolve auth_http/backend names with the bounded runtime resolver; a custom mail resolver is not implemented"
+      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution",
+      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied"
     },
     {
       "id": "mail:resolver_timeout",
@@ -20944,10 +21030,14 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "mail listeners use the bounded runtime resolver; a custom mail resolver timeout is not implemented"
+      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution",
+      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied"
     },
     {
       "id": "mail:server",
@@ -21075,10 +21165,26 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "real-IP trust for mail listeners is not implemented (HTTP/stream real_ip only)"
+      "runtimeField": "mailServers[].realIpTrustedCidrs (trusted inbound PROXY peers rewrite the client address)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "mail.realip-trusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "mail.realip-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:smtp_auth",
@@ -21149,10 +21255,34 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "custom SMTP capability lists are not implemented"
+      "runtimeField": "mailServers[].capabilities.smtp (custom SMTP EHLO capability list, nginx 250-/250 line rendering)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "imap.capability-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "pop3.capa-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-default"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:smtp_client_buffer",
@@ -22331,10 +22461,29 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].passAddress (IP-literal address:port re-dispatch to the target listen socket default server, chain up to 10 with cycle rejection)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "pass.proxy"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "pass.return"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "pass.target-return"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "stream:preread_buffer_size",
@@ -23401,10 +23550,41 @@
         "stream"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamSplitClients[] (MurmurHash2 cumulative buckets over accept/preread sources: $remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name + stream GeoIP vars; result seeded into the per-connection variable table)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.1"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.2"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.3"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.4"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.5"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.6"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "stream:ssl_alpn",

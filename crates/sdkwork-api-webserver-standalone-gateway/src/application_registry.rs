@@ -729,6 +729,7 @@ mod tests {
             stream_limit_conn_zones: Vec::new(),
             cache_zone_names: Vec::new(),
             stream_maps: Vec::new(),
+            stream_split_clients: Vec::new(),
             resolution_cache: None,
             limits: Default::default(),
             listeners: Vec::new(),

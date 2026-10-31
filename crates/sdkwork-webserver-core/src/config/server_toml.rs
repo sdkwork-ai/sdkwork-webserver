@@ -3504,6 +3504,7 @@ impl<'a> Materializer<'a> {
                 target,
                 access,
                 return_value,
+                pass_address: None,
                 limit_conn: Vec::new(),
                 limit_conn_dry_run: false,
                 set_variables: Vec::new(),

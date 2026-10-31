@@ -193,6 +193,16 @@ export const PARSER_EXECUTED = new Map([
   ['http:memcached_next_upstream_tries', 'mapping memcached settings pipeline'],
   ['http:memcached_next_upstream_timeout', 'mapping memcached settings pipeline'],
   ['http:set', 'mapping materialize_location bounded set arm'],
+  ['stream:split_clients', 'mapping stream split_clients pipeline'],
+  ['stream:pass', 'mapping stream pass pipeline'],
+  ['http:grpc_bind', 'mapping grpc settings pipeline'],
+  ['http:grpc_socket_keepalive', 'mapping grpc settings pipeline'],
+  ['mail:smtp_capabilities', 'mapping mail settings pipeline'],
+  ['mail:imap_capabilities', 'mapping mail settings pipeline'],
+  ['mail:pop3_capabilities', 'mapping mail settings pipeline'],
+  ['mail:set_real_ip_from', 'mapping mail settings pipeline'],
+  ['mail:resolver', 'mapping mail settings pipeline'],
+  ['mail:resolver_timeout', 'mapping mail settings pipeline'],
   ['http:geoip_country', 'mapping geoip settings pipeline'],
   ['http:geoip_city', 'mapping geoip settings pipeline'],
   ['http:geoip_org', 'mapping geoip settings pipeline'],
@@ -387,6 +397,8 @@ export const PARTIAL_ENFORCEMENT = {
   'http:keepalive_timeout': 'the nginx upstream keepalive idle timeout is not carried into the nginx materializer (the typed TOML path owns the upstream pool)',
   'http:keepalive_requests': 'the nginx upstream keepalive request ceiling is not carried into the nginx materializer (the typed TOML path owns the upstream pool)',
   'http:keepalive_time': 'the nginx upstream keepalive connection lifetime is not carried into the nginx materializer (the typed TOML path owns the upstream pool)',
+  'mail:resolver': 'the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; a custom nginx resolver block is validated and accepted but not applied',
+  'mail:resolver_timeout': 'the mail plane uses the runtime resolver timeouts; the nginx resolver_timeout value is validated and accepted but not applied',
 };
 
 function stripRustComments(text) {

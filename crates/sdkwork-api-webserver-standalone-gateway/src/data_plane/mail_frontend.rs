@@ -80,9 +80,14 @@ struct MailConnectionProfile {
     timeout: Duration,
     so_keepalive: bool,
     inbound_proxy_protocol: bool,
+    /// nginx mail `set_real_ip_from` trusted PROXY protocol peers.
+    real_ip_trusted: Vec<ipnet::IpNet>,
     max_line_bytes: usize,
     greeting_delay: Duration,
     mechanisms: Vec<MailAuthMechanism>,
+    /// nginx `smtp_capabilities`/`imap_capabilities`/`pop3_capabilities`: the
+    /// configured capability list (replaces the protocol default when set).
+    capabilities: Option<Vec<String>>,
     max_errors: u32,
     auth_http: Option<AuthHttpProfile>,
     tls: Option<MailTlsProfile>,
@@ -190,9 +195,11 @@ impl PreparedMailListener {
             timeout: Duration::from_millis(config.timeout_ms),
             so_keepalive: config.so_keepalive,
             inbound_proxy_protocol: config.proxy_protocol,
+            real_ip_trusted: parse_mail_trusted_cidrs(&config.real_ip_trusted_cidrs),
             max_line_bytes: config.client_buffer_bytes(),
             greeting_delay,
             mechanisms: config.auth_mechanisms().to_vec(),
+            capabilities: config.capabilities.clone(),
             max_errors: config.max_errors,
             auth_http,
             tls,
@@ -213,6 +220,21 @@ impl PreparedMailListener {
             profile: Arc::new(profile),
         })
     }
+}
+
+/// Parse the mail `set_real_ip_from` trusted networks.
+fn parse_mail_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
+    values
+        .iter()
+        .filter_map(|value| {
+            value.parse::<ipnet::IpNet>().ok().or_else(|| {
+                value
+                    .parse::<std::net::IpAddr>()
+                    .ok()
+                    .map(ipnet::IpNet::from)
+            })
+        })
+        .collect()
 }
 
 /// Resolve the `auth_http` endpoint once at listener preparation.
@@ -751,8 +773,19 @@ async fn serve_mail_connection(
         match read_proxy_v1(&mut raw, &limits, profile.timeout).await {
             Ok((header, leftover)) => {
                 pending = leftover;
-                if let Some(address) = header.source() {
-                    client_ip = address.ip();
+                // nginx mail realip (`ngx_mail_realip_module`): the PROXY
+                // protocol source replaces the client address only when the
+                // connecting peer is listed by `set_real_ip_from`. With no
+                // trusted network the header is parsed but the peer address
+                // stays authoritative (verified against nginx 1.29.6).
+                if profile
+                    .real_ip_trusted
+                    .iter()
+                    .any(|network| network.contains(&peer.ip()))
+                {
+                    if let Some(address) = header.source() {
+                        client_ip = address.ip();
+                    }
                 }
                 proxy_header = Some(header);
             }
@@ -1004,6 +1037,7 @@ struct MailSessionState {
     client_ip: std::net::IpAddr,
     session: FrontendSession,
     mechanisms: Vec<MailAuthMechanism>,
+    capabilities: Option<Vec<String>>,
     greeting_name: String,
     limits: Limits,
     commands: usize,
@@ -1047,6 +1081,7 @@ impl MailSessionState {
             client_ip,
             session: FrontendSession::new(profile.protocol, implicit_tls),
             mechanisms: profile.mechanisms.clone(),
+            capabilities: profile.capabilities.clone(),
             greeting_name: profile.greeting_name.clone(),
             limits: *limits,
             commands: 0,
@@ -1360,13 +1395,33 @@ impl MailSessionState {
         }
     }
 
+    /// nginx POP3 `CAPA` reply (`ngx_mail_pop3_module`): the configured (or
+    /// default) capability lines, then the SASL mechanism line, then STLS when
+    /// STARTTLS is offered. A `starttls_only` listener omits `USER` and SASL and
+    /// advertises only the remaining capabilities plus `STLS`.
     fn pop3_capabilities(&self) -> Vec<u8> {
+        const DEFAULT_CAPABILITIES: &[&str] = &["TOP", "USER", "UIDL"];
+        let capabilities: Vec<&str> = match &self.capabilities {
+            Some(capabilities) => capabilities.iter().map(String::as_str).collect(),
+            None => DEFAULT_CAPABILITIES.to_vec(),
+        };
         let mut out = String::from("+OK Capability list follows\r\n");
         if self.starttls_only {
-            out.push_str("TOP\r\nUIDL\r\nSTLS\r\n.\r\n");
+            for capability in capabilities
+                .iter()
+                .filter(|capability| !capability.eq_ignore_ascii_case("USER"))
+            {
+                out.push_str(capability);
+                out.push_str("\r\n");
+            }
+            out.push_str("STLS\r\n.\r\n");
             return out.into_bytes();
         }
-        out.push_str("TOP\r\nUSER\r\nUIDL\r\nSASL");
+        for capability in capabilities {
+            out.push_str(capability);
+            out.push_str("\r\n");
+        }
+        out.push_str("SASL");
         for mechanism in self.mechanism_tokens() {
             out.push(' ');
             out.push_str(mechanism);
@@ -1440,7 +1495,16 @@ impl MailSessionState {
         let (verb, argument) = split_mail_command(rest);
         match verb.as_str() {
             "CAPABILITY" => {
-                let mut text = String::from("* CAPABILITY IMAP4 IMAP4rev1 UIDPLUS");
+                const DEFAULT_CAPABILITIES: &[&str] = &["IMAP4", "IMAP4rev1", "UIDPLUS"];
+                let capabilities: Vec<&str> = match &self.capabilities {
+                    Some(capabilities) => capabilities.iter().map(String::as_str).collect(),
+                    None => DEFAULT_CAPABILITIES.to_vec(),
+                };
+                let mut text = String::from("* CAPABILITY");
+                for capability in capabilities {
+                    text.push(' ');
+                    text.push_str(capability);
+                }
                 if self.starttls_only {
                     text.push_str(" STARTTLS LOGINDISABLED");
                 } else {
@@ -1608,26 +1672,38 @@ impl MailSessionState {
         }
     }
 
+    /// nginx SMTP `EHLO` reply (`ngx_mail_smtp_module`): the server name line,
+    /// then each configured capability line, then `AUTH …`, then `STARTTLS`
+    /// when offered. Every line but the last carries the `250-` continuation
+    /// prefix, exactly like nginx's two pre-rendered capability strings.
     fn smtp_capabilities(&self) -> Vec<u8> {
-        let mut out = String::new();
+        let mut lines: Vec<String> = vec![self.greeting_name.clone()];
+        if let Some(capabilities) = &self.capabilities {
+            lines.extend(capabilities.iter().cloned());
+        }
         if self.starttls_only {
-            out.push_str(&format!("250-{}\r\n", self.greeting_name));
-            out.push_str("250 STARTTLS\r\n");
-            return out.into_bytes();
-        }
-        out.push_str(&format!("250-{}\r\n", self.greeting_name));
-        if self.starttls_available {
-            out.push_str("250-AUTH");
+            lines.push("STARTTLS".to_owned());
         } else {
-            out.push_str("250 AUTH");
+            let mut auth = String::from("AUTH");
+            for mechanism in self.mechanism_tokens() {
+                auth.push(' ');
+                auth.push_str(mechanism);
+            }
+            lines.push(auth);
+            if self.starttls_available {
+                lines.push("STARTTLS".to_owned());
+            }
         }
-        for mechanism in self.mechanism_tokens() {
-            out.push(' ');
-            out.push_str(mechanism);
-        }
-        out.push_str("\r\n");
-        if self.starttls_available {
-            out.push_str("250 STARTTLS\r\n");
+        let mut out = String::new();
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.iter().enumerate() {
+            if index == last {
+                out.push_str("250 ");
+            } else {
+                out.push_str("250-");
+            }
+            out.push_str(line);
+            out.push_str("\r\n");
         }
         out.into_bytes()
     }
@@ -2538,9 +2614,11 @@ mod tests {
             timeout: Duration::from_secs(5),
             so_keepalive: false,
             inbound_proxy_protocol: false,
+            real_ip_trusted: Vec::new(),
             max_line_bytes: 4096,
             greeting_delay: Duration::ZERO,
             mechanisms: vec![MailAuthMechanism::Plain, MailAuthMechanism::Login],
+            capabilities: None,
             max_errors: 5,
             auth_http: None,
             tls: None,

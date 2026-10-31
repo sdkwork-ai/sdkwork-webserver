@@ -54,10 +54,10 @@ use crate::config::{
     MapEntryConfig, MimeTypeConfig, ModernBrowserName, ModernBrowserRule,
     ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
     RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
-    SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
-    UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig, UserIdExpires, UserIdFlags,
-    UserIdMode, UserIdSameSite, WebServerAppConfig, WebServerConfigError,
-    ACME_HTTP_01_CHALLENGE_PREFIX, HTTP2_MAX_FRAME_SIZE,
+    SplitClientsPartConfig, StreamServerConfig, StreamSetVariableConfig, StreamTargetConfig,
+    StreamTlsMode, TlsVersion, UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig,
+    UserIdExpires, UserIdFlags, UserIdMode, UserIdSameSite, WebServerAppConfig,
+    WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX, HTTP2_MAX_FRAME_SIZE,
 };
 
 use super::parser::NginxDirective;
@@ -853,6 +853,7 @@ pub fn materialize_nginx_app(
                 mapper.http_autoindex.format = Some(parse_autoindex_format(directive)?);
             }
             "stream" | "events" | "http" | "mail" => {}
+            "slice" => return Err(slice_directive_blocker(directive)),
             name if ACCEPTED_IGNORED.contains(&name) => {}
             name if UNSUPPORTED_SECURITY.contains(&name) => {
                 return Err(NginxConfigError::unsupported(
@@ -886,6 +887,28 @@ pub fn materialize_nginx_app(
         ));
     }
     mapper.finish()
+}
+
+/// The exact blocker for nginx `slice <size>` (`ngx_http_slice_filter_module`).
+///
+/// nginx 1.29.6 spells the directive `slice <size>` (the legacy `slice on|off`
+/// plus `slice_size` form no longer exists; `slice_size` is not an nginx 1.29.6
+/// directive at all). Slice caching needs a range-subrequest pipeline: the
+/// module turns one client request into `Range: bytes=<start>-<end>`
+/// subrequests, stores each slice under `(cache key, slice range)` (the cache
+/// key must include `$slice_range`), and assembles the client response (or the
+/// requested range) from the cached slices. The shared cache key *could* carry
+/// a slice component without changing the store, but the bounded proxy adapter
+/// performs exactly one upstream exchange per client request and caches one
+/// complete body per key (`CachedResponse`): there is no multi-subrequest
+/// pipeline, no `$slice_range` variable, and no partial-object (206) assembly,
+/// so the directive fails closed instead of proxying unsliced behind an
+/// accepting parse.
+fn slice_directive_blocker(directive: &NginxDirective) -> NginxConfigError {
+    NginxConfigError::unsupported(
+        directive,
+        "`slice <size>` is not executable: the proxy adapter performs exactly one upstream exchange per client request and caches one complete response body per key (`CachedResponse`), so there is no slice-range subrequest pipeline (`$slice_range`, Range subrequests, per-slice 206 assembly); the cache key could carry a slice component, but the multi-subrequest assembly does not exist, so the directive fails closed instead of silently proxying unsliced",
+    )
 }
 
 /// When the input is a full `nginx.conf`, unwrap the `http { }` block; site
@@ -1682,6 +1705,12 @@ struct Mapper<'a> {
     /// nginx stream `map` blocks (bounded per-connection variable engine).
     stream_maps: Vec<MapConfig>,
     stream_map_results: Vec<String>,
+    /// nginx stream `split_clients` blocks (bounded per-connection distribution).
+    stream_split_clients: Vec<SplitClientsConfig>,
+    stream_split_results: Vec<String>,
+    /// `pass <address>` declarations awaiting the cross-server target check
+    /// (the target may be declared after the passing server).
+    stream_pass_declarations: Vec<(NginxDirective, String)>,
     /// nginx stream `limit_conn_zone` declarations (separate from HTTP zones).
     stream_limit_conn_zones: Vec<Value>,
     stream_limit_conn_zone_names: Vec<String>,
@@ -1803,6 +1832,9 @@ impl<'a> Mapper<'a> {
             stream_access: Vec::new(),
             stream_maps: Vec::new(),
             stream_map_results: Vec::new(),
+            stream_split_clients: Vec::new(),
+            stream_split_results: Vec::new(),
+            stream_pass_declarations: Vec::new(),
             stream_limit_conn_zones: Vec::new(),
             stream_limit_conn_zone_names: Vec::new(),
             stream_limit_conn_dry_run: false,
@@ -2820,6 +2852,7 @@ impl<'a> Mapper<'a> {
                         format!("`{name}` is only allowed in the `http` block"),
                     ));
                 }
+                "slice" => return Err(slice_directive_blocker(child)),
                 name => {
                     return Err(NginxConfigError::unsupported(
                         child,
@@ -4465,6 +4498,7 @@ impl<'a> Mapper<'a> {
                         format!("`{name}` cannot be enforced by the SDKWork runtime"),
                     ));
                 }
+                "slice" => return Err(slice_directive_blocker(child)),
                 name => {
                     return Err(NginxConfigError::unsupported(
                         child,
@@ -5502,6 +5536,8 @@ impl<'a> Mapper<'a> {
                 "readTimeoutMs": effective_grpc.read_timeout_ms.unwrap_or(60_000),
                 "bufferSize": effective_grpc.buffer_size.unwrap_or(4096),
                 "ignoreHeaders": effective_grpc.ignore_headers.clone().unwrap_or_default(),
+                "bindAddress": effective_grpc.bind_address.flatten().map(|address| address.to_string()),
+                "socketKeepalive": effective_grpc.socket_keepalive,
                 "responsePolicy": proxy_response_policy_json(&response_policy)?,
                 "interceptErrors": effective_grpc.intercept_errors.unwrap_or(false),
                 "retry": json!({
@@ -6410,16 +6446,34 @@ impl<'a> Mapper<'a> {
                         ));
                     }
                 }
+                // nginx stream `split_clients`: the expanded accept/preread
+                // source is hashed with nginx's MurmurHash2 (`ngx_murmur_hash2`)
+                // and assigned to the configured bucket; the result is a
+                // per-connection variable for `set`/`return` templates.
                 "split_clients" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "stream `split_clients` is not executable in this round: the bounded per-connection variable engine evaluates only the fixed accept/preread vocabulary, and a stream split_clients distribution needs a per-variable hash context; no silent approximation is performed",
-                    ));
+                    let split = parse_stream_split_clients(directive)?;
+                    if let Some(result) = split.result.strip_prefix('$') {
+                        if self.stream_map_results.iter().any(|name| name == result)
+                            || self.stream_split_results.iter().any(|name| name == result)
+                        {
+                            return Err(NginxConfigError::unsupported(
+                                directive,
+                                format!(
+                                    "duplicate stream split_clients result variable `${result}`"
+                                ),
+                            ));
+                        }
+                        self.stream_split_results.push(result.to_owned());
+                    }
+                    self.stream_split_clients.push(split);
                 }
+                // nginx stream `pass`: the value is a listen address with a
+                // port; at connection time the session is re-dispatched to the
+                // default virtual server of that listening socket.
                 "pass" => {
                     return Err(NginxConfigError::unsupported(
                         directive,
-                        "stream `pass` (raw-address proxy handler) requires a per-connection variable-expanded dial target and the proxy handler it is embedded in; the bounded stream plane executes `proxy_pass` targets only and fails closed rather than approximating the pass module",
+                        "stream `pass` is a server-content directive (`pass <address>` inside `stream server {}`), not a stream-context directive",
                     ));
                 }
                 // nginx `stream` context `map`: executable over the bounded
@@ -6502,6 +6556,63 @@ impl<'a> Mapper<'a> {
                 }
             }
         }
+        // `pass` may name a server declared later in the same stream block, so
+        // the target and cycle check run once every server has materialized.
+        self.validate_stream_passes()?;
+        Ok(())
+    }
+
+    /// Validate every stream `pass <address>` declaration against the
+    /// materialized stream servers.
+    ///
+    /// nginx resolves the address to a listening socket at connection time and
+    /// re-dispatches the session to that socket's default virtual server; a
+    /// mismatch is a runtime "port not found" log. The bounded plane resolves
+    /// it at configuration time so a typo is a located diagnostic, and it
+    /// rejects pass cycles (nginx counts them per connection and fails after
+    /// `NGX_STREAM_PASS_MAX_PASSES` = 10).
+    fn validate_stream_passes(&mut self) -> Result<(), NginxConfigError> {
+        if self.stream_pass_declarations.is_empty() {
+            return Ok(());
+        }
+        let mut configs: Vec<StreamServerConfig> = Vec::with_capacity(self.streams.len());
+        for stream in &self.streams {
+            let config: StreamServerConfig =
+                serde_json::from_value(stream.clone()).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "stream server materialization failed: {error}"
+                    ))
+                })?;
+            configs.push(config);
+        }
+        for (directive, address) in self.stream_pass_declarations.clone() {
+            match crate::config::resolve_stream_pass_target(&configs, &address) {
+                Ok(_) => {}
+                Err(crate::config::StreamPassError::InvalidAddress) => {
+                    return Err(NginxConfigError::unsupported(
+                        &directive,
+                        format!("stream `pass {address}` must be a literal `IP:port` address"),
+                    ))
+                }
+                Err(crate::config::StreamPassError::NotConfigured) => {
+                    return Err(NginxConfigError::unsupported(
+                        &directive,
+                        format!(
+                            "stream `pass {address}` does not name a configured stream listener; nginx logs \"port not found\" and closes the connection"
+                        ),
+                    ))
+                }
+                Err(crate::config::StreamPassError::Cycle) => {
+                    return Err(NginxConfigError::unsupported(
+                        &directive,
+                        format!(
+                            "stream `pass {address}` forms a pass cycle (nginx fails after {} passes)",
+                            crate::config::STREAM_PASS_MAX_PASSES
+                        ),
+                    ))
+                }
+            }
+        }
         Ok(())
     }
 
@@ -6521,6 +6632,7 @@ impl<'a> Mapper<'a> {
         let mut ssl_client_certificate: Option<String> = None;
         let mut access: Vec<Value> = Vec::new();
         let mut return_value: Option<String> = None;
+        let mut pass_address: Option<String> = None;
         let mut limit_conn: Vec<Value> = Vec::new();
         let mut limit_conn_dry_run: Option<bool> = None;
         let mut set_variables: Vec<StreamSetVariableConfig> = Vec::new();
@@ -6539,9 +6651,10 @@ impl<'a> Mapper<'a> {
         let mut next_upstream_tries: Option<u8> = None;
         let mut next_upstream_timeout_ms: Option<u64> = None;
         let mut server_names: Vec<String> = Vec::new();
-        // Variables a `set`/`return` template may reference: stream map
-        // results plus earlier `set` assignments of this server.
+        // Variables a `set`/`return` template may reference: stream map and
+        // split_clients results plus earlier `set` assignments of this server.
         let mut available_variables: Vec<String> = self.stream_map_results.clone();
+        available_variables.extend(self.stream_split_results.iter().cloned());
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
@@ -6562,6 +6675,14 @@ impl<'a> Mapper<'a> {
                         ));
                     };
                     proxy_pass = Some(target.clone());
+                }
+                // nginx stream `pass <address>`: content handler that hands the
+                // accepted connection to another listening socket.
+                "pass" => {
+                    let address = parse_stream_pass_address(child)?;
+                    self.stream_pass_declarations
+                        .push((child.clone(), address.clone()));
+                    pass_address = Some(address);
                 }
                 "proxy_timeout" => {
                     let Some(value) = child.args.first() else {
@@ -6923,6 +7044,22 @@ impl<'a> Mapper<'a> {
                 "a stream server cannot combine `return` with `proxy_pass`",
             ));
         }
+        // nginx installs the content handler at directive-parse time (the last
+        // of `pass`/`proxy_pass`/`return` wins). The bounded plane executes one
+        // content handler per server and rejects the ambiguous combination
+        // instead of silently choosing one.
+        if pass_address.is_some() && (proxy_pass.is_some() || return_value.is_some()) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "a stream server cannot combine `pass` with `proxy_pass` or `return`; nginx keeps the last content handler, while the bounded stream plane requires exactly one",
+            ));
+        }
+        if pass_address.is_some() && ssl_preread {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "stream `pass` cannot follow `ssl_preread on`: nginx refuses to pass a connection with buffered preread data (\"cannot pass connection with preread data\")",
+            ));
+        }
         let target =
             if let Some(target_name) = proxy_pass.as_ref().filter(|_| return_value.is_none()) {
                 Some(if self.upstream_names.contains(target_name) {
@@ -6946,10 +7083,10 @@ impl<'a> Mapper<'a> {
             } else {
                 None
             };
-        if target.is_none() && return_value.is_none() {
+        if target.is_none() && return_value.is_none() && pass_address.is_none() {
             return Err(NginxConfigError::unsupported(
                 directive,
-                "stream server requires proxy_pass or return",
+                "stream server requires `proxy_pass`, `return`, or `pass`",
             ));
         }
         // nginx allows one `stream server` block with several `listen`
@@ -6979,6 +7116,9 @@ impl<'a> Mapper<'a> {
             }
             if let Some(value) = &return_value {
                 stream["returnValue"] = Value::String(value.clone());
+            }
+            if let Some(address) = &pass_address {
+                stream["passAddress"] = Value::String(address.clone());
             }
             if !limit_conn.is_empty() {
                 stream["limitConn"] = Value::Array(limit_conn.clone());
@@ -7294,6 +7434,30 @@ impl<'a> Mapper<'a> {
             if let Some(server_name) = &server.server_name {
                 entry["serverName"] = Value::String(server_name.clone());
             }
+            let capabilities = match protocol {
+                "smtp" => server.smtp_capabilities.as_ref(),
+                "imap" => server.imap_capabilities.as_ref(),
+                _ => server.pop3_capabilities.as_ref(),
+            };
+            if let Some(capabilities) = capabilities {
+                entry["capabilities"] = Value::Array(
+                    capabilities
+                        .iter()
+                        .cloned()
+                        .map(Value::String)
+                        .collect::<Vec<_>>(),
+                );
+            }
+            if !server.real_ip_cidrs.is_empty() {
+                entry["realIpTrustedCidrs"] = Value::Array(
+                    server
+                        .real_ip_cidrs
+                        .iter()
+                        .cloned()
+                        .map(Value::String)
+                        .collect::<Vec<_>>(),
+                );
+            }
             for (key, mechanisms) in [
                 ("pop3Auth", &pop3_auth),
                 ("imapAuth", &imap_auth),
@@ -7382,6 +7546,7 @@ impl<'a> Mapper<'a> {
             "mail": { "servers": self.mail_servers },
             "streamLimitConnZones": self.stream_limit_conn_zones,
             "streamMaps": self.stream_maps,
+            "streamSplitClients": self.stream_split_clients,
             "cacheZoneNames": self.proxy_cache_zone_names,
             "proxyCache": proxy_cache,
             "metadata": { "source": "nginx configuration" },
@@ -7554,6 +7719,8 @@ struct GrpcSettings {
     next_upstream_tries: Option<u8>,
     next_upstream_timeout_ms: Option<u64>,
     ignore_headers: Option<Vec<String>>,
+    bind_address: Option<Option<std::net::IpAddr>>,
+    socket_keepalive: Option<bool>,
 }
 
 impl GrpcSettings {
@@ -7588,6 +7755,8 @@ impl GrpcSettings {
                 .ignore_headers
                 .clone()
                 .or_else(|| self.ignore_headers.clone()),
+            bind_address: inner.bind_address.or(self.bind_address),
+            socket_keepalive: inner.socket_keepalive.or(self.socket_keepalive),
         }
     }
 
@@ -7679,11 +7848,15 @@ impl GrpcSettings {
             "grpc_next_upstream_timeout" => {
                 self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
             }
+            "grpc_bind" => self.bind_address = Some(parse_upstream_bind(directive)?),
+            "grpc_socket_keepalive" => {
+                self.socket_keepalive = Some(parse_on_off(directive, "grpc_socket_keepalive")?)
+            }
             other => {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_ignore_headers/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_ssl_*"
+                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_ignore_headers/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_bind/grpc_socket_keepalive/grpc_ssl_*"
                     ),
                 ))
             }
@@ -8613,6 +8786,14 @@ struct MailContextDefaults {
     proxy_buffer_bytes: usize,
     proxy_timeout_ms: u64,
     max_errors: u32,
+    /// `smtp_capabilities` / `imap_capabilities` / `pop3_capabilities` are
+    /// protocol-scoped in nginx (each is inherited by the matching protocol
+    /// module), so the inherited defaults keep one list per protocol.
+    smtp_capabilities: Option<Vec<String>>,
+    imap_capabilities: Option<Vec<String>>,
+    pop3_capabilities: Option<Vec<String>>,
+    /// `set_real_ip_from` inherited from the `mail {}` context.
+    real_ip_cidrs: Vec<String>,
 }
 
 impl Default for MailContextDefaults {
@@ -8638,6 +8819,10 @@ impl Default for MailContextDefaults {
             proxy_buffer_bytes: 4096,
             proxy_timeout_ms: 24 * 60 * 60 * 1000,
             max_errors: 5,
+            smtp_capabilities: None,
+            imap_capabilities: None,
+            pop3_capabilities: None,
+            real_ip_cidrs: Vec::new(),
         }
     }
 }
@@ -8674,6 +8859,11 @@ struct MailServerDraft {
     proxy_timeout_ms: u64,
     max_errors: u32,
     proxy_tls: Option<Value>,
+    smtp_capabilities: Option<Vec<String>>,
+    imap_capabilities: Option<Vec<String>>,
+    pop3_capabilities: Option<Vec<String>>,
+    real_ip_cidrs: Vec<String>,
+    real_ip_declared: bool,
 }
 
 impl MailServerDraft {
@@ -8709,6 +8899,11 @@ impl MailServerDraft {
             proxy_timeout_ms: defaults.proxy_timeout_ms,
             max_errors: defaults.max_errors,
             proxy_tls: None,
+            smtp_capabilities: defaults.smtp_capabilities.clone(),
+            imap_capabilities: defaults.imap_capabilities.clone(),
+            pop3_capabilities: defaults.pop3_capabilities.clone(),
+            real_ip_cidrs: defaults.real_ip_cidrs.clone(),
+            real_ip_declared: false,
         }
     }
 
@@ -8813,6 +9008,19 @@ fn parse_mail_context_directive(
             defaults.max_errors = parse_mail_max_errors(directive)?;
             Ok(())
         }
+        "smtp_capabilities" => parse_mail_capabilities(directive, &mut defaults.smtp_capabilities),
+        "imap_capabilities" => parse_mail_capabilities(directive, &mut defaults.imap_capabilities),
+        "pop3_capabilities" => parse_mail_capabilities(directive, &mut defaults.pop3_capabilities),
+        "set_real_ip_from" => parse_mail_real_ip_from(directive, &mut defaults.real_ip_cidrs, None),
+        // nginx mail `resolver`/`resolver_timeout` configure the DNS resolver
+        // used for `Auth-Server` host names and the SMTP client-host lookup.
+        // The bounded mail plane resolves through the runtime's own bounded
+        // system resolver (`lookup_host` with a timeout), exactly like the HTTP
+        // plane's accepted-unenforced `resolver`; the directive is validated
+        // and accepted so a migrated configuration does not fail closed on a
+        // setting whose observable effect the runtime already owns.
+        "resolver" => validate_mail_resolver(directive),
+        "resolver_timeout" => validate_mail_resolver_timeout(directive),
         name if ACCEPTED_IGNORED.contains(&name) => Ok(()),
         name => Err(NginxConfigError::unsupported(
             directive,
@@ -8958,13 +9166,12 @@ fn parse_mail_server_directive(
             Ok(())
         }
         "pop3_capabilities" | "imap_capabilities" | "smtp_capabilities" => {
-            Err(NginxConfigError::unsupported(
-                directive,
-                format!(
-                    "mail `{}` (custom capability advertisement) is not executable; the runtime advertises nginx's default capability set",
-                    directive.name
-                ),
-            ))
+            let target = match directive.name.as_str() {
+                "smtp_capabilities" => &mut server.smtp_capabilities,
+                "imap_capabilities" => &mut server.imap_capabilities,
+                _ => &mut server.pop3_capabilities,
+            };
+            parse_mail_capabilities(directive, target)
         }
         "ssl_client_certificate" | "ssl_verify_client" | "ssl_verify_depth" => {
             Err(NginxConfigError::unsupported(
@@ -8993,23 +9200,194 @@ fn parse_mail_server_directive(
                 directive.name
             ),
         )),
-        "resolver" | "resolver_timeout" => Err(NginxConfigError::unsupported(
-            directive,
-            format!(
-                "mail `{}` (SMTP client-host PTR/forward-confirmed resolution) is not executable; the runtime resolves the `Auth-Server` backend with its own bounded DNS policy",
-                directive.name
-            ),
-        )),
-        "set_real_ip_from" => Err(NginxConfigError::unsupported(
-            directive,
-            "mail `set_real_ip_from` (mail realip module) is not executable",
-        )),
+        // Accepted-unenforced, same policy as the HTTP plane: the nameserver
+        // list is validated but the mail plane resolves names through the
+        // runtime's bounded system resolver, and `resolver_timeout` is a
+        // property of that resolver's own bounded timeout.
+        "resolver" => validate_mail_resolver(directive),
+        "resolver_timeout" => validate_mail_resolver_timeout(directive),
+        "set_real_ip_from" => {
+            parse_mail_real_ip_from(directive, &mut server.real_ip_cidrs, Some(&mut server.real_ip_declared))
+        }
         name if ACCEPTED_IGNORED.contains(&name) => Ok(()),
         name => Err(NginxConfigError::unsupported(
             directive,
             format!("unsupported mail server directive `{name}`"),
         )),
     }
+}
+
+/// Parse one mail capability-list directive
+/// (`smtp_capabilities` / `imap_capabilities` / `pop3_capabilities`).
+///
+/// nginx stores each directive argument as one advertised capability string
+/// (`ngx_mail_capabilities`); a quoted argument may contain spaces. The list
+/// *replaces* the protocol's built-in default list; the runtime renders it with
+/// nginx's line protocol (every line but the last uses the continuation prefix).
+fn parse_mail_capabilities(
+    directive: &NginxDirective,
+    target: &mut Option<Vec<String>>,
+) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `{}` requires at least one capability", directive.name),
+        ));
+    }
+    if directive.args.len() > 64 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `{}` supports at most 64 advertised capabilities",
+                directive.name
+            ),
+        ));
+    }
+    let mut capabilities = Vec::with_capacity(directive.args.len());
+    for capability in &directive.args {
+        if capability.is_empty() || capability.len() > 512 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `{}` capability must be 1..=512 bytes", directive.name),
+            ));
+        }
+        if capability.chars().any(|character| {
+            character.is_control() || character.is_whitespace() && character != ' '
+        }) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "mail `{}` capability `{capability}` contains a control character",
+                    directive.name
+                ),
+            ));
+        }
+        capabilities.push(capability.clone());
+    }
+    *target = Some(capabilities);
+    Ok(())
+}
+
+/// Parse mail `set_real_ip_from <address…>` trusted PROXY protocol peers.
+///
+/// A server-level declaration replaces the inherited `mail {}` list (nginx
+/// `ngx_mail_realip_merge_srv_conf`).
+fn parse_mail_real_ip_from(
+    directive: &NginxDirective,
+    target: &mut Vec<String>,
+    declared: Option<&mut bool>,
+) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `set_real_ip_from` requires at least one address or CIDR",
+        ));
+    }
+    if let Some(declared) = declared {
+        if !*declared {
+            target.clear();
+            *declared = true;
+        }
+    }
+    for value in &directive.args {
+        if value.parse::<ipnet::IpNet>().is_err() && value.parse::<std::net::IpAddr>().is_err() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `set_real_ip_from {value}` must be an IP address or CIDR"),
+            ));
+        }
+        target.push(value.clone());
+    }
+    Ok(())
+}
+
+/// Validate a mail `resolver <address…> [valid=time] [ipv4=on|off]
+/// [ipv6=on|off] [status_zone=zone]` declaration.
+///
+/// The bounded mail plane accepts and validates the declaration but resolves
+/// names through the runtime's own bounded system resolver (the same
+/// accepted-unenforced policy as the HTTP `resolver`), so the nameserver list
+/// is not applied.
+fn validate_mail_resolver(directive: &NginxDirective) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `resolver` requires at least one nameserver address",
+        ));
+    }
+    for argument in &directive.args {
+        if argument == "off" {
+            continue;
+        }
+        if let Some((name, value)) = argument.split_once('=') {
+            let valid_parameter = match name {
+                "valid" => value.parse::<u64>().is_ok() || parse_nginx_time_millis(value).is_some(),
+                "ipv4" | "ipv6" => matches!(value, "on" | "off"),
+                "status_zone" => {
+                    !value.is_empty()
+                        && value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                }
+                _ => false,
+            };
+            if !valid_parameter {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("mail `resolver` parameter `{argument}` is not supported"),
+                ));
+            }
+            continue;
+        }
+        let Some((host, port)) = split_mail_resolver_address(argument) else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `resolver` address `{argument}` must be an IP literal, optionally with a port"),
+            ));
+        };
+        if host.parse::<std::net::IpAddr>().is_err()
+            || port.is_some_and(|port| port.parse::<u16>().is_err())
+        {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `resolver` address `{argument}` must be an IP literal, optionally with a port"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Split an optional `host:port` nameserver token (bracketed IPv6 supported).
+fn split_mail_resolver_address(value: &str) -> Option<(&str, Option<&str>)> {
+    if let Some(rest) = value.strip_prefix('[') {
+        let (host, tail) = rest.split_once(']')?;
+        if tail.is_empty() {
+            return Some((host, None));
+        }
+        return Some((host, Some(tail.strip_prefix(':')?)));
+    }
+    match value.rsplit_once(':') {
+        Some((host, port)) if !host.contains(':') => Some((host, Some(port))),
+        Some(_) => None,
+        None => Some((value, None)),
+    }
+}
+
+/// Validate a mail `resolver_timeout <time>` declaration.
+fn validate_mail_resolver_timeout(directive: &NginxDirective) -> Result<(), NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `resolver_timeout` requires a duration",
+        ));
+    };
+    if directive.args.len() != 1 || parse_nginx_time_millis(value).is_none() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid mail `resolver_timeout {value}`"),
+        ));
+    }
+    Ok(())
 }
 
 fn parse_mail_auth_http(
@@ -10597,6 +10975,141 @@ fn parse_stream_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfig
         default,
         entries,
     })
+}
+
+/// Parse nginx stream `split_clients <source-template> $variable { <percent>% <value>; … }`.
+///
+/// The distribution engine is the shared nginx-compatible one
+/// (`config::geo::evaluate_split_clients`: MurmurHash2 buckets, cumulative
+/// percentage thresholds, `*` catch-all). The stream plane restricts the source
+/// template to the variables it resolves at accept/preread time; a source that
+/// names anything else fails closed instead of hashing an empty string.
+fn parse_stream_split_clients(
+    directive: &NginxDirective,
+) -> Result<SplitClientsConfig, NginxConfigError> {
+    let [source, result] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream split_clients takes `split_clients <source> $variable { … }`",
+        ));
+    };
+    if !result.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream split_clients result `{result}` must be a `$variable`"),
+        ));
+    }
+    if source.len() > crate::config::map_variables::MAX_MAP_VALUE_BYTES {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream split_clients source exceeds the 4096-byte bound",
+        ));
+    }
+    for reference in crate::config::stream_template_variables(source) {
+        if !crate::config::STREAM_MAP_SOURCES.contains(&reference.as_str()) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "stream split_clients source `${reference}` is not known at accept/preread time; supported: {}",
+                    crate::config::STREAM_MAP_SOURCES
+                        .iter()
+                        .map(|name| format!("${name}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ),
+            ));
+        }
+    }
+    if directive.children.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream split_clients requires a `{ … }` block",
+        ));
+    }
+    let mut parts: Vec<SplitClientsPartConfig> = Vec::new();
+    for child in &directive.children {
+        let Some(percent) = crate::config::parse_split_percent(&child.name) else {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "invalid stream split_clients percentage `{}`; expected `NN%`, `NN.NN%`, or `*`",
+                    child.name
+                ),
+            ));
+        };
+        if child.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "stream split_clients bucket `{}` requires exactly one value",
+                    child.name
+                ),
+            ));
+        }
+        let value = &child.args[0];
+        if value.contains('$') {
+            return Err(NginxConfigError::unsupported(
+                child,
+                "stream split_clients values must be literal strings; variable values are not supported",
+            ));
+        }
+        parts.push(SplitClientsPartConfig {
+            percent,
+            value: value.clone(),
+        });
+    }
+    let split = SplitClientsConfig {
+        source: source.clone(),
+        result: result.clone(),
+        parts,
+    };
+    crate::config::validate_split_clients_config(&split)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(split)
+}
+
+/// Parse one nginx stream `pass <address>` content handler.
+///
+/// nginx parses the value as a URL with `no_resolve`: the target must be a
+/// literal address plus an explicit port (a hostname yields "no addresses" and
+/// a variable expands at connection time). The bounded plane accepts the
+/// literal `IP:port` / `[IPv6]:port` form and fails closed on variables.
+fn parse_stream_pass_address(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    let [address] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream `pass` takes exactly one address",
+        ));
+    };
+    if address.contains('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream `pass` with a variable address is not executable: the bounded plane resolves the pass target once at configuration time",
+        ));
+    }
+    let (host, port) = if let Some(rest) = address.strip_prefix('[') {
+        let Some((host, tail)) = rest.split_once("]:") else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("stream `pass {address}` must be an `[IPv6]:port` address"),
+            ));
+        };
+        (host, tail)
+    } else if let Some((host, port)) = address.rsplit_once(':') {
+        (host, port)
+    } else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream `pass {address}` requires an explicit port"),
+        ));
+    };
+    if host.parse::<std::net::IpAddr>().is_err() || port.parse::<u16>().is_err() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream `pass {address}` must be a literal `IP:port` address"),
+        ));
+    }
+    Ok(address.clone())
 }
 
 /// Parse nginx `geo [$address] $variable { … }` (http context).
@@ -18376,9 +18889,9 @@ stream {
                 "cannot combine `return` with `proxy_pass`",
             ),
             (
-                "neither target nor return",
+                "no content handler",
                 "listen 127.0.0.1:9106;",
-                "requires proxy_pass or return",
+                "requires `proxy_pass`, `return`, or `pass`",
             ),
             (
                 "invalid access network",
@@ -20974,30 +21487,299 @@ stream {
     }
 
     #[test]
-    fn stream_split_clients_and_pass_fail_closed_with_exact_blockers() {
-        let split = materialize(
+    fn stream_split_clients_materializes_and_feeds_set_and_return() {
+        let config = materialize(
             r#"
 stream {
-    split_clients "$remote_addr" $backend {
-        50% a;
-        * b;
+    split_clients "$remote_addr:$ssl_preread_server_name" $backend {
+        50% "alpha";
+        * "beta";
+    }
+    server {
+        listen 5205;
+        set $chosen $backend;
+        return $chosen;
     }
 }
 "#,
         )
-        .expect_err("stream split_clients must fail closed");
-        assert!(split.to_string().contains("split_clients"), "{split}");
-        let pass = materialize(
+        .expect("stream split_clients must materialize");
+        assert_eq!(config.stream_split_clients.len(), 1);
+        let split = &config.stream_split_clients[0];
+        assert_eq!(split.source, "$remote_addr:$ssl_preread_server_name");
+        assert_eq!(split.result, "$backend");
+        assert_eq!(
+            split
+                .parts
+                .iter()
+                .map(|part| (part.percent, part.value.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(Some(5000), "alpha"), (None, "beta")]
+        );
+        assert_eq!(config.streams.len(), 1);
+        assert_eq!(config.streams[0].set_variables.len(), 1);
+        assert_eq!(config.streams[0].set_variables[0].value, "$backend");
+        assert_eq!(config.streams[0].return_value.as_deref(), Some("$chosen"));
+    }
+
+    #[test]
+    fn stream_split_clients_rejects_http_only_sources_and_bad_buckets() {
+        let source = materialize(
+            r#"
+stream {
+    split_clients "$http_host" $backend { * "x"; }
+}
+"#,
+        )
+        .expect_err("HTTP-only split_clients sources must fail closed");
+        assert!(source.to_string().contains("accept/preread"), "{source}");
+        let percent = materialize(
+            r#"
+stream {
+    split_clients "$remote_addr" $backend { 60% "a"; 60% "b"; }
+}
+"#,
+        )
+        .expect_err("over-100% buckets must fail closed");
+        assert!(percent.to_string().contains("more than 100%"), "{percent}");
+        let duplicate = materialize(
+            r#"
+stream {
+    map $remote_addr $zone { default "a"; }
+    split_clients "$remote_addr" $zone { * "b"; }
+}
+"#,
+        )
+        .expect_err("a split_clients result cannot redefine a map result");
+        assert!(duplicate.to_string().contains("duplicate"), "{duplicate}");
+    }
+
+    #[test]
+    fn stream_pass_resolves_the_target_listener_default_server() {
+        let config = materialize(
             r#"
 stream {
     server {
         listen 5206;
-        pass 127.0.0.1:15230;
+        pass 127.0.0.1:5207;
+    }
+    server {
+        listen 127.0.0.1:5207;
+        return "via-pass";
     }
 }
 "#,
         )
-        .expect_err("stream pass must fail closed");
-        assert!(pass.to_string().contains("`pass`"), "{pass}");
+        .expect("stream pass must materialize");
+        assert_eq!(config.streams.len(), 2);
+        let passing = config
+            .streams
+            .iter()
+            .find(|stream| stream.port == 5206)
+            .expect("passing server");
+        assert_eq!(passing.pass_address.as_deref(), Some("127.0.0.1:5207"));
+        let target = config
+            .streams
+            .iter()
+            .find(|stream| stream.port == 5207)
+            .expect("target server");
+        assert_eq!(target.return_value.as_deref(), Some("via-pass"));
+    }
+
+    #[test]
+    fn stream_pass_fails_closed_for_unknown_targets_cycles_and_preread() {
+        let unknown = materialize(
+            r#"
+stream {
+    server {
+        listen 5206;
+        pass 127.0.0.1:5299;
+    }
+}
+"#,
+        )
+        .expect_err("an unconfigured pass target must fail closed");
+        assert!(
+            unknown
+                .to_string()
+                .contains("does not name a configured stream listener"),
+            "{unknown}"
+        );
+        let cycle = materialize(
+            r#"
+stream {
+    server { listen 5206; pass 127.0.0.1:5207; }
+    server { listen 5207; pass 127.0.0.1:5206; }
+}
+"#,
+        )
+        .expect_err("a pass cycle must fail closed");
+        assert!(cycle.to_string().contains("pass cycle"), "{cycle}");
+        let variable = materialize(
+            r#"
+stream {
+    server { listen 5206; pass $ssl_preread_server_name; }
+    server { listen 5207; return "x"; }
+}
+"#,
+        )
+        .expect_err("a variable pass address must fail closed");
+        assert!(
+            variable.to_string().contains("variable address"),
+            "{variable}"
+        );
+        let preread = materialize(
+            r#"
+stream {
+    server { listen 5206; ssl_preread on; pass 127.0.0.1:5207; }
+    server { listen 5207; return "x"; }
+}
+"#,
+        )
+        .expect_err("pass after ssl_preread must fail closed");
+        assert!(preread.to_string().contains("preread"), "{preread}");
+    }
+
+    #[test]
+    fn mail_capabilities_resolver_and_realip_materialize() {
+        let config = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    resolver 127.0.0.1:5353 valid=30s;
+    resolver_timeout 5s;
+    set_real_ip_from 10.0.0.0/8;
+    smtp_capabilities "SIZE 10485760" ENHANCEDSTATUSCODES;
+    imap_capabilities IMAP4rev2;
+    pop3_capabilities TOP USER;
+    server {
+        listen 2525;
+        protocol smtp;
+    }
+    server {
+        listen 2143;
+        protocol imap;
+        set_real_ip_from 192.0.2.0/24;
+    }
+}
+"#,
+        )
+        .expect("mail capabilities/resolver/realip must materialize");
+        assert_eq!(config.mail.servers.len(), 2);
+        let smtp = config
+            .mail
+            .servers
+            .iter()
+            .find(|server| server.port == 2525)
+            .expect("smtp listener");
+        assert_eq!(
+            smtp.capabilities.as_deref(),
+            Some(
+                ["SIZE 10485760", "ENHANCEDSTATUSCODES"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+        assert_eq!(smtp.real_ip_trusted_cidrs, vec!["10.0.0.0/8".to_owned()]);
+        let imap = config
+            .mail
+            .servers
+            .iter()
+            .find(|server| server.port == 2143)
+            .expect("imap listener");
+        assert_eq!(
+            imap.capabilities.as_deref(),
+            Some(["IMAP4rev2".to_owned()].as_slice())
+        );
+        // A server-level `set_real_ip_from` replaces the inherited list.
+        assert_eq!(imap.real_ip_trusted_cidrs, vec!["192.0.2.0/24".to_owned()]);
+    }
+
+    #[test]
+    fn mail_capabilities_and_resolver_reject_invalid_tokens() {
+        let empty = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    server { listen 2525; protocol smtp; smtp_capabilities ""; }
+}
+"#,
+        )
+        .expect_err("an empty capability must fail closed");
+        assert!(empty.to_string().contains("capability"), "{empty}");
+        let control = materialize(
+            "mail {\n auth_http 127.0.0.1:9000/auth;\n server { listen 2525; protocol smtp; smtp_capabilities \"bad\ttoken\"; }\n}\n",
+        )
+        .expect_err("a control character in a capability must fail closed");
+        assert!(
+            control.to_string().contains("control character"),
+            "{control}"
+        );
+        let resolver = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    resolver nameserver.invalid;
+    server { listen 2525; protocol smtp; }
+}
+"#,
+        )
+        .expect_err("a non-IP resolver address must fail closed");
+        assert!(resolver.to_string().contains("IP literal"), "{resolver}");
+        let timeout = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    resolver_timeout soon;
+    server { listen 2525; protocol smtp; }
+}
+"#,
+        )
+        .expect_err("an invalid resolver_timeout must fail closed");
+        assert!(
+            timeout.to_string().contains("resolver_timeout"),
+            "{timeout}"
+        );
+    }
+
+    #[test]
+    fn grpc_bind_and_socket_keepalive_materialize_with_inheritance() {
+        let config = materialize(
+            r#"
+grpc_bind 127.0.0.2;
+grpc_socket_keepalive on;
+server {
+    listen 8080;
+    server_name grpc.example.test;
+    location /grpc/ {
+        grpc_pass grpc://127.0.0.1:9000;
+    }
+    location /grpc-unbound/ {
+        grpc_bind off;
+        grpc_socket_keepalive off;
+        grpc_pass grpc://127.0.0.1:9000;
+    }
+}
+"#,
+        )
+        .expect("grpc_bind/grpc_socket_keepalive must materialize");
+        let mut seen = Vec::new();
+        for resource in &config.resources {
+            if let crate::config::ResourceConfig::Grpc {
+                bind_address,
+                socket_keepalive,
+                ..
+            } = resource
+            {
+                seen.push((*bind_address, *socket_keepalive));
+            }
+        }
+        assert_eq!(
+            seen,
+            vec![
+                (Some("127.0.0.2".parse().expect("ip")), Some(true)),
+                (None, Some(false)),
+            ]
+        );
     }
 }

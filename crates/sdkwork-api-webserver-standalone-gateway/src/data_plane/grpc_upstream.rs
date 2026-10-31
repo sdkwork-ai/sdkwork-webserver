@@ -44,7 +44,11 @@ use sdkwork_webserver_core::{
 };
 use sdkwork_webserver_upstream_protocol::grpc::{grpc_request_headers, TE_HEADER_VALUE};
 use sdkwork_webserver_upstream_protocol::limits::Limits;
-use tokio::{net::TcpStream, sync::mpsc, time::timeout};
+use tokio::{
+    net::{TcpSocket, TcpStream},
+    sync::mpsc,
+    time::timeout,
+};
 use tokio_rustls::TlsConnector;
 use url::Url;
 
@@ -121,6 +125,8 @@ pub(crate) async fn serve_grpc(
     send_timeout_ms: u64,
     read_timeout_ms: u64,
     buffer_size: u64,
+    bind_address: Option<std::net::IpAddr>,
+    socket_keepalive: Option<bool>,
     response_policy: Option<&ProxyResponsePolicyConfig>,
     retry: Option<&UpstreamRetryConfig>,
     method: &Method,
@@ -208,6 +214,8 @@ pub(crate) async fn serve_grpc(
             send_timeout,
             read_timeout,
             chunk_bound,
+            bind_address,
+            socket_keepalive,
             response_policy,
         )
         .await;
@@ -254,6 +262,46 @@ pub(crate) async fn serve_grpc(
     }
 }
 
+/// Connect one upstream TCP socket with the optional nginx `grpc_bind` source
+/// address and `grpc_socket_keepalive` flag.
+///
+/// `grpc_bind` is applied with [`TcpSocket`] before `connect` (a bind after
+/// connect is impossible); `grpc_socket_keepalive on` is applied with
+/// `socket2`'s `SO_KEEPALIVE` immediately after connect, which is the same
+/// socket option nginx sets. A bind address from the other address family is
+/// ignored rather than failing the attempt (nginx fails the connect; the
+/// bounded adapter keeps the same "upstream failed" outcome without a
+/// cross-family socket error).
+async fn connect_upstream_socket(
+    address: SocketAddr,
+    bind_address: Option<std::net::IpAddr>,
+    socket_keepalive: Option<bool>,
+) -> io::Result<TcpStream> {
+    let bind = bind_address.filter(|bind| bind.is_ipv4() == address.is_ipv4());
+    let tcp = match bind {
+        Some(bind) => {
+            let socket = if address.is_ipv4() {
+                TcpSocket::new_v4()?
+            } else {
+                TcpSocket::new_v6()?
+            };
+            socket.bind(SocketAddr::new(bind, 0))?;
+            socket.connect(address).await?
+        }
+        None => TcpStream::connect(address).await?,
+    };
+    if socket_keepalive == Some(true) {
+        if let Err(error) = socket2::SockRef::from(&tcp).set_keepalive(true) {
+            tracing::debug!(
+                %address,
+                error = %error,
+                "gRPC upstream could not enable SO_KEEPALIVE"
+            );
+        }
+    }
+    Ok(tcp)
+}
+
 /// One call attempt against one selected target.
 #[allow(clippy::too_many_arguments)]
 async fn attempt(
@@ -270,6 +318,8 @@ async fn attempt(
     send_timeout: Duration,
     read_timeout: Duration,
     chunk_bound: usize,
+    bind_address: Option<std::net::IpAddr>,
+    socket_keepalive: Option<bool>,
     response_policy: Option<&ProxyResponsePolicyConfig>,
 ) -> Result<Response<Body>, GrpcFailure> {
     let policy = upstream_address_policy(generation, upstream_ref);
@@ -280,10 +330,13 @@ async fn attempt(
     let address = resolve_target(generation, &policy, target, scheme, metrics)
         .await
         .ok_or(GrpcFailure::Transport)?;
-    let tcp = timeout(connect_timeout, TcpStream::connect(address))
-        .await
-        .map_err(|_| GrpcFailure::Timeout)?
-        .map_err(|_| GrpcFailure::Transport)?;
+    let tcp = timeout(
+        connect_timeout,
+        connect_upstream_socket(address, bind_address, socket_keepalive),
+    )
+    .await
+    .map_err(|_| GrpcFailure::Timeout)?
+    .map_err(|_| GrpcFailure::Transport)?;
     tcp.set_nodelay(true).ok();
 
     let connection: Box<dyn UpstreamIo> = if scheme == "https" {
@@ -968,5 +1021,66 @@ mod tests {
         let chunk = Bytes::from_static(b"0123456789");
         assert_eq!(split_chunk(chunk.clone(), 16), vec![chunk.clone()]);
         assert_eq!(split_chunk(chunk, 4).len(), 3);
+    }
+
+    #[tokio::test]
+    async fn grpc_bind_connects_from_the_configured_source_address() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test listener");
+        let address = listener.local_addr().expect("listener address");
+        let connect = connect_upstream_socket(
+            address,
+            Some("127.0.0.2".parse().expect("bind address")),
+            Some(true),
+        );
+        let (stream, peer) = tokio::join!(connect, listener.accept());
+        let stream = stream.expect("connect with grpc_bind");
+        let (accepted, peer) = peer.expect("accept");
+        // The upstream observes the bound source address, which is nginx's
+        // observable `grpc_bind` contract.
+        assert_eq!(
+            peer.ip(),
+            "127.0.0.2".parse::<std::net::IpAddr>().expect("ip")
+        );
+        if socket2::SockRef::from(&stream)
+            .keepalive()
+            .expect("read SO_KEEPALIVE")
+        {
+            // `grpc_socket_keepalive on` was applied to the client socket.
+        } else {
+            panic!("grpc_socket_keepalive on did not set SO_KEEPALIVE");
+        }
+        // The accepted peer is on a different loopback alias than the default.
+        assert_eq!(
+            accepted.local_addr().expect("accepted local").ip(),
+            "127.0.0.1".parse::<std::net::IpAddr>().expect("ip")
+        );
+        drop(accepted);
+        drop(stream);
+    }
+
+    #[tokio::test]
+    async fn grpc_without_bind_connects_from_the_default_loopback_address() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test listener");
+        let address = listener.local_addr().expect("listener address");
+        let connect = connect_upstream_socket(address, None, None);
+        let (stream, peer) = tokio::join!(connect, listener.accept());
+        let stream = stream.expect("plain connect");
+        let (accepted, peer) = peer.expect("accept");
+        assert_eq!(
+            peer.ip(),
+            "127.0.0.1".parse::<std::net::IpAddr>().expect("ip")
+        );
+        assert!(
+            !socket2::SockRef::from(&stream)
+                .keepalive()
+                .expect("read SO_KEEPALIVE"),
+            "SO_KEEPALIVE must stay off without grpc_socket_keepalive on"
+        );
+        drop(accepted);
+        drop(stream);
     }
 }

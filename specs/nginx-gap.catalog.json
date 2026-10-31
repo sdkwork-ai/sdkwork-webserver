@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Wave 13 residual closure (2026-10-31): stream split_clients/pass and mail capabilities/real_ip execute with new real-nginx extra fixtures (stream 14+9, mail 9+8); gRPC bind/keepalive execute with real-socket integration tests (no grpc differential possible: oracle lacks http_v2). Still blocked with exact diagnostics: OCSP dynamic (rustls), rustls/OpenSSL TLS knobs (grpc/uwsgi/mail), mail client-cert flows, temp-spool family (no bounded spool), hyper HTTP/1 close-delimited framing, nginx Plus degradation/degrade, and deferred slice/ignore_client_abort/catch_stderr/send_lowat. Catalog: 378 executable / 172 accepted-unenforced / 189 fail-closed / 5 excluded; out-of-profile 5 (Perl 4 + load_module 1).",
     "GeoIP module (Wave 12, 2026-10-31): all 8 ngx_http/stream_geoip directives execute with 16 variables and a bounded MMDB runtime; PRD section 3/4 amended (GeoIP in profile for operator-provisioned MMDB editions, no data redistribution). Out-of-profile is now 5 (Perl 4, load_module 1). Catalog: 370 executable / 170 accepted-unenforced / 199 fail-closed / 5 excluded. New geoip-differential slice (5 cases) is the 7th aggregate slice.",
     "Wave 11B (2026-10-31): http2_chunk_size and random_index execute; differential-http 364->367 (random-index candidate set/empty/off); h2 frame-capture test proves DATA frames <= configured chunk with byte-identical reassembly; nginx config-acceptance probe for http2_chunk_size. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Slice remains fail-closed (shared store whole-representation contract); next: GeoIP + residual closure.",
     "Wave 11B (2026-10-31): `http2_chunk_size` executes at http/server/location through an outermost response-body re-chunker (nginx 8 KiB default, 16 MiB clamp, zero rejected; hyper/h2 exposes no server-side DATA-frame knob), proven by a raw h2 frame-capture test plus a real v2-enabled nginx config-acceptance probe; `random_index` executes at location with a bounded sorted candidate scan, hidden/symlink exclusion and a deterministic seeded SplitMix64 selection, proven by a real-nginx candidate-set differential (192 draws), empty-directory and off cases. differential-http grew 364->367. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Remaining module-sized gaps: slice, degradation/degrade (nginx Plus).",
@@ -653,6 +654,24 @@
       "group": "core",
       "status": "implemented",
       "summary": "nginx GeoIP module (Wave 12): geoip_country/geoip_city/geoip_org at http and stream context, geoip_proxy/geoip_proxy_recursive at http; all 16 $geoip_* variables (incl. nginx's deprecated geoip_dma_code; geoip_area_code always empty), MMDB readers cached per runtime generation, post-real_ip client address with a bounded nginx-shaped right-to-left XFF trust walk (64 hops/8 KiB); operator-provisioned absolute MMDB paths confined by [http] geoipDatabaseRoot; no GeoLite data shipped; synthetic deterministic fixture at tests/nginx/geoip; new geoip-differential slice (4 HTTP + 1 stream case, labelled variable-plumbing proxy differential because the oracle lacks the GeoIP modules); out-of-profile 13 -> 5 (Perl 4 + load_module 1) (REQ-2026-0073 wave 12)"
+    },
+    {
+      "id": "stream.split-clients-pass",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "stream split_clients and pass (Wave 13): split_clients reuses the HTTP MurmurHash2 cumulative-bucket engine over accept/preread sources ($remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name + stream GeoIP variables) with '* 'catch-all and duplicate-result rejection, result seeded into the per-connection variable table; pass re-dispatches an IP-literal address:port to the target listen socket's default stream virtual server (nginx NGX_STREAM_PASS_MAX_PASSES=10, cycle rejection, target access/content phases), with variable/name/preread forms fail-closed; new differential-stream extra fixture (9 cases: 6 split.server-addr + 3 pass) vs real nginx (REQ-2026-0073 wave 13)"
+    },
+    {
+      "id": "mail.capabilities-realip",
+      "group": "mail",
+      "status": "implemented",
+      "summary": "mail residuals (Wave 13): smtp/imap/pop3 custom capability lists rendered with nginx's exact line protocol, set_real_ip_from trusted PROXY peers rewrite the client address, resolver/resolver_timeout validated and accepted-unenforced (runtime resolver owns mail name resolution); new differential-mail capabilities fixture (8 cases) vs real nginx (REQ-2026-0073 wave 13)"
+    },
+    {
+      "id": "upstream.grpc-bind-keepalive",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "gRPC grpc_bind/grpc_socket_keepalive (Wave 13): per-Grpc-resource bindAddress/socketKeepalive with http/server/location inheritance, applied in the h2 connector (TcpSocket source bind, socket2 SO_KEEPALIVE); variable/transparent bind forms fail closed; covered by real-socket integration tests because the pinned oracle lacks --with-http_v2_module (REQ-2026-0073 wave 13)"
     }
   ]
 }

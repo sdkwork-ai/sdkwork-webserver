@@ -2621,6 +2621,33 @@ impl SemanticValidator {
             }
             stream_map_results.push(result);
         }
+        // nginx stream `split_clients`: the result is a per-connection variable
+        // in the same namespace as stream `map` results.
+        for (index, split) in config.stream_split_clients.iter().enumerate() {
+            let path = format!("/streamSplitClients/{index}");
+            if let Err(message) = crate::config::validate_split_clients_config(split) {
+                self.push(&path, message);
+            }
+            for reference in crate::config::stream_template_variables(&split.source) {
+                if !crate::config::STREAM_MAP_SOURCES.contains(&reference.as_str()) {
+                    self.push(
+                        format!("{path}/source"),
+                        format!(
+                            "stream split_clients source `${reference}` is not known at accept/preread time"
+                        ),
+                    );
+                }
+            }
+            if let Some(result) = split.result.strip_prefix('$') {
+                if stream_map_results.iter().any(|name| name == result) {
+                    self.push(
+                        format!("{path}/result"),
+                        format!("duplicate stream result variable `${result}`"),
+                    );
+                }
+                stream_map_results.push(result.to_owned());
+            }
+        }
         let mut stream_zone_names: HashSet<&str> = HashSet::new();
         for (index, zone) in config.stream_limit_conn_zones.iter().enumerate() {
             let path = format!("/streamLimitConnZones/{index}");
@@ -2879,9 +2906,10 @@ impl SemanticValidator {
                         );
                     }
                 }
+                (None, None) if stream.pass_address.is_some() => {}
                 (None, None) => self.push(
                     &path,
-                    "stream server requires a `target` or a `returnValue`",
+                    "stream server requires a `target`, a `returnValue`, or a `passAddress`",
                 ),
                 (None, Some(target)) => match target {
                     StreamTargetConfig::Upstream { name } => {
@@ -2937,6 +2965,23 @@ impl SemanticValidator {
                     "proxyTimeoutMs must be between 1000 and 3,600,000 milliseconds",
                 );
             }
+            if let Some(address) = &stream.pass_address {
+                match crate::config::resolve_stream_pass_target(&config.streams, address) {
+                    Ok(_) => {}
+                    Err(crate::config::StreamPassError::InvalidAddress) => self.push(
+                        format!("{path}/passAddress"),
+                        "stream pass address must be a literal `IP:port`",
+                    ),
+                    Err(crate::config::StreamPassError::NotConfigured) => self.push(
+                        format!("{path}/passAddress"),
+                        format!("stream pass `{address}` names no configured stream listener"),
+                    ),
+                    Err(crate::config::StreamPassError::Cycle) => self.push(
+                        format!("{path}/passAddress"),
+                        format!("stream pass `{address}` forms a pass cycle"),
+                    ),
+                }
+            }
         }
     }
 
@@ -2983,6 +3028,33 @@ impl SemanticValidator {
                     format!("{path}/timeoutMs"),
                     "mail timeout must be between 1 ms and 24 hours",
                 );
+            }
+            if let Some(capabilities) = &server.capabilities {
+                if capabilities.is_empty() || capabilities.len() > 64 {
+                    self.push(
+                        format!("{path}/capabilities"),
+                        "mail capabilities must contain 1..=64 entries",
+                    );
+                }
+                for (capability_index, capability) in capabilities.iter().enumerate() {
+                    if capability.is_empty()
+                        || capability.len() > 512
+                        || capability.chars().any(|character| character.is_control())
+                    {
+                        self.push(
+                            format!("{path}/capabilities/{capability_index}"),
+                            "mail capability must be 1..=512 printable bytes",
+                        );
+                    }
+                }
+            }
+            for (cidr_index, cidr) in server.real_ip_trusted_cidrs.iter().enumerate() {
+                if cidr.parse::<ipnet::IpNet>().is_err() && cidr.parse::<IpAddr>().is_err() {
+                    self.push(
+                        format!("{path}/realIpTrustedCidrs/{cidr_index}"),
+                        "mail set_real_ip_from must be an IP address or CIDR",
+                    );
+                }
             }
             for (field, value) in [
                 ("smtpClientBuffer", server.smtp_client_buffer),

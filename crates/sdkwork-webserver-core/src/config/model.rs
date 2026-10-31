@@ -493,6 +493,19 @@ pub struct WebServerAppConfig {
     /// plane knows at accept/preread time).
     #[serde(rename = "streamMaps", default, skip_serializing_if = "Vec::is_empty")]
     pub stream_maps: Vec<MapConfig>,
+    /// nginx stream `split_clients` blocks. The expanded source is hashed with
+    /// nginx's MurmurHash2 and assigned to the configured bucket; the result is
+    /// a per-connection variable consumed by stream `set`/`return` templates
+    /// exactly like a stream `map` result. Sources are restricted to the
+    /// accept/preread variable set (`$remote_addr`, `$remote_port`,
+    /// `$server_addr`, `$server_port`, `$ssl_preread_server_name` and the
+    /// stream GeoIP variables).
+    #[serde(
+        rename = "streamSplitClients",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub stream_split_clients: Vec<SplitClientsConfig>,
     /// Names of nginx HTTP cache zones declared by `proxy_cache_path` or a
     /// CGI `*_cache_path` `keys_zone=` parameter. All zones share the single
     /// process cache store (bounded difference: nginx sizes each zone
@@ -1835,6 +1848,15 @@ pub enum ResourceConfig {
         /// `grpc_ignore_headers` resolved field list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ignore_headers: Vec<String>,
+        /// nginx `grpc_bind <address>`: bind the upstream connection's source
+        /// address before connect. Only an IP literal is executable
+        /// (`grpc_bind off` clears an inherited bind).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bind_address: Option<IpAddr>,
+        /// nginx `grpc_socket_keepalive on`: enable `SO_KEEPALIVE` on the
+        /// upstream socket.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        socket_keepalive: Option<bool>,
     },
     Redirect {
         id: String,
@@ -2174,6 +2196,15 @@ pub struct StreamServerConfig {
     /// connection and close it instead of proxying.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_value: Option<String>,
+    /// nginx stream `pass <address>`: hand the accepted connection to the
+    /// stream server bound at `<ip>:<port>` (the `ngx_stream_pass_module`
+    /// re-dispatches the connection to that listening socket, whose default
+    /// virtual server then runs its own access phase and content handler).
+    /// IP-literal addresses with an explicit port only; a variable address
+    /// fails closed at materialization. `None` keeps the server's own content
+    /// handler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pass_address: Option<String>,
     /// nginx stream `limit_conn <zone> <n>` rules (checked at accept time;
     /// a denied connection is closed silently, like nginx).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2374,6 +2405,18 @@ pub struct MailServerConfig {
     /// is Wave 9B's relay concern).
     #[serde(default)]
     pub proxy_protocol: bool,
+    /// nginx mail `set_real_ip_from <address…>`: PROXY protocol peers trusted
+    /// to supply the client address. The header source replaces the connection
+    /// peer only when the connecting address matches one of these networks
+    /// (nginx `ngx_mail_realip_module`); an empty list trusts nobody.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub real_ip_trusted_cidrs: Vec<String>,
+    /// nginx `smtp_capabilities` / `imap_capabilities` / `pop3_capabilities`:
+    /// the custom capability list advertised by this listener, in authored
+    /// order (each entry is one advertised capability line). `None` keeps the
+    /// protocol's built-in default list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
     /// nginx `smtp_client_buffer`: the SMTP client command line bound.
     #[serde(default = "default_mail_client_buffer_bytes")]
     pub smtp_client_buffer: usize,

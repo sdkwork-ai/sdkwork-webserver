@@ -268,6 +268,13 @@
         "$ref": "#/$defs/map"
       }
     },
+    "streamSplitClients": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/splitClients"
+      }
+    },
     "cacheZoneNames": {
       "type": "array",
       "maxItems": 256,
@@ -2000,6 +2007,16 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "bindAddress": {
+          "description": "nginx grpc_bind: bind the upstream connection source address (an IP literal; `off` clears an inherited bind).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "socketKeepalive": {
+          "description": "nginx grpc_socket_keepalive: enable SO_KEEPALIVE on the upstream socket.",
+          "type": "boolean"
         }
       }
     },
@@ -3620,6 +3637,26 @@
           "minimum": 0,
           "maximum": 60000,
           "default": 0
+        },
+        "capabilities": {
+          "description": "nginx smtp_capabilities/imap_capabilities/pop3_capabilities: the custom capability list advertised by this listener, in authored order.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "realIpTrustedCidrs": {
+          "description": "nginx mail set_real_ip_from: trusted PROXY protocol peers whose header source replaces the connection address.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
         }
       }
     },
@@ -3907,7 +3944,10 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["error", "timeout"]
+            "enum": [
+              "error",
+              "timeout"
+            ]
           }
         },
         "nextUpstreamTries": {
@@ -3934,12 +3974,12 @@
           }
         },
         "defaultServer": {
-          "description": "nginx stream `listen … default_server`: selected when no `server_name` matches.",
+          "description": "nginx stream `listen \u2026 default_server`: selected when no `server_name` matches.",
           "type": "boolean",
           "default": false
         },
         "acceptProxyProtocol": {
-          "description": "nginx stream `listen … proxy_protocol`: accept an inbound PROXY protocol v1/v2 header before proxying.",
+          "description": "nginx stream `listen \u2026 proxy_protocol`: accept an inbound PROXY protocol v1/v2 header before proxying.",
           "type": "boolean",
           "default": false
         },
@@ -4067,6 +4107,12 @@
           "minimum": 512,
           "maximum": 1048576,
           "description": "Stream preread_buffer_size: ClientHello peek buffer bound."
+        },
+        "passAddress": {
+          "description": "nginx stream `pass <address>`: re-dispatch the connection to the stream server bound at this literal IP:port.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
         }
       }
     },

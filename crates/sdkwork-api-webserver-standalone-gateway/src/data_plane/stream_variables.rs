@@ -8,8 +8,8 @@
 use std::net::SocketAddr;
 
 use sdkwork_webserver_core::{
-    evaluate_stream_sets, expand_stream_template, resolve_map_value, GeoIpDatabases,
-    StreamServerConfig, StreamVariableFacts, WebServerAppConfig,
+    evaluate_split_clients, evaluate_stream_sets, expand_stream_template, resolve_map_value,
+    GeoIpDatabases, StreamServerConfig, StreamVariableFacts, WebServerAppConfig,
 };
 
 /// Build the per-connection variable table.
@@ -47,6 +47,15 @@ pub(crate) fn resolve_stream_variables(
         let value = resolve_map_value(map, &source);
         if let Some(name) = map.result.strip_prefix('$') {
             map_results.push((name.to_owned(), value.to_owned()));
+        }
+    }
+    // nginx stream `split_clients`: the shared MurmurHash2 bucket engine over
+    // the expanded accept/preread source template (the materializer restricted
+    // the source to the stream variable vocabulary).
+    for split in &config.stream_split_clients {
+        let value = evaluate_split_clients(split, &facts);
+        if let Some(name) = split.result.strip_prefix('$') {
+            map_results.push((name.to_owned(), value));
         }
     }
     evaluate_stream_sets(&server.set_variables, &facts, &map_results)
@@ -116,6 +125,74 @@ mod tests {
         assert_eq!(lookup("geoip_city"), Some("Testville"));
         assert_eq!(lookup("geoip_org"), Some("Example Org"));
         assert_eq!(lookup("geoip_postal_code"), Some("90210"));
+    }
+
+    #[test]
+    fn stream_split_clients_buckets_the_preread_sni_like_nginx() {
+        // The expected assignments for these exact source strings were captured
+        // from a real nginx 1.29.6 `split_clients "$src" { 50% "left"; * "right"; }`
+        // block (a `set` supplied the source value), so this locks the
+        // `$ssl_preread_server_name` wiring against nginx's MurmurHash2
+        // thresholds rather than against the runtime's own arithmetic. The
+        // accept-time sources are covered by the differential-stream
+        // `split_clients` fixture; the pinned oracle lacks ssl_preread.
+        let config: WebServerAppConfig = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "kind": "sdkwork.webserver.app",
+            "appKey": "stream-split-test",
+            "listeners": [],
+            "resources": [],
+            "virtualHosts": [],
+            "streamSplitClients": [{
+                "source": "$ssl_preread_server_name",
+                "result": "$bucket",
+                "parts": [
+                    {"percent": 5000, "value": "left"},
+                    {"value": "right"}
+                ]
+            }]
+        }))
+        .expect("config");
+        let server: StreamServerConfig = serde_json::from_value(serde_json::json!({
+            "id": "stream",
+            "bind": "127.0.0.1",
+            "port": 19000
+        }))
+        .expect("stream server");
+        let bucket = |sni: &str| {
+            let variables = resolve_stream_variables(
+                &config,
+                &server,
+                "198.51.100.7:12345".parse().expect("peer"),
+                "127.0.0.1:19000".parse().expect("local"),
+                Some(sni),
+                None,
+            );
+            variables
+                .into_iter()
+                .find(|(name, _)| name == "bucket")
+                .map(|(_, value)| value)
+                .expect("split_clients result")
+        };
+        assert_eq!(bucket("a.example"), "left");
+        assert_eq!(bucket("b.example"), "right");
+        assert_eq!(bucket("mail.example.com"), "left");
+        assert_eq!(bucket("tls-stream.test"), "right");
+        assert_eq!(bucket("x"), "left");
+        // Without `ssl_preread on` the variable is empty; nginx hashes the
+        // empty string (MurmurHash2 of "" is 0) and the first 50% bucket wins
+        // (verified against the oracle with `set $src ""`).
+        let variables = resolve_stream_variables(
+            &config,
+            &server,
+            "198.51.100.7:12345".parse().expect("peer"),
+            "127.0.0.1:19000".parse().expect("local"),
+            None,
+            None,
+        );
+        assert!(variables
+            .iter()
+            .any(|(name, value)| name == "bucket" && value == "left"));
     }
 
     #[test]

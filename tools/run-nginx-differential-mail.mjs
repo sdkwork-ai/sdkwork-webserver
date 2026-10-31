@@ -33,15 +33,23 @@ const RENDERED = path.join(fixtureDir, 'nginx.rendered.conf');
 const GATEWAY_CONF_DIR = path.join(root, 'tmp', 'nginx-differential-mail');
 const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-mail-ours.json');
+const CAPS_DIR = path.join(fixtureDir, 'capabilities');
+const CAPS_BASELINE = path.join(CAPS_DIR, 'nginx-oracle.json');
+const CAPS_GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'capabilities.conf');
+const CAPS_OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-mail-capabilities-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
 const CASE_FLOOR = 9;
+const CAPS_CASE_FLOOR = 8;
 const ORACLE_UNAVAILABLE_EXITS = new Set([3, 4, 5]);
 
 // Oracle side ports (proxy, auth service, mock backends).
 const ORACLE = { proxy: 21490, auth: 21500, pop3: 21501, imap: 21502, smtp: 21503 };
 // Gateway side ports, offset so the two sides never share a socket.
 const GATEWAY = { proxy: 21480, auth: 21510, pop3: 21511, imap: 21512, smtp: 21513 };
+// Capability/realip slice ports (plaintext-only fixture the oracle can run).
+const CAPS_GATEWAY = { base: 21520, auth: 21540, backend: 21541 };
+const CAPS_ORACLE = { base: 21560, auth: 21580, backend: 21581 };
 
 const log = (message) => process.stderr.write(`[nginx-differential-mail] ${message}\n`);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -159,6 +167,81 @@ function findBinary() {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 
+const CAPS_PLACEHOLDERS = [
+  '@SMTP_DEFAULT@',
+  '@SMTP_CUSTOM@',
+  '@IMAP_DEFAULT@',
+  '@IMAP_CUSTOM@',
+  '@POP3_DEFAULT@',
+  '@POP3_CUSTOM@',
+  '@SMTP_PROXY_TRUSTED@',
+  '@SMTP_PROXY_UNTRUSTED@',
+];
+
+/** Render the plaintext capability/realip fixture (oracle-runnable). */
+function renderCapabilitiesConfig(base, target) {
+  const template = fs.readFileSync(path.join(CAPS_DIR, 'nginx.conf'), 'utf8');
+  let rendered = template;
+  CAPS_PLACEHOLDERS.forEach((placeholder, index) => {
+    rendered = rendered.replaceAll(placeholder, String(base + index));
+  });
+  rendered = rendered
+    .replaceAll('@AUTH@', String(base + 20))
+    .replaceAll('@BACKEND@', String(base + 21));
+  for (const placeholder of [...CAPS_PLACEHOLDERS, '@AUTH@', '@BACKEND@']) {
+    if (rendered.includes(placeholder)) {
+      throw new Error(`mail capability fixture placeholder ${placeholder} was left unrendered`);
+    }
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, rendered);
+}
+
+function captureCapabilitiesOracle(base) {
+  const result = spawnSync('bash', [path.join(CAPS_DIR, 'run-nginx.sh')], {
+    cwd: root,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NGINX_DIFF_MAIL_CAPS_PORT: String(base),
+      NGINX_DIFF_MAIL_CAPS_WORK: path.join(root, 'tmp', 'nginx-differential-mail-caps-oracle'),
+      NGINX_DIFF_MAIL_CAPS_ORACLE_OUT: CAPS_BASELINE,
+    },
+  });
+  if (result.error) return { status: 'unavailable', reason: result.error.message };
+  if (ORACLE_UNAVAILABLE_EXITS.has(result.status)) {
+    return { status: 'unavailable', reason: (result.stderr ?? '').trim().split('\n').at(-1) };
+  }
+  if (result.status !== 0) return { status: 'failed', code: result.status };
+  return { status: 'captured' };
+}
+
+function runCapabilitiesBattery(python, base, outPath) {
+  const result = spawnSync(
+    python,
+    [
+      path.join(CAPS_DIR, 'battery.py'),
+      '--smtp-default', String(base),
+      '--smtp-custom', String(base + 1),
+      '--imap-default', String(base + 2),
+      '--imap-custom', String(base + 3),
+      '--pop3-default', String(base + 4),
+      '--pop3-custom', String(base + 5),
+      '--smtp-proxy-trusted', String(base + 6),
+      '--smtp-proxy-untrusted', String(base + 7),
+      '--auth-port', String(base + 20),
+      '--backend-port', String(base + 21),
+      '--out', outPath,
+    ],
+    { cwd: root, encoding: 'utf8' },
+  );
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  process.stderr.write(output);
+  if (result.status !== 0) return { ok: false, cases: 0 };
+  const match = output.match(/\((\d+) mail cases\)/);
+  return { ok: true, cases: match ? Number(match[1]) : 0 };
+}
+
 async function main() {
   const refreshOracle = process.argv.includes('--refresh-oracle');
   const requireOracle = process.argv.includes('--require-oracle');
@@ -262,7 +345,107 @@ async function main() {
     }
     fs.closeSync(logHandle);
   }
-  return exitCode;
+  if (exitCode !== 0) return exitCode;
+
+  // Mail residual slice: custom capability lists and `set_real_ip_from`. The
+  // pinned oracle is built without mail_ssl, so this second fixture is
+  // plaintext-only and can be captured from the oracle itself.
+  for (const [label, port] of [
+    ['capability gateway listener', CAPS_GATEWAY.base],
+    ['capability mock auth_http', CAPS_GATEWAY.auth],
+    ['capability mock SMTP backend', CAPS_GATEWAY.backend],
+  ]) {
+    if (!(await portFree(port))) {
+      log(`FAIL: 127.0.0.1:${port} (${label}) is already listening; refusing to measure it`);
+      return 1;
+    }
+  }
+  let capsBaseline = fs.existsSync(CAPS_BASELINE);
+  if (refreshOracle || !capsBaseline) {
+    log(
+      refreshOracle
+        ? 'refreshing the nginx oracle baseline for the capability/realip fixture…'
+        : 'no committed capability/realip baseline; capturing one…',
+    );
+    const oracle = captureCapabilitiesOracle(CAPS_ORACLE.base);
+    if (oracle.status === 'captured') {
+      capsBaseline = true;
+      log(`oracle baseline written to ${path.relative(root, CAPS_BASELINE)}`);
+    } else {
+      log(`oracle ${oracle.status}: ${oracle.reason ?? 'no real nginx mail build available here'}`);
+      if (!capsBaseline) {
+        if (requireOracle) {
+          log('FAIL: --require-oracle was requested but no capability/realip baseline was produced');
+          return 1;
+        }
+        log('SKIP: no capability/realip baseline to compare against; that slice did NOT run');
+        return 0;
+      }
+      log('falling back to the committed capability/realip baseline');
+    }
+  }
+  const capsRecorded = JSON.parse(fs.readFileSync(CAPS_BASELINE, 'utf8'));
+  const capsRecordedCases = Object.keys(capsRecorded).filter((key) => !key.startsWith('_')).length;
+  if (capsRecordedCases < CAPS_CASE_FLOOR) {
+    log(
+      `FAIL: the committed capability baseline holds ${capsRecordedCases} cases, below the floor of ${CAPS_CASE_FLOOR}`,
+    );
+    return 1;
+  }
+  try {
+    renderCapabilitiesConfig(CAPS_GATEWAY.base, CAPS_GATEWAY_CONF);
+  } catch (error) {
+    log(`FAIL: ${error.message}`);
+    return 1;
+  }
+  const capsLogPath = path.join(root, 'tmp', 'nginx-differential-mail-capabilities-gateway.log');
+  const capsLogHandle = fs.openSync(capsLogPath, 'w');
+  log(`capability gateway listeners ${CAPS_GATEWAY.base}..${CAPS_GATEWAY.base + 7}`);
+  const capsGateway = spawn(binary, ['serve-nginx', CAPS_GATEWAY_CONF], {
+    cwd: root,
+    stdio: ['ignore', capsLogHandle, capsLogHandle],
+  });
+  let capsExit = 1;
+  try {
+    if (!(await waitForPort(CAPS_GATEWAY.base, 20_000))) {
+      log(
+        `FAIL: the gateway never listened on ${CAPS_GATEWAY.base}; see ${path.relative(root, capsLogPath)}`,
+      );
+    } else if (capsGateway.exitCode !== null) {
+      log(`FAIL: the capability gateway exited with ${capsGateway.exitCode} instead of serving`);
+    } else {
+      const battery = runCapabilitiesBattery(python, CAPS_GATEWAY.base, CAPS_OUR_CAPTURE);
+      if (!battery.ok) {
+        log('FAIL: the capability/realip battery could not capture the gateway');
+      } else if (battery.cases < CAPS_CASE_FLOOR) {
+        log(
+          `FAIL: the capability/realip battery reported ${battery.cases} cases, below the floor of ${CAPS_CASE_FLOOR}`,
+        );
+      } else {
+        const matched = spawnSync(
+          python,
+          [path.join(fixtureDir, 'compare.py'), '--expected', CAPS_BASELINE, '--actual', CAPS_OUR_CAPTURE],
+          { cwd: root, stdio: 'inherit' },
+        ).status === 0;
+        log(
+          matched
+            ? `PASS: ${battery.cases} capability/realip cases match real nginx`
+            : 'FAIL: unexpected capability/realip differences (see above)',
+        );
+        capsExit = matched ? 0 : 1;
+      }
+    }
+  } finally {
+    if (capsGateway.exitCode === null) {
+      capsGateway.kill();
+      await Promise.race([
+        new Promise((resolve) => capsGateway.once('exit', resolve)),
+        delay(10_000).then(() => capsGateway.kill('SIGKILL')),
+      ]);
+    }
+    fs.closeSync(capsLogHandle);
+  }
+  return capsExit;
 }
 
 process.exit(await main());

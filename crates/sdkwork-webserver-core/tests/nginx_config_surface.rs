@@ -2137,11 +2137,11 @@ fn grpc_unsupported_forms_fail_closed_with_located_diagnostics() {
             "grpc_ssl_conf_command",
         ),
         (
-            "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive on;",
+            "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive maybe;",
             "grpc_socket_keepalive",
         ),
         (
-            "grpc_pass grpc://127.0.0.1:9100; grpc_bind 127.0.0.1;",
+            "grpc_pass grpc://127.0.0.1:9100; grpc_bind unix:/tmp/source.sock;",
             "grpc_bind",
         ),
         (
@@ -2374,12 +2374,20 @@ fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
             "ssl_session_cache",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver 127.0.0.1; } }",
-            "resolver",
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver not-an-ip; } }",
+            "IP literal",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol smtp; set_real_ip_from 127.0.0.1; } }",
-            "set_real_ip_from",
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver_timeout soon; } }",
+            "resolver_timeout",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; set_real_ip_from not-a-network; } }",
+            "IP address or CIDR",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; smtp_capabilities \"\"; } }",
+            "capability",
         ),
         (
             "mail { server { listen 127.0.0.1:2993 ssl; protocol imap; } }",

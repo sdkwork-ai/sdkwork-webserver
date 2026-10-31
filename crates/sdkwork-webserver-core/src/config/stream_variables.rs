@@ -13,12 +13,113 @@
 //! A full stream variable engine (rewrites, `if`, upstream selection by
 //! variable, `$proxy_protocol_*` from parsed inbound PROXY headers) is not
 //! implemented; those forms fail closed at configuration time.
+//!
+//! `resolve_stream_pass_target` resolves the nginx stream `pass <address>`
+//! content handler: the connection is re-dispatched to the default virtual
+//! server of the named listening socket (nginx `ngx_stream_pass_module`).
 
 use std::net::IpAddr;
 
 use super::geoip::GeoIpRequestState;
 use super::map_variables::MapVariables;
-use super::model::StreamSetVariableConfig;
+use super::model::{StreamServerConfig, StreamSetVariableConfig};
+
+/// nginx `NGX_STREAM_PASS_MAX_PASSES`: a pass chain longer than this is a cycle.
+pub const STREAM_PASS_MAX_PASSES: u8 = 10;
+
+/// Why a stream `pass <address>` target could not be resolved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamPassError {
+    /// The value is not an `IP:port` / `[IPv6]:port` literal.
+    InvalidAddress,
+    /// No configured stream listener listens on the named address.
+    NotConfigured,
+    /// The pass chain revisits a server or exceeds nginx's 10-pass bound.
+    Cycle,
+}
+
+/// Resolve one nginx stream `pass <address>` content handler.
+///
+/// nginx parses the value as an address with an explicit port and re-dispatches
+/// the connection to the listening socket bound there; that socket's default
+/// virtual server (`default_server`, else the first server on the socket) runs
+/// its own content handler. A chain of `pass` directives is followed up to
+/// [`STREAM_PASS_MAX_PASSES`] jumps.
+///
+/// # Errors
+///
+/// Returns [`StreamPassError::InvalidAddress`] when the address is not a
+/// literal IP/port, [`StreamPassError::NotConfigured`] when no listener binds
+/// it, and [`StreamPassError::Cycle`] when the chain loops.
+pub fn resolve_stream_pass_target<'a>(
+    configs: &'a [StreamServerConfig],
+    address: &str,
+) -> Result<&'a StreamServerConfig, StreamPassError> {
+    let socket = parse_pass_socket(address).ok_or(StreamPassError::InvalidAddress)?;
+    let mut current = socket_target(configs, socket).ok_or(StreamPassError::NotConfigured)?;
+    let mut visited = vec![current];
+    let mut passes = 0_u8;
+    while let Some(next_address) = configs[current].pass_address.as_deref() {
+        passes = passes.saturating_add(1);
+        if passes > STREAM_PASS_MAX_PASSES {
+            return Err(StreamPassError::Cycle);
+        }
+        let next_socket = parse_pass_socket(next_address).ok_or(StreamPassError::InvalidAddress)?;
+        let next = socket_target(configs, next_socket).ok_or(StreamPassError::NotConfigured)?;
+        if visited.contains(&next) {
+            return Err(StreamPassError::Cycle);
+        }
+        visited.push(next);
+        current = next;
+    }
+    Ok(&configs[current])
+}
+
+/// Split a validated `pass` address into its IP/port pair.
+fn parse_pass_socket(address: &str) -> Option<(IpAddr, u16)> {
+    let (host, port) = if let Some(rest) = address.strip_prefix('[') {
+        rest.split_once("]:")?
+    } else {
+        let (host, port) = address.rsplit_once(':')?;
+        if host.contains(':') {
+            return None;
+        }
+        (host, port)
+    };
+    Some((host.parse().ok()?, port.parse().ok()?))
+}
+
+/// Whether one stream server listens on the `pass` socket.
+///
+/// nginx matches a literal listen address exactly and a wildcard listener by
+/// socket family and port (`ngx_stream_pass_match`).
+fn pass_target_matches((host, port): (IpAddr, u16), config: &StreamServerConfig) -> bool {
+    if config.port != port {
+        return false;
+    }
+    let Ok(bind) = config.bind.parse::<IpAddr>() else {
+        return false;
+    };
+    if bind.is_unspecified() {
+        return bind.is_ipv4() == host.is_ipv4();
+    }
+    bind == host
+}
+
+/// The default virtual server of the socket a `pass` address names.
+fn socket_target(configs: &[StreamServerConfig], socket: (IpAddr, u16)) -> Option<usize> {
+    let targets: Vec<usize> = configs
+        .iter()
+        .enumerate()
+        .filter(|(_, config)| pass_target_matches(socket, config))
+        .map(|(index, _)| index)
+        .collect();
+    targets
+        .iter()
+        .copied()
+        .find(|index| configs[*index].default_server)
+        .or_else(|| targets.first().copied())
+}
 
 /// Variables a stream `map` source may use (all known at accept/preread time).
 pub const STREAM_MAP_SOURCES: &[&str] = &[

@@ -1,0 +1,86 @@
+{
+  "imap.capability-custom": {
+    "client": [
+      "* OK IMAP4 ready\r\n",
+      "* CAPABILITY IMAP4rev2 LITERAL+ AUTH=PLAIN\r\na1 OK completed\r\n"
+    ]
+  },
+  "imap.capability-default": {
+    "client": [
+      "* OK IMAP4 ready\r\n",
+      "* CAPABILITY IMAP4 IMAP4rev1 UIDPLUS AUTH=PLAIN\r\na1 OK completed\r\n"
+    ]
+  },
+  "mail.realip-trusted": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 203.0.113.9",
+        "Client-Host: [UNAVAILABLE]",
+        "Proxy-Protocol-Addr: 203.0.113.9",
+        "Proxy-Protocol-Port: 5555",
+        "Proxy-Protocol-Server-Addr: 127.0.0.1",
+        "Proxy-Protocol-Server-Port: 25"
+      ]
+    ],
+    "client": [
+      "220 mail.example.com ESMTP ready\r\n",
+      "250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n",
+      "235 2.0.0 OK\r\n"
+    ]
+  },
+  "mail.realip-untrusted": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Proxy-Protocol-Addr: 203.0.113.9",
+        "Proxy-Protocol-Port: 5555",
+        "Proxy-Protocol-Server-Addr: 127.0.0.1",
+        "Proxy-Protocol-Server-Port: 25"
+      ]
+    ],
+    "client": [
+      "220 mail.example.com ESMTP ready\r\n",
+      "250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n",
+      "235 2.0.0 OK\r\n"
+    ]
+  },
+  "pop3.capa-custom": {
+    "client": [
+      "+OK POP3 ready\r\n",
+      "+OK Capability list follows\r\nTOP\r\nUSER\r\nPIPELINING\r\nSASL PLAIN LOGIN\r\n.\r\n"
+    ]
+  },
+  "pop3.capa-default": {
+    "client": [
+      "+OK POP3 ready\r\n",
+      "+OK Capability list follows\r\nTOP\r\nUSER\r\nUIDL\r\nSASL PLAIN LOGIN\r\n.\r\n"
+    ]
+  },
+  "smtp.ehlo-custom": {
+    "client": [
+      "220 mail.example.com ESMTP ready\r\n",
+      "250-mail.example.com\r\n250-SIZE 10485760\r\n250-ENHANCEDSTATUSCODES\r\n250-8BITMIME\r\n250-DSN\r\n250 AUTH PLAIN LOGIN\r\n"
+    ]
+  },
+  "smtp.ehlo-default": {
+    "client": [
+      "220 mail.example.com ESMTP ready\r\n",
+      "250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n"
+    ]
+  }
+}

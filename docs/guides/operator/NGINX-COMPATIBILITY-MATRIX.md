@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 370 |
-| accepted, NOT enforced | 170 |
-| rejected (fail closed) | 199 |
+| executable | 378 |
+| accepted, NOT enforced | 172 |
+| rejected (fail closed) | 189 |
 | excluded from profile | 5 |
 | **total** | **744** |
 
@@ -84,7 +84,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_degradation_module` (2) — `degradation`, `degrade`
 - `ngx_http_fastcgi_module` (6) — `fastcgi_catch_stderr`, `fastcgi_ignore_client_abort`, `fastcgi_max_temp_file_size`, `fastcgi_send_lowat`, `fastcgi_temp_file_write_size`, `fastcgi_temp_path`
 - `ngx_http_flv_module` (1) — `flv`
-- `ngx_http_grpc_module` (8) — `grpc_bind`, `grpc_socket_keepalive`, `grpc_ssl_certificate_cache`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_password_file`, `grpc_ssl_session_reuse`
+- `ngx_http_grpc_module` (6) — `grpc_ssl_certificate_cache`, `grpc_ssl_ciphers`, `grpc_ssl_conf_command`, `grpc_ssl_crl`, `grpc_ssl_password_file`, `grpc_ssl_session_reuse`
 - `ngx_http_gunzip_filter_module` (2) — `gunzip`, `gunzip_buffers`
 - `ngx_http_gzip_filter_module` (3) — `gzip_hash`, `gzip_no_buffer`, `postpone_gzipping`
 - `ngx_http_headers_filter_module` (3) — `add_header_inherit`, `add_trailer`, `add_trailer_inherit`
@@ -106,19 +106,12 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
 - `ngx_mail_auth_http_module` (1) — `auth_http_pass_client_cert`
-- `ngx_mail_core_module` (2) — `resolver`, `resolver_timeout`
-- `ngx_mail_imap_module` (1) — `imap_capabilities`
-- `ngx_mail_pop3_module` (1) — `pop3_capabilities`
-- `ngx_mail_realip_module` (1) — `set_real_ip_from`
-- `ngx_mail_smtp_module` (1) — `smtp_capabilities`
 - `ngx_mail_ssl_module` (16) — `ssl_certificate_compression`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`
 - `ngx_openssl_cache_module` (1) — `ssl_object_cache_inheritable`
 - `ngx_quic_bpf_module` (1) — `quic_bpf`
 - `ngx_stream_geo_module` (1) — `geo`
 - `ngx_stream_log_module` (1) — `open_log_file_cache`
-- `ngx_stream_pass_module` (1) — `pass`
 - `ngx_stream_proxy_module` (6) — `proxy_downstream_buffer`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_password_file`, `proxy_upstream_buffer`
-- `ngx_stream_split_clients_module` (1) — `split_clients`
 - `ngx_stream_ssl_module` (14) — `ssl_alpn`, `ssl_certificate_cache`, `ssl_certificate_compression`, `ssl_crl`, `ssl_ech_file`, `ssl_handshake_timeout`, `ssl_ocsp`, `ssl_ocsp_cache`, `ssl_ocsp_responder`, `ssl_password_file`, `ssl_reject_handshake`, `ssl_session_ticket_key`, `ssl_stapling_file`, `ssl_stapling_responder`
 - `ngx_stream_upstream_zone_module` (1) — `zone`
 - `ngx_thread_pool_module` (1) — `thread_pool`
@@ -578,7 +571,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `grpc_bind` | 1\|2 | http, http-location, http-server | rejected (fail closed) |  |
+| `grpc_bind` | 1\|2 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" bindAddress (IP literal source address for the h2 connector)`. applied in the h2 client connector (source bind / SO_KEEPALIVE); the pinned oracle lacks --with-http_v2_module so no grpc_pass differential is possible — covered by real-socket integration tests instead |
 | `grpc_buffer_size` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_buffer_size setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
 | `grpc_connect_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_connect_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
 | `grpc_hide_header` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_hide_header setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
@@ -592,7 +585,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `grpc_read_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_read_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
 | `grpc_send_timeout` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_send_timeout setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
 | `grpc_set_header` | 2 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_set_header setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
-| `grpc_socket_keepalive` | flag | http, http-location, http-server | rejected (fail closed) |  |
+| `grpc_socket_keepalive` | flag | http, http-location, http-server | executable | runtime: `resources[].type="grpc" socketKeepalive (SO_KEEPALIVE on the h2 TCP socket)`. applied in the h2 client connector (source bind / SO_KEEPALIVE); the pinned oracle lacks --with-http_v2_module so no grpc_pass differential is possible — covered by real-socket integration tests instead |
 | `grpc_ssl_certificate` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_ssl_certificate setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
 | `grpc_ssl_certificate_cache` | 1\|2\|3 | http, http-location, http-server | rejected (fail closed) |  |
 | `grpc_ssl_certificate_key` | 1 | http, http-location, http-server | executable | runtime: `resources[].type="grpc" (grpc_ssl_certificate_key setting in the grpc adapter; h2 client with always-verified upstream TLS)`. nginx 1.29.6 does not map non-zero grpc-status to 502: trailers-only errors keep 200 with grpc-status/grpc-message as response headers and body+trailers stream 200 with trailers; the runtime matches the oracle; no upstream HTTP/2 connection pooling (one connection per attempt); request body is bounded-buffered; grpc_ssl_verify_depth is accepted but full-chain verification is always enforced; unix/variable targets and the grpc_buffers/ignore_headers/internal_trailers/temp/limit-rate/bind/socket-keepalive forms fail closed with located diagnostics |
@@ -1184,8 +1177,8 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `listen` | 1+ | mail-server | executable | runtime: `mailServers[].listen`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `max_errors` | 1 | mail, mail-server | executable | runtime: `mailServers[].maxErrors`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `protocol` | 1 | mail-server | executable | runtime: `mailServers[].protocol`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
-| `resolver` | 1+ | mail, mail-server | rejected (fail closed) |  |
-| `resolver_timeout` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `resolver` | 1+ | mail, mail-server | accepted, NOT enforced | the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied |
+| `resolver_timeout` | 1 | mail, mail-server | accepted, NOT enforced | the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied |
 | `server` | no-args | mail | executable | runtime: `mail server blocks (listen/protocol/server_name/timeout/tls)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `server_name` | 1 | mail, mail-server | executable | runtime: `mailServers[].serverName`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `timeout` | 1 | mail, mail-server | executable | runtime: `mailServers[].timeoutMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
@@ -1195,7 +1188,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
 | `imap_auth` | 1+ | mail, mail-server | executable | runtime: `mailServers[].imapAuth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
-| `imap_capabilities` | 1+ | mail, mail-server | rejected (fail closed) |  |
+| `imap_capabilities` | 1+ | mail, mail-server | executable | runtime: `mailServers[].capabilities.imap (custom IMAP CAPABILITY list)`. bounded implementation; forms outside the documented subset fail closed with located diagnostics |
 | `imap_client_buffer` | 1 | mail, mail-server | executable | runtime: `mailServers[].imapClientBufferBytes`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_module` (1 directives)
@@ -1209,7 +1202,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
 | `pop3_auth` | 1+ | mail, mail-server | executable | runtime: `mailServers[].pop3Auth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
-| `pop3_capabilities` | 1+ | mail, mail-server | rejected (fail closed) |  |
+| `pop3_capabilities` | 1+ | mail, mail-server | executable | runtime: `mailServers[].capabilities.pop3 (custom POP3 CAPA list)`. bounded implementation; forms outside the documented subset fail closed with located diagnostics |
 
 #### `ngx_mail_proxy_module` (7 directives)
 
@@ -1227,14 +1220,14 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `set_real_ip_from` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `set_real_ip_from` | 1 | mail, mail-server | executable | runtime: `mailServers[].realIpTrustedCidrs (trusted inbound PROXY peers rewrite the client address)`. bounded implementation; forms outside the documented subset fail closed with located diagnostics |
 
 #### `ngx_mail_smtp_module` (4 directives)
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
 | `smtp_auth` | 1+ | mail, mail-server | executable | runtime: `mailServers[].smtpAuth`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
-| `smtp_capabilities` | 1+ | mail, mail-server | rejected (fail closed) |  |
+| `smtp_capabilities` | 1+ | mail, mail-server | executable | runtime: `mailServers[].capabilities.smtp (custom SMTP EHLO capability list, nginx 250-/250 line rendering)`. bounded implementation; forms outside the documented subset fail closed with located diagnostics |
 | `smtp_client_buffer` | 1 | mail, mail-server | executable | runtime: `mailServers[].smtpClientBufferBytes`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `smtp_greeting_delay` | 1 | mail, mail-server | executable | runtime: `mailServers[].smtpGreetingDelayMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
@@ -1340,7 +1333,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `pass` | 1 | stream-server | rejected (fail closed) |  |
+| `pass` | 1 | stream-server | executable | runtime: `streamServers[].passAddress (IP-literal address:port re-dispatch to the target listen socket default server, chain up to 10 with cycle rejection)`. bounded implementation; forms outside the documented subset fail closed with located diagnostics |
 
 #### `ngx_stream_proxy_module` (32 directives)
 
@@ -1401,7 +1394,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `split_clients` | 2 | stream | rejected (fail closed) |  |
+| `split_clients` | 2 | stream | executable | runtime: `streamSplitClients[] (MurmurHash2 cumulative buckets over accept/preread sources: $remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name + stream GeoIP vars; result seeded into the per-connection variable table)`. bounded implementation; forms outside the documented subset fail closed with located diagnostics |
 
 #### `ngx_stream_ssl_module` (31 directives)
 

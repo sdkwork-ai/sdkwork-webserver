@@ -141,9 +141,9 @@ pub use source::{
     DEFAULT_TOML_PROFILE,
 };
 pub use stream_variables::{
-    evaluate_stream_sets, expand_stream_template, stream_template_variables,
-    validate_stream_return, validate_stream_set, StreamVariableFacts, STREAM_MAP_SOURCES,
-    STREAM_TEMPLATE_VARIABLES,
+    evaluate_stream_sets, expand_stream_template, resolve_stream_pass_target,
+    stream_template_variables, validate_stream_return, validate_stream_set, StreamPassError,
+    StreamVariableFacts, STREAM_MAP_SOURCES, STREAM_PASS_MAX_PASSES, STREAM_TEMPLATE_VARIABLES,
 };
 pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,
