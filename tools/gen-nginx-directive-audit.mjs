@@ -57,7 +57,7 @@ const AUDIT_HEAD = '93900462';
 const AUDIT_BRANCH = 'main';
 const PROFILE = 'http-core-v1';
 const SNAPSHOT_STATE =
-  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the userid/browser-module wave (wave 11A) (code plus the re-synced directive catalog), on top of HEAD ' +
+  'uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) the userid/browser-module wave (wave 11A) and the HTTP/2 DATA-chunking + random_index wave (wave 11B) (code plus the re-synced directive catalog), on top of HEAD ' +
   AUDIT_HEAD;
 const REMAINING_WAVE = 'remaining backlog';
 
@@ -500,6 +500,12 @@ const COMPLETED_WAVES = [
       'http:ancient_browser_value',
     ],
   },
+  {
+    key: 'wave 11B (http2_chunk_size + random_index)',
+    summary:
+      'HTTP/2 DATA-frame body re-chunker for http2_chunk_size (http/server/location; nginx 8 KiB default, 16 MiB clamp, zero rejected) proven by a raw h2 frame-capture client, and random_index directory selection (bounded sorted candidate scan, deterministic seeded SplitMix64, symlink refusal) proven by a real-nginx candidate-set differential',
+    ids: ['http:http2_chunk_size', 'http:random_index'],
+  },
 ];
 
 const COMPLETED_WAVE_IDS = new Set(COMPLETED_WAVES.flatMap((wave) => wave.ids));
@@ -531,29 +537,16 @@ const REMAINING_GAP_CATEGORIES = [
     label: 'module-sized functional modules',
     priority: 'medium',
     ids: [
-      'http:random_index',
       'http:degradation',
       'http:degrade',
       'http:slice',
     ],
     rejectedLoss:
       'a stock nginx.conf that uses this module fails to activate.',
-    why: 'the remaining module-sized features are random_index (random directory-index selection), degradation/degrade (nginx Plus degradation limits) and slice (partial-object cache indexing); userid and browser moved to executable in wave 11A, so these are self-contained module work rather than engine work.',
+    why: 'the remaining module-sized features are slice (partial-object cache indexing) and degradation/degrade (nginx Plus degradation limits, with no OSS oracle). random_index moved to executable in wave 11B; the userid/browser modules moved in wave 11A, so what remains is not engine work.',
     surface:
       'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/handler.rs + static_file_response.rs (new module handlers), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for userid and slice',
-  },
-  {
-    key: 'http2-chunking',
-    label: 'HTTP/2 DATA chunking',
-    priority: 'medium (blocked upstream)',
-    ids: ['http:http2_chunk_size'],
-    rejectedLoss:
-      'a stock nginx.conf that tunes the HTTP/2 DATA-frame chunk size fails to activate.',
-    why: 'the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob; implementing it needs a bounded body re-chunker plus an h2 frame-capture test harness, which has not been done. Every other HTTP/2 tuning directive is executable, a nginx-obsolete accepted no-op, or runtime-owned ingress buffer sizing.',
-    surface:
-      'crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/server.rs (Hyper h2 builder) + data_plane/runtime.rs (limits struct), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs',
-    tests: 'h2 DATA-chunking differential once the pinned hyper/h2 exposes the knob; blocked upstream until then',
+    tests: 'one differential slice per module against nginx 1.29.6 plus expiry/encoding unit tests for slice',
   },
   {
     key: 'ocsp',
@@ -855,7 +848,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_v2_module$/,
-    'http2_chunk_size is tracked as wave-3 backlog (the pinned hyper/h2 ingress has no DATA-chunk knob); the module\'s other directives are executable, nginx-obsolete accepted no-ops, or runtime-owned ingress buffer sizing.',
+    'the remaining rejected rows are HTTP/2 tuning knobs the pinned hyper/h2 ingress does not expose; http2_chunk_size is executable through the response-body re-chunker, and the module\'s other directives are nginx-obsolete accepted no-ops or runtime-owned ingress buffer sizing.',
   ],
   [
     /^ngx_http_ssl_module$/,
@@ -963,7 +956,7 @@ const FAIL_CLOSED_REASONS = [
   ],
   [
     /^ngx_http_random_index_module$/,
-    'random index selection is tracked as wave-4 backlog (module-sized work).',
+    'the module\'s only directive (random_index) is executable; no remaining rejection is planned.',
   ],
   [
     /^ngx_http_slice_filter_module$/,
@@ -2167,7 +2160,7 @@ function renderHeader(inventory, catalog) {
   wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B) and the
   CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D) and the
   bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
-  userid/browser-module wave (wave 11A).** The code, tests, generated operator matrix and the re-synced directive
+  userid/browser-module wave (wave 11A) and the HTTP/2 DATA-chunking + random_index wave (wave 11B).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   \`${AUDIT_HEAD}\`; the audit is regenerated against that post-wave catalog (evidence
   revision ${catalog.evidenceRevision}). Wave 1 (map, MIME types/default_type,
@@ -2191,7 +2184,7 @@ function renderHeader(inventory, catalog) {
   force_ranges, ignore_headers, pass_request_body) and the bounded subrequest-engine wave
   (addition/auth_request/mirror on a one-level engine) and the stream-plane wave (upstream
   TLS, inbound PROXY protocol, SNI routing, half-close, bind, counters, rates and the retry
-  budget) and the userid/browser-module wave (cookies, UA classification tables) are
+  budget), the userid/browser-module wave (cookies, UA classification tables) and the HTTP/2 DATA-chunking + random_index wave (DATA-frame re-chunking, bounded directory selection) are
   recorded as completed in section 3, and every one of them is asserted executable by
   \`--verify-evidence\`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
@@ -2298,7 +2291,7 @@ ${['core', 'events', 'http', 'mail', 'stream']
   )} of ${total} directives (${((countRows(rows, 'enforced') / total) * 100).toFixed(
     1,
   )}%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave and the userid/browser-module wave landed ${completedCount} directives. ${countRows(
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave and the HTTP/2 DATA-chunking + random_index wave landed ${completedCount} directives. ${countRows(
      rows,
      'runtime-owned',
    )} more are deliberately runtime-owned (${(
@@ -2407,7 +2400,7 @@ ${categoryRows
   }).join('\n');
   return `## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B)
 
 The catalog now classifies every directive below as \`executable\` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -2439,7 +2432,8 @@ buffer/gzip-flag and gRPC ignore_headers; and the subrequest-engine wave added t
 addition/auth_request/auth_request_set/mirror forms; and the stream-plane wave added
 upstream TLS (shared proxy_ssl policy), inbound PROXY v1/v2 + deadline, SNI server_name
 routing, half-close, proxy_bind, counters, rates and the next_upstream retry budget; and
-wave 11A added the userid cookie module and the browser UA-classification tables.
+wave 11A added the userid cookie module and the browser UA-classification tables; wave 11B added
+HTTP/2 DATA-frame chunking for \`http2_chunk_size\` and the \`random_index\` directory handler.
 
 ${completedTable}
 ${completedRows}
@@ -2535,10 +2529,10 @@ proxy_set_header/grpc_set_header) and the browser classification module
 safari/konqueror, Firefox matches \`rv:\`, Chrome matches \`Safari/\`, first matching slot
 decides, the http-level inherited modern list reproduces nginx's unfilled-mask quirk,
 values default "1", \`$modern_browser\`/\`$ancient_browser\`). differential-http grew
-274 -> 364 with 90 new cases (userid issue/echo/on/v1/log/off/attrs/name/domain/path/
+274 -> 367 with 93 new cases (userid issue/echo/on/v1/log/off/attrs/name/domain/path/
 expires/flags/p3p/mark/service/inheritance/404; browser 4 locations x 15 UAs + no-UA +
-http inheritance) and its oracle was regenerated from real nginx 1.29.6; floor/manifest
-364. Bounded differences recorded: the userid identifier tail is CSPRNG-derived (nginx
+http inheritance; wave 11B random_index candidate-set/empty/off) and its oracle was
+regenerated from real nginx 1.29.6; floor/manifest 367. Bounded differences recorded: the userid identifier tail is CSPRNG-derived (nginx
 uses time/pid/sequencer) while the observable 16-byte shape, service/address word, time
 position, mark placement and echo semantics match and are differentially canonicalised;
 \`$uid_*\` expands empty inside subrequest responses; error_page internal redirects keep the
@@ -2555,7 +2549,7 @@ pre-vhost-selection \`merge_slashes\` quirk); those are documented in each catal
   )} directives)
 
 These are the categories \`specs/nginx-gap.catalog.json\` lists as remaining after
-the userid/browser-module wave (wave 11A). An accepted-unenforced row is silently ignored today; a rejected row fails
+the HTTP/2 DATA-chunking + random_index wave (wave 11B). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -2566,13 +2560,12 @@ ${backlogSections}
 Within the backlog, the largest surfaces are the mail module residuals (23) and the 21
 residual sub-families of the landed CGI protocol modules (temp-spool blockers,
 ignore_client_abort, catch_stderr, send_lowat, uWSGI TLS leftovers); the remaining
-module-sized work is random_index, degradation/degrade and slice (4 rows). The stream plane is
+module-sized work is degradation/degrade (nginx Plus) and slice (3 rows). The stream plane is
 nearly complete: only stream split_clients (map-style nested variable table) and stream
 pass (named-target selection) remain as explicit blockers. Eight gRPC residual
 bind/socket/TLS-library knobs come next. \`chunked_transfer_encoding\` is a probed blocker
 (the pinned hyper HTTP/1.1 encoder cannot emit a close-delimited response),
-\`http2_chunk_size\` needs a bounded body re-chunker plus an h2 frame-capture harness (not
-done), and the OCSP rows are limited to dynamic fetch/refresh/verification (static
+\`http2_chunk_size\` now re-chunks responses and \`random_index\` executes (wave 11B), and the OCSP rows are limited to dynamic fetch/refresh/verification (static
 ssl_stapling_file executes) because rustls exposes no fetch surface. The open-file-cache
 rows are no longer backlog: static-file caching is runtime-owned and their performance
 tuning has no client-visible response effect.
@@ -2635,10 +2628,9 @@ Wave 8 note: the subrequest engine is bounded by design - one level, 4 MiB body 
 target handlers limited to return/empty_gif/proxy_pass - and every out-of-bound form fails
 closed with a located diagnostic. Remaining HTTP-level gap rows and their blockers:
 \`chunked_transfer_encoding\` (hyper HTTP/1.1 encoder cannot emit close-delimited framing;
-probed, see section 5.3), \`http2_chunk_size\` (feasible body re-chunker plus an h2
-frame-capture harness, not done), OCSP dynamic fetch/refresh (rustls is static-only), and
-the module-sized userid/browser/random_index/degradation/slice modules (each needs its own
-bounded wave; slice requires partial-object cache indexing). The open-file-cache rows are
+probed, see section 5.3), \`http2_chunk_size\` and \`random_index\` now execute (wave 11B), OCSP dynamic fetch/refresh
+(rustls is static-only), and the module-sized degradation/degrade and slice modules remain
+(slice requires partial-object cache indexing). The open-file-cache rows are
 runtime-owned, not backlog.
 
 Wave 7E note: the stream plane now executes upstream TLS identity/verification through the
@@ -2660,7 +2652,23 @@ pid/sequencer) while the observable 16-byte shape, service/address word, time po
 mark placement and echo semantics match and are differentially canonicalised; \`$uid_*\`
 expands empty inside subrequest responses; error_page internal redirects keep the original
 location config; \`$uid_reset\` is not implemented. The module-sized backlog is now only
-random_index, degradation/degrade and slice.
+degradation/degrade and slice.
+
+Wave 11B acceptance evidence: \`http2_chunk_size\` is not exposed by the pinned hyper 1 /
+h2 0.4 server API (\`h2::SendStream::send_data\` writes each body chunk as one frame and
+never merges them, but there is no server-side DATA-frame chunk-size control). The runtime
+therefore resolves the nginx value at http/server/location into
+\`virtualHosts[].http2ChunkSize\` / \`routes[].http2ChunkSize\` (nginx default 8 KiB, clamped
+at 2^24-1, zero rejected) and an outermost layer splits the response body into bounded
+chunks before hyper sees it; the reassembled body is byte-identical. The wire proof is the
+raw h2 frame-capture integration test (\`tests/http2_tuning.rs\`), and a real v2-enabled
+nginx config-acceptance probe checks the same directive contexts plus the zero-size
+rejection. The HTTP/1 differential is deliberately not used to fake an HTTP/2 frame
+boundary. \`random_index\` scans a bounded (4096-entry) sorted candidate set, skips hidden
+names and symlinks, and selects with a deterministic seeded SplitMix64; the
+differential-http slice compares the candidate set against real nginx 1.29.6 (192 draws),
+plus the empty-directory and \`off\` behavior. differential-http grew 364 -> 367;
+floor/manifest 367.
 
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: \`charset_map\` (byte-level transcoding is deliberately out of
@@ -2708,7 +2716,7 @@ function renderSpotChecks(rows) {
 
 - A sample of ${VERIFIED_SPOT_CHECKS.length} \`executable\` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave and the userid/browser-module wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave and the HTTP/2 DATA-chunking + random_index wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2928,8 +2936,8 @@ same catalog is byte-identical. \`--check\` regenerates in memory and compares b
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the userid/browser-module wave (wave 11A) landed and
-the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the HTTP/2 DATA-chunking + random_index wave (wave 11B)
+landed and the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |

@@ -699,6 +699,7 @@ mod tests {
             ignore_invalid_headers: true,
             charset: None,
             autoindex: None,
+            http2_chunk_size: None,
             referer: None,
             userid: None,
             browser: None,

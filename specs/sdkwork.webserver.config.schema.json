@@ -2729,6 +2729,12 @@
         "autoindex": {
           "$ref": "#/$defs/autoindex"
         },
+        "http2ChunkSize": {
+          "description": "Server-level nginx http2_chunk_size (http -> server resolved); maximum response-body bytes written into one HTTP/2 DATA frame.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777215
+        },
         "referer": {
           "$ref": "#/$defs/referer"
         },
@@ -2957,6 +2963,16 @@
         "autoindex": {
           "description": "Location-level nginx autoindex policy resolved over the host value.",
           "$ref": "#/$defs/autoindex"
+        },
+        "randomIndex": {
+          "description": "Location-level nginx random_index: select a random non-hidden regular file for a directory request before index/autoindex handling.",
+          "type": "boolean"
+        },
+        "http2ChunkSize": {
+          "description": "Location-level nginx http2_chunk_size; overrides the host value.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777215
         },
         "referer": {
           "$ref": "#/$defs/referer"

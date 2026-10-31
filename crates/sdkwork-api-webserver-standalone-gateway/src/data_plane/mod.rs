@@ -20,6 +20,7 @@ mod gzip_predicate;
 mod handler;
 mod handshake_timeout;
 mod http1_wire;
+mod http2_chunk;
 mod http2_wire;
 mod io_timeout;
 mod keep_alive_timeout;

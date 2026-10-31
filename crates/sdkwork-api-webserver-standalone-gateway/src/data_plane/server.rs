@@ -664,7 +664,13 @@ async fn serve_listener(
         )
         // Outermost: nginx `gzip_vary off` removes the compression layer's
         // automatic `Vary: Accept-Encoding`.
-        .layer(super::gzip_predicate::SuppressGzipVaryLayer);
+        .layer(super::gzip_predicate::SuppressGzipVaryLayer)
+        // Outermost: nginx `http2_chunk_size` DATA-frame bounding. It must run
+        // after every body-producing layer (notably compression), so it wraps
+        // the fully finalized response and only rewrites HTTP/2 bodies.
+        .layer(middleware::from_fn(
+            super::http2_chunk::apply_http2_chunking,
+        ));
     let service = app.into_make_service_with_connect_info::<DownstreamConnectionInfo>();
     let global_permits = runtime.connection_permits.clone();
     let resource_pressure = runtime.resource_pressure.clone();

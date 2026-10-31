@@ -845,6 +845,52 @@ def capture_concurrent_connection_limit(
     )
 
 
+def capture_random_index_candidates(
+    port: int,
+    upstream_port: int,
+    dead_port: int,
+    results: dict,
+    label: str,
+    path: str,
+    host: str = HOST,
+    attempts: int = 192,
+) -> None:
+    """Record the set of bodies `random_index` can serve for one directory.
+
+    nginx chooses a random regular file per request, so a single response is
+    not comparable across two runs. The observable contract is the candidate
+    set: with enough draws both implementations must return exactly the same
+    set of files. `attempts` is 64x the fixture's three candidates, which makes
+    missing a candidate for nginx vanishingly unlikely (3*(2/3)^192 ~ 1e-33)
+    and covers the runtime's deterministic seeded selector by construction
+    (its unit test proves every 64x window covers every candidate).
+    """
+    candidates = {}
+    for _ in range(attempts):
+        status, response_headers, body = request(port, path, host=host)
+        record = canonicalize(port, upstream_port, dead_port, status, response_headers, body)
+        content_type = record["headers"].get("content-type")
+        etag = record["headers"].get("etag")
+        key = (record["status"], record["body_sha256"], content_type, etag)
+        candidates[key] = {
+            "status": record["status"],
+            "body_sha256": record["body_sha256"],
+            "body_len": record["body_len"],
+            "body_text": record.get("body_text"),
+            "content_type": content_type,
+            "etag": etag,
+        }
+    results[label] = {
+        "status": 200,
+        "headers": {},
+        "body_len": 0,
+        "body_sha256": "",
+        "random_index_candidates": sorted(
+            candidates.values(), key=lambda item: item["body_sha256"]
+        ),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
@@ -1870,6 +1916,20 @@ def main() -> int:
                     headers=[("User-Agent", agent)],
                 )
         case("browser.http.no-ua", "/browser/http", host=BROWSER_HTTP_HOST)
+
+        # ---- Wave 11B: random_index -------------------------------------
+        # The candidate set is the observable contract; a single random pick is
+        # not comparable. `off`/undeclared and the empty directory stay exact.
+        capture_random_index_candidates(
+            port,
+            upstream_port,
+            dead_port,
+            results,
+            "random-index.candidates",
+            "/random-index/",
+        )
+        case("random-index.empty", "/random-index-empty/")
+        case("random-index.off", "/random-plain/")
 
         document = {
             "_server": identity,

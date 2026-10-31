@@ -1631,6 +1631,12 @@ impl SemanticValidator {
         let mut total_routes = 0usize;
         for (index, virtual_host) in config.virtual_hosts.iter().enumerate() {
             let path = format!("/virtualHosts/{index}");
+            if virtual_host.http2_chunk_size == Some(0) {
+                self.push(
+                    format!("{path}/http2ChunkSize"),
+                    "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
+                );
+            }
             let named_targets = named_location_targets(self, &path, virtual_host);
             let map_variable_names: Vec<String> = config
                 .maps
@@ -4242,6 +4248,12 @@ fn validate_routes(
             validator.push(
                 format!("{path}/maxRequestBodyBytes"),
                 "maxRequestBodyBytes must be greater than zero",
+            );
+        }
+        if route.http2_chunk_size == Some(0) {
+            validator.push(
+                format!("{path}/http2ChunkSize"),
+                "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
             );
         }
         let mut route_variables = server_variables.to_vec();

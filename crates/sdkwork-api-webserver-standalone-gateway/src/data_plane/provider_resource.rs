@@ -438,6 +438,8 @@ mod tests {
             internal: false,
             charset: None,
             autoindex: None,
+            random_index: None,
+            http2_chunk_size: None,
             referer: None,
             userid: None,
             browser: None,

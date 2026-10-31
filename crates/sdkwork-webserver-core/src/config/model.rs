@@ -3069,6 +3069,12 @@ pub struct VirtualHostConfig {
     /// `None` leaves nginx's defaults (no modern rule, no ancient matcher).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser: Option<BrowserConfig>,
+    /// Server-level nginx `http2_chunk_size` resolved for this host
+    /// (http → server inheritance); `None` keeps nginx's 8 KiB default.
+    /// The runtime re-chunks HTTP/2 response bodies at this boundary because
+    /// the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http2_chunk_size: Option<usize>,
 }
 
 /// `true` is the serde default for the nginx `merge_slashes` /
@@ -3081,6 +3087,16 @@ fn is_true(value: &bool) -> bool {
 /// `NGX_MAX_INT32_VALUE`, i.e. a range-count ceiling that is effectively
 /// unbounded for any real request.
 pub const DEFAULT_MAX_RANGES: u64 = i32::MAX as u64;
+
+/// nginx `NGX_HTTP_V2_MAX_FRAME_SIZE`: the largest legal HTTP/2 frame payload
+/// (`2^24 - 1`). nginx clamps `http2_chunk_size` values above this ceiling
+/// instead of rejecting the configuration.
+pub const HTTP2_MAX_FRAME_SIZE: usize = 16_777_215;
+
+/// nginx `http2_chunk_size` default (`ngx_http_v2_merge_loc_conf`:
+/// `ngx_conf_merge_size_value(conf->chunk_size, prev->chunk_size, 8 * 1024)`),
+/// the maximum response-body bytes nginx writes into one HTTP/2 DATA frame.
+pub const DEFAULT_HTTP2_CHUNK_SIZE: usize = 8 * 1024;
 
 /// nginx proxy response-header policy (`proxy_hide_header`,
 /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
@@ -3696,6 +3712,15 @@ pub struct RouteConfig {
     /// Location-level nginx `autoindex` family resolved over the host value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autoindex: Option<AutoindexConfig>,
+    /// Location-level nginx `random_index` (nginx allows the directive only in
+    /// `location {}`): when `Some(true)`, a directory request selects a random
+    /// non-hidden regular file before the `index`/`autoindex` handling runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub random_index: Option<bool>,
+    /// Location-level nginx `http2_chunk_size`; `None` inherits the host
+    /// (which already carries the http/server-resolved value).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http2_chunk_size: Option<usize>,
     /// Location-level nginx `valid_referers` policy resolved over the host
     /// value (a location declaration replaces the inherited list).
     #[serde(default, skip_serializing_if = "Option::is_none")]

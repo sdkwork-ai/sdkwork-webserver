@@ -22,6 +22,7 @@ use super::{
     model::MapEntryConfig,
     model::TlsVersion,
     model::WebServerAppConfig,
+    model::HTTP2_MAX_FRAME_SIZE,
     network::hostname_upstream_allowed_cidrs,
     proxy_headers::merge_proxy_set_headers,
     validate_webserver_config,
@@ -1076,6 +1077,33 @@ fn materialize_size_bytes(value: &str) -> u64 {
         .parse::<u64>()
         .unwrap_or(0)
         .saturating_mul(multiplier)
+}
+
+/// Typed `http2ChunkSize`: a byte count (number or nginx-style size string).
+///
+/// Mirrors nginx's `http2_chunk_size` post-handler: zero is rejected and a
+/// value above `NGX_HTTP_V2_MAX_FRAME_SIZE` is clamped rather than refused.
+fn materialize_http2_chunk_size(value: &Value, path: &str) -> Result<usize, WebServerConfigError> {
+    let bytes = match value {
+        Value::Number(number) => number.as_u64(),
+        Value::String(text) => Some(materialize_size_bytes(text)),
+        _ => None,
+    };
+    let Some(bytes) = bytes else {
+        return Err(materialize_error(
+            path,
+            "http2ChunkSize must be an integer byte count or a size string such as \"8k\"",
+        ));
+    };
+    if bytes == 0 {
+        return Err(materialize_error(
+            path,
+            "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
+        ));
+    }
+    Ok(usize::try_from(bytes)
+        .unwrap_or(HTTP2_MAX_FRAME_SIZE)
+        .min(HTTP2_MAX_FRAME_SIZE))
 }
 
 fn parse_location_match<'a>(
@@ -2263,6 +2291,8 @@ impl<'a> Materializer<'a> {
                 "etag",
                 "userid",
                 "browser",
+                "randomIndex",
+                "http2ChunkSize",
             ],
         )?;
         let match_value = as_str(location, &path, "match")?;
@@ -2621,6 +2651,7 @@ impl<'a> Materializer<'a> {
                 "location",
                 "userid",
                 "browser",
+                "http2ChunkSize",
             ],
         )?;
         // Server-level `proxySetHeader` entries are inherited by every proxy
@@ -2817,6 +2848,14 @@ impl<'a> Materializer<'a> {
         if let Some(browser) = server.get("browser") {
             virtual_host["browser"] = browser.clone();
         }
+        // Typed server-level `http2ChunkSize` (nginx server context); locations
+        // that declare no value inherit it.
+        if let Some(value) = server.get("http2ChunkSize") {
+            virtual_host["http2ChunkSize"] = json!(materialize_http2_chunk_size(
+                value,
+                &format!("{path}.http2ChunkSize")
+            )?);
+        }
         // Build routes with their match metadata (the materialize_location
         // helper already pushed resources; attach route objects here).
         let mut route_entries = Vec::new();
@@ -2868,6 +2907,21 @@ impl<'a> Materializer<'a> {
             }
             if let Some(browser) = location.get("browser") {
                 route["browser"] = browser.clone();
+            }
+            if let Some(value) = location.get("http2ChunkSize") {
+                route["http2ChunkSize"] = json!(materialize_http2_chunk_size(
+                    value,
+                    &format!("{path}.http2ChunkSize")
+                )?);
+            }
+            if let Some(random_index) = location.get("randomIndex") {
+                let Some(enabled) = random_index.as_bool() else {
+                    return Err(materialize_error(
+                        &path,
+                        "randomIndex must be a boolean (`random_index on|off`)",
+                    ));
+                };
+                route["randomIndex"] = Value::Bool(enabled);
             }
             route_entries.push(route);
         }
@@ -6664,6 +6718,72 @@ mode = "log"
         let route_userid = route.userid.as_ref().expect("route userid");
         assert_eq!(route_userid.mode, UserIdMode::Log);
         assert_eq!(route_userid.name, "uid");
+    }
+
+    #[test]
+    fn typed_http2_chunk_size_and_random_index_materialize() {
+        let toml_text = r#"
+[http]
+[[http.server]]
+listen = ["8080"]
+serverName = ["typed.example.test"]
+http2ChunkSize = "8k"
+
+[[http.server.location]]
+match = "/chunked/"
+root = "/srv/www"
+http2ChunkSize = 1024
+
+[[http.server.location]]
+match = "/random/"
+root = "/srv/www"
+randomIndex = true
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        let host = &config.virtual_hosts[0];
+        assert_eq!(
+            host.http2_chunk_size,
+            Some(8 * 1024),
+            "server-level http2ChunkSize is materialized"
+        );
+        let chunked = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/chunked/")
+            .expect("chunked route");
+        assert_eq!(chunked.http2_chunk_size, Some(1024));
+        assert_eq!(chunked.random_index, None);
+        let random = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/random/")
+            .expect("random route");
+        assert_eq!(random.random_index, Some(true));
+        assert_eq!(random.http2_chunk_size, None);
+
+        // nginx clamps above NGX_HTTP_V2_MAX_FRAME_SIZE and rejects zero; the
+        // typed materializer mirrors both rules.
+        let clamped_text = toml_text.replace("http2ChunkSize = \"8k\"", "http2ChunkSize = \"32m\"");
+        let clamped_value: toml::Value = toml::from_str(&clamped_text).expect("toml parses");
+        let clamped = materialize_app(
+            &serde_json::to_value(&clamped_value).expect("converts"),
+            "test",
+        )
+        .expect("materialize clamped");
+        assert_eq!(
+            clamped.virtual_hosts[0].http2_chunk_size,
+            Some(HTTP2_MAX_FRAME_SIZE)
+        );
+        let zero_text = toml_text.replace("http2ChunkSize = \"8k\"", "http2ChunkSize = 0");
+        let zero_value: toml::Value = toml::from_str(&zero_text).expect("toml parses");
+        let error = materialize_app(
+            &serde_json::to_value(&zero_value).expect("converts"),
+            "test",
+        )
+        .expect_err("zero chunk size must fail closed");
+        assert!(format!("{error}").contains("http2ChunkSize"), "{error}");
     }
 
     #[test]

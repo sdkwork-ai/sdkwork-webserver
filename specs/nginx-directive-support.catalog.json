@@ -7789,10 +7789,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "virtualHosts[].http2ChunkSize / routes[].http2ChunkSize (HTTP/2 response-body re-chunker; default 8 KiB, nginx clamp 16 MiB)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs",
+          "test": "http2_data_frames_respect_the_configured_chunk_size"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "test": "http2_tuning_diagnostics_are_truthful"
+        }
+      ],
+      "knownDifferences": [
+        "the pinned hyper 1 / h2 0.4 server API exposes no DATA-frame chunk-size knob (h2::SendStream::send_data writes each body chunk as one frame and never merges them); the runtime therefore splits the response body into at most `http2_chunk_size` bytes before hyper sees it. The reassembled body is byte-identical and every DATA frame is <= the configured size. nginx 1.29.6 clamps values above NGX_HTTP_V2_MAX_FRAME_SIZE to 2^24-1 and rejects zero; the runtime reproduces both.",
+        "the HTTP/1 differential harness cannot observe an HTTP/2 DATA-frame boundary, so no differential case fakes one: the wire evidence is the h2 frame-capture test, and a real v2-enabled nginx config-acceptance probe (tools/check-nginx-http2-chunk-acceptance.mjs) checks http/server/location acceptance plus the zero-size rejection."
+      ]
     },
     {
       "id": "http:http2_idle_timeout",
@@ -11893,10 +11911,38 @@
         "http-location"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http-location"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "virtualHosts[].routes[].randomIndex (default off; bounded candidate scan + seeded selection)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "random-index.candidates"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "random-index.empty"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "random-index.off"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs",
+          "test": "random_index_selects_only_visible_regular_files"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "test": "materializes_random_index_location_flag"
+        }
+      ],
+      "knownDifferences": [
+        "nginx chooses with ngx_random() over the directory read order; the runtime scans a bounded (4096-entry) sorted candidate set and selects with a deterministic SplitMix64 seeded by the directory path and a per-process counter. The observable contract is preserved: the served file is always a non-hidden regular file and the candidate set over many requests matches nginx exactly (the differential compares that set, not individual draws).",
+        "the runtime skips symlinked files even when they resolve to a regular file because every other static delivery path refuses symlinks; nginx would follow the link. A directory with no candidate falls through to nginx's 403 (autoindex off) or listing (autoindex on)."
+      ]
     },
     {
       "id": "http:read_ahead",

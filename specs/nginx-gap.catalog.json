@@ -8,6 +8,8 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Wave 11B (2026-10-31): http2_chunk_size and random_index execute; differential-http 364->367 (random-index candidate set/empty/off); h2 frame-capture test proves DATA frames <= configured chunk with byte-identical reassembly; nginx config-acceptance probe for http2_chunk_size. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Slice remains fail-closed (shared store whole-representation contract); next: GeoIP + residual closure.",
+    "Wave 11B (2026-10-31): `http2_chunk_size` executes at http/server/location through an outermost response-body re-chunker (nginx 8 KiB default, 16 MiB clamp, zero rejected; hyper/h2 exposes no server-side DATA-frame knob), proven by a raw h2 frame-capture test plus a real v2-enabled nginx config-acceptance probe; `random_index` executes at location with a bounded sorted candidate scan, hidden/symlink exclusion and a deterministic seeded SplitMix64 selection, proven by a real-nginx candidate-set differential (192 draws), empty-directory and off cases. differential-http grew 364->367. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Remaining module-sized gaps: slice, degradation/degrade (nginx Plus).",
     "userid + browser modules (Wave 11A, 2026-10-31): 13 directives executable with 90 new real-nginx differential-http cases (274->364). Catalog: 360 executable / 170 accepted-unenforced / 201 fail-closed / 13 excluded. Remaining module-sized gaps: random_index, slice, degradation/degrade (nginx Plus). Wave 11B (http2_chunk_size/random_index/slice) is next.",
     "Stream plane wave (Wave 7E, 2026-10-30): upstream TLS client, inbound PROXY v1/v2 + proxy_protocol_timeout, SNI server_name routing, half-close, proxy_bind, request/response counters, download/upload rates and the next_upstream retry budget execute; differential-stream grew 9->14 (proxy_ssl verified/untrusted, proxy_protocol inbound/missing, half-close) and stream_tls_proxy integration tests cover SNI/bind/retry/PROXY. Still fail-closed with exact blockers: stream split_clients, pass, rustls-unsupported proxy_ssl knobs. Catalog: 341 executable / 170 accepted-unenforced / 220 fail-closed / 13 excluded.",
     "Subrequest engine (Wave 8, 2026-10-30): addition/auth_request/auth_request_set/mirror execute with 9 real-nginx differential-http cases (274/274). Reported blockers (not faked): chunked_transfer_encoding off needs close-delimited framing hyper cannot emit; http2_chunk_size needs a body re-chunker + h2 frame-capture harness; userid/browser/random_index/degradation/slice need their own bounded waves (UA tables, RNG evidence strategy, partial-object cache indexing). Catalog: 328 executable / 171 accepted-unenforced / 232 fail-closed / 13 excluded.",
@@ -247,7 +249,7 @@
       "id": "nginx.behavioral-corpus",
       "group": "operations",
       "status": "implemented",
-      "summary": "Indexed real-nginx differential slices under tests/nginx/: conditional-cache (50 cases, tools/run-nginx-differential.mjs, captured nginx 1.29.6 oracle), broad HTTP surface (75 cases, tools/run-nginx-differential-http.mjs), virtual-host selection + named locations (39 cases, tools/run-nginx-differential-host.mjs), plus the in-process full-surface behavioural corpus (76 cases, tools/run-nginx-behavioral-corpus.mjs). tools/run-nginx-compat-gate.mjs executes them all as the release gate. Oracles are committed and pinned; a real nginx binary is needed only to refresh them. Full OSS parity remains out of profile"
+      "summary": "Indexed real-nginx differential slices under tests/nginx/: conditional-cache (50 cases, tools/run-nginx-differential.mjs, captured nginx 1.29.6 oracle), broad HTTP surface (367 cases, tools/run-nginx-differential-http.mjs, including the wave 11B random_index candidate-set matrix), virtual-host selection + named locations (39 cases, tools/run-nginx-differential-host.mjs), plus the in-process full-surface behavioural corpus (76 cases, tools/run-nginx-behavioral-corpus.mjs). tools/run-nginx-compat-gate.mjs executes them all as the release gate. Oracles are committed and pinned; a real nginx binary is needed only to refresh them. Full OSS parity remains out of profile"
     },
     {
       "id": "config.source-unified-loader",
@@ -463,7 +465,7 @@
       "id": "http.http2-tuning",
       "group": "operations",
       "status": "implemented",
-      "summary": "http2_max_concurrent_streams is executable at http/server and materialized into the ingress h2 stream ceiling, proven over a real TLS/ALPN connection by parsing the server SETTINGS frame; the directives nginx 1.29.6 made obsolete (http2_max_field_size/http2_max_header_size/http2_max_requests/http2_idle_timeout/http2_recv_timeout/http2_max_concurrent_pushes/http2_push/http2_push_preload) are accepted no-ops with truthful diagnostics; buffer/table sizing keys (recv_buffer_size/body_preread_size/pool_size/streams_index_size) stay runtime-owned; http2_chunk_size fails closed because the pinned hyper/h2 ingress does not expose DATA-frame chunking. Runtime advertises its own MAX_HEADER_LIST_SIZE (documented difference) (REQ-2026-0073 wave 3b)"
+      "summary": "http2_max_concurrent_streams is executable at http/server and materialized into the ingress h2 stream ceiling, proven over a real TLS/ALPN connection by parsing the server SETTINGS frame; the directives nginx 1.29.6 made obsolete (http2_max_field_size/http2_max_header_size/http2_max_requests/http2_idle_timeout/http2_recv_timeout/http2_max_concurrent_pushes/http2_push/http2_push_preload) are accepted no-ops with truthful diagnostics; buffer/table sizing keys (recv_buffer_size/body_preread_size/pool_size/streams_index_size) stay runtime-owned; http2_chunk_size executes at http/server/location through a bounded response-body re-chunker because the pinned hyper/h2 ingress exposes no server-side DATA-frame chunk knob; nginx default 8 KiB, 16 MiB clamp and zero rejection are reproduced, the reassembled body is byte-identical, and an h2 frame-capture test proves every DATA frame stays within the configured chunk (wave 11B). Runtime advertises its own MAX_HEADER_LIST_SIZE (documented difference) (REQ-2026-0073 wave 3b)"
     },
     {
       "id": "http.proxy-method",
@@ -632,6 +634,18 @@
       "group": "core",
       "status": "implemented",
       "summary": "nginx browser module (Wave 11A): modern_browser/ancient_browser (+value) with nginx 1.29.6 UA tables (opera/msie/gecko/safari/konqueror, version comparison, first-matching-slot, regex form) at http/server/location, $modern_browser/$ancient_browser variables, nginx's http-level inherited-modern-list quirk reproduced; differential-http UA matrix (REQ-2026-0073 wave 11A)"
+    },
+    {
+      "id": "http.http2-chunk-size",
+      "group": "core",
+      "status": "implemented",
+      "summary": "http2_chunk_size (Wave 11B): executable at http/server/location + typed plane; nginx semantics (8 KiB default verified from source, 16 MiB clamp, zero rejected); hyper/h2 has no server-side DATA-frame knob, so an outermost post-compression body layer splits finalized bodies into <=chunk-size DATA frames for HTTP/2 only (reassembled body byte-identical), verified by an h2 frame-capturing gateway test and an nginx config-acceptance probe (REQ-2026-0073 wave 11B)"
+    },
+    {
+      "id": "http.random-index",
+      "group": "core",
+      "status": "implemented",
+      "summary": "random_index (Wave 11B): location-context directive + typed routes[].randomIndex; bounded 4096 sorted visible-regular-file scan, deterministic seeded SplitMix64 selection (path-derived seed), empty-set fall-through to index/autoindex, symlinks intentionally skipped, 403 above cap; differential-http candidate-set cases (192 draws exact set comparison), empty and off cases (REQ-2026-0073 wave 11B)"
     }
   ]
 }

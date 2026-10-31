@@ -57,7 +57,7 @@ use crate::config::{
     SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
     UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig, UserIdExpires, UserIdFlags,
     UserIdMode, UserIdSameSite, WebServerAppConfig, WebServerConfigError,
-    ACME_HTTP_01_CHALLENGE_PREFIX,
+    ACME_HTTP_01_CHALLENGE_PREFIX, HTTP2_MAX_FRAME_SIZE,
 };
 
 use super::parser::NginxDirective;
@@ -714,18 +714,16 @@ pub fn materialize_nginx_app(
             // nginx HTTP/2 ingress tuning. `http2_max_concurrent_streams` maps
             // onto the runtime ingress profile (the value hyper/h2 publishes
             // as SETTINGS_MAX_CONCURRENT_STREAMS). `http2_chunk_size` controls
-            // DATA-frame chunking, which the pinned hyper/h2 ingress does not
-            // expose to callers, so it fails closed instead of being faked.
+            // DATA-frame chunking; hyper/h2 exposes no server-side chunk knob,
+            // so the data plane re-chunks the response body into bounded chunks
+            // before h2 sends them (see `data_plane/http2_chunk.rs`).
             "http2_max_concurrent_streams" => {
                 mapper.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
                     directive,
                 )?);
             }
             "http2_chunk_size" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`http2_chunk_size` is not exposed by the pinned hyper/h2 ingress (it controls DATA-frame chunking); remove it or declare `http2_max_concurrent_streams` instead",
-                ));
+                mapper.http_http2_chunk_size = Some(parse_http2_chunk_size(directive)?);
             }
             "proxy_method" => {
                 mapper.http_proxy_method = Some(parse_proxy_method(directive)?);
@@ -1248,6 +1246,11 @@ struct LocationExtras {
     gzip_refinements: GzipRefinementDeclarations,
     /// Location-level nginx autoindex-family declarations.
     autoindex: AutoindexDeclarations,
+    /// Location-level nginx `random_index` flag (nginx allows the directive
+    /// only in `location {}`).
+    random_index: Option<bool>,
+    /// Location-level nginx `http2_chunk_size`; `None` inherits the host.
+    http2_chunk_size: Option<usize>,
     /// nginx `empty_gif` location handler.
     empty_gif: bool,
     /// nginx `stub_status` location handler.
@@ -1558,6 +1561,9 @@ struct Mapper<'a> {
     /// http-level `http2 on|off` inherited by every server's ssl listeners
     /// (nginx 1.25.1+ `http2` directive).
     http_http2: Option<bool>,
+    /// http-level nginx `http2_chunk_size` (the maximum body bytes written
+    /// into one HTTP/2 DATA frame); inherited by every server and location.
+    http_http2_chunk_size: Option<usize>,
     /// http-level `ssl_protocols` window inherited by every server that does
     /// not declare its own (nginx http-context inheritance).
     http_ssl_protocols: Option<SslProtocolRange>,
@@ -1728,6 +1734,7 @@ impl<'a> Mapper<'a> {
             http_proxy_intercept_errors: false,
             http_proxy_ssl: ProxySslSettings::default(),
             http_http2: None,
+            http_http2_chunk_size: None,
             http_ssl_protocols: None,
             http_cache: CacheDirectives::default(),
             http_redirect_policy: RedirectPolicyDeclarations::default(),
@@ -2233,6 +2240,7 @@ impl<'a> Mapper<'a> {
         let mut inherited_auth_off = false;
         let mut inherited_proxy_set_headers: Vec<String> = Vec::new();
         let mut server_http2: Option<bool> = None;
+        let mut server_http2_chunk_size: Option<usize> = None;
         let mut server_proxy_ssl = ProxySslSettings::default();
         let mut server_real_ip = RealIpSettings::default();
         let mut ssl_verify_client: Option<&str> = None;
@@ -2493,10 +2501,7 @@ impl<'a> Mapper<'a> {
                     )?);
                 }
                 "http2_chunk_size" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "`http2_chunk_size` is not exposed by the pinned hyper/h2 ingress (it controls DATA-frame chunking); remove it or declare `http2_max_concurrent_streams` instead",
-                    ));
+                    server_http2_chunk_size = Some(parse_http2_chunk_size(child)?);
                 }
                 "proxy_method" => {
                     server_proxy_method = Some(parse_proxy_method(child)?);
@@ -2986,6 +2991,9 @@ impl<'a> Mapper<'a> {
         let effective_limit_req_status = server_limit_req_status.or(self.http_limit_req_status);
         let effective_limit_conn_status = server_limit_conn_status.or(self.http_limit_conn_status);
         let effective_max_ranges = server_max_ranges.or(self.http_max_ranges);
+        // nginx http → server inheritance for the HTTP/2 DATA-frame chunk size;
+        // locations inherit this value unless they declare their own.
+        let effective_http2_chunk_size = server_http2_chunk_size.or(self.http_http2_chunk_size);
         self.server_proxy_response = self
             .http_proxy_response
             .clone()
@@ -3304,6 +3312,11 @@ impl<'a> Mapper<'a> {
         }
         if let Some(max_ranges) = effective_max_ranges {
             virtual_host["maxRanges"] = json!(max_ranges);
+        }
+        // nginx http/server-resolved `http2_chunk_size`; a location that
+        // declares its own value overlays it on the route.
+        if let Some(chunk_size) = effective_http2_chunk_size {
+            virtual_host["http2ChunkSize"] = json!(chunk_size);
         }
         // nginx `merge_slashes` / `underscores_in_headers` /
         // `ignore_invalid_headers` resolved for this host; only the non-default
@@ -3687,6 +3700,12 @@ impl<'a> Mapper<'a> {
                 })?;
             }
         }
+        if let Some(random_index) = extras.random_index {
+            route["randomIndex"] = json!(random_index);
+        }
+        if let Some(chunk_size) = extras.http2_chunk_size {
+            route["http2ChunkSize"] = json!(chunk_size);
+        }
         Ok(())
     }
 
@@ -4066,6 +4085,12 @@ impl<'a> Mapper<'a> {
                 }
                 "autoindex_format" => {
                     extras.autoindex.format = Some(parse_autoindex_format(child)?);
+                }
+                "random_index" => {
+                    extras.random_index = Some(parse_on_off(child, "random_index")?);
+                }
+                "http2_chunk_size" => {
+                    extras.http2_chunk_size = Some(parse_http2_chunk_size(child)?);
                 }
                 "valid_referers" => {
                     extras.referer = Some(parse_valid_referers(child)?);
@@ -11850,6 +11875,35 @@ fn parse_http2_max_concurrent_streams(directive: &NginxDirective) -> Result<u32,
     Ok(streams)
 }
 
+/// Parse `http2_chunk_size <size>` (nginx http/server/location context).
+///
+/// nginx's `ngx_http_v2_chunk_size` post-handler rejects a zero size and clamps
+/// any value above `NGX_HTTP_V2_MAX_FRAME_SIZE` (`2^24 - 1`) instead of
+/// rejecting it; the materializer reproduces both rules.
+fn parse_http2_chunk_size(directive: &NginxDirective) -> Result<usize, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "http2_chunk_size takes exactly one size",
+        ));
+    }
+    let value = &directive.args[0];
+    let Some(size) = parse_size_bytes(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid http2_chunk_size `{value}`; expected a byte size such as 8k"),
+        ));
+    };
+    if size == 0 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "the http2 chunk size cannot be zero",
+        ));
+    }
+    let size = usize::try_from(size).unwrap_or(HTTP2_MAX_FRAME_SIZE);
+    Ok(size.min(HTTP2_MAX_FRAME_SIZE))
+}
+
 /// Parse `proxy_method <method>` (an RFC 9110 method token).
 fn parse_proxy_method(directive: &NginxDirective) -> Result<String, NginxConfigError> {
     if directive.args.len() != 1 {
@@ -17868,19 +17922,129 @@ http {
             message("open_file_cache").contains("descriptor/metadata cache"),
             "open_file_cache must state its precise runtime rationale"
         );
-        // `http2_chunk_size` is active in nginx but not exposed by hyper/h2:
-        // fail closed with a precise diagnostic instead of faking it.
-        let error = materialize(
+        // `http2_chunk_size` is active in nginx but the pinned hyper/h2 ingress
+        // exposes no server-side DATA-frame chunker; the runtime therefore
+        // materializes the value and re-chunks the response body itself (see
+        // the gateway `http2_chunk` adapter and its h2 frame-capture test).
+        let config = materialize(
             r#"
 http2_chunk_size 4k;
-server { listen 80; server_name h2.example.test; location / { return 200 "ok"; } }
+server {
+    listen 80;
+    server_name h2.example.test;
+    location /inherit/ { return 200 "ok"; }
+    location /override/ { http2_chunk_size 1k; return 200 "ok"; }
+}
+server {
+    listen 80;
+    server_name h2-server.example.test;
+    http2_chunk_size 8k;
+    location / { return 200 "ok"; }
+}
 "#,
         )
-        .expect_err("http2_chunk_size must fail closed");
-        assert!(
-            error.to_string().contains("hyper/h2 ingress"),
-            "http2_chunk_size diagnostic must name the runtime blocker: {error}"
+        .expect("materialize");
+        let host_chunk = |id: &str| {
+            config
+                .virtual_hosts
+                .iter()
+                .find(|host| host.server_names.first().is_some_and(|name| name == id))
+                .unwrap_or_else(|| panic!("missing virtual host {id}"))
+                .http2_chunk_size
+        };
+        assert_eq!(
+            host_chunk("h2.example.test"),
+            Some(4 * 1024),
+            "http-level http2_chunk_size is inherited by every server"
         );
+        assert_eq!(
+            host_chunk("h2-server.example.test"),
+            Some(8 * 1024),
+            "server-level http2_chunk_size overrides the http-level value"
+        );
+        let route_chunk = |host_id: &str, path: &str| {
+            config
+                .virtual_hosts
+                .iter()
+                .find(|host| {
+                    host.server_names
+                        .first()
+                        .is_some_and(|name| name == host_id)
+                })
+                .and_then(|host| {
+                    host.routes
+                        .iter()
+                        .find(|route| route.route_match.path == path)
+                })
+                .unwrap_or_else(|| panic!("missing route {path}"))
+                .http2_chunk_size
+        };
+        assert_eq!(
+            route_chunk("h2.example.test", "/inherit/"),
+            None,
+            "a location that declares no http2_chunk_size inherits the host value"
+        );
+        assert_eq!(
+            route_chunk("h2.example.test", "/override/"),
+            Some(1024),
+            "location-level http2_chunk_size overrides the host value"
+        );
+        // nginx clamps above NGX_HTTP_V2_MAX_FRAME_SIZE and rejects zero.
+        let clamped = materialize(
+            "http2_chunk_size 32m;\nserver { listen 80; server_name h2.example.test; location / { return 200 \"ok\"; } }",
+        )
+        .expect("clamp oversized value");
+        assert_eq!(
+            clamped.virtual_hosts[0].http2_chunk_size,
+            Some(HTTP2_MAX_FRAME_SIZE)
+        );
+        for value in ["0", "many"] {
+            let error = materialize(&format!(
+                "http2_chunk_size {value};\nserver {{ listen 80; server_name h2.example.test; location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .expect_err("invalid http2_chunk_size must fail closed");
+            assert!(
+                error.to_string().contains("http2_chunk_size")
+                    || error.to_string().contains("chunk size"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn materializes_random_index_location_flag() {
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name random.example.test;
+    location /pick/ { random_index on; root /srv/www; }
+    location /off/ { random_index off; root /srv/www; }
+    location /plain/ { root /srv/www; }
+}
+"#,
+        )
+        .expect("materialize");
+        let random_index = |path: &str| {
+            config.virtual_hosts[0]
+                .routes
+                .iter()
+                .find(|route| route.route_match.path == path)
+                .unwrap_or_else(|| panic!("missing route {path}"))
+                .random_index
+        };
+        assert_eq!(random_index("/pick/"), Some(true));
+        assert_eq!(random_index("/off/"), Some(false));
+        assert_eq!(random_index("/plain/"), None);
+        // nginx allows `random_index` only in a location block; the
+        // materializer must reject the server/http contexts too.
+        for source in [
+            "random_index on;\nserver { listen 80; server_name random.example.test; location / { return 200 \"ok\"; } }",
+            "server { listen 80; server_name random.example.test; random_index on; location / { return 200 \"ok\"; } }",
+        ] {
+            let error = materialize(source).expect_err("random_index outside location must fail");
+            assert!(error.to_string().contains("random_index"), "{error}");
+        }
     }
 
     #[test]

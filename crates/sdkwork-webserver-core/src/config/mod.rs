@@ -93,8 +93,8 @@ pub use model::{
     UpstreamPassiveHealthConfig, UpstreamRetryCondition, UpstreamRetryConfig, UpstreamStoreConfig,
     UpstreamTargetConfig, UpstreamTlsConfig, UpstreamTlsTrustMode, UsageMeteringChannel,
     UsageMeteringConfig, VirtualHostConfig, WebServerAppConfig, WebServerLimits, XFrameOptions,
-    ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_MAX_RANGES, MAX_REWRITE_PHASE_OPS,
-    MAX_REWRITE_PHASE_VARIABLES,
+    ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_HTTP2_CHUNK_SIZE, DEFAULT_MAX_RANGES,
+    HTTP2_MAX_FRAME_SIZE, MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,

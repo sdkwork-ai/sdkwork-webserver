@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 360 |
+| executable | 362 |
 | accepted, NOT enforced | 170 |
-| rejected (fail closed) | 201 |
+| rejected (fail closed) | 199 |
 | excluded from profile | 13 |
 | **total** | **744** |
 
@@ -94,7 +94,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_log_module` (1) — `open_log_file_cache`
 - `ngx_http_mp4_module` (4) — `mp4`, `mp4_buffer_size`, `mp4_max_buffer_size`, `mp4_start_key_frame`
 - `ngx_http_proxy_module` (31) — `proxy_bind`, `proxy_busy_buffers_size`, `proxy_cache_background_update`, `proxy_cache_bypass`, `proxy_cache_convert_head`, `proxy_cache_lock`, `proxy_cache_lock_age`, `proxy_cache_lock_timeout`, `proxy_cache_max_range_offset`, `proxy_cache_methods`, `proxy_cache_min_uses`, `proxy_cache_revalidate`, `proxy_cookie_flags`, `proxy_force_ranges`, `proxy_ignore_client_abort`, `proxy_ignore_headers`, `proxy_limit_rate`, `proxy_next_upstream_timeout`, `proxy_next_upstream_tries`, `proxy_no_cache`, `proxy_pass_request_body`, `proxy_pass_trailers`, `proxy_set_body`, `proxy_socket_keepalive`, `proxy_ssl_certificate_cache`, `proxy_ssl_conf_command`, `proxy_ssl_crl`, `proxy_ssl_name`, `proxy_ssl_password_file`, `proxy_store`, `proxy_store_access`
-- `ngx_http_random_index_module` (1) — `random_index`
 - `ngx_http_referer_module` (2) — `referer_hash_bucket_size`, `referer_hash_max_size`
 - `ngx_http_rewrite_module` (3) — `break`, `rewrite_log`, `uninitialized_variable_warn`
 - `ngx_http_scgi_module` (4) — `scgi_ignore_client_abort`, `scgi_max_temp_file_size`, `scgi_temp_file_write_size`, `scgi_temp_path`
@@ -104,7 +103,6 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_upstream_sticky_module` (1) — `sticky`
 - `ngx_http_upstream_zone_module` (1) — `zone`
 - `ngx_http_uwsgi_module` (11) — `uwsgi_ignore_client_abort`, `uwsgi_max_temp_file_size`, `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_password_file`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_verify_depth`, `uwsgi_temp_file_write_size`, `uwsgi_temp_path`
-- `ngx_http_v2_module` (1) — `http2_chunk_size`
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
 - `ngx_mail_auth_http_module` (1) — `auth_http_pass_client_cert`
@@ -829,7 +827,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 | Directive | Args | Contexts | Status | Runtime field / difference |
 | --- | --- | --- | --- | --- |
-| `random_index` | flag | http-location | rejected (fail closed) |  |
+| `random_index` | flag | http-location | executable | runtime: `virtualHosts[].routes[].randomIndex (default off; bounded candidate scan + seeded selection)`. nginx chooses with ngx_random() over the directory read order; the runtime scans a bounded (4096-entry) sorted candidate set and selects with a deterministic SplitMix64 seeded by the directory path and a per-process counter. The observable contract is preserved: the served file is always a non-hidden regular file and the candidate set over many requests matches nginx exactly (the differential compares that set, not individual draws).; the runtime skips symlinked files even when they resolve to a regular file because every other static delivery path refuses symlinks; nginx would follow the link. A directory with no candidate falls through to nginx's 403 (autoindex off) or listing (autoindex on). |
 
 #### `ngx_http_realip_module` (3 directives)
 
@@ -1131,7 +1129,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | --- | --- | --- | --- | --- |
 | `http2` | flag | http, http-server | executable | runtime: `listeners[].protocols (h2)` |
 | `http2_body_preread_size` | 1 | http, http-server | accepted, NOT enforced | ingress buffer/table sizing follows the runtime ingress profile; the nginx value is not applied. runtime-owned ingress tuning (bounded memory profile) rather than a directive-mapped value |
-| `http2_chunk_size` | 1 | http, http-location, http-server | rejected (fail closed) |  |
+| `http2_chunk_size` | 1 | http, http-location, http-server | executable | runtime: `virtualHosts[].http2ChunkSize / routes[].http2ChunkSize (HTTP/2 response-body re-chunker; default 8 KiB, nginx clamp 16 MiB)`. the pinned hyper 1 / h2 0.4 server API exposes no DATA-frame chunk-size knob (h2::SendStream::send_data writes each body chunk as one frame and never merges them); the runtime therefore splits the response body into at most `http2_chunk_size` bytes before hyper sees it. The reassembled body is byte-identical and every DATA frame is <= the configured size. nginx 1.29.6 clamps values above NGX_HTTP_V2_MAX_FRAME_SIZE to 2^24-1 and rejects zero; the runtime reproduces both.; the HTTP/1 differential harness cannot observe an HTTP/2 DATA-frame boundary, so no differential case fakes one: the wire evidence is the h2 frame-capture test, and a real v2-enabled nginx config-acceptance probe (tools/check-nginx-http2-chunk-acceptance.mjs) checks http/server/location acceptance plus the zero-size rejection. |
 | `http2_idle_timeout` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
 | `http2_max_concurrent_pushes` | 1 | http, http-server | accepted, NOT enforced | none: nginx 1.29.6 itself made this directive an obsolete no-op (ngx_http_v2_obsolete); accepting it changes nothing on either side. nginx 1.29.6 ignores it as an obsolete directive; the runtime accepts it with the same no-op result |
 | `http2_max_concurrent_streams` | 1 | http, http-server | executable | runtime: `limits.http2MaxConcurrentStreams (advertised as h2 SETTINGS_MAX_CONCURRENT_STREAMS)`. conflicting values at http/server levels fail closed (the ingress profile owns one ceiling); the runtime always advertises SETTINGS_MAX_HEADER_LIST_SIZE from its own ingress profile; nginx 1.29.6 advertises none because http2_max_header_size is obsolete there |

@@ -223,6 +223,16 @@ def known_body_reason(expected_record):
 
 
 def compare_records(case, expected, actual, failures, known):
+    # `random_index` is intentionally non-deterministic per request: the battery
+    # records the set of candidate responses over many draws, and the compared
+    # contract is that both implementations can serve exactly the same set.
+    if "random_index_candidates" in expected or "random_index_candidates" in actual:
+        left = expected.get("random_index_candidates")
+        right = actual.get("random_index_candidates")
+        if left != right:
+            failures.append((case, "random_index_candidates", left, right))
+        return
+
     if expected.get("status") != actual.get("status"):
         failures.append((case, "status", expected.get("status"), actual.get("status")))
 

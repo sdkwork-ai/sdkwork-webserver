@@ -22,8 +22,8 @@ use sdkwork_webserver_core::{
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
     AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, RedirectPolicyConfig,
     ResourceConfig, RewriteOutcome, RoutePathType, SecureLinkFailure, SecurityHeadersConfig,
-    SelectedRoute, UserIdRequestState, XFrameOptions, DEFAULT_MAX_RANGES,
-    MAX_REWRITE_INTERNAL_REDIRECTS,
+    SelectedRoute, UserIdRequestState, XFrameOptions, DEFAULT_HTTP2_CHUNK_SIZE, DEFAULT_MAX_RANGES,
+    HTTP2_MAX_FRAME_SIZE, MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -2454,6 +2454,21 @@ async fn route_admitted_request(
         response =
             response.map(|body| Body::new(super::limit_conn::LeaseBody { inner: body, lease }));
     }
+    // nginx `http2_chunk_size`: the effective value is resolved here (location
+    // overrides the host's http/server-resolved value; absent keeps nginx's
+    // 8 KiB default) and the outermost data-plane layer re-chunks the body
+    // only for HTTP/2 requests. The value is carried on the response because
+    // that layer runs after the handler (and after compression) with no route
+    // selection context.
+    let http2_chunk_size = selected
+        .route
+        .http2_chunk_size
+        .or(selected.virtual_host.http2_chunk_size)
+        .unwrap_or(DEFAULT_HTTP2_CHUNK_SIZE)
+        .clamp(1, HTTP2_MAX_FRAME_SIZE);
+    response
+        .extensions_mut()
+        .insert(super::http2_chunk::Http2ChunkSize(http2_chunk_size));
     response
 }
 
@@ -2485,6 +2500,7 @@ fn static_delivery_policy<'a>(
             ResourceConfig::Static { index_files, .. } => index_files,
             _ => &[],
         },
+        random_index: selected.route.random_index.unwrap_or(false),
     }
 }
 
@@ -2707,7 +2723,8 @@ async fn named_fallback_selection<'a>(
             path.ends_with('/'),
             None,
             false,
-            None
+            None,
+            false
         )
         .await,
         Err(super::static_path::StaticPathError::NotFound)
@@ -4357,6 +4374,7 @@ mod tests {
             ignore_invalid_headers: true,
             charset: None,
             autoindex: None,
+            http2_chunk_size: None,
             referer: None,
             userid: None,
             browser: None,
@@ -4391,6 +4409,8 @@ mod tests {
             internal: false,
             charset: None,
             autoindex: None,
+            random_index: None,
+            http2_chunk_size: None,
             referer: None,
             userid: None,
             browser: None,

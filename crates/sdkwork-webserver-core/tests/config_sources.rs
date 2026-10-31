@@ -440,7 +440,7 @@ fn unsupported_nginx_directives_fail_closed_with_file_and_line() {
     let file = directory.path().join("bad.conf");
     fs::write(
         &file,
-        "server {\n    listen 80;\n    server_name userid.local;\n    location / {\n        random_index on;\n    }\n}\n",
+        "server {\n    listen 80;\n    server_name userid.local;\n    location / {\n        slice 1k;\n    }\n}\n",
     )
     .expect("write");
     let error = loader()
@@ -449,7 +449,7 @@ fn unsupported_nginx_directives_fail_closed_with_file_and_line() {
     let message = error.to_string();
     let diagnostics = error.diagnostics();
     assert!(
-        message.contains("random_index"),
+        message.contains("slice"),
         "diagnostic must name the directive: {message}"
     );
     if let Some(diagnostic) = diagnostics.first() {
