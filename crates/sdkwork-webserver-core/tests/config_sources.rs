@@ -599,3 +599,51 @@ fn nginx_sites_with_include_glob_expand_in_order() {
     assert_eq!(loaded.app.listeners.len(), 2);
     let _ = Path::new("");
 }
+
+/// Typed-TOML parity for the Wave 14B mail client-certificate TLS fields.
+#[test]
+fn typed_toml_mail_tls_client_certificate_fields_materialize() {
+    let directory = tempfile::TempDir::new().expect("temp dir");
+    let path = directory.path().join("server.toml");
+    fs::write(
+        &path,
+        r#"
+[[mail.server]]
+listen = ["127.0.0.1:2993 ssl"]
+protocol = "smtp"
+
+[mail.server.tls]
+certificateFile = "server.pem"
+privateKeyFile = "server.key"
+verifyClient = "optional-no-ca"
+verifyDepth = 2
+clientCertificateFile = "ca.pem"
+trustedCertificateFile = "chain.pem"
+
+[mail.server.authHttp]
+uri = "127.0.0.1:9000/auth"
+passClientCert = true
+"#,
+    )
+    .expect("write toml config");
+    let config = loader()
+        .load(&path, &ConfigLoadOptions::default())
+        .expect("typed mail TLS client-cert config materializes");
+    let server = &config.app.mail.servers[0];
+    let tls = server.tls.as_ref().expect("mail tls");
+    assert!(tls.implicit);
+    assert_eq!(
+        tls.verify_client,
+        sdkwork_webserver_core::MailClientVerifyMode::OptionalNoCa
+    );
+    assert_eq!(tls.verify_depth, 2);
+    assert!(tls
+        .client_certificate_file
+        .as_deref()
+        .is_some_and(|value| value.ends_with("ca.pem")));
+    assert!(tls
+        .trusted_certificate_file
+        .as_deref()
+        .is_some_and(|value| value.ends_with("chain.pem")));
+    assert!(server.auth_http.as_ref().expect("auth").pass_client_cert);
+}

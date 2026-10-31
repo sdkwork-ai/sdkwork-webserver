@@ -35,9 +35,9 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 391 |
+| executable | 396 |
 | accepted, NOT enforced | 173 |
-| rejected (fail closed) | 175 |
+| rejected (fail closed) | 170 |
 | excluded from profile | 5 |
 | **total** | **744** |
 
@@ -103,8 +103,7 @@ silent approximation. The exhaustive per-directive rows are in the module tables
 - `ngx_http_uwsgi_module` (7) — `uwsgi_ssl_certificate_cache`, `uwsgi_ssl_ciphers`, `uwsgi_ssl_conf_command`, `uwsgi_ssl_crl`, `uwsgi_ssl_password_file`, `uwsgi_ssl_session_reuse`, `uwsgi_ssl_verify_depth`
 - `ngx_http_v3_module` (8) — `http3`, `http3_hq`, `http3_max_concurrent_streams`, `http3_stream_buffer_size`, `quic_active_connection_id_limit`, `quic_gso`, `quic_host_key`, `quic_retry`
 - `ngx_http_xslt_filter_module` (6) — `xml_entities`, `xslt_last_modified`, `xslt_param`, `xslt_string_param`, `xslt_stylesheet`, `xslt_types`
-- `ngx_mail_auth_http_module` (1) — `auth_http_pass_client_cert`
-- `ngx_mail_ssl_module` (16) — `ssl_certificate_compression`, `ssl_ciphers`, `ssl_client_certificate`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`, `ssl_trusted_certificate`, `ssl_verify_client`, `ssl_verify_depth`
+- `ngx_mail_ssl_module` (12) — `ssl_certificate_compression`, `ssl_ciphers`, `ssl_conf_command`, `ssl_crl`, `ssl_dhparam`, `ssl_ecdh_curve`, `ssl_password_file`, `ssl_prefer_server_ciphers`, `ssl_session_cache`, `ssl_session_ticket_key`, `ssl_session_tickets`, `ssl_session_timeout`
 - `ngx_openssl_cache_module` (1) — `ssl_object_cache_inheritable`
 - `ngx_quic_bpf_module` (1) — `quic_bpf`
 - `ngx_stream_geo_module` (1) — `geo`
@@ -1164,7 +1163,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | --- | --- | --- | --- | --- |
 | `auth_http` | 1 | mail, mail-server | executable | runtime: `mailServers[].authHttp (endpoint/uri/headers/timeout)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `auth_http_header` | 2 | mail, mail-server | executable | runtime: `mailServers[].authHttp.headers`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
-| `auth_http_pass_client_cert` | flag | mail, mail-server | rejected (fail closed) |  |
+| `auth_http_pass_client_cert` | flag | mail, mail-server | executable | runtime: `mailServers[].tls.passClientCertificateToAuth (Auth-SSL-Cert header only when on; Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always when verification enabled)`. failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request) |
 | `auth_http_timeout` | 1 | mail, mail-server | executable | runtime: `mailServers[].authHttp.timeoutMs`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 #### `ngx_mail_core_module` (9 directives)
@@ -1237,7 +1236,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `ssl_certificate_compression` | flag | mail, mail-server | rejected (fail closed) |  |
 | `ssl_certificate_key` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.certificateKeyFile`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 | `ssl_ciphers` | 1 | mail, mail-server | rejected (fail closed) |  |
-| `ssl_client_certificate` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_client_certificate` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.clientCertificateFile (verification store + CertificateRequest CA hints)`. failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request) |
 | `ssl_conf_command` | 2 | mail, mail-server | rejected (fail closed) |  |
 | `ssl_crl` | 1 | mail, mail-server | rejected (fail closed) |  |
 | `ssl_dhparam` | 1 | mail, mail-server | rejected (fail closed) |  |
@@ -1249,9 +1248,9 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `ssl_session_ticket_key` | 1 | mail, mail-server | rejected (fail closed) |  |
 | `ssl_session_tickets` | flag | mail, mail-server | rejected (fail closed) |  |
 | `ssl_session_timeout` | 1 | mail, mail-server | rejected (fail closed) |  |
-| `ssl_trusted_certificate` | 1 | mail, mail-server | rejected (fail closed) |  |
-| `ssl_verify_client` | 1 | mail, mail-server | rejected (fail closed) |  |
-| `ssl_verify_depth` | 1 | mail, mail-server | rejected (fail closed) |  |
+| `ssl_trusted_certificate` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.trustedCertificateFile (verification store only, no CA hints)`. failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request) |
+| `ssl_verify_client` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.verifyClient (off\|on\|optional\|optional_no_ca; nginx post-handshake deferred verification)`. failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request) |
+| `ssl_verify_depth` | 1 | mail, mail-server | executable | runtime: `mailServers[].tls.verifyDepth (default 1; 0 = directly root-issued leaf)`. failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request) |
 | `starttls` | 1 | mail, mail-server | executable | runtime: `mailServers[].starttls (on\|only\|off)`. mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics |
 
 ### Stream (`stream`)

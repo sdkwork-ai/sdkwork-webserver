@@ -3788,6 +3788,35 @@
         "implicit": {
           "type": "boolean",
           "default": false
+        },
+        "verifyClient": {
+          "description": "nginx mail ssl_verify_client: off requests no client certificate; on requires a verified certificate; optional requests and verifies when present; optional-no-ca tolerates nginx's optional verification failures (unknown issuer/self-signed/untrusted) while still rejecting expired, bad-signature and over-depth paths.",
+          "enum": [
+            "off",
+            "on",
+            "optional",
+            "optional-no-ca"
+          ],
+          "default": "off"
+        },
+        "verifyDepth": {
+          "description": "nginx mail ssl_verify_depth: maximum number of intermediate CA certificates in the client certificate path (0 = directly issued by a trust anchor).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024,
+          "default": 1
+        },
+        "clientCertificateFile": {
+          "description": "nginx mail ssl_client_certificate: PEM CA bundle used as the client-certificate trust store and advertised as CertificateRequest CA hints.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "trustedCertificateFile": {
+          "description": "nginx mail ssl_trusted_certificate: PEM certificates added to the client-certificate verification store for chain building, without CA hints.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
         }
       }
     },

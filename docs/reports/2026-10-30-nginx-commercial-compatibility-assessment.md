@@ -16,9 +16,9 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **391** | 可承诺 |
+| executable（真实执行且有测试证据） | 79 | **396** | 可承诺 |
 | accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **170** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **175** | 安全失败，不静默近似；剩余全部为依赖/Plus 阻塞项 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **170** | 安全失败，不静默近似；剩余全部为依赖/Plus 阻塞项 |
 | excluded from profile（明确排除） | 229 | **5** | 仅 Perl 4 / 动态模块 1；GeoIP 已进档位，HTTP/3 为 fail-closed 规划项 |
 | **合计** | 744 | **744** | |
 
@@ -132,7 +132,7 @@
 | 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **89/89** 逐字节一致（含 bind/keep-conn/unix、uWSGI TLS/mTLS、CGI cache、store/rate/ranges/buffering、temp-spool/catch_stderr 用例） |
 | 真实生产配置验收（api.birdcoder.com 快照） | `node tools/check-nginx-real-world.mjs` | virtualHosts=41 / listeners=4 / resources=150 / upstreams=88 / skipped=0，纳入聚合门禁 |
 | stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **23/23**（14 主 + 9 额外：split_clients/pass） |
-| 邮件代理差分（POP3/IMAP/SMTP vs nginx） | `node tools/run-nginx-differential-mail.mjs` | **17/17**（9 主 + 8 capabilities/realip） |
+| 邮件代理差分（POP3/IMAP/SMTP vs nginx） | `node tools/run-nginx-differential-mail.mjs` | **36/36**（9 主 + 8 capabilities/realip + 19 client-cert） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |

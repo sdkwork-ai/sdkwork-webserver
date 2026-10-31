@@ -2604,6 +2604,51 @@ pub struct MailTlsConfig {
     /// Listen with implicit TLS (`listen … ssl`).
     #[serde(default)]
     pub implicit: bool,
+    /// nginx mail `ssl_verify_client on|off|optional|optional_no_ca`: the
+    /// client-certificate policy of the frontend TLS listener. nginx requests a
+    /// client certificate for every mode except `off` and checks the result
+    /// after the handshake (its OpenSSL verify callback always succeeds), so
+    /// the runtime reproduces the post-handshake rejection and the
+    /// protocol-level error line instead of a TLS handshake alert.
+    #[serde(default)]
+    pub verify_client: MailClientVerifyMode,
+    /// nginx mail `ssl_verify_depth` (nginx default 1): the maximum number of
+    /// intermediate CA certificates in the verified client certificate path.
+    /// `0` allows only a certificate issued directly by a trust anchor.
+    #[serde(default = "default_mail_verify_depth")]
+    pub verify_depth: u32,
+    /// nginx mail `ssl_client_certificate`: PEM CA bundle used as the client
+    /// certificate trust store **and** as the CertificateRequest CA-name hint
+    /// list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_certificate_file: Option<String>,
+    /// nginx mail `ssl_trusted_certificate`: PEM certificates added to the
+    /// verification store for chain building, without being advertised as CA
+    /// hints (nginx distinguishes the two bundles exactly this way).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trusted_certificate_file: Option<String>,
+}
+
+/// nginx mail `ssl_verify_client` mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MailClientVerifyMode {
+    /// `ssl_verify_client off`: no client certificate is requested.
+    #[default]
+    Off,
+    /// `ssl_verify_client on`: a client certificate is required and must
+    /// verify. A missing or unverifiable certificate is rejected with the
+    /// protocol's error line after the TLS handshake.
+    On,
+    /// `ssl_verify_client optional`: a certificate is requested and verified
+    /// when present; a missing certificate is accepted.
+    Optional,
+    /// `ssl_verify_client optional_no_ca`: a certificate is requested and its
+    /// path is verified, but nginx's documented "optional" verification
+    /// failures (unknown issuer, self-signed, untrusted) are tolerated and
+    /// recorded. Every other verification error (expired, bad signature,
+    /// depth) is rejected; this is never an unconditional accept.
+    OptionalNoCa,
 }
 
 /// One allowed TLS protocol token from mail `ssl_protocols`.
@@ -2711,6 +2756,11 @@ fn default_mail_auth_http_timeout_ms() -> u64 {
 
 fn default_mail_tls_protocols() -> Vec<MailTlsProtocol> {
     vec![MailTlsProtocol::Tls12, MailTlsProtocol::Tls13]
+}
+
+/// nginx mail `ssl_verify_depth` merge default (`ngx_mail_ssl_module`).
+fn default_mail_verify_depth() -> u32 {
+    1
 }
 
 fn default_mail_proxy_buffer_bytes() -> usize {

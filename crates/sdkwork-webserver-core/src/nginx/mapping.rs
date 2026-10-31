@@ -7439,13 +7439,49 @@ impl<'a> Mapper<'a> {
                     "mail `listen … ssl` and `starttls only` are mutually exclusive",
                 ));
             }
-            if let Some(tls) = tls.as_mut() {
-                if !implicit_tls && server.starttls == "off" {
-                    // TLS material is declared but unused by this listener;
-                    // nginx accepts it (main-context certificate for a
-                    // STARTTLS listener). Keep it for a later `starttls on` in
-                    // the same server block: the value is not silently dropped.
-                    let _ = tls;
+            // The declared TLS material may be inherited and unused by a
+            // plaintext listener; nginx accepts that (main-context certificate
+            // for a STARTTLS listener), so the value is kept, not dropped.
+            // nginx's mail SSL module initializes one SSL context per server
+            // that declares certificate material, whether or not a listener
+            // uses it, and validates the verification bundles there. Apply the
+            // same rule: a server with TLS material also materializes its
+            // client-certificate policy, even when the listener is plaintext.
+            let tls_active = tls.is_some();
+            if tls_active {
+                if server.tls_verify_client != "off" {
+                    if server.tls_verify_client != "optional-no-ca"
+                        && server.tls_client_certificate.is_none()
+                        && server.tls_trusted_certificate.is_none()
+                    {
+                        // nginx `ngx_mail_ssl_module` init: `on`/`optional`
+                        // without a verification bundle is a configuration error.
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "mail `ssl_verify_client on|optional` requires `ssl_client_certificate` or `ssl_trusted_certificate`",
+                        ));
+                    }
+                    let tls = tls.as_mut().expect("checked active TLS");
+                    tls["verifyClient"] = Value::String(server.tls_verify_client.clone());
+                    tls["verifyDepth"] = json!(server.tls_verify_depth);
+                    if let Some(client_certificate) = &server.tls_client_certificate {
+                        tls["clientCertificateFile"] = Value::String(client_certificate.clone());
+                    }
+                    if let Some(trusted_certificate) = &server.tls_trusted_certificate {
+                        tls["trustedCertificateFile"] = Value::String(trusted_certificate.clone());
+                    }
+                } else if server.tls_client_certificate.is_some()
+                    || server.tls_trusted_certificate.is_some()
+                {
+                    // The runtime refuses to accept a verification bundle that
+                    // is never consulted (the HTTP/stream planes apply the same
+                    // policy): nginx would load it only for a non-zero verify
+                    // mode, so an operator who declared it without one almost
+                    // certainly expects verification.
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail `ssl_client_certificate`/`ssl_trusted_certificate` require `ssl_verify_client on|optional|optional_no_ca`",
+                    ));
                 }
             }
             let mut entry = json!({
@@ -8816,6 +8852,12 @@ struct MailContextDefaults {
     tls_cert: Option<String>,
     tls_key: Option<String>,
     tls_protocols: Vec<String>,
+    /// nginx mail `ssl_verify_client` / `ssl_verify_depth` and the two
+    /// verification bundles, inherited from the `mail {}` context.
+    tls_verify_client: String,
+    tls_verify_depth: u32,
+    tls_client_certificate: Option<String>,
+    tls_trusted_certificate: Option<String>,
     starttls: String,
     proxy_enabled: bool,
     xclient: bool,
@@ -8848,6 +8890,10 @@ impl Default for MailContextDefaults {
             tls_cert: None,
             tls_key: None,
             tls_protocols: default_mail_tls_protocols(),
+            tls_verify_client: "off".to_owned(),
+            tls_verify_depth: 1,
+            tls_client_certificate: None,
+            tls_trusted_certificate: None,
             starttls: "off".to_owned(),
             // nginx mail proxy module defaults (ngx_mail_proxy_module merge).
             proxy_enabled: true,
@@ -8888,6 +8934,10 @@ struct MailServerDraft {
     tls_cert: Option<String>,
     tls_key: Option<String>,
     tls_protocols: Vec<String>,
+    tls_verify_client: String,
+    tls_verify_depth: u32,
+    tls_client_certificate: Option<String>,
+    tls_trusted_certificate: Option<String>,
     starttls: String,
     proxy_enabled: bool,
     xclient: bool,
@@ -8928,6 +8978,10 @@ impl MailServerDraft {
             tls_cert: defaults.tls_cert.clone(),
             tls_key: defaults.tls_key.clone(),
             tls_protocols: defaults.tls_protocols.clone(),
+            tls_verify_client: defaults.tls_verify_client.clone(),
+            tls_verify_depth: defaults.tls_verify_depth,
+            tls_client_certificate: defaults.tls_client_certificate.clone(),
+            tls_trusted_certificate: defaults.tls_trusted_certificate.clone(),
             starttls: defaults.starttls.clone(),
             proxy_enabled: defaults.proxy_enabled,
             xclient: defaults.xclient,
@@ -9009,6 +9063,22 @@ fn parse_mail_context_directive(
         }
         "ssl_protocols" => {
             defaults.tls_protocols = parse_mail_ssl_protocols(directive)?;
+            Ok(())
+        }
+        "ssl_verify_client" => {
+            defaults.tls_verify_client = parse_mail_ssl_verify_client(directive)?;
+            Ok(())
+        }
+        "ssl_verify_depth" => {
+            defaults.tls_verify_depth = parse_mail_ssl_verify_depth(directive)?;
+            Ok(())
+        }
+        "ssl_client_certificate" => {
+            defaults.tls_client_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
+        "ssl_trusted_certificate" => {
+            defaults.tls_trusted_certificate = Some(parse_mail_single_path(mapper, directive)?);
             Ok(())
         }
         "starttls" => {
@@ -9172,6 +9242,22 @@ fn parse_mail_server_directive(
             server.tls_protocols = parse_mail_ssl_protocols(directive)?;
             Ok(())
         }
+        "ssl_verify_client" => {
+            server.tls_verify_client = parse_mail_ssl_verify_client(directive)?;
+            Ok(())
+        }
+        "ssl_verify_depth" => {
+            server.tls_verify_depth = parse_mail_ssl_verify_depth(directive)?;
+            Ok(())
+        }
+        "ssl_client_certificate" => {
+            server.tls_client_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
+        "ssl_trusted_certificate" => {
+            server.tls_trusted_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
         "starttls" => {
             server.starttls = parse_mail_starttls(directive)?;
             Ok(())
@@ -9211,15 +9297,6 @@ fn parse_mail_server_directive(
                 _ => &mut server.pop3_capabilities,
             };
             parse_mail_capabilities(directive, target)
-        }
-        "ssl_client_certificate" | "ssl_verify_client" | "ssl_verify_depth" => {
-            Err(NginxConfigError::unsupported(
-                directive,
-                format!(
-                    "mail `{}` (client certificate verification) is not executable yet; client-cert auth is not modeled in the mail plane",
-                    directive.name
-                ),
-            ))
         }
         "ssl_ciphers"
         | "ssl_conf_command"
@@ -9556,6 +9633,61 @@ fn parse_mail_starttls(directive: &NginxDirective) -> Result<String, NginxConfig
             format!("mail `starttls` accepts on|off|only, found `{other:?}`"),
         )),
     }
+}
+
+/// nginx mail `ssl_verify_client on|off|optional|optional_no_ca`
+/// (`ngx_mail_ssl_module`).
+fn parse_mail_ssl_verify_client(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `ssl_verify_client` takes exactly one argument",
+        ));
+    }
+    match directive.args[0].as_str() {
+        "on" => Ok("on".to_owned()),
+        "off" => Ok("off".to_owned()),
+        "optional" => Ok("optional".to_owned()),
+        "optional_no_ca" => Ok("optional-no-ca".to_owned()),
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `ssl_verify_client` accepts on|off|optional|optional_no_ca, found `{other}`"
+            ),
+        )),
+    }
+}
+
+/// nginx mail `ssl_verify_depth` (`ngx_conf_set_num_slot`, merge default 1).
+fn parse_mail_ssl_verify_depth(directive: &NginxDirective) -> Result<u32, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `ssl_verify_depth` requires a number",
+        ));
+    };
+    if directive.args.len() != 1
+        || value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `ssl_verify_depth` requires a non-negative integer, found `{value}`"),
+        ));
+    }
+    let depth = value.parse::<u32>().map_err(|_| {
+        NginxConfigError::unsupported(
+            directive,
+            format!("mail `ssl_verify_depth` value `{value}` is out of range"),
+        )
+    })?;
+    if depth > 1024 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `ssl_verify_depth` `{value}` is outside 0..=1024"),
+        ));
+    }
+    Ok(depth)
 }
 
 fn parse_mail_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {

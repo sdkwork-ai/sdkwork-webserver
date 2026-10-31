@@ -134,7 +134,7 @@
    "listenPort": 21490,
    "cases": 9,
    "orchestrator": "tools/run-nginx-differential-mail.mjs",
-   "notes": "Wave 9B mail-proxy slice: one nginx `mail {}` fixture is rendered for real nginx 1.29.6 (built --with-mail --with-mail_ssl_module) and for the gateway; a deterministic mock auth_http service plus mock POP3/IMAP/SMTP backends record the three observable flows per case: the client-visible byte transcript, every backend line (including the backend authentication sequence, SMTP XCLIENT with the `[UNAVAILABLE]` client host, the replayed client EHLO and relayed commands) and every auth_http request header. Cases: POP3 USER/PASS + relay, POP3 AUTH LOGIN dialog, POP3 auth failure, IMAP LOGIN + relay, IMAP auth failure, SMTP AUTH PLAIN with XCLIENT + relay, SMTP auth failure with Auth-Error-Code, implicit-TLS SMTP session, and STARTTLS (greeting, EHLO with STARTTLS capability, STARTTLS 220, TLS handshake, no re-greeting, AUTH). TLS cases compare decrypted application bytes; `Auth-SSL-Cipher` is normalised because nginx reports an OpenSSL cipher name while rustls reports its own suite label. The slice owns its oracle and orchestrator; `cases` is the executed-case floor enforced by tools/run-nginx-differential-mail.mjs. Wave 13 adds a plaintext capabilities/ fixture (custom smtp/imap/pop3 capability lists and mail set_real_ip_from) that the pinned --with-mail build (without mail_ssl) can capture directly."
+   "notes": "Wave 9B mail-proxy slice: one nginx `mail {}` fixture is rendered for real nginx 1.29.6 (built --with-mail --with-mail_ssl_module) and for the gateway; a deterministic mock auth_http service plus mock POP3/IMAP/SMTP backends record the three observable flows per case: the client-visible byte transcript, every backend line (including the backend authentication sequence, SMTP XCLIENT with the `[UNAVAILABLE]` client host, the replayed client EHLO and relayed commands) and every auth_http request header. Cases: POP3 USER/PASS + relay, POP3 AUTH LOGIN dialog, POP3 auth failure, IMAP LOGIN + relay, IMAP auth failure, SMTP AUTH PLAIN with XCLIENT + relay, SMTP auth failure with Auth-Error-Code, implicit-TLS SMTP session, and STARTTLS (greeting, EHLO with STARTTLS capability, STARTTLS 220, TLS handshake, no re-greeting, AUTH). TLS cases compare decrypted application bytes; `Auth-SSL-Cipher` is normalised because nginx reports an OpenSSL cipher name while rustls reports its own suite label. The slice owns its oracle and orchestrator; `cases` is the executed-case floor enforced by tools/run-nginx-differential-mail.mjs. Wave 13 adds a plaintext capabilities/ fixture (custom smtp/imap/pop3 capability lists and mail set_real_ip_from) that the pinned --with-mail build (without mail_ssl) can capture directly. Wave 14B adds a separate client-cert/ fixture (19 cases) that exercises ssl_verify_client on/optional/optional_no_ca, ssl_verify_depth 0/1/2, ssl_client_certificate vs ssl_trusted_certificate, the protocol-specific rejection lines and the exact auth_http certificate headers (Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint/Cert)."
   },
   {
    "id": "geoip-differential",
@@ -147,6 +147,18 @@
    "cases": 5,
    "orchestrator": "tools/run-nginx-geoip-differential.mjs",
    "notes": "Wave 12 GeoIP variable-plumbing proxy differential. The pinned nginx 1.29.6 oracle is NOT built with --with-http_geoip_module, so a real GeoIP lookup differential is unavailable and is not faked here. The oracle fixture fixes the sixteen $geoip_* variables with `set` and exercises them through a `return` body, a `map` result and `add_header`; the gateway fixture declares geoip_country/geoip_city/geoip_org/geoip_proxy/geoip_proxy_recursive against the synthetic MMDB fixtures in tests/nginx/geoip and renders the same template. Four HTTP cases (US record, DE record, empty record, recursive trusted-hop walk) plus one stream `return` case must be byte-identical; the stream fixture records 127.0.0.1/32 as the US test record because the stream plane resolves the accepted peer address (no X-Forwarded-For). This proves nginx-compatible variable plumbing and empty-string rendering, not the MMDB field mapping against a GeoIP-enabled nginx (covered by Rust unit/integration tests). `cases` is the executed-case floor."
+  },
+  {
+   "id": "differential-mail-client-cert",
+   "req": "REQ-2026-0073",
+   "dir": "differential-mail/client-cert",
+   "nginxConf": "nginx.conf",
+   "probe": "battery.py",
+   "oracle": "nginx-oracle.json",
+   "listenPort": 21820,
+   "cases": 19,
+   "orchestrator": "tools/run-nginx-differential-mail.mjs",
+   "notes": "Wave 14B mail client-certificate slice: real nginx 1.29.6 (OpenSSL build with --with-mail --with-mail_ssl_module) vs the Rust mail plane. 19 cases cover implicit-TLS and STARTTLS frontends with a trusted root-signed client certificate, an untrusted certificate, a self-signed certificate, an intermediate-CA chain and a missing certificate; ssl_verify_client on/optional/optional_no_ca; ssl_verify_depth 0/1/2 including the ssl_trusted_certificate-supplied intermediate; ssl_client_certificate vs ssl_trusted_certificate verification stores; auth_http_pass_client_cert on/off plus a verify-off listener; and IMAP/POP3/SMTP rejection lines. The mock auth_http service records every header, so Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint and the percent-encoded PEM in Auth-SSL-Cert are compared byte-for-byte (Auth-SSL-Cipher is normalized like the main mail slice). The committed oracle was captured from NGINX_BIN=/tmp/nginx-oracle-src/objs/nginx."
   }
  ]
 }

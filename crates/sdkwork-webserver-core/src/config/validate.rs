@@ -3275,16 +3275,10 @@ impl SemanticValidator {
                 );
             }
         }
-        if auth.pass_client_cert {
-            // Forwarding the client certificate requires the mail plane to
-            // model downstream client-certificate verification, which it does
-            // not (mail `ssl_verify_client` fails closed). Accepting the flag
-            // would silently drop it, so it fails closed instead.
-            self.push(
-                format!("{path}/authHttp/passClientCert"),
-                "auth_http_pass_client_cert requires downstream client-certificate verification, which the mail plane does not model; remove the directive",
-            );
-        }
+        // `auth_http_pass_client_cert` is honoured only when the listener
+        // verifies a client certificate; nginx accepts the flag on a listener
+        // that requests none and simply omits `Auth-SSL-Cert`. That is the
+        // probed nginx 1.29.6 behaviour, not a silent drop.
     }
 
     /// Validate the mail frontend TLS material (Wave 9B).
@@ -3320,6 +3314,43 @@ impl SemanticValidator {
             self.push(
                 format!("{path}/tls/starttls"),
                 "implicit TLS and `starttls only` are mutually exclusive",
+            );
+        }
+        if tls.verify_depth > 1024 {
+            self.push(
+                format!("{path}/tls/verifyDepth"),
+                "ssl_verify_depth must be between 0 and 1024",
+            );
+        }
+        for (field, value) in [
+            ("clientCertificateFile", &tls.client_certificate_file),
+            ("trustedCertificateFile", &tls.trusted_certificate_file),
+        ] {
+            if value
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                self.push(
+                    format!("{path}/tls/{field}"),
+                    "a client-certificate bundle path must not be empty",
+                );
+            }
+        }
+        if tls.verify_client != crate::config::MailClientVerifyMode::Off {
+            if tls.client_certificate_file.is_none() && tls.trusted_certificate_file.is_none() {
+                // nginx `ngx_mail_ssl_module`: optional_no_ca is the only mode
+                // that accepts an empty verification store.
+                if tls.verify_client != crate::config::MailClientVerifyMode::OptionalNoCa {
+                    self.push(
+                        format!("{path}/tls/verifyClient"),
+                        "ssl_verify_client on|optional requires ssl_client_certificate or ssl_trusted_certificate",
+                    );
+                }
+            }
+        } else if tls.client_certificate_file.is_some() || tls.trusted_certificate_file.is_some() {
+            self.push(
+                format!("{path}/tls/verifyClient"),
+                "ssl_client_certificate/ssl_trusted_certificate require ssl_verify_client on|optional|optional_no_ca",
             );
         }
     }

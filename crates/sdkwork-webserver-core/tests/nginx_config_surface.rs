@@ -14,9 +14,9 @@
 use std::path::Path;
 
 use sdkwork_webserver_core::config::{
-    ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailServerProtocol,
-    MailStarttlsMode, ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
-    WebServerAppConfig, WebServerConfigLoader,
+    ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailClientVerifyMode,
+    MailServerProtocol, MailStarttlsMode, ResourceConfig, RoutePathType, StreamTlsMode,
+    UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
     expand_includes, load_nginx_compat, materialize_nginx_app_default, merge_nginx_apps,
@@ -2348,6 +2348,67 @@ mail {
     assert!(!pop3.proxy.xclient, "xclient off is inherited");
 }
 
+/// Wave 14B mail client-certificate verification materializes with nginx
+/// mail-context inheritance: `ssl_verify_client`, `ssl_verify_depth`,
+/// `ssl_client_certificate`, `ssl_trusted_certificate` and
+/// `auth_http_pass_client_cert` reach the typed mail TLS policy, and a
+/// server-level verify mode overrides the inherited one.
+#[test]
+fn mail_14b_client_certificate_policy_materializes_with_inheritance() {
+    let config = materialize_ok(
+        r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    auth_http_pass_client_cert on;
+    ssl_certificate cert.pem;
+    ssl_certificate_key key.pem;
+    ssl_verify_client optional_no_ca;
+    ssl_verify_depth 2;
+    ssl_client_certificate ca.pem;
+
+    server {
+        listen 127.0.0.1:2993 ssl;
+        protocol smtp;
+        ssl_trusted_certificate chain.pem;
+    }
+
+    server {
+        listen 127.0.0.1:2994 ssl;
+        protocol imap;
+        ssl_verify_client on;
+        ssl_trusted_certificate chain.pem;
+        ssl_client_certificate client-ca.pem;
+        ssl_verify_depth 0;
+    }
+}
+"#,
+    );
+    assert_eq!(config.mail.servers.len(), 2);
+    let smtp = &config.mail.servers[0];
+    let auth = smtp.auth_http.as_ref().expect("auth_http");
+    assert!(auth.pass_client_cert);
+    let tls = smtp.tls.as_ref().expect("mail TLS");
+    assert_eq!(tls.verify_client, MailClientVerifyMode::OptionalNoCa);
+    assert_eq!(tls.verify_depth, 2);
+    assert!(tls
+        .client_certificate_file
+        .as_deref()
+        .is_some_and(|path| path.ends_with("ca.pem")));
+    assert!(tls
+        .trusted_certificate_file
+        .as_deref()
+        .is_some_and(|path| path.ends_with("chain.pem")));
+
+    let imap = &config.mail.servers[1];
+    let tls = imap.tls.as_ref().expect("mail TLS");
+    assert_eq!(tls.verify_client, MailClientVerifyMode::On);
+    assert_eq!(tls.verify_depth, 0);
+    assert!(tls
+        .client_certificate_file
+        .as_deref()
+        .is_some_and(|path| path.ends_with("client-ca.pem")));
+}
+
 /// Forms the rustls TLS stack and the bounded runtime cannot honour fail
 /// closed with a located diagnostic instead of being accepted and ignored.
 #[test]
@@ -2402,8 +2463,20 @@ fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
             "auth_http",
         ),
         (
-            "mail { auth_http 127.0.0.1:9000/auth; auth_http_pass_client_cert on; server { listen 127.0.0.1:2993; protocol imap; } }",
-            "auth_http_pass_client_cert",
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_verify_client on; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "requires `ssl_client_certificate`",
+        ),
+        (
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_client_certificate ca.pem; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "require `ssl_verify_client",
+        ),
+        (
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_verify_depth -1; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "non-negative integer",
+        ),
+        (
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_verify_client maybe; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "on|off|optional|optional_no_ca",
         ),
         (
             "mail { max_errors 0; server { listen 127.0.0.1:2993; protocol imap; } }",

@@ -843,6 +843,10 @@ fn materialize_mail_tls(value: &Value, path: &str) -> Result<Value, WebServerCon
             "protocols",
             "starttls",
             "implicit",
+            "verifyClient",
+            "verifyDepth",
+            "clientCertificateFile",
+            "trustedCertificateFile",
         ],
     )?;
     let certificate_file = table
@@ -907,6 +911,48 @@ fn materialize_mail_tls(value: &Value, path: &str) -> Result<Value, WebServerCon
             ));
         }
         out["starttls"] = Value::String(mode.to_owned());
+    }
+    if let Some(implicit) = table.get("implicit") {
+        let implicit = implicit
+            .as_bool()
+            .ok_or_else(|| materialize_error(&format!("{path}.implicit"), "must be a boolean"))?;
+        out["implicit"] = Value::Bool(implicit);
+    }
+    if let Some(verify_client) = table.get("verifyClient") {
+        let mode = verify_client.as_str().ok_or_else(|| {
+            materialize_error(&format!("{path}.verifyClient"), "must be a string")
+        })?;
+        if !matches!(mode, "off" | "on" | "optional" | "optional-no-ca") {
+            return Err(materialize_error(
+                &format!("{path}.verifyClient"),
+                "`verifyClient` accepts off|on|optional|optional-no-ca",
+            ));
+        }
+        out["verifyClient"] = Value::String(mode.to_owned());
+    }
+    if let Some(verify_depth) = table.get("verifyDepth") {
+        let depth = verify_depth.as_u64().ok_or_else(|| {
+            materialize_error(&format!("{path}.verifyDepth"), "must be an integer")
+        })?;
+        if depth > 1024 {
+            return Err(materialize_error(
+                &format!("{path}.verifyDepth"),
+                "`verifyDepth` must be between 0 and 1024",
+            ));
+        }
+        out["verifyDepth"] = Value::from(depth);
+    }
+    for key in ["clientCertificateFile", "trustedCertificateFile"] {
+        if let Some(file) = table.get(key) {
+            let file = file
+                .as_str()
+                .map(str::trim)
+                .filter(|file| !file.is_empty())
+                .ok_or_else(|| {
+                    materialize_error(&format!("{path}.{key}"), "must be a non-empty file path")
+                })?;
+            out[key] = Value::String(file.to_owned());
+        }
     }
     Ok(out)
 }

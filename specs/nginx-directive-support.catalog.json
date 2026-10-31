@@ -20450,10 +20450,30 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate forwarding to auth_http is not implemented (no mail client-cert model)"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.passClientCertificateToAuth (Auth-SSL-Cert header only when on; Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always when verification enabled)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.trusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.pass-cert-off"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:auth_http_timeout",
@@ -21933,10 +21953,30 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate verification is not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.clientCertificateFile (verification store + CertificateRequest CA hints)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-trusted-bundle"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.trusted"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:ssl_conf_command",
@@ -22157,10 +22197,26 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "trusted client-certificate chains are not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.trustedCertificateFile (verification store only, no CA hints)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-trusted-intermediate.leaf-only"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:ssl_verify_client",
@@ -22172,10 +22228,46 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate verification is not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.verifyClient (off|on|optional|optional_no_ca; nginx post-handshake deferred verification)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.trusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.missing"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-optional.missing"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-no-ca.untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-off.client-cert-loaded"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:ssl_verify_depth",
@@ -22187,10 +22279,38 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate verification is not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.verifyDepth (default 1; 0 = directly root-issued leaf)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth0.direct"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth0.intermediate"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth1.intermediate"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth2.intermediate"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:starttls",

@@ -6,12 +6,12 @@
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-10-30 |
-| Repository | `sdkwork-webserver`, branch `main`, HEAD `1a5e2513` |
-| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B), the GeoIP-module wave (wave 12), the residual-closure wave (wave 13) and the temp-spool + connection-control wave (wave 14A) (code plus the re-synced directive catalog), on top of HEAD 1a5e2513 |
+| Repository | `sdkwork-webserver`, branch `main`, HEAD `72c77d3a` |
+| Snapshot state | uncommitted worktree refresh after Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave (wave 5), the gRPC wave (wave 6), the stream/OCSP wave, the CGI-transport wave (wave 7A), the rewrite/variable-engine wave (wave 10), the mail waves (9A/9B), the uWSGI upstream-TLS wave (wave 7B), the CGI cache-family wave (wave 7C), the protocol response-policy wave (wave 7D), the bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E), the userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B), the GeoIP-module wave (wave 12), the residual-closure wave (wave 13), the temp-spool + connection-control wave (wave 14A) and the mail client-certificate wave (wave 14B) (code plus the re-synced directive catalog), on top of HEAD 72c77d3a |
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `c15aa81001fb014f6fd014f7834b66d8ef0cb44c6e7a4e7a71ac6ed8a3371c4b` |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `92c9a4f771c23235d396b3da24fc2d868dc839e95f1e7127ea30546cfff6770a` |
 | Catalog evidence revision | 2026-10-29 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
@@ -32,9 +32,9 @@
   bounded subrequest-engine wave (wave 8), the stream-plane wave (wave 7E) and the
   userid/browser-module wave (wave 11A), the HTTP/2 DATA-chunking + random_index wave (wave 11B)
   the GeoIP-module wave (wave 12), the residual-closure wave (wave 13) and the temp-spool +
-  connection-control wave (wave 14A).** The code, tests, generated operator matrix and the re-synced directive
+  connection-control wave (wave 14A) and the mail client-certificate wave (wave 14B).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
-  `1a5e2513`; the audit is regenerated against that post-wave catalog (evidence
+  `72c77d3a`; the audit is regenerated against that post-wave catalog (evidence
   revision 2026-10-29). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
@@ -60,8 +60,9 @@
   and the GeoIP-module wave (MMDB lookups) are recorded as completed in section 3, and every
   and the residual-closure wave (stream split_clients/pass, gRPC bind/keepalive, mail
   capabilities/real-IP) and the temp-spool + connection-control wave (bounded CGI spool,
-  ignore_client_abort, catch_stderr; send_lowat accepted-unenforced) are recorded as
-  completed in section 3, and every one of them is asserted executable by
+  ignore_client_abort, catch_stderr; send_lowat accepted-unenforced) and the mail
+  client-certificate wave (deferred post-handshake verification for POP3/IMAP/SMTP) are
+  recorded as completed in section 3, and every one of them is asserted executable by
   `--verify-evidence`.
 - **The ledger, the counts, and the operator matrix must be regenerated whenever the
   catalog changes.** The catalog and
@@ -91,15 +92,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 391 | 52.6% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `enforced` | 396 | 53.2% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
 | `runtime-owned` | 149 | 20.0% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
-| `behavior-gap` | 40 | 5.4% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
+| `behavior-gap` | 35 | 4.7% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 5 | 0.7% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
 | `fail-closed` | 142 | 19.1% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 391 + 149 + 17 + 40 + 5 + 142 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 396 + 149 + 17 + 35 + 5 + 142 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -111,11 +112,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 391 | 391 | 0 | 0 | 0 | 0 | 0 |
+| `executable` | 396 | 396 | 0 | 0 | 0 | 0 | 0 |
 | `accepted-unenforced` | 173 | 0 | 149 | 17 | 7 | 0 | 0 |
-| `unsupported-fail-closed` | 175 | 0 | 0 | 0 | 33 | 0 | 142 |
+| `unsupported-fail-closed` | 170 | 0 | 0 | 0 | 28 | 0 | 142 |
 | `excluded` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
-| **total** | **744** | 391 | 149 | 17 | 40 | 5 | 142 |
+| **total** | **744** | 396 | 149 | 17 | 35 | 5 | 142 |
 
 ### 1.3 Wave Completion Status
 
@@ -144,8 +145,9 @@ wave-3 backlog entries that are currently rejected.
 | `wave 12 (GeoIP module)` | 8 | done - http geoip_country/city/org + geoip_proxy(_recursive) and stream geoip_country/city/org execute with a bounded MMDB runtime, all 16 $geoip_* variables and an operator-provisioned database root (catalog: executable) |
 | `wave 13 (residual closure)` | 8 | done - stream split_clients/pass, gRPC bind/socket_keepalive (real-socket tests, no gRPC differential because the oracle lacks http_v2), mail capability lists and mail trusted-PROXY real-IP handling (catalog: executable) |
 | `wave 14A (temp-spool + connection control)` | 13 | done - bounded per-generation CGI temp-spool subsystem (9 fields: byte/file budget, 0700 symlink-refusing dir, 0600 unlink files, in-memory response-buffer tier) plus ignore_client_abort and fastcgi_catch_stderr; fastcgi_send_lowat accepted-unenforced (Linux unaffected) (catalog: executable) |
-| remaining backlog | 40 | open - 8 categories, see section 3.2 |
-| **total planned work** | **352** | 312 completed, 40 remaining |
+| `wave 14B (mail client-certificate flows)` | 5 | done - nginx-style post-handshake deferred client-certificate verification for the mail proxy (verify modes/depth, client vs trusted CA stores and hints, Auth-SSL-* header passing) with 19/19 real-nginx differential cases (catalog: executable) |
+| remaining backlog | 35 | open - 7 categories, see section 3.2 |
+| **total planned work** | **352** | 317 completed, 35 remaining |
 
 Every completed-wave directive is asserted `executable` by
 `node tools/gen-nginx-directive-audit.mjs --verify-evidence`; a regression in any of
@@ -158,15 +160,15 @@ them fails the gate.
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
 | `http` | 547 | 310 | 90 | 9 | 20 | 4 | 114 |
-| `mail` | 51 | 31 | 3 | 0 | 17 | 0 | 0 |
+| `mail` | 51 | 36 | 3 | 0 | 12 | 0 | 0 |
 | `stream` | 105 | 49 | 22 | 8 | 3 | 0 | 23 |
-| **total** | **744** | 391 | 149 | 17 | 40 | 5 | 142 |
+| **total** | **744** | 396 | 149 | 17 | 35 | 5 | 142 |
 
 ### 1.5 Headline Findings
 
-1. **391 of 744 directives (52.6%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave and the temp-spool + connection-control wave landed 312 directives. 149 more are deliberately runtime-owned (20.0%) and 17 are intentional, spec-justified security differences.
-2. **40 behavior-gap directives remain in the remaining backlog** (5.4% of the surface): HTTP/1 framing policy (1), OCSP dynamic fetch / refresh / verification (6), gRPC residual forms (6), uWSGI residual forms (7), mail rustls-unsupported TLS knobs (12), mail client-certificate verification flows (5), slice partial-object cache (1), nginx Plus degradation/degrade modules (2).
+1. **396 of 744 directives (53.2%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave and the mail client-certificate wave landed 317 directives. 149 more are deliberately runtime-owned (20.0%) and 17 are intentional, spec-justified security differences.
+2. **35 behavior-gap directives remain in the remaining backlog** (4.7% of the surface): HTTP/1 framing policy (1), OCSP dynamic fetch / refresh / verification (6), gRPC residual forms (6), uWSGI residual forms (7), mail rustls-unsupported TLS knobs (12), slice partial-object cache (1), nginx Plus degradation/degrade modules (2).
 3. **147 of 744 directives (19.8%) are excluded or rejected, not silently emulated.** 5 are explicit PRD section 4 profile exclusions and 142 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
    evidence-citation mismatches were replaced with the stronger committed tests and
@@ -174,7 +176,7 @@ them fails the gate.
    reflect actual materializer consumption; the generator gates both classes so they
    cannot silently regress (section 4.3).
 5. **Regenerating this report is mandatory when the catalog moves.** It is a generated
-   snapshot of the post-temp-spool-wave worktree, not a hand-maintained table; section 6 states
+   snapshot of the post-mail-client-cert-wave worktree, not a hand-maintained table; section 6 states
    the exact commands and the remaining-backlog landing procedure.
 
 ## 2. Decision Ledger By Module
@@ -1164,7 +1166,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | --- | --- | --- | --- | --- |
 | `auth_http` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].authHttp (endpoint/uri/headers/timeout)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 | `auth_http_header` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].authHttp.headers`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
-| `auth_http_pass_client_cert` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail client-certificate verification flows): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `auth_http_pass_client_cert` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.passClientCertificateToAuth (Auth-SSL-Cert header only when on; Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always when verification enabled)`; evidence tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-on.trusted. Known difference: failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request). |
 | `auth_http_timeout` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].authHttp.timeoutMs`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 #### `ngx_mail_core_module` (9 directives)
@@ -1237,7 +1239,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `ssl_certificate_compression` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `ssl_certificate_key` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.certificateKeyFile`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 | `ssl_ciphers` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ssl_client_certificate` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail client-certificate verification flows): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_client_certificate` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.clientCertificateFile (verification store + CertificateRequest CA hints)`; evidence tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-trusted-bundle. Known difference: failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request). |
 | `ssl_conf_command` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `ssl_crl` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `ssl_dhparam` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
@@ -1249,9 +1251,9 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `ssl_session_ticket_key` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `ssl_session_tickets` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
 | `ssl_session_timeout` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail rustls-unsupported TLS knobs): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ssl_trusted_certificate` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail client-certificate verification flows): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ssl_verify_client` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail client-certificate verification flows): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
-| `ssl_verify_depth` | mail, mail-server | unsupported-fail-closed | **behavior-gap** | behavior-gap (remaining backlog, mail client-certificate verification flows): currently rejected at load; the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. Not runtime-owned: no runtime policy substitutes the client-visible effect. |
+| `ssl_trusted_certificate` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.trustedCertificateFile (verification store only, no CA hints)`; evidence tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-trusted-intermediate.leaf-only. Known difference: failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request). |
+| `ssl_verify_client` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.verifyClient (off\|on\|optional\|optional_no_ca; nginx post-handshake deferred verification)`; evidence tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-on.trusted. Known difference: failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request). |
+| `ssl_verify_depth` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].tls.verifyDepth (default 1; 0 = directly root-issued leaf)`; evidence tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-depth0.direct. Known difference: failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass; depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain); rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not; optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS; auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request). |
 | `starttls` | mail, mail-server | executable | **enforced** | enforced: the value reaches `mailServers[].starttls (on\|only\|off)`; evidence tests/nginx/differential-mail/battery.py::pop3.login.relay. Known difference: mail listener plane executes against a real nginx 1.29.6 differential (9/9 cases: POP3/IMAP/SMTP login/relay, auth failures, SMTP AUTH+XCLIENT, implicit TLS and STARTTLS); rustls-unsupported TLS knobs and custom capability/resolver/real-IP forms fail closed with located diagnostics. |
 
 ### Stream (`stream`) - 105 directives
@@ -1468,7 +1470,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 
 ## 3. Wave Completion And Remaining Behavior-Gap Backlog
 
-### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12, wave 13, wave 14A)
+### 3.1 Completed Waves (1, 2, 2b, 3a, 3a-2, 3b, 4a, upstream-protocol, gRPC, stream/OCSP, CGI-transport, rewrite/variable-engine, mail 9A/9B, wave 7B, wave 7C, wave 7D, wave 8, wave 7E, wave 11A, wave 11B, wave 12, wave 13, wave 14A, wave 14B)
 
 The catalog now classifies every directive below as `executable` with committed
 evidence. Wave 1 was the routing/static correctness set; Wave 2 added redirect
@@ -1506,7 +1508,7 @@ wave 12 brought GeoIP in profile (http/stream lookup directives and the $geoip_*
 wave 13 closed the remaining stream, gRPC and mail residuals (stream split_clients/pass,
 gRPC bind/keepalive, mail capability lists and trusted-PROXY real-IP); and wave 14A added
 the bounded CGI temp-spool subsystem plus ignore_client_abort/catch_stderr connection
-control.
+control; and wave 14B added the mail client-certificate verification flows.
 
 | Wave | Directive | Runtime field reached | Evidence |
 | --- | --- | --- | --- |
@@ -1822,6 +1824,11 @@ control.
 | `wave 14A (temp-spool + connection control)` | `uwsgi_ignore_client_abort` (`http:uwsgi_ignore_client_abort`) | `resources[].ignoreClientAbort (uwsgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)` | `tests/nginx/differential-protocols/nginx-oracle.json::d14a-ignore-client-abort` |
 | `wave 14A (temp-spool + connection control)` | `scgi_ignore_client_abort` (`http:scgi_ignore_client_abort`) | `resources[].ignoreClientAbort (scgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)` | `tests/nginx/differential-protocols/nginx-oracle.json::d14a-ignore-client-abort` |
 | `wave 14A (temp-spool + connection control)` | `fastcgi_catch_stderr` (`http:fastcgi_catch_stderr`) | `resources[].catchStderrPatterns (nginx trimmed-message substring match -> 502, no retry)` | `tests/nginx/differential-protocols/nginx-oracle.json::d14a-catch-stderr` |
+| `wave 14B (mail client-certificate flows)` | `ssl_verify_client` (`mail:ssl_verify_client`) | `mailServers[].tls.verifyClient (off\|on\|optional\|optional_no_ca; nginx post-handshake deferred verification)` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-on.trusted` |
+| `wave 14B (mail client-certificate flows)` | `ssl_verify_depth` (`mail:ssl_verify_depth`) | `mailServers[].tls.verifyDepth (default 1; 0 = directly root-issued leaf)` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-depth0.direct` |
+| `wave 14B (mail client-certificate flows)` | `ssl_client_certificate` (`mail:ssl_client_certificate`) | `mailServers[].tls.clientCertificateFile (verification store + CertificateRequest CA hints)` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-trusted-bundle` |
+| `wave 14B (mail client-certificate flows)` | `ssl_trusted_certificate` (`mail:ssl_trusted_certificate`) | `mailServers[].tls.trustedCertificateFile (verification store only, no CA hints)` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-trusted-intermediate.leaf-only` |
+| `wave 14B (mail client-certificate flows)` | `auth_http_pass_client_cert` (`mail:auth_http_pass_client_cert`) | `mailServers[].tls.passClientCertificateToAuth (Auth-SSL-Cert header only when on; Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always when verification enabled)` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-on.trusted` |
 
 Wave 10 also landed engine capabilities that are not directive rows but are part of the
 claim: a bounded template grammar (`$name`, `${name}`, `$1..$9`), server/location `set`
@@ -1928,10 +1935,10 @@ timing, orphan `.gz` sidecars, regex proxy_redirect/cookie forms, and the nginx
 pre-vhost-selection `merge_slashes` quirk); those are documented in each catalog entry's
 `knownDifferences` and are not counted as backlog rows.
 
-### 3.2 Remaining Behavior-Gap Backlog (40 directives)
+### 3.2 Remaining Behavior-Gap Backlog (35 directives)
 
 These are the categories `specs/nginx-gap.catalog.json` lists as remaining after
-the temp-spool + connection-control wave (wave 14A). An accepted-unenforced row is silently ignored today; a rejected row fails
+the mail client-certificate wave (wave 14B). An accepted-unenforced row is silently ignored today; a rejected row fails
 the configuration load. Both are real migration gaps, so every row carries the
 operator-visible loss, the reason it is **not** runtime-owned, the files that would
 have to change, and the tests to add.
@@ -1980,36 +1987,26 @@ have to change, and the tests to add.
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ssl_certificate_compression` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_ciphers` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_conf_command` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_crl` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_dhparam` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_ecdh_curve` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_password_file` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_prefer_server_ciphers` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_session_cache` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_session_ticket_key` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_session_tickets` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
-| `ssl_session_timeout` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists and trusted-PROXY real-IP handling execute; the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) are blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_certificate_compression` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_ciphers` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_conf_command` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_crl` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_dhparam` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_ecdh_curve` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_password_file` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_prefer_server_ciphers` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_session_cache` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_session_ticket_key` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_session_tickets` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
+| `ssl_session_timeout` | medium (rustls surface) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that uses this TLS-library form fails to activate. | the mail module is in profile and its POP3/IMAP/SMTP planes, capability lists, trusted-PROXY real-IP handling and client-certificate verification flows execute; only the 12 rustls-unsupported ssl_* knobs (certificate_compression, ciphers, conf_command, crl, dhparam, ecdh_curve, password_file, prefer_server_ciphers, session cache/timeout/tickets/ticket_key) remain, blocked by the pinned rustls surface. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | extend tests/nginx/differential-mail with TLS-library cases once rustls exposes the surface |
 
-### 3.2.6 mail client-certificate verification flows - 5 directive(s)
-
-| Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
-| --- | --- | --- | --- | --- | --- | --- |
-| `auth_http_pass_client_cert` | medium (deferred implementable-with-subsystem) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. | deferred implementable work: the mail protocol planes execute, but client-certificate verification (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/auth_http_pass_client_cert) needs a bounded client-certificate verification subsystem wired through the mail listener and auth_http exchange; it is not blocked by a dependency. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | needs client-certificate integration tests plus a real-nginx mail differential fixture with verify_client on |
-| `ssl_client_certificate` | medium (deferred implementable-with-subsystem) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. | deferred implementable work: the mail protocol planes execute, but client-certificate verification (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/auth_http_pass_client_cert) needs a bounded client-certificate verification subsystem wired through the mail listener and auth_http exchange; it is not blocked by a dependency. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | needs client-certificate integration tests plus a real-nginx mail differential fixture with verify_client on |
-| `ssl_trusted_certificate` | medium (deferred implementable-with-subsystem) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. | deferred implementable work: the mail protocol planes execute, but client-certificate verification (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/auth_http_pass_client_cert) needs a bounded client-certificate verification subsystem wired through the mail listener and auth_http exchange; it is not blocked by a dependency. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | needs client-certificate integration tests plus a real-nginx mail differential fixture with verify_client on |
-| `ssl_verify_client` | medium (deferred implementable-with-subsystem) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. | deferred implementable work: the mail protocol planes execute, but client-certificate verification (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/auth_http_pass_client_cert) needs a bounded client-certificate verification subsystem wired through the mail listener and auth_http exchange; it is not blocked by a dependency. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | needs client-certificate integration tests plus a real-nginx mail differential fixture with verify_client on |
-| `ssl_verify_depth` | medium (deferred implementable-with-subsystem) | unsupported-fail-closed | the directive is rejected at load; a stock nginx mail{} sidecar that verifies client certificates fails to activate. | deferred implementable work: the mail protocol planes execute, but client-certificate verification (ssl_verify_client/ssl_verify_depth/ssl_client_certificate/ssl_trusted_certificate/auth_http_pass_client_cert) needs a bounded client-certificate verification subsystem wired through the mail listener and auth_http exchange; it is not blocked by a dependency. | crates/sdkwork-webserver-mail-protocol, crates/sdkwork-api-webserver-standalone-gateway (mail listener), crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | needs client-certificate integration tests plus a real-nginx mail differential fixture with verify_client on |
-
-### 3.2.7 slice partial-object cache - 1 directive(s)
+### 3.2.6 slice partial-object cache - 1 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
 | `slice` | medium (deferred implementable-with-subsystem) | unsupported-fail-closed | the directive is rejected at load; a stock nginx.conf that relies on slice partial-object caching fails to activate. | deferred but implementable: slice needs multi-subrequest Range assembly (the bounded subrequest engine exists, but assembling/streaming multiple range slices into the cache store is a subsystem of its own), so it is backlog rather than a blocker. | crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs + cache store, crates/sdkwork-webserver-core/src/config/model.rs, src/nginx/mapping.rs | the subrequest engine and cache store exist; needs a Range-assembly differential (single/multi slice, partial-object reuse) against nginx 1.29.6 |
 
-### 3.2.8 nginx Plus degradation/degrade modules - 2 directive(s)
+### 3.2.7 nginx Plus degradation/degrade modules - 2 directive(s)
 
 | Directive | Priority | Catalog state | Operator loss | Why it is a real gap (not runtime-owned) | Estimated implementation surface | Tests to add |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2018,15 +2015,14 @@ have to change, and the tests to add.
 
 ### 3.3 Backlog Sequencing Note
 
-The remaining backlog is now the definitive 40-row list: 32 pinned-dependency rows - OCSP
-dynamic fetch/refresh/verification (6, rustls static-only), hyper HTTP/1 close-delimited
-framing (1, `chunked_transfer_encoding`; probed), rustls/OpenSSL TLS knobs (gRPC 6, uWSGI 7)
-and mail rustls knobs (12) - plus mail client-certificate flows (5, deferred
-implementable-with-subsystem), slice (1, needs multi-subrequest Range assembly) and nginx
-Plus degradation/degrade (2, no OSS oracle). The temp-spool family, ignore_client_abort and
-fastcgi_catch_stderr are closed by wave 14A; fastcgi_send_lowat is accepted-unenforced and
-runtime-owned (BSD-only hint, Linux unaffected), as are the open-file-cache trio and mail
-error_log. Nothing else is backlog.
+The remaining backlog is now the definitive 35-row list: 32 pinned-dependency rows - hyper
+HTTP/1 close-delimited framing (1, `chunked_transfer_encoding`; probed), OCSP dynamic
+fetch/refresh/verification (6, rustls static-only), rustls/OpenSSL TLS knobs (gRPC 6, uWSGI 7)
+and mail rustls knobs (12, after the client-certificate flows moved to executable in wave
+14B) - plus slice (1: needs multi-subrequest Range/`$slice_range` assembly; nginx-probed and
+fail-closed with an exact blocker) and nginx Plus degradation/degrade (2, no OSS oracle).
+fastcgi_send_lowat is accepted-unenforced and runtime-owned (BSD-only hint, Linux
+unaffected), as are the open-file-cache trio and mail error_log. Nothing else is backlog.
 
 Wave 7A also landed two non-directive transport capabilities recorded here for operators:
 (a) typed `[http] unixSocketRoot` with strict-descendant confinement for
@@ -2177,6 +2173,25 @@ path/disabled, uWSGI/SCGI spool, catch_stderr match/no-match, ignore_client_abor
 send_lowat) with the oracle re-captured from real nginx 1.29.6 (all 77 prior values
 byte-identical); floor/manifest 89.
 
+Wave 14B acceptance evidence: the five mail client-certificate directives execute -
+`ssl_verify_client` (off|on|optional|optional_no_ca) with nginx-style **post-handshake
+deferred verification** and application-level rejection lines (POP3 `-ERR`, IMAP `* BYE`,
+SMTP `421`) rather than a TLS alert; `ssl_verify_depth` (default 1; 0 = directly
+root-issued leaf); `ssl_client_certificate` (verification store + CertificateRequest CA
+hints) and `ssl_trusted_certificate` (store only, no CA hints); and
+`auth_http_pass_client_cert` (Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always when
+verification is enabled, Auth-SSL-Cert only with the flag, exact nginx escaping). The new
+`tests/nginx/differential-mail/client-cert` fixture is 19/19 against real nginx 1.29.6
+(verify modes, depth 0/1/2, trusted vs client bundle CA hints, STARTTLS, POP3/IMAP/SMTP
+rejection lines, pass-cert gating); mail differential totals are now 9 + 8 + 19 = 36 with
+floors 9/8/19. Probe corrections recorded: failed verification is application-level after
+the handshake (not a TLS alert), and nginx 1.29.6 has **no** 8 KiB client-cert refusal - a
+13.5 KiB certificate was forwarded in a 14.4 KiB request and auth succeeded. Bounded
+differences: depth counts presented intermediates (nginx/OpenSSL counts its built path),
+rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification
+does not, and `optional_no_ca` without a bundle enforces only the validity window while
+recording an optional failure (never SUCCESS).
+
 Wave 12 note: GeoIP is in profile behind a bounded MMDB runtime. Database lifecycle caveat:
 the runtime ships no GeoLite/GeoIP2 data and never downloads it; databases are
 operator-provisioned absolute MMDB paths confined by the typed `[http] geoipDatabaseRoot`,
@@ -2213,6 +2228,19 @@ runtime implements the probed byte-identical semantics (oversized bodies complet
 bounded by max_response_body_bytes). The remaining 40 behavior-gap rows are enumerated in
 the sequencing paragraph above; nothing else is backlog.
 
+Wave 14B note: the mail proxy now performs nginx-style post-handshake deferred
+client-certificate verification. Rejection is application-level (POP3 `-ERR`, IMAP
+`* BYE`, SMTP `421`), never a silent bypass; `ssl_verify_depth` counts the presented
+intermediates; the client bundle supplies CertificateRequest CA hints while the trusted
+bundle does not; `auth_http_pass_client_cert` sends Auth-SSL-Verify/Subject/Issuer/Serial/
+Fingerprint whenever verification is enabled and Auth-SSL-Cert only when the flag is set,
+with nginx's exact escaping. Probe corrections: no 8 KiB client-cert refusal exists in
+nginx 1.29.6 (a 13.5 KiB cert was forwarded inside a 14.4 KiB request and auth succeeded),
+and failed verification happens after the handshake rather than as a TLS alert. Bounded
+differences: depth counts presented intermediates, rustls enforces the clientAuth EKU when
+present, and optional_no_ca without a bundle checks only the validity window while recording
+an optional failure (never SUCCESS).
+
 Two former backlog rows are **not** remaining gaps and stay accepted-unenforced with
 truthful diagnostics: `charset_map` (byte-level transcoding is deliberately out of
 scope; the runtime owns charset translation at header level) and `gzip_comp_level` (the
@@ -2222,9 +2250,9 @@ compression layer owns the level).
 
 ### 4.1 Method
 
-- A sample of 120 `executable` directive rows was drawn,
+- A sample of 123 `executable` directive rows was drawn,
   covering the original surface (routing, static content, proxying, cache, limits, TLS,
-  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave and the temp-spool + connection-control wave**.
+  stream) **and every directive completed by Waves 1/2/2b/3a/3a-2/3b/4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave and the mail client-certificate wave**.
 - For each one the audit **read the cited file** and confirmed the cited
   function/case exists and its assertions cover the behavior the catalog attaches to
   the directive. Mechanical existence is re-checkable offline with
@@ -2233,7 +2261,7 @@ compression layer owns the level).
   behavior. Section 4.3 records the previously reported over-claims and their current
   state.
 
-### 4.2 Verified Sample (120 directive rows)
+### 4.2 Verified Sample (123 directive rows)
 
 | Directive | Claim checked | Evidence reference | What the assertion actually proves | Verdict |
 | --- | --- | --- | --- | --- |
@@ -2357,6 +2385,9 @@ compression layer owns the level).
 | `http:fastcgi_temp_path` | `temp_path confines the per-generation spool directory` | `tests/nginx/differential-protocols/nginx-oracle.json::d14a-spool-path` | the spool-path case compares responses with an explicit temp path against nginx 1.29.6; only the single absolute form is supported, multi-arg level/variable forms fail closed | verified |
 | `http:fastcgi_catch_stderr` | `catch_stderr turns a matching upstream stderr message into a 502 without retry` | `tests/nginx/differential-protocols/nginx-oracle.json::d14a-catch-stderr` | the catch_stderr match/no-match cases compare the response status and log behavior against nginx 1.29.6 (trimmed-message substring match) | verified |
 | `http:fastcgi_ignore_client_abort` | `ignore_client_abort on keeps the upstream exchange running after a client abort` | `tests/nginx/differential-protocols/nginx-oracle.json::d14a-ignore-client-abort` | the ignore-client-abort case compares the observed upstream exchange behavior against nginx 1.29.6; the bounded admission under-count for the detached exchange is a documented bounded difference | verified |
+| `mail:ssl_verify_client` | `mail ssl_verify_client performs deferred post-handshake verification with application-level rejection` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-on.untrusted` | the 19-case client-cert fixture compares verify modes (on/optional/optional_no_ca/off), untrusted/missing certificates and the POP3 -ERR / IMAP * BYE / SMTP 421 rejection lines against real nginx 1.29.6; failed verification is application-level, not a TLS alert | verified |
+| `mail:ssl_verify_depth` | `mail ssl_verify_depth bounds the chain like nginx (0 = directly root-issued leaf)` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-depth0.intermediate` | the depth 0/1/2 cases compare direct and intermediate chains against nginx 1.29.6; the runtime counts the presented intermediates as a documented bounded difference | verified |
+| `mail:auth_http_pass_client_cert` | `auth_http_pass_client_cert gates Auth-SSL-Cert while Auth-SSL-* verification headers are always sent` | `tests/nginx/differential-mail/client-cert/nginx-oracle.json::verify-on.pass-cert-off` | the verify-on default and pass-cert-off cases compare the auth_http request headers (Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always, Auth-SSL-Cert only with the flag) with nginx escaping against real nginx 1.29.6 | verified |
 
 ### 4.3 Over-Claim Status
 
@@ -2402,7 +2433,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-391 executable rows cite only the generic
+396 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -2413,7 +2444,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (391 <=> 391). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (396 <=> 396). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -2421,9 +2452,9 @@ Consistent: `executable` <=> `enforced` in both directions (391 <=> 391). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 391 | 52.6% |
+| `enforced` (actually nginx-compatible behavior) | 396 | 53.2% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
-| `behavior-gap` (planned toward compatibility) | 40 | 5.4% |
+| `behavior-gap` (planned toward compatibility) | 35 | 4.7% |
 | `runtime-owned` (deliberately not nginx value) | 149 | 20.0% |
 | `out-of-profile` (PRD section 4 exclusion) | 5 | 0.7% |
 | `fail-closed` (rejected, not planned) | 142 | 19.1% |
@@ -2431,7 +2462,7 @@ Consistent: `executable` <=> `enforced` in both directions (391 <=> 391). Every 
 296 of 744 directives (39.8%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 391 executed directives plus the 40 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 396 executed directives plus the 35 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (5 directives)
@@ -2476,12 +2507,14 @@ Mail note (PRD section 4 amendment): the mail proxy is no longer out of profile.
 mail listener plane (wave 9A: config plane, nginx mail{} materialization, plaintext
 dialog and PROXY v1) are now wired end-to-end (wave 9B): the mail module is executable for
 its implemented planes (wave 13 added the custom capability lists and trusted-PROXY
-real-IP handling; the differential-mail slice grew 9 -> 17), while `resolver`/
+real-IP handling; wave 14B added the client-certificate flows with a 19-case fixture, so
+mail differential totals are now 9 + 8 + 19 = 36), while `resolver`/
 `resolver_timeout` are accepted-unenforced because the runtime resolver owns mail name
-resolution. Two scope caveats stay explicit: backend TLS is a typed-plane extension (nginx
-mail has no proxy_ssl), so nginx parity is not claimed for it; client-certificate
-verification is absent and those five flows plus the twelve rustls-unsupported ssl_* knobs
-remain fail-closed backlog (section 3.2 mail module residuals, 17 rows).
+resolution. One scope caveat stays explicit: backend TLS is a typed-plane extension (nginx
+mail has no proxy_ssl), so nginx parity is not claimed for it. Client-certificate
+verification now executes (post-handshake deferred, application-level rejection); only the
+twelve rustls-unsupported ssl_* knobs remain fail-closed backlog (section 3.2 mail rustls
+knobs, 12 rows).
 
 GeoIP note (PRD sections 3/4 amendment): the 8 GeoIP directives are in profile behind a
 bounded MMDB runtime - operator-provisioned absolute MMDB paths confined by the typed
@@ -2573,8 +2606,8 @@ same catalog is byte-identical. `--check` regenerates in memory and compares byt
 
 ### 6.2 What Changed In This Refresh
 
-This refresh was regenerated after the temp-spool + connection-control wave (wave 14A)
-landed and the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
+This refresh was regenerated after the mail client-certificate wave (wave 14B) landed and
+the Lead re-synced the catalog. The table lists the cumulative completed-wave rows and their
 current state:
 
 | Directive | Wave | Current state |
@@ -2891,13 +2924,18 @@ current state:
 | `uwsgi_ignore_client_abort` (`http:uwsgi_ignore_client_abort`) | `wave 14A (temp-spool + connection control)` | completed - `enforced` |
 | `scgi_ignore_client_abort` (`http:scgi_ignore_client_abort`) | `wave 14A (temp-spool + connection control)` | completed - `enforced` |
 | `fastcgi_catch_stderr` (`http:fastcgi_catch_stderr`) | `wave 14A (temp-spool + connection control)` | completed - `enforced` |
+| `ssl_verify_client` (`mail:ssl_verify_client`) | `wave 14B (mail client-certificate flows)` | completed - `enforced` |
+| `ssl_verify_depth` (`mail:ssl_verify_depth`) | `wave 14B (mail client-certificate flows)` | completed - `enforced` |
+| `ssl_client_certificate` (`mail:ssl_client_certificate`) | `wave 14B (mail client-certificate flows)` | completed - `enforced` |
+| `ssl_trusted_certificate` (`mail:ssl_trusted_certificate`) | `wave 14B (mail client-certificate flows)` | completed - `enforced` |
+| `auth_http_pass_client_cert` (`mail:auth_http_pass_client_cert`) | `wave 14B (mail client-certificate flows)` | completed - `enforced` |
 
-All 312 rows above were re-spot-checked (section 4.2) and are
+All 317 rows above were re-spot-checked (section 4.2) and are
 asserted `executable` by `--verify-evidence`.
 
 ### 6.3 Which Claims Change When Wave 3 Lands
 
-The 40 wave-3 backlog rows are the only behavior-gap
+The 35 wave-3 backlog rows are the only behavior-gap
 entries that can move to `enforced`. When a wave-3 slice lands, the workstream (or the
 Lead) must:
 
