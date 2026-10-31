@@ -333,4 +333,8 @@ entries:
     path: docs/product/requirements/REQ-2026-0072-harmony-shell-bootstrap-wiring.md
     kind: req
     status: accepted
+  - id: REQ-2026-0073
+    path: docs/product/requirements/REQ-2026-0073-nginx-commercial-compatibility-closure.md
+    kind: req
+    status: accepted
 domains: []

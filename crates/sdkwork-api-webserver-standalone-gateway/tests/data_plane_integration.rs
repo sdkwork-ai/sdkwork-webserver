@@ -1299,7 +1299,12 @@ async fn serves_fixed_and_static_routes_and_drains() {
         .await
         .expect("request redirect route");
     assert_eq!(moved.status(), reqwest::StatusCode::PERMANENT_REDIRECT);
-    assert_eq!(moved.headers()[reqwest::header::LOCATION], "/healthz");
+    // nginx `absolute_redirect on` (the default) builds the Location from the
+    // request Host plus the listening port when it is not the scheme default.
+    assert_eq!(
+        moved.headers()[reqwest::header::LOCATION],
+        format!("http://test.localhost:{port}/healthz")
+    );
 
     let index = client
         .get(format!("http://127.0.0.1:{port}/"))
@@ -1320,13 +1325,18 @@ async fn serves_fixed_and_static_routes_and_drains() {
         .send()
         .await
         .expect("request static directory redirect");
+    // nginx `ngx_http_static_module` answers a directory request without its
+    // trailing slash with 301 Moved Permanently (differentially confirmed
+    // against nginx 1.29.6), not 307.
     assert_eq!(
         nested_redirect.status(),
-        reqwest::StatusCode::TEMPORARY_REDIRECT
+        reqwest::StatusCode::MOVED_PERMANENTLY
     );
+    // nginx `absolute_redirect on` (default): the directory redirect is
+    // absolute and keeps the query string.
     assert_eq!(
         nested_redirect.headers()[reqwest::header::LOCATION],
-        "/docs/?view=compact"
+        format!("http://test.localhost:{port}/docs/?view=compact").as_str()
     );
 
     let nested_index = client
@@ -6304,6 +6314,165 @@ server {{
         .expect("ordinary request");
     assert_eq!(ordinary.status(), reqwest::StatusCode::OK);
     assert_eq!(ordinary.text().await.expect("ordinary body"), "ordinary");
+
+    stop_data_plane(shutdown_tx, task).await;
+}
+
+/// nginx `add_header` applies to a rewrite-generated redirect, an `error_page`
+/// response that keeps its error status publishes no representation validators,
+/// and a `limit_req` rejection is a bare 503 without `Retry-After`. All three
+/// were differentially confirmed against nginx 1.29.6 and are the reason the
+/// handler applies the host header policy on the redirect branch, strips the
+/// static validators on a retained error status, and dropped the retry hint.
+#[tokio::test]
+async fn nginx_redirect_headers_error_page_validators_and_limit_req_match_nginx() {
+    let directory = TempDir::new().expect("temp directory");
+    let public = directory.path().join("public");
+    fs::create_dir_all(&public).expect("create public root");
+    fs::write(public.join("hello.txt"), b"hello static body\n").expect("write hello");
+    fs::write(
+        public.join("notfound.html"),
+        b"<!doctype html><title>not-found</title>\n",
+    )
+    .expect("write not found page");
+
+    let port = available_port();
+    // nginx treats backslash as an escape introducer; forward slashes are the
+    // portable spelling of the same absolute path.
+    let public_directive = public.to_string_lossy().replace('\\', "/");
+    let config = directory.path().join("edge-nginx.conf");
+    fs::write(
+        &config,
+        format!(
+            r#"
+limit_req_zone $binary_remote_addr zone=httpreq:1m rate=1r/s;
+
+server {{
+    listen 127.0.0.1:{port};
+    server_name test.localhost;
+    root {public_directive};
+    index index.html;
+    add_header X-Server-Level srv;
+    error_page 404 /notfound.html;
+
+    location / {{
+        try_files $uri $uri/ =404;
+    }}
+
+    location /rw-perm/ {{
+        rewrite ^/rw-perm/(.*)$ /hello.txt permanent;
+    }}
+
+    location /rate/ {{
+        limit_req zone=httpreq burst=1 nodelay;
+        return 200 "rate-ok";
+    }}
+}}
+"#,
+        ),
+    )
+    .expect("write nginx config");
+
+    let (shutdown_tx, task) = spawn_data_plane_from_nginx(&config);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("client");
+    let base = format!("http://127.0.0.1:{port}");
+    wait_for_http(&client, &base, "test.localhost").await;
+
+    let redirect = client
+        .get(format!("{base}/rw-perm/hello.txt"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("redirect request");
+    assert_eq!(redirect.status(), reqwest::StatusCode::MOVED_PERMANENTLY);
+    assert_eq!(
+        redirect
+            .headers()
+            .get("x-server-level")
+            .and_then(|value| value.to_str().ok()),
+        Some("srv"),
+        "a rewrite-generated redirect must carry the host's add_header policy"
+    );
+    // nginx `absolute_redirect on` (default): rewrite-generated redirects are
+    // absolute using the request Host and the non-default listener port.
+    assert_eq!(
+        redirect
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok()),
+        Some(format!("http://test.localhost:{port}/hello.txt").as_str())
+    );
+
+    let missing = client
+        .get(format!("{base}/missing.txt"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("mapped 404 request");
+    assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
+    assert!(
+        !missing
+            .headers()
+            .contains_key(reqwest::header::LAST_MODIFIED),
+        "an error_page response that keeps its error status publishes no Last-Modified"
+    );
+    assert!(
+        !missing
+            .headers()
+            .contains_key(reqwest::header::ACCEPT_RANGES),
+        "an error_page response that keeps its error status publishes no Accept-Ranges"
+    );
+    assert_eq!(
+        missing.text().await.expect("mapped 404 body"),
+        "<!doctype html><title>not-found</title>\n"
+    );
+
+    let served = client
+        .get(format!("{base}/hello.txt"))
+        .header("host", "test.localhost")
+        .send()
+        .await
+        .expect("static request");
+    assert_eq!(served.status(), reqwest::StatusCode::OK);
+    assert!(
+        served
+            .headers()
+            .contains_key(reqwest::header::LAST_MODIFIED),
+        "a successful static response keeps its validators"
+    );
+
+    let mut rate_statuses = Vec::new();
+    let mut rejected_headers = None;
+    for index in 0..3 {
+        let response = client
+            .get(format!("{base}/rate/{index}"))
+            .header("host", "test.localhost")
+            .send()
+            .await
+            .expect("rate request");
+        rate_statuses.push(response.status());
+        if response.status() == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+            rejected_headers = Some(response.headers().clone());
+        }
+    }
+    assert_eq!(
+        rate_statuses,
+        vec![
+            reqwest::StatusCode::OK,
+            reqwest::StatusCode::OK,
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+        ],
+        "limit_req allows the burst slot and rejects the third request"
+    );
+    let rejected_headers = rejected_headers.expect("third request rejected");
+    assert!(
+        !rejected_headers.contains_key(reqwest::header::RETRY_AFTER),
+        "nginx's limit_req rejection carries no Retry-After"
+    );
 
     stop_data_plane(shutdown_tx, task).await;
 }

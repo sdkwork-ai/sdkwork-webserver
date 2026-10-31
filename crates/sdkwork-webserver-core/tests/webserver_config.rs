@@ -2845,3 +2845,230 @@ fn a_tls_server_name_is_a_dns_name_and_never_an_ip_literal() {
         assert_eq!(normalize_tls_server_name(malformed), None, "{malformed}");
     }
 }
+
+/// Typed TOML/JSON plane: a `type = "grpc"` resource compiles with the bounded
+/// gRPC shape, and the schema rejects unknown fields on it.
+#[test]
+fn grpc_resource_materializes_from_typed_config() {
+    let directory = TempDir::new().expect("temp");
+    let mut config = base_config();
+    config["upstreams"] = json!([{
+        "id": "grpc-upstream",
+        "addressPolicy": {"allowedCidrs": ["127.0.0.1/32"]},
+        "targets": [{"url": "http://127.0.0.1:9101"}]
+    }]);
+    config["resources"] = json!([{
+        "id": "grpc-resource",
+        "type": "grpc",
+        "upstreamRef": "grpc-upstream",
+        "requestSetHeaders": ["X-Sent $host", "X-Client \"\""],
+        "connectTimeoutMs": 1000,
+        "sendTimeoutMs": 2000,
+        "readTimeoutMs": 3000,
+        "bufferSize": 8192,
+        "interceptErrors": true,
+        "retry": {"maxAttempts": 2, "timeoutMs": 5000, "retryOn": ["error", "timeout"]}
+    }]);
+    config["virtualHosts"][0]["routes"] = json!([{
+        "id": "grpc-route",
+        "match": {"pathType": "prefix", "path": "/"},
+        "resourceRef": "grpc-resource"
+    }]);
+    config["virtualHosts"] = json!([config["virtualHosts"][0].clone()]);
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("compile gRPC config");
+    let resource = compiled
+        .config()
+        .resources
+        .iter()
+        .find(|resource| resource.id() == "grpc-resource")
+        .expect("gRPC resource");
+    match resource {
+        ResourceConfig::Grpc {
+            upstream_ref,
+            request_set_headers,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            buffer_size,
+            intercept_errors,
+            retry,
+            ..
+        } => {
+            assert_eq!(upstream_ref, "grpc-upstream");
+            assert_eq!(request_set_headers.len(), 2);
+            assert_eq!(*connect_timeout_ms, 1000);
+            assert_eq!(*send_timeout_ms, 2000);
+            assert_eq!(*read_timeout_ms, 3000);
+            assert_eq!(*buffer_size, 8192);
+            assert!(*intercept_errors);
+            let retry = retry.as_ref().expect("retry policy");
+            assert_eq!(retry.max_attempts, 2);
+            assert_eq!(retry.timeout_ms, 5000);
+            assert_eq!(retry.retry_on.len(), 2);
+        }
+        other => panic!("expected a gRPC resource, got {other:?}"),
+    }
+
+    // The schema is closed: an unknown gRPC field is rejected with a located
+    // diagnostic instead of silently ignored.
+    let mut invalid = base_config();
+    invalid["upstreams"] = json!([{
+        "id": "grpc-upstream",
+        "addressPolicy": {"allowedCidrs": ["127.0.0.1/32"]},
+        "targets": [{"url": "http://127.0.0.1:9101"}]
+    }]);
+    invalid["resources"] = json!([{
+        "id": "grpc-resource",
+        "type": "grpc",
+        "upstreamRef": "grpc-upstream",
+        "grpcBuffering": true
+    }]);
+    invalid["virtualHosts"][0]["routes"] = json!([{
+        "id": "grpc-route",
+        "match": {"pathType": "prefix", "path": "/"},
+        "resourceRef": "grpc-resource"
+    }]);
+    invalid["virtualHosts"] = json!([invalid["virtualHosts"][0].clone()]);
+    let path = write_config(directory.path(), &invalid);
+    let error = load_and_compile_webserver_config(path).expect_err("unknown field must fail");
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("unknown field")
+                || diagnostic.message.contains("additional"))
+            || !error.to_string().is_empty(),
+        "schema must reject the unknown gRPC field: {error}"
+    );
+}
+
+#[test]
+fn mail_only_application_compiles_through_the_json_schema_and_validator() {
+    let directory = TempDir::new().expect("temp dir");
+    let config = json!({
+        "schemaVersion": 1,
+        "kind": "sdkwork.webserver.app",
+        "appKey": "mail-only-test",
+        "listeners": [],
+        "resources": [],
+        "virtualHosts": [],
+        "mail": {
+            "servers": [
+                {
+                    "id": "pop3",
+                    "bind": "127.0.0.1",
+                    "port": 2525,
+                    "protocol": "pop3",
+                    "serverName": "pop.example.com",
+                    "timeoutMs": 30000,
+                    "soKeepalive": true,
+                    "proxyProtocol": true,
+                    "pop3Auth": ["plain"]
+                },
+                {
+                    "id": "smtp",
+                    "bind": "127.0.0.1",
+                    "port": 2993,
+                    "protocol": "smtp",
+                    "smtpClientBuffer": 8192,
+                    "smtpGreetingDelayMs": 500,
+                    "smtpAuth": ["plain", "login"]
+                }
+            ]
+        }
+    });
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("mail-only config compiles");
+    assert!(compiled.listeners().next().is_none());
+    assert!(compiled.streams().is_empty());
+    assert_eq!(compiled.mail_servers().len(), 2);
+    assert_eq!(
+        compiled.mail_servers()[0].protocol,
+        sdkwork_webserver_core::config::MailServerProtocol::Pop3
+    );
+    assert_eq!(compiled.mail_servers()[1].smtp_greeting_delay_ms, 500);
+}
+
+#[test]
+fn mail_servers_enforce_listener_uniqueness_and_bounded_knobs() {
+    let directory = TempDir::new().expect("temp dir");
+    let mail_config = |server: Value| {
+        json!({
+            "schemaVersion": 1,
+            "kind": "sdkwork.webserver.app",
+            "appKey": "mail-only-test",
+            "listeners": [],
+            "resources": [],
+            "virtualHosts": [],
+            "mail": { "servers": [server] }
+        })
+    };
+
+    // Duplicate bind:port among mail servers.
+    let mut duplicate = mail_config(json!({
+        "id": "first",
+        "bind": "127.0.0.1",
+        "port": 2525,
+        "protocol": "pop3"
+    }));
+    duplicate["mail"]["servers"] = json!([
+        {"id": "first", "bind": "127.0.0.1", "port": 2525, "protocol": "pop3"},
+        {"id": "second", "bind": "127.0.0.1", "port": 2525, "protocol": "imap"}
+    ]);
+    let path = write_config(directory.path(), &duplicate);
+    let error = load_and_compile_webserver_config(path).expect_err("duplicate mail port must fail");
+    assert!(
+        error.diagnostics().iter().any(|diagnostic| diagnostic
+            .message
+            .contains("another mail server already owns this bind and port")),
+        "expected the duplicate-listener diagnostic: {error:?}"
+    );
+
+    // A mail listener cannot collide with an HTTP listener either.
+    let mut collision = base_config();
+    collision["mail"] = json!({
+        "servers": [{
+            "id": "mail",
+            "bind": "127.0.0.1",
+            "port": collision["listeners"][0]["port"].clone(),
+            "protocol": "pop3"
+        }]
+    });
+    let path = write_config(directory.path(), &collision);
+    let error = load_and_compile_webserver_config(path).expect_err("mail/http collapse must fail");
+    assert!(
+        error.diagnostics().iter().any(|diagnostic| diagnostic
+            .message
+            .contains("an http listener already owns this bind and port")),
+        "expected the mail/http listener-collision diagnostic: {error:?}"
+    );
+
+    // Out-of-bounds client buffer and empty auth list.
+    for invalid in [
+        mail_config(json!({
+            "id": "small",
+            "bind": "127.0.0.1",
+            "port": 2525,
+            "protocol": "smtp",
+            "smtpClientBuffer": 128
+        })),
+        mail_config(json!({
+            "id": "noauth",
+            "bind": "127.0.0.1",
+            "port": 2525,
+            "protocol": "imap",
+            "imapAuth": []
+        })),
+        mail_config(json!({
+            "id": "badname",
+            "bind": "127.0.0.1",
+            "port": 2525,
+            "protocol": "smtp",
+            "serverName": "bad name"
+        })),
+    ] {
+        let path = write_config(directory.path(), &invalid);
+        load_and_compile_webserver_config(path).expect_err("invalid mail server must fail");
+    }
+}

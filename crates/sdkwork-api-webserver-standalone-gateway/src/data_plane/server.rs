@@ -48,13 +48,14 @@ use super::{
     http2_wire::Http2WireGuardAcceptor,
     io_timeout::WriteTimeoutAcceptor,
     keep_alive_timeout::Http1KeepAliveTimeoutAcceptor,
+    mail_frontend::{serve_mail_listener, PreparedMailListener},
     metrics::{ConnectionRejection, DataPlaneMetrics},
     operations::{
         prepare_operations_listener, serve_operations_listener, DataPlaneOperationsConfig,
     },
     proxy_protocol::{resolve_connection_info, DownstreamConnectionInfo},
     runtime::RuntimeGeneration,
-    stream_proxy::{prepare_stream_listener, serve_stream_listener},
+    stream_proxy::{prepare_stream_listener, prepare_stream_listener_group, serve_stream_listener},
     tls::{build_tls_config, compile_policy_tls_material},
     tls_runtime::FileTlsRuntimeController,
     udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
@@ -75,7 +76,7 @@ struct PreparedListener {
 /// Bind a listener socket, setting `IPV6_V6ONLY` on IPv6 wildcard binds so a
 /// `[::]:port` listener can coexist with `0.0.0.0:port` (nginx `listen`
 /// semantics; Linux would otherwise reject the second bind via IPv4-mapped).
-async fn bind_listener(address: SocketAddr) -> std::io::Result<TcpListener> {
+pub(crate) async fn bind_listener(address: SocketAddr) -> std::io::Result<TcpListener> {
     if address.is_ipv6() {
         let domain = socket2::Domain::IPV6;
         let socket =
@@ -267,20 +268,43 @@ where
     }
     let mut prepared_streams = Vec::with_capacity(initial.app.streams().len());
     let mut prepared_udp_streams = Vec::with_capacity(initial.app.streams().len());
+    // stream `server_name` virtual servers share one listening socket: bind
+    // each socket once and select the server by the preread SNI.
+    let mut tcp_groups: Vec<Vec<sdkwork_webserver_core::StreamServerConfig>> = Vec::new();
     for stream in initial.app.streams() {
         match stream.protocol {
             sdkwork_webserver_core::StreamProtocol::Tcp => {
-                prepared_streams.push(prepare_stream_listener(stream, &initial).await?);
+                if let Some(group) = tcp_groups
+                    .iter_mut()
+                    .find(|group| group[0].socket_key() == stream.socket_key())
+                {
+                    group.push(stream.clone());
+                } else {
+                    tcp_groups.push(vec![stream.clone()]);
+                }
             }
             sdkwork_webserver_core::StreamProtocol::Udp => {
                 prepared_udp_streams.push(prepare_udp_stream_listener(stream).await?);
             }
         }
     }
+    for group in &tcp_groups {
+        if group.len() == 1 {
+            prepared_streams.push(prepare_stream_listener(&group[0], &initial).await?);
+        } else {
+            prepared_streams.push(prepare_stream_listener_group(group, &initial).await?);
+        }
+    }
     let prepared_operations = match operations.as_ref() {
         Some(config) => Some(prepare_operations_listener(config).await?),
         None => None,
     };
+    // nginx `mail {}` listeners: the plaintext POP3/IMAP/SMTP frontend plane.
+    let mut prepared_mail: Vec<PreparedMailListener> =
+        Vec::with_capacity(initial.app.mail_servers().len());
+    for mail_server in initial.app.mail_servers() {
+        prepared_mail.push(PreparedMailListener::prepare(mail_server).await?);
+    }
     // Tunnel gateway: QUIC listener rides the data-plane lifecycle (PRD SS77
     // backward compatibility: absent/disabled config leaves nothing running).
     let mut tunnel_gateway = match runtime.tunnel_options.as_ref() {
@@ -372,6 +396,16 @@ where
         tasks.spawn(async move {
             let result = serve_udp_stream_listener(runtime, stream, shutdown_rx).await;
             (stream_id, result)
+        });
+    }
+    for prepared_mail in prepared_mail {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        shutdown_senders.push(shutdown_tx);
+        let runtime = runtime.clone();
+        let mail_server_id = prepared_mail.id.clone();
+        tasks.spawn(async move {
+            let result = serve_mail_listener(runtime, prepared_mail, shutdown_rx).await;
+            (mail_server_id, result)
         });
     }
     if let Some(prepared_operations) = prepared_operations {
@@ -627,7 +661,10 @@ async fn serve_listener(
                 .no_deflate()
                 .no_zstd()
                 .compress_when(NginxGzipPredicate::new(runtime.clone())),
-        );
+        )
+        // Outermost: nginx `gzip_vary off` removes the compression layer's
+        // automatic `Vary: Accept-Encoding`.
+        .layer(super::gzip_predicate::SuppressGzipVaryLayer);
     let service = app.into_make_service_with_connect_info::<DownstreamConnectionInfo>();
     let global_permits = runtime.connection_permits.clone();
     let resource_pressure = runtime.resource_pressure.clone();

@@ -9,6 +9,7 @@ members = [
   "crates/sdkwork-routes-webserver-common",
   "crates/sdkwork-webserver-contract",
   "crates/sdkwork-webserver-core",
+  "crates/sdkwork-webserver-mail-protocol",
   "crates/sdkwork-webserver-resolver-cache",
   "crates/sdkwork-webserver-delivery-runtime",
   "crates/sdkwork-webserver-drive-provider",
@@ -29,6 +30,8 @@ members = [
   "crates/sdkwork-webserver-tunnel-transport",
   "crates/sdkwork-webserver-tunnel",
   "crates/sdkwork-webserver-cluster",
+  "crates/sdkwork-webserver-upstream-protocol",
+  "crates/sdkwork-webserver-grpc-mock",
 ]
 exclude = [
   "sdks/sdkwork-webserver-backend-sdk/sdkwork-webserver-backend-sdk-rust/generated/server-openapi",
@@ -141,6 +144,8 @@ sdkwork-webserver-agent = { path = "crates/sdkwork-webserver-agent" }
 sdkwork-webserver-certificate-worker = { path = "crates/sdkwork-webserver-certificate-worker" }
 sdkwork-webserver-contract = { path = "crates/sdkwork-webserver-contract" }
 sdkwork-webserver-core = { path = "crates/sdkwork-webserver-core" }
+sdkwork-webserver-mail-protocol = { path = "crates/sdkwork-webserver-mail-protocol" }
+sdkwork-webserver-upstream-protocol = { path = "crates/sdkwork-webserver-upstream-protocol" }
 sdkwork-webserver-tunnel-core = { path = "crates/sdkwork-webserver-tunnel-core" }
 sdkwork-webserver-tunnel-protocol = { path = "crates/sdkwork-webserver-tunnel-protocol" }
 sdkwork-webserver-tunnel-transport = { path = "crates/sdkwork-webserver-tunnel-transport" }

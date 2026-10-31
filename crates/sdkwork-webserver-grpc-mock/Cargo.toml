@@ -1,0 +1,25 @@
+[package]
+name = "sdkwork-webserver-grpc-mock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# Test-only gRPC-over-HTTP/2 responder for the nginx differential slice. It is a
+# separate binary crate, never a dependency of the gateway, so it cannot reach a
+# release package.
+[[bin]]
+name = "sdkwork-webserver-grpc-mock"
+path = "src/main.rs"
+
+[dependencies]
+bytes.workspace = true
+h2.workspace = true
+http.workspace = true
+rustls.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+
+[lints]
+workspace = true

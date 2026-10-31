@@ -14,11 +14,12 @@
 use std::path::Path;
 
 use sdkwork_webserver_core::config::{
-    ConfigFormat, ConfigLoadOptions, ListenerProtocol, ResourceConfig, RoutePathType,
-    StreamTlsMode, UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
+    ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailServerProtocol,
+    MailStarttlsMode, ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
+    WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
-    expand_includes, load_nginx_compat, materialize_nginx_app, merge_nginx_apps,
+    expand_includes, load_nginx_compat, materialize_nginx_app_default, merge_nginx_apps,
     parse_nginx_config, NginxConfigError,
 };
 use tempfile::TempDir;
@@ -33,7 +34,7 @@ fn nginx_path(path: &Path) -> String {
 /// Parse + materialize + validate one configuration text.
 fn materialize(text: &str) -> Result<WebServerAppConfig, NginxConfigError> {
     let parsed = parse_nginx_config(text, Path::new("site.conf")).expect("parse");
-    materialize_nginx_app(&parsed, Path::new("/etc/nginx/sites-enabled"), "surface")
+    materialize_nginx_app_default(&parsed, Path::new("/etc/nginx/sites-enabled"), "surface")
 }
 
 fn materialize_ok(text: &str) -> WebServerAppConfig {
@@ -43,7 +44,7 @@ fn materialize_ok(text: &str) -> WebServerAppConfig {
 /// Parse + materialize, expecting a fail-closed diagnostic containing
 /// `expected`.
 fn materialize_err(text: &str, expected: &str) {
-    let error = materialize(text).err().expect("must fail closed");
+    let error = materialize(text).expect_err("must fail closed");
     let message = error.to_string();
     assert!(
         message.contains(expected),
@@ -869,7 +870,7 @@ server {
         },
     },
     SurfaceCase {
-        name: "add_header maps security headers",
+        name: "add_header materializes ordered nginx response headers",
         nginx: r#"
 server {
     listen 80;
@@ -882,21 +883,124 @@ server {
 }
 "#,
         check: |config| {
+            // nginx `add_header` is an ordered response-header policy with its
+            // own status gating, not a set of dedicated security-header
+            // fields: promoting it would apply every header to every status
+            // (the dedicated fields are unconditional), while nginx skips a
+            // non-`always` field on 4xx/5xx. Declaration order, duplicates, and
+            // the `always` flag must therefore survive materialization.
             let security = config.virtual_hosts[0]
                 .security_headers
                 .as_ref()
-                .expect("security headers");
-            assert!(security.x_frame_options.is_some());
-            assert!(security.x_content_type_options);
+                .expect("response headers");
+            // The runtime's unconditional nosniff default is a runtime-native
+            // security policy, not an imported nginx declaration; the mapping
+            // pins it off so an nginx `add_header` array is the only source.
+            assert!(!security.x_content_type_options);
+            let headers = &security.custom_headers;
+            let names = headers
+                .iter()
+                .map(|header| header.name.as_str())
+                .collect::<Vec<_>>();
             assert_eq!(
-                security
-                    .strict_transport_security
-                    .as_ref()
-                    .unwrap()
-                    .max_age_seconds,
-                63_072_000
+                names,
+                vec![
+                    "X-Frame-Options",
+                    "X-Content-Type-Options",
+                    "Strict-Transport-Security",
+                    "X-Custom",
+                ]
             );
-            assert!(security.custom_headers.iter().any(|h| h.name == "X-Custom"));
+            assert!(headers[0].always);
+            assert!(!headers[1].always);
+            assert_eq!(headers[2].value, "max-age=63072000");
+            assert_eq!(headers[3].value, "custom-value");
+        },
+    },
+    SurfaceCase {
+        name: "add_header inherits from http and is replaced at server and location",
+        nginx: r#"
+http {
+    add_header X-Http-Level http;
+    add_header X-Http-Always http-always always;
+    server {
+        listen 80;
+        server_name inherit.example.com;
+        location / { return 200 "ok"; }
+    }
+    server {
+        listen 80;
+        server_name replace.example.com;
+        add_header X-Server-Level srv;
+        location / {
+            add_header X-Location-Level loc;
+            return 200 "ok";
+        }
+        location /inherit/ { return 200 "ok"; }
+    }
+}
+"#,
+        check: |config| {
+            let inherit = config
+                .virtual_hosts
+                .iter()
+                .find(|host| {
+                    host.server_names
+                        .iter()
+                        .any(|name| name == "inherit.example.com")
+                })
+                .expect("inheriting host");
+            let headers = &inherit
+                .security_headers
+                .as_ref()
+                .expect("inherited response headers")
+                .custom_headers;
+            assert_eq!(
+                headers
+                    .iter()
+                    .map(|header| (header.name.as_str(), header.always))
+                    .collect::<Vec<_>>(),
+                vec![("X-Http-Level", false), ("X-Http-Always", true)]
+            );
+            let replace = config
+                .virtual_hosts
+                .iter()
+                .find(|host| {
+                    host.server_names
+                        .iter()
+                        .any(|name| name == "replace.example.com")
+                })
+                .expect("replacing host");
+            assert_eq!(
+                replace
+                    .security_headers
+                    .as_ref()
+                    .expect("server policy")
+                    .custom_headers
+                    .iter()
+                    .map(|header| header.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["X-Server-Level"]
+            );
+            let location_route = replace
+                .routes
+                .iter()
+                .find(|route| route.route_match.path == "/")
+                .expect("location route");
+            assert_eq!(
+                location_route
+                    .response_headers
+                    .iter()
+                    .map(|header| header.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["X-Location-Level"]
+            );
+            let inherit_route = replace
+                .routes
+                .iter()
+                .find(|route| route.route_match.path == "/inherit/")
+                .expect("inheriting route");
+            assert!(inherit_route.response_headers.is_empty());
         },
     },
     SurfaceCase {
@@ -936,7 +1040,7 @@ stream {
             let upstream_target = config.streams.iter().find(|s| s.port == 5101).unwrap();
             assert!(matches!(
                 upstream_target.target,
-                sdkwork_webserver_core::config::StreamTargetConfig::Upstream { .. }
+                Some(sdkwork_webserver_core::config::StreamTargetConfig::Upstream { .. })
             ));
             let preread = config.streams.iter().find(|s| s.port == 5102).unwrap();
             assert_eq!(preread.tls, Some(StreamTlsMode::Preread));
@@ -1044,17 +1148,17 @@ server {
 
 /// Every fail-closed form with the diagnostic fragment it must produce.
 const FAIL_CLOSED: &[(&str, &str, &str)] = &[
-    ("named location", "location @fallback { root /srv; }", "named location"),
-    ("regex server_name", "server_name ~^www\\d+\\.example\\.com$;", "regex server name"),
-    ("trailing wildcard server_name", "server_name www.example.*;", "wildcard server name"),
-    ("empty server_name", "server_name \"\";", "empty `server_name"),
+    ("named location chain", "root /srv/www;\n    location / { try_files $uri @a; }\n    location @a { try_files $uri @b; }\n    location @b { root /srv; }", "internal redirect depth bound"),
+    ("invalid regex-like server_name", "server_name *lead.example.com;", "not a supported nginx form"),
+    ("embedded wildcard server_name", "server_name www.*.example.com;", "not a supported nginx form"),
+    ("empty hostname form", "server_name \"\";", "empty `server_name"),
     ("return 444", "location / { return 444; }", "return 444"),
-    ("variable return body", "location / { return 200 \"$host\"; }", "contains variables"),
+    ("variable return body", "location / { return 200 \"$upstream_addr\"; }", "uses variables the runtime does not expand"),
     // `=code` fallbacks are accepted since the runtime maps them to a static
     // resource without a SPA fallback (with `root`); without any root the
     // location fails closed on the serving-behavior rule.
     ("try_files =code fallback without a root", "location / { try_files $uri =404; }", "exactly one of"),
-    ("try_files @named with serving", "location / { try_files $uri @x; proxy_pass http://127.0.0.1:9001; }", "cannot be combined"),
+    ("try_files @named with serving", "location / { try_files $uri @x; proxy_pass http://127.0.0.1:9001; }", "not a declared named location"),
     // Literal intermediate probes are nginx-standard and accepted; the
     // rejection path covers non-`$uri`/non-literal probes (unit-tested). The
     // fixture below fails closed on the serving-behavior rule (no root).
@@ -1071,7 +1175,6 @@ const FAIL_CLOSED: &[(&str, &str, &str)] = &[
     ("proxy_ssl on http target", "location / { proxy_ssl_verify on; proxy_pass http://127.0.0.1:9001; }", "require an `https://`"),
     ("real_ip unsupported header", "real_ip_header X-Real-IP;", "X-Forwarded-For"),
     ("invalid client_max_body_size", "client_max_body_size huge;", "invalid client_max_body_size"),
-    ("conflicting client_max_body_size", "client_max_body_size 1m; location /a/ { client_max_body_size 10m; return 200 \"a\"; }", "conflicting `client_max_body_size`"),
     ("proxy_cache undefined zone", "proxy_cache nope;", "undefined cache zone"),
     ("limit_req undefined zone", "location / { limit_req zone=nope; proxy_pass http://127.0.0.1:9001; }", "undefined zone"),
     ("limit_conn undefined zone", "location / { limit_conn nope 10; proxy_pass http://127.0.0.1:9001; }", "undefined zone"),
@@ -1133,7 +1236,8 @@ server {{
         Path::new("site.conf"),
     )
     .expect("parse");
-    let config = materialize_nginx_app(&parsed, directory.path(), "auth").expect("materialize");
+    let config =
+        materialize_nginx_app_default(&parsed, directory.path(), "auth").expect("materialize");
     let routes = &config.virtual_hosts[0].routes;
     assert!(
         routes[0].auth_basic.is_none(),
@@ -1266,9 +1370,20 @@ const FAIL_CLOSED_HTTP: &[(&str, &str, &str)] = &[
 #[test]
 fn every_fail_closed_form_produces_a_precise_diagnostic() {
     for (name, body, expected) in FAIL_CLOSED {
+        // The synthetic host keeps the case isolated; sanitize every
+        // non-DNS character so only the fixture body under test can fail.
+        let host: String = name
+            .chars()
+            .map(|character| {
+                if character.is_ascii_alphanumeric() {
+                    character.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
+            .collect();
         let text = format!(
-            "server {{\n    listen 80;\n    server_name fail-{}.example.com;\n    {body}\n}}\n",
-            name.replace(' ', "-")
+            "server {{\n    listen 80;\n    server_name fail-{host}.example.com;\n    {body}\n}}\n"
         );
         materialize_err(&text, expected);
     }
@@ -1324,13 +1439,18 @@ const FAIL_CLOSED_TOP: &[(&str, &str, &str)] = &[
     ),
     (
         "top-level unknown directive",
+        "load_module modules/ngx_http_foo_module.so;",
+        "unsupported directive `load_module`",
+    ),
+    (
+        "empty mail context",
         "mail { }",
-        "unsupported directive `mail`",
+        "no `server`, `stream`, or `mail` blocks",
     ),
     (
         "no server blocks",
         "http { limit_req_zone $binary_remote_addr zone=z:1m rate=1r/s; }",
-        "no `server` or `stream` blocks",
+        "no `server`, `stream`, or `mail` blocks",
     ),
     (
         "server without location",
@@ -1480,7 +1600,8 @@ stream {{
     let mut stack = vec![directory.path().join("nginx.conf")];
     let expanded =
         expand_includes(parsed, directory.path(), &mut budget, &mut stack).expect("expand");
-    let config = materialize_nginx_app(&expanded, directory.path(), "full").expect("materialize");
+    let config =
+        materialize_nginx_app_default(&expanded, directory.path(), "full").expect("materialize");
     assert_eq!(config.virtual_hosts.len(), 1);
     assert_eq!(config.listeners.len(), 2, "80 + [::]:80");
     assert_eq!(config.upstreams.len(), 2, "api + tcp_backend");
@@ -1551,8 +1672,7 @@ fn include_missing_and_cycle_fail_closed() {
     let mut budget = 16;
     let mut stack = Vec::new();
     let error = expand_includes(parsed, root.path(), &mut budget, &mut stack)
-        .err()
-        .expect("missing include must fail");
+        .expect_err("missing include must fail");
     assert!(error.to_string().contains("matches no files"), "{error}");
 
     std::fs::write(root.path().join("loop.conf"), "include loop.conf;\n").unwrap();
@@ -1564,8 +1684,7 @@ fn include_missing_and_cycle_fail_closed() {
     let mut budget = 16;
     let mut stack = Vec::new();
     let error = expand_includes(parsed, root.path(), &mut budget, &mut stack)
-        .err()
-        .expect("include cycle must fail");
+        .expect_err("include cycle must fail");
     assert!(error.to_string().contains("cycle"), "{error}");
 }
 
@@ -1607,8 +1726,8 @@ server {
     assert_eq!(file_report.app.virtual_hosts.len(), 1);
 
     let missing = load_nginx_compat(&root.path().join("absent"), "compat")
-        .err()
-        .expect("missing path must fail");
+        .map(|_| ())
+        .expect_err("missing path must fail");
     assert!(missing.to_string().contains("does not exist"), "{missing}");
 }
 
@@ -1749,7 +1868,7 @@ fn load_report_skips_unmaterializable_site_files_with_diagnostics() {
     assert_eq!(report.app.virtual_hosts.len(), 1);
     assert_eq!(report.skipped.len(), 1);
     assert!(
-        report.skipped[0].1.contains("named location"),
+        report.skipped[0].1.contains("at least one location"),
         "{:?}",
         report.skipped
     );
@@ -1765,7 +1884,7 @@ fn accepted_but_unenforced_nginx_directives_surface_a_diagnostic() {
 server {
     listen 8080;
     server_name gzip.example.com;
-    gzip_static on;
+    gzip_comp_level 6;
     location / { return 200 "ok"; }
 }
 "#,
@@ -1775,10 +1894,776 @@ server {
     let report = load_nginx_compat(&config, "diagnostics").expect("load config");
     assert!(
         report.ignored.iter().any(|diagnostic| {
-            diagnostic.message.contains("gzip_static")
+            diagnostic.message.contains("gzip_comp_level")
                 && diagnostic.message.contains("not enforced")
         }),
         "an accepted-but-unenforced directive must warn instead of silently doing nothing: {:?}",
         report.ignored
     );
+}
+
+// ---- Wave 6: gRPC-over-HTTP/2 upstream (`ngx_http_grpc_module`) ----
+
+#[test]
+fn grpc_pass_materializes_plaintext_resource_and_retry_policy() {
+    let config = materialize_ok(
+        r#"
+upstream grpc_pool {
+    server 127.0.0.1:9101;
+    server 127.0.0.1:9102;
+}
+server {
+    listen 80;
+    server_name grpc.example.com;
+    location /grpc.test.Echo/ {
+        grpc_pass grpc://127.0.0.1:9100;
+        grpc_set_header X-Sent $host;
+        grpc_connect_timeout 1s;
+        grpc_send_timeout 2s;
+        grpc_read_timeout 3s;
+        grpc_buffer_size 8k;
+    }
+    location /retry/ {
+        grpc_pass grpc_pool;
+        grpc_next_upstream error timeout;
+        grpc_next_upstream_tries 2;
+        grpc_next_upstream_timeout 5s;
+        grpc_intercept_errors on;
+    }
+}
+"#,
+    );
+    let grpc = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::Grpc { .. }))
+        .expect("gRPC resource");
+    match grpc {
+        ResourceConfig::Grpc {
+            upstream_ref,
+            request_set_headers,
+            connect_timeout_ms,
+            send_timeout_ms,
+            read_timeout_ms,
+            buffer_size,
+            ..
+        } => {
+            assert!(upstream_ref.starts_with("literal-127-0-0-1-9100"));
+            assert_eq!(request_set_headers, &vec!["X-Sent $host".to_owned()]);
+            assert_eq!(*connect_timeout_ms, 1000);
+            assert_eq!(*send_timeout_ms, 2000);
+            assert_eq!(*read_timeout_ms, 3000);
+            assert_eq!(*buffer_size, 8192);
+        }
+        other => panic!("expected gRPC resource, got {other:?}"),
+    }
+    // The literal target became an upstream with the http scheme (h2c).
+    assert!(config.upstreams.iter().any(|upstream| upstream
+        .targets
+        .iter()
+        .any(|target| target.url == "http://127.0.0.1:9100")));
+    // The declared upstream name resolves to the pool; retry policy is bounded
+    // by the pool size and carries the declared conditions.
+    let retry = config
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::Grpc {
+                upstream_ref,
+                retry,
+                ..
+            } if upstream_ref == "grpc_pool" => retry.as_ref(),
+            _ => None,
+        })
+        .next()
+        .expect("retry policy");
+    assert_eq!(retry.max_attempts, 2);
+    assert_eq!(retry.timeout_ms, 5000);
+}
+
+#[test]
+fn grpc_settings_inherit_from_http_and_location_overrides() {
+    let config = materialize_ok(
+        r#"
+grpc_set_header X-Level http;
+grpc_connect_timeout 9s;
+grpc_hide_header X-Hidden;
+server {
+    listen 80;
+    server_name grpc.example.com;
+    grpc_set_header X-Level server;
+    location /a/ {
+        grpc_pass grpc://127.0.0.1:9100;
+        grpc_read_timeout 4s;
+    }
+    location /b/ {
+        grpc_pass grpc://127.0.0.1:9100;
+        grpc_set_header X-Level location;
+        grpc_hide_header X-Hidden-2;
+    }
+}
+"#,
+    );
+    let mut headers = Vec::new();
+    for resource in &config.resources {
+        if let ResourceConfig::Grpc {
+            request_set_headers,
+            connect_timeout_ms,
+            read_timeout_ms,
+            intercept_errors,
+            ..
+        } = resource
+        {
+            headers.push(request_set_headers.clone());
+            // nginx http-level connect timeout is inherited.
+            assert_eq!(*connect_timeout_ms, 9000);
+            assert!(!intercept_errors);
+            let _ = read_timeout_ms;
+        }
+    }
+    assert_eq!(headers.len(), 2);
+    // A location that declares no grpc_set_header inherits the http list
+    // (server-level declarations replace it, then location-level replaces that).
+    assert_eq!(
+        headers[0],
+        vec!["X-Level server".to_owned()],
+        "location /a/ inherits the server-level set-header list"
+    );
+    assert_eq!(
+        headers[1],
+        vec!["X-Level location".to_owned()],
+        "location /b/ replaces the inherited list"
+    );
+    let hide_lists: Vec<&Vec<String>> = config
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::Grpc {
+                response_policy, ..
+            } => response_policy.as_ref().map(|policy| &policy.hide_headers),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(hide_lists.len(), 2);
+    assert!(
+        hide_lists
+            .iter()
+            .any(|list| list.contains(&"x-hidden".to_owned())
+                || list.contains(&"X-Hidden".to_owned()))
+    );
+}
+
+#[test]
+fn grpc_ssl_materializes_tls_policy_with_sni_override() {
+    let directory = TempDir::new().expect("temp dir");
+    std::fs::write(directory.path().join("ca.pem"), "ca").expect("write ca");
+    std::fs::write(directory.path().join("client.pem"), "cert").expect("write cert");
+    std::fs::write(directory.path().join("client.key"), "key").expect("write key");
+    let text = r#"
+server {
+    listen 80;
+    server_name grpc.example.com;
+    location /a/ {
+        grpc_ssl_verify on;
+        grpc_ssl_verify_depth 2;
+        grpc_ssl_trusted_certificate ca.pem;
+        grpc_ssl_certificate client.pem;
+        grpc_ssl_certificate_key client.key;
+        grpc_ssl_server_name on;
+        grpc_ssl_name localhost;
+        grpc_ssl_protocols TLSv1.3;
+        grpc_pass grpcs://127.0.0.1:9101;
+    }
+    location /b/ {
+        grpc_ssl_verify on;
+        grpc_ssl_trusted_certificate ca.pem;
+        grpc_ssl_server_name on;
+        grpc_ssl_name localhost;
+        grpc_pass grpcs://127.0.0.1:9101;
+        grpc_set_header X-Other location;
+    }
+}
+"#;
+    let parsed = parse_nginx_config(text, Path::new("site.conf")).expect("parse");
+    let config =
+        materialize_nginx_app_default(&parsed, directory.path(), "surface").expect("materialize");
+    let tls_policies: Vec<_> = config
+        .upstreams
+        .iter()
+        .filter_map(|upstream| upstream.tls.as_ref())
+        .collect();
+    // Two locations with different `grpc_ssl_*` policies point at the same
+    // authority; nginx scopes the policy per location, so the materializer
+    // creates one policy-scoped upstream per distinct policy.
+    assert_eq!(tls_policies.len(), 2);
+    for tls in &tls_policies {
+        assert_eq!(
+            tls.trust_mode,
+            sdkwork_webserver_core::UpstreamTlsTrustMode::Custom
+        );
+        assert_eq!(tls.ca_certificate_files.len(), 1);
+        assert!(tls.ca_certificate_files[0].ends_with("ca.pem"));
+        assert_eq!(tls.server_name.as_deref(), Some("localhost"));
+    }
+    assert!(tls_policies.iter().any(|tls| {
+        tls.client_certificate_file.is_some()
+            && tls.minimum_version == sdkwork_webserver_core::TlsVersion::Tls13
+            && tls.maximum_version == sdkwork_webserver_core::TlsVersion::Tls13
+    }));
+}
+
+#[test]
+fn grpc_unsupported_forms_fail_closed_with_located_diagnostics() {
+    for (body, expected) in [
+        (
+            "grpc_pass grpc://127.0.0.1:9100/v1;",
+            "URI part",
+        ),
+        ("grpc_pass $backend;", "variable `grpc_pass` targets"),
+        (
+            "grpc_pass unix:/tmp/grpc.sock;",
+            "unix:",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_buffering on;",
+            "grpc_buffering",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_ssl_conf_command Options;",
+            "grpc_ssl_conf_command",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive on;",
+            "grpc_socket_keepalive",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_bind 127.0.0.1;",
+            "grpc_bind",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_verify off;",
+            "grpc_ssl_verify off",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_server_name off;",
+            "grpc_ssl_server_name off",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_trusted_certificate ca.pem;",
+            "requires `grpc_ssl_verify on`",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_verify on; grpc_ssl_certificate client.pem;",
+            "requires `grpc_ssl_certificate_key`",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_ciphers HIGH;",
+            "grpc_ssl_ciphers",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_session_reuse on;",
+            "grpc_ssl_session_reuse",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_buffers 8 8k;",
+            "grpc_buffers",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_busy_buffers_size 8k;",
+            "grpc_busy_buffers_size",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_internal_trailers on;",
+            "grpc_internal_trailers",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_limit_rate 10k;",
+            "grpc_limit_rate",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_max_temp_file_size 8m;",
+            "grpc_max_temp_file_size",
+        ),
+        (
+            "grpc_pass grpc://127.0.0.1:9100; grpc_temp_path /tmp;",
+            "grpc_temp_path",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_crl revoked.pem;",
+            "grpc_ssl_crl",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_conf_command Options -session_tickets;",
+            "grpc_ssl_conf_command",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_password_file pass.txt;",
+            "grpc_ssl_password_file",
+        ),
+        (
+            "grpc_pass grpcs://127.0.0.1:9100; grpc_ssl_certificate_cache max=8;",
+            "grpc_ssl_certificate_cache",
+        ),
+    ] {
+        let text = format!(
+            "server {{ listen 80; server_name grpc.example.com; location / {{ {body} }} }}"
+        );
+        materialize_err(&text, expected);
+    }
+    // `grpc_pass` is a location handler in nginx; http/server contexts fail
+    // closed with a located diagnostic instead of being silently ignored.
+    materialize_err(
+        "server { listen 80; server_name grpc.example.com; grpc_pass grpc://127.0.0.1:9100; }",
+        "only allowed inside a `location` block",
+    );
+}
+
+/// The nginx `mail {}` context executes the Wave 9A listener plane: listeners,
+/// protocol, server_name, timeout/so_keepalive/proxy_protocol, bounded client
+/// buffers, the bounded auth-mechanism vocabulary, and smtp greeting delay.
+#[test]
+fn mail_listeners_materialize_with_nginx_defaults_and_protocol_knobs() {
+    let config = materialize_ok(
+        r#"
+mail {
+    server {
+        listen 127.0.0.1:2525 proxy_protocol;
+        protocol pop3;
+        server_name pop.example.com;
+        timeout 30s;
+        so_keepalive on;
+        pop3_auth plain;
+    }
+    server {
+        listen 127.0.0.1:2993;
+        protocol smtp;
+        server_name smtp.example.com;
+        smtp_client_buffer 8k;
+        smtp_greeting_delay 500ms;
+        smtp_auth plain login;
+    }
+}
+"#,
+    );
+    assert_eq!(config.mail.servers.len(), 2);
+    let pop3 = &config.mail.servers[0];
+    assert_eq!(pop3.protocol, MailServerProtocol::Pop3);
+    assert_eq!(pop3.bind, "127.0.0.1");
+    assert_eq!(pop3.port, 2525);
+    assert_eq!(pop3.server_name.as_deref(), Some("pop.example.com"));
+    assert_eq!(pop3.timeout_ms, 30_000);
+    assert!(pop3.so_keepalive);
+    assert!(pop3.proxy_protocol);
+    // nginx advertises AUTH LOGIN implicitly for POP3 whenever PLAIN is
+    // enabled; `login` is not a configurable pop3_auth token.
+    assert_eq!(
+        pop3.pop3_auth,
+        vec![MailAuthMechanism::Plain, MailAuthMechanism::Login]
+    );
+    assert_eq!(pop3.client_buffer_bytes(), 4 * 1024);
+
+    let smtp = &config.mail.servers[1];
+    assert_eq!(smtp.protocol, MailServerProtocol::Smtp);
+    assert_eq!(smtp.port, 2993);
+    assert_eq!(smtp.timeout_ms, 60_000, "nginx mail timeout default");
+    assert!(!smtp.so_keepalive);
+    assert!(!smtp.proxy_protocol);
+    assert_eq!(smtp.smtp_client_buffer, 8 * 1024);
+    assert_eq!(smtp.smtp_greeting_delay_ms, 500);
+    assert_eq!(
+        smtp.smtp_auth,
+        vec![MailAuthMechanism::Plain, MailAuthMechanism::Login]
+    );
+}
+
+/// Wave 9B mail features materialize: `auth_http*`, frontend TLS/STARTTLS,
+/// the backend relay policy (`proxy_*`, `xclient`) and `max_errors` are
+/// inherited from the mail context into each server.
+#[test]
+fn mail_9b_features_materialize_with_context_inheritance() {
+    let config = materialize_ok(
+        r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    auth_http_timeout 3s;
+    auth_http_header X-Tenant acme;
+    ssl_certificate cert.pem;
+    ssl_certificate_key key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    xclient off;
+    proxy_buffer 8k;
+    proxy_timeout 30s;
+    max_errors 7;
+
+    server {
+        listen 127.0.0.1:2993 ssl;
+        protocol smtp;
+        starttls off;
+    }
+
+    server {
+        listen 127.0.0.1:2994;
+        protocol pop3;
+        starttls on;
+        proxy_protocol on;
+        proxy_smtp_auth on;
+        proxy_pass_error_message on;
+        max_errors 3;
+    }
+}
+"#,
+    );
+    assert_eq!(config.mail.servers.len(), 2);
+    let smtp = &config.mail.servers[0];
+    let auth = smtp.auth_http.as_ref().expect("inherited auth_http");
+    assert_eq!(auth.uri, "127.0.0.1:9000/auth");
+    assert_eq!(auth.timeout_ms, 3_000);
+    assert_eq!(auth.headers, vec!["X-Tenant: acme".to_owned()]);
+    let tls = smtp.tls.as_ref().expect("inherited mail TLS");
+    assert!(tls.implicit, "listen … ssl selects implicit TLS");
+    assert_eq!(tls.protocols.len(), 2);
+    assert!(smtp.proxy.enabled);
+    assert!(
+        !smtp.proxy.xclient,
+        "xclient off inherited from mail context"
+    );
+    assert_eq!(smtp.max_errors, 7);
+
+    let pop3 = &config.mail.servers[1];
+    let tls = pop3.tls.as_ref().expect("inherited mail TLS");
+    assert!(!tls.implicit);
+    assert_eq!(
+        tls.starttls,
+        MailStarttlsMode::On,
+        "server starttls overrides the inherited default"
+    );
+    assert!(pop3.proxy.proxy_protocol, "backend PROXY protocol");
+    assert!(pop3.proxy.smtp_auth);
+    assert!(pop3.proxy.pass_error_message);
+    assert_eq!(pop3.max_errors, 3);
+    assert!(!pop3.proxy.xclient, "xclient off is inherited");
+}
+
+/// Forms the rustls TLS stack and the bounded runtime cannot honour fail
+/// closed with a located diagnostic instead of being accepted and ignored.
+#[test]
+fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
+    for (nginx, expected) in [
+        (
+            "mail { auth_http 127.0.0.1:9000/auth; server { listen 127.0.0.1:2993; protocol smtp; ssl_ciphers HIGH:!aNULL; } }",
+            "ssl_ciphers",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_conf_command Options PrioritizeChaCha; } }",
+            "ssl_conf_command",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_crl crl.pem; } }",
+            "ssl_crl",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_password_file pass.txt; } }",
+            "ssl_password_file",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_session_cache shared:SSL:10m; } }",
+            "ssl_session_cache",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver 127.0.0.1; } }",
+            "resolver",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; set_real_ip_from 127.0.0.1; } }",
+            "set_real_ip_from",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "requires `ssl_certificate`",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol imap; starttls on; } }",
+            "requires `ssl_certificate`",
+        ),
+        (
+            "mail { auth_http not a url; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "auth_http",
+        ),
+        (
+            "mail { auth_http 127.0.0.1:9000/auth; auth_http_pass_client_cert on; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "auth_http_pass_client_cert",
+        ),
+        (
+            "mail { max_errors 0; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "max_errors",
+        ),
+        (
+            "mail { proxy_buffer 1; server { listen 127.0.0.1:2993; protocol imap; } }",
+            "proxy_buffer",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; ssl_protocols TLSv1.1; } }",
+            "ssl_protocols",
+        ),
+    ] {
+        materialize_err(nginx, expected);
+    }
+}
+
+// ---- Wave 7D: CGI-family buffering / store / rate / ranges / ignore headers ----
+
+#[test]
+fn fastcgi_wave_7d_buffering_store_rate_and_ranges_materialize() {
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+  fastcgi_param SCRIPT_NAME $fastcgi_script_name;
+  server {
+    listen 8080;
+    server_name example.com;
+    location /fcgi {
+      fastcgi_pass 127.0.0.1:9100;
+      fastcgi_buffer_size 8k;
+      fastcgi_buffers 16 8k;
+      fastcgi_busy_buffers_size 32k;
+      fastcgi_store /tmp/sdkwork-store$uri;
+      fastcgi_store_access user:rw group:rw all:r;
+      fastcgi_limit_rate 10k;
+      fastcgi_force_ranges on;
+      fastcgi_ignore_headers X-Accel-Redirect Cache-Control;
+      fastcgi_pass_request_body off;
+    }
+  }
+}
+"#,
+    );
+    let resource = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::FastCgi { .. }))
+        .expect("FastCGI resource");
+    match resource {
+        ResourceConfig::FastCgi {
+            buffer_policy,
+            store,
+            limit_rate_bytes_per_second,
+            force_ranges,
+            ignore_headers,
+            pass_request_body,
+            ..
+        } => {
+            let policy = buffer_policy.expect("buffer policy");
+            assert_eq!(policy.header_bytes, 8 * 1024);
+            assert_eq!(policy.chunks, 16);
+            assert_eq!(policy.chunk_bytes, 8 * 1024);
+            assert_eq!(policy.busy_bytes, 32 * 1024);
+            let store = store.as_ref().expect("store policy");
+            assert_eq!(store.path, "/tmp/sdkwork-store$uri");
+            assert_eq!(store.access_mode, 0o664);
+            assert_eq!(*limit_rate_bytes_per_second, Some(10 * 1024));
+            assert!(*force_ranges);
+            assert!(!*pass_request_body);
+            assert_eq!(
+                ignore_headers,
+                &vec!["X-Accel-Redirect".to_owned(), "Cache-Control".to_owned()]
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn uwsgi_scgi_wave_7d_forms_materialize_per_prefix() {
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+  server {
+    listen 8080;
+    server_name example.com;
+    location /u {
+      uwsgi_pass 127.0.0.1:9101;
+      uwsgi_buffer_size 4k;
+      uwsgi_buffers 8 4k;
+      uwsgi_busy_buffers_size 8k;
+      uwsgi_store /tmp/sdkwork-uwsgi$uri;
+      uwsgi_store_access user:rw;
+      uwsgi_limit_rate 4k;
+      uwsgi_force_ranges on;
+      uwsgi_ignore_headers Expires;
+      uwsgi_pass_request_body off;
+    }
+    location /s {
+      scgi_pass 127.0.0.1:9102;
+      scgi_buffer_size 4k;
+      scgi_buffers 8 4k;
+      scgi_busy_buffers_size 8k;
+      scgi_store /tmp/sdkwork-scgi$uri;
+      scgi_store_access user:rw group:r;
+      scgi_limit_rate 2k;
+      scgi_force_ranges on;
+      scgi_ignore_headers Vary;
+      scgi_pass_request_body off;
+    }
+  }
+}
+"#,
+    );
+    let cgi_resources: Vec<_> = config
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::CgiUpstream { protocol, .. } => Some((*protocol, resource)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cgi_resources.len(), 2);
+    for (protocol, resource) in cgi_resources {
+        match resource {
+            ResourceConfig::CgiUpstream {
+                buffer_policy,
+                store,
+                limit_rate_bytes_per_second,
+                force_ranges,
+                ignore_headers,
+                pass_request_body,
+                ..
+            } => {
+                assert!(buffer_policy.is_some(), "{protocol:?} buffer policy");
+                assert!(store.is_some(), "{protocol:?} store policy");
+                assert!(limit_rate_bytes_per_second.is_some());
+                assert!(*force_ranges);
+                assert_eq!(ignore_headers.len(), 1);
+                assert!(!*pass_request_body);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn memcached_and_grpc_wave_7d_forms_materialize() {
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+  server {
+    listen 8080;
+    server_name example.com;
+    location /m {
+      set $memcached_key $uri;
+      memcached_pass 127.0.0.1:9103;
+      memcached_buffer_size 8k;
+      memcached_gzip_flag 2;
+    }
+    location /g {
+      grpc_pass grpc://127.0.0.1:9104;
+      grpc_ignore_headers X-Accel-Expires Expires;
+    }
+  }
+}
+"#,
+    );
+    let memcached = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::Memcached { .. }))
+        .expect("memcached resource");
+    match memcached {
+        ResourceConfig::Memcached {
+            buffer_bytes,
+            gzip_flag,
+            ..
+        } => {
+            assert_eq!(*buffer_bytes, Some(8 * 1024));
+            assert_eq!(*gzip_flag, Some(2));
+        }
+        _ => unreachable!(),
+    }
+    let grpc = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::Grpc { .. }))
+        .expect("gRPC resource");
+    match grpc {
+        ResourceConfig::Grpc { ignore_headers, .. } => {
+            assert_eq!(ignore_headers.len(), 2);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn cgi_wave_7d_temp_spool_and_abort_forms_fail_closed_with_exact_blockers() {
+    for (body, expected) in [
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_max_temp_file_size 1m;",
+            "temp-file spool",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path /tmp/fcgi;",
+            "temp-file spool",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_file_write_size 8k;",
+            "temp-file spool",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_ignore_client_abort on;",
+            "client-disconnect signal",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_catch_stderr ERROR;",
+            "stderr stream",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_send_lowat 12000;",
+            "send low-water mark",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_store store$uri;",
+            "must be absolute",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_store on;",
+            "fastcgi_store on",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_limit_rate $limit_rate;",
+            "variable rate",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_store /tmp/store$unknown;",
+            "not executable",
+        ),
+        (
+            "uwsgi_pass 127.0.0.1:9101; uwsgi_busy_buffers_size 256;",
+            "outside the executable",
+        ),
+        (
+            "scgi_pass 127.0.0.1:9102; scgi_max_temp_file_size 1m;",
+            "temp-file spool",
+        ),
+        (
+            "memcached_pass 127.0.0.1:9103; memcached_gzip_flag 0;",
+            "can never match",
+        ),
+        (
+            "memcached_pass 127.0.0.1:9103; memcached_buffer_size 100;",
+            "outside the executable",
+        ),
+    ] {
+        let prefix = if body.starts_with("memcached_pass") {
+            "set $memcached_key $uri; "
+        } else {
+            ""
+        };
+        materialize_err(
+            &format!(
+                "events {{}} http {{ fastcgi_param SCRIPT_NAME $fastcgi_script_name; server {{ listen 8080; server_name example.com; location /x {{ {prefix}{body} }} }} }}"
+            ),
+            expected,
+        );
+    }
 }

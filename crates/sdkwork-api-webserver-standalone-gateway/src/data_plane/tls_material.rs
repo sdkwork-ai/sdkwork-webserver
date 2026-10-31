@@ -49,7 +49,7 @@ impl LoadedCertifiedKey {
 /// configured policy with assigned certificates go through
 /// [`build_layered_server_config`].
 pub(crate) fn build_sni_server_config(
-    certificates: Vec<(Vec<String>, LoadedCertifiedKey)>,
+    certificates: Vec<(Vec<String>, Vec<String>, LoadedCertifiedKey)>,
     minimum_version: TlsVersion,
     maximum_version: TlsVersion,
     alpn: &[String],
@@ -95,11 +95,15 @@ pub(crate) fn build_layered_server_config(
 
 /// Indexes loaded material by server name, rejecting ambiguous claims.
 pub(crate) fn build_source_index(
-    certificates: Vec<(Vec<String>, LoadedCertifiedKey)>,
+    certificates: Vec<(Vec<String>, Vec<String>, LoadedCertifiedKey)>,
 ) -> Result<CertificateSourceIndex, String> {
     let mut index = CertificateSourceIndex::default();
-    for (server_names, loaded) in certificates {
-        index.insert(&server_names, loaded.into_resolvable())?;
+    for (server_names, server_name_regexes, loaded) in certificates {
+        index.insert_with_regexes(
+            &server_names,
+            &server_name_regexes,
+            loaded.into_resolvable(),
+        )?;
     }
     Ok(index)
 }
@@ -157,25 +161,106 @@ pub(crate) fn install_crypto_provider() -> Result<(), DataPlaneError> {
 pub(crate) fn load_certified_key(
     certificate_file: &Path,
     private_key_file: &Path,
+    chain_file: Option<&Path>,
+    ocsp_stapling_file: Option<&Path>,
     declared_server_names: &[String],
     provider: &rustls::crypto::CryptoProvider,
 ) -> Result<LoadedCertifiedKey, DataPlaneError> {
     let certificate_pem = read_bounded_tls_material(certificate_file)?;
     let private_key_pem = read_bounded_tls_material(private_key_file)?;
-    let certificate_chain = parse_certificate_chain(&certificate_pem)
+    let mut certificate_chain = parse_certificate_chain(&certificate_pem)
         .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
+    // nginx `ssl_trusted_certificate` / typed-TOML `chainFile`: the declared
+    // PEM chain completes the served certificate chain. Certificates already
+    // present in `certFile` (the usual fullchain form) are deduplicated by
+    // DER, so a redundant declaration is harmless while a leaf-only `certFile`
+    // plus a separate chain still presents the intermediates instead of
+    // silently dropping the declaration.
+    if let Some(chain_file) = chain_file {
+        let chain_pem = read_bounded_tls_material(chain_file)?;
+        let mut chain_certificates = 0usize;
+        for item in CertificateDer::pem_slice_iter(&chain_pem) {
+            chain_certificates = chain_certificates.saturating_add(1);
+            let certificate = item.map_err(|error| {
+                tls_files_error(
+                    chain_file,
+                    private_key_file,
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("invalid chainFile PEM: {error}"),
+                    ),
+                )
+            })?;
+            if !certificate_chain
+                .iter()
+                .any(|existing| existing.as_ref() == certificate.as_ref())
+            {
+                certificate_chain.push(certificate);
+            }
+        }
+        if chain_certificates == 0 {
+            return Err(tls_files_error(
+                chain_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "chainFile contains no PEM certificates",
+                ),
+            ));
+        }
+    }
     let evidence = validate_leaf_certificate(certificate_chain[0].as_ref(), declared_server_names)
         .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
     let private_key = parse_single_private_key(&private_key_pem)
         .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
-    let certified_key =
-        CertifiedKey::from_der(certificate_chain, private_key, provider).map_err(|source| {
+    let mut certified_key = CertifiedKey::from_der(certificate_chain, private_key, provider)
+        .map_err(|source| {
             tls_files_error(
                 certificate_file,
                 private_key_file,
                 io::Error::new(io::ErrorKind::InvalidData, source),
             )
         })?;
+    // nginx `ssl_stapling_file`: a static DER OCSP response served as the
+    // stapled response. The file is read once when TLS material is built; nginx
+    // refreshes it from disk, the runtime requires a config reload (documented
+    // limitation). rustls sends `CertifiedKey::ocsp` verbatim.
+    if let Some(ocsp_file) = ocsp_stapling_file {
+        let response = read_bounded_tls_material(ocsp_file)?;
+        if response.is_empty() {
+            return Err(tls_files_error(
+                ocsp_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "ssl_stapling_file contains no OCSP response",
+                ),
+            ));
+        }
+        if response.len() > 64 * 1024 {
+            return Err(tls_files_error(
+                ocsp_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "ssl_stapling_file exceeds the 64 KiB OCSP response bound",
+                ),
+            ));
+        }
+        // An OCSPResponse is an ASN.1 SEQUENCE; reject obvious non-DER files
+        // early instead of stapling arbitrary bytes.
+        if response[0] != 0x30 {
+            return Err(tls_files_error(
+                ocsp_file,
+                private_key_file,
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "ssl_stapling_file is not a DER OCSP response (missing SEQUENCE tag)",
+                ),
+            ));
+        }
+        certified_key.ocsp = Some(response);
+    }
     Ok(LoadedCertifiedKey {
         certified_key,
         leaf_fingerprint_sha256: evidence.fingerprint_sha256,
@@ -411,6 +496,79 @@ mod tests {
         )
         .expect_err("an expired leaf must never be activated");
         assert!(error.to_string().contains("expired or not yet valid"));
+    }
+
+    #[test]
+    fn chain_file_completes_the_served_chain_without_duplicates() {
+        use super::{install_crypto_provider, load_certified_key};
+
+        install_crypto_provider().expect("crypto provider");
+        let provider = rustls::crypto::CryptoProvider::get_default().expect("provider");
+        let directory = tempfile::tempdir().expect("temp dir");
+
+        let leaf_params =
+            CertificateParams::new(vec!["chain.example.test".to_owned()]).expect("leaf parameters");
+        let leaf_key = KeyPair::generate().expect("leaf key");
+        let leaf = leaf_params
+            .self_signed(&leaf_key)
+            .expect("leaf certificate");
+        let certificate_path = directory.path().join("leaf.pem");
+        let private_key_path = directory.path().join("leaf.key");
+        std::fs::write(&certificate_path, leaf.pem()).expect("write leaf");
+        std::fs::write(&private_key_path, leaf_key.serialize_pem()).expect("write key");
+
+        let chain_params = CertificateParams::new(vec!["issuer.example.test".to_owned()])
+            .expect("chain parameters");
+        let chain_key = KeyPair::generate().expect("chain key");
+        let issuer = chain_params
+            .self_signed(&chain_key)
+            .expect("issuer certificate");
+        let chain_path = directory.path().join("chain.pem");
+
+        // A chain file that repeats the leaf is deduplicated: the served chain
+        // stays a single certificate.
+        std::fs::write(&chain_path, format!("{}\n{}", leaf.pem(), issuer.pem()))
+            .expect("write chain");
+        let loaded = load_certified_key(
+            &certificate_path,
+            &private_key_path,
+            Some(&chain_path),
+            None,
+            &["chain.example.test".to_owned()],
+            provider,
+        )
+        .expect("chain file loads");
+        assert_eq!(
+            loaded.certified_key.cert.len(),
+            2,
+            "leaf plus one missing intermediate, with the duplicate leaf deduplicated"
+        );
+
+        // Without a chain file the served chain is exactly the certificate file.
+        let loaded = load_certified_key(
+            &certificate_path,
+            &private_key_path,
+            None,
+            None,
+            &["chain.example.test".to_owned()],
+            provider,
+        )
+        .expect("no chain file");
+        assert_eq!(loaded.certified_key.cert.len(), 1);
+
+        // A malformed chain file fails closed instead of being ignored.
+        std::fs::write(&chain_path, "not a PEM chain").expect("write invalid chain");
+        let error = load_certified_key(
+            &certificate_path,
+            &private_key_path,
+            Some(&chain_path),
+            None,
+            &["chain.example.test".to_owned()],
+            provider,
+        )
+        .err()
+        .expect("malformed chain must fail closed");
+        assert!(error.to_string().contains("chain.pem"), "{error}");
     }
 
     #[test]

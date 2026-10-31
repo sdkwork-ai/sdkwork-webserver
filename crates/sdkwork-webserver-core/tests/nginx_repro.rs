@@ -1,11 +1,11 @@
 #[test]
 fn repro_api_site() {
-    use sdkwork_webserver_core::nginx::{materialize_nginx_app, parse_nginx_config};
+    use sdkwork_webserver_core::nginx::{materialize_nginx_app_default, parse_nginx_config};
     let text =
         std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/api-repro.conf"))
             .unwrap();
     let parsed = parse_nginx_config(&text, std::path::Path::new("api.conf")).unwrap();
-    match materialize_nginx_app(
+    match materialize_nginx_app_default(
         &parsed,
         std::path::Path::new("/etc/nginx/sites-enabled/sdkwork"),
         "repro",

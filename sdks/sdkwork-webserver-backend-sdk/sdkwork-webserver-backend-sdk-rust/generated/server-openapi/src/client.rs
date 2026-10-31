@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
-use crate::api::{ApplicationApi, PluginApi, ApplicationDomainApi, CertificateApi, DomainApi, ApplicationSourceVersionApi, ApplicationDeploymentApi, CertificateDistributionApi, NginxApi, ServerApi, ServerFileApi, WebserverConfigApi, AgentApi, AuditApi, ClusterApi, TunnelApi, TrafficUsageApi, MetricsSummaryApi};
+use crate::api::{
+    AgentApi, ApplicationApi, ApplicationDeploymentApi, ApplicationDomainApi,
+    ApplicationSourceVersionApi, AuditApi, CertificateApi, CertificateDistributionApi, ClusterApi,
+    DomainApi, MetricsSummaryApi, NginxApi, PluginApi, ServerApi, ServerFileApi, TrafficUsageApi,
+    TunnelApi, WebserverConfigApi,
+};
 use crate::http::{SdkworkConfig, SdkworkError, SdkworkHttpClient};
 
 #[derive(Clone)]
@@ -33,7 +38,6 @@ impl SdkworkBackendClient {
         self
     }
 
-
     pub fn set_header(&self, key: impl Into<String>, value: impl Into<String>) -> &Self {
         self.http.set_header(key, value);
         self
@@ -44,74 +48,74 @@ impl SdkworkBackendClient {
     }
 
     pub fn application(&self) -> ApplicationApi {
-            ApplicationApi::new(Arc::clone(&self.http))
-        }
+        ApplicationApi::new(Arc::clone(&self.http))
+    }
 
     pub fn plugin(&self) -> PluginApi {
-            PluginApi::new(Arc::clone(&self.http))
-        }
+        PluginApi::new(Arc::clone(&self.http))
+    }
 
     pub fn application_domain(&self) -> ApplicationDomainApi {
-            ApplicationDomainApi::new(Arc::clone(&self.http))
-        }
+        ApplicationDomainApi::new(Arc::clone(&self.http))
+    }
 
     pub fn certificate(&self) -> CertificateApi {
-            CertificateApi::new(Arc::clone(&self.http))
-        }
+        CertificateApi::new(Arc::clone(&self.http))
+    }
 
     pub fn domain(&self) -> DomainApi {
-            DomainApi::new(Arc::clone(&self.http))
-        }
+        DomainApi::new(Arc::clone(&self.http))
+    }
 
     pub fn application_source_version(&self) -> ApplicationSourceVersionApi {
-            ApplicationSourceVersionApi::new(Arc::clone(&self.http))
-        }
+        ApplicationSourceVersionApi::new(Arc::clone(&self.http))
+    }
 
     pub fn application_deployment(&self) -> ApplicationDeploymentApi {
-            ApplicationDeploymentApi::new(Arc::clone(&self.http))
-        }
+        ApplicationDeploymentApi::new(Arc::clone(&self.http))
+    }
 
     pub fn certificate_distribution(&self) -> CertificateDistributionApi {
-            CertificateDistributionApi::new(Arc::clone(&self.http))
-        }
+        CertificateDistributionApi::new(Arc::clone(&self.http))
+    }
 
     pub fn nginx(&self) -> NginxApi {
-            NginxApi::new(Arc::clone(&self.http))
-        }
+        NginxApi::new(Arc::clone(&self.http))
+    }
 
     pub fn server(&self) -> ServerApi {
-            ServerApi::new(Arc::clone(&self.http))
-        }
+        ServerApi::new(Arc::clone(&self.http))
+    }
 
     pub fn server_file(&self) -> ServerFileApi {
-            ServerFileApi::new(Arc::clone(&self.http))
-        }
+        ServerFileApi::new(Arc::clone(&self.http))
+    }
 
     pub fn webserver_config(&self) -> WebserverConfigApi {
-            WebserverConfigApi::new(Arc::clone(&self.http))
-        }
+        WebserverConfigApi::new(Arc::clone(&self.http))
+    }
 
     pub fn agent(&self) -> AgentApi {
-            AgentApi::new(Arc::clone(&self.http))
-        }
+        AgentApi::new(Arc::clone(&self.http))
+    }
 
     pub fn audit(&self) -> AuditApi {
-            AuditApi::new(Arc::clone(&self.http))
-        }
+        AuditApi::new(Arc::clone(&self.http))
+    }
 
     pub fn cluster(&self) -> ClusterApi {
-            ClusterApi::new(Arc::clone(&self.http))
-        }
+        ClusterApi::new(Arc::clone(&self.http))
+    }
 
     pub fn tunnel(&self) -> TunnelApi {
-            TunnelApi::new(Arc::clone(&self.http))
-        }
+        TunnelApi::new(Arc::clone(&self.http))
+    }
 
     pub fn traffic_usage(&self) -> TrafficUsageApi {
-            TrafficUsageApi::new(Arc::clone(&self.http))
-        }
+        TrafficUsageApi::new(Arc::clone(&self.http))
+    }
 
     pub fn metrics_summary(&self) -> MetricsSummaryApi {
-            MetricsSummaryApi::new(Arc::clone(&self.http))
-        }
+        MetricsSummaryApi::new(Arc::clone(&self.http))
+    }
 }

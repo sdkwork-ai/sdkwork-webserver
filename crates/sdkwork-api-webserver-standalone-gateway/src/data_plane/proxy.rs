@@ -22,8 +22,9 @@ use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use sdkwork_webserver_core::{
-    CompiledWebServerApp, RouteConfig, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
-    UpstreamConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy, UpstreamRetryCondition,
+    CompiledWebServerApp, ProxyResponsePolicyConfig, RouteConfig, UpstreamActiveHealthConfig,
+    UpstreamActiveHealthMethod, UpstreamConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy,
+    UpstreamRetryCondition,
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
@@ -225,12 +226,16 @@ impl AttemptedTargets {
             .is_some_and(|value| value & (1_u64 << bit) != 0)
     }
 
-    fn insert(&mut self, index: usize) {
+    pub(super) fn mark(&mut self, index: usize) {
         let word = index / u64::BITS as usize;
         let bit = index % u64::BITS as usize;
         if let Some(value) = self.words.get_mut(word) {
             *value |= 1_u64 << bit;
         }
+    }
+
+    fn insert(&mut self, index: usize) {
+        self.mark(index);
     }
 }
 
@@ -268,6 +273,19 @@ pub(super) struct SelectedTarget<'a> {
     url: &'a Url,
     probe: bool,
     ejection_deadline_ms: u64,
+}
+
+impl<'a> SelectedTarget<'a> {
+    /// Index of the target in the upstream's `targets` array.
+    pub(super) fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Target URL (`http://host:port[/]`); protocol adapters take the
+    /// authority and ignore the scheme/URI.
+    pub(super) fn url(&self) -> &'a Url {
+        self.url
+    }
 }
 
 /// Stream proxy selection handle that can report success/failure into the
@@ -353,6 +371,18 @@ pub(super) struct ProxyRequestContext<'a> {
     pub metrics: &'a Arc<DataPlaneMetrics>,
     /// Shared HTTP response cache for proxied surfaces, when enabled.
     pub cache: Option<Arc<super::cache::HttpResponseCache>>,
+    /// nginx `map` results for this request, expandable in
+    /// `proxy_set_header` values and variable `proxy_pass` targets.
+    pub map_results: &'a super::map_variables::MapResults,
+    /// nginx proxy response-header policy (`proxy_hide_header`,
+    /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
+    /// `proxy_cookie_domain`) resolved for this proxy resource.
+    pub response_policy: Option<&'a ProxyResponsePolicyConfig>,
+    /// nginx `proxy_method`: override the method sent upstream.
+    pub proxy_method: Option<&'a str>,
+    /// Rewrite-phase variables for request-time `proxy_pass` templates
+    /// (arbitrary request variables, `${name}` braces, `$1..$9` captures).
+    pub variables: Option<&'a super::request_variables::RequestVariables>,
 }
 
 mod hash_lb;
@@ -826,25 +856,38 @@ async fn proxy_request_dynamic(
             )
         })
         .collect::<HashMap<_, _>>();
-    let evaluated = match sdkwork_webserver_core::expand_proxy_pass_template(
-        template,
-        &host,
-        server_port,
-        request_path,
-        &request_uri,
-        &headers,
-    ) {
-        Ok(url) => url,
-        Err(()) => {
-            return upgrade_failure_response(
-                upgrade,
-                text_response(
-                    StatusCode::BAD_GATEWAY,
-                    "invalid proxy_pass target
+    // A declared map result in a variable `proxy_pass` template is resolved
+    // first; a `$` surviving from the value is escaped so the nginx-variable
+    // pass below cannot re-expand it.
+    let template_with_maps = context.map_results.expand_tokens_escaped(template);
+    // Rewrite-phase variables (request facts, `map` results, `set` values,
+    // regex captures) take precedence when the request carries them; the
+    // legacy expander remains for contexts without rewrite-phase state.
+    let evaluated = match context
+        .variables
+        .filter(|variables| variables.uses_rewrite_variables())
+    {
+        Some(variables) => variables.expand(&template_with_maps),
+        None => match sdkwork_webserver_core::expand_proxy_pass_template(
+            &template_with_maps,
+            &host,
+            server_port,
+            request_path,
+            &request_uri,
+            &headers,
+        ) {
+            Ok(url) => url,
+            Err(()) => {
+                return upgrade_failure_response(
+                    upgrade,
+                    text_response(
+                        StatusCode::BAD_GATEWAY,
+                        "invalid proxy_pass target
 ",
-                ),
-            );
-        }
+                    ),
+                );
+            }
+        },
     };
     // A template without `$uri`/`$request_uri` forwards the full request URI
     // (nginx `proxy_pass http://host;` semantics).
@@ -854,6 +897,15 @@ async fn proxy_request_dynamic(
     } else {
         format!("{evaluated}{request_uri}")
     };
+    // A variable `proxy_pass` whose evaluated authority names a *declared*
+    // upstream routes through that upstream (real load balancing, health
+    // checks, and TLS policy) instead of the synthetic single-target upstream.
+    // Anything else keeps the bounded SSRF-policy path below.
+    let evaluated_url = target_url.parse::<Url>().ok();
+    let declared_upstream = evaluated_url
+        .as_ref()
+        .and_then(Url::host_str)
+        .and_then(|host| context.generation.upstreams.get(host).cloned());
     let authority = match target_url.parse::<Url>() {
         Ok(url) => match url.host_str() {
             Some(host) => format!("{host}:{}", url.port_or_known_default().unwrap_or(80)),
@@ -887,7 +939,9 @@ async fn proxy_request_dynamic(
     // lock so one slow build never serializes every dynamic-proxy request.
     // The shared upstream TLS policy cache (`data_plane::upstream_tls`)
     // keeps each cached entry's TLS footprint at one `ClientConfig` clone.
-    let upstream = {
+    let upstream = if let Some(declared) = declared_upstream.clone() {
+        declared
+    } else {
         let cached = {
             let mut cache = context
                 .generation
@@ -964,18 +1018,34 @@ async fn proxy_request_dynamic(
         );
     };
     let target_activity = upstream.claim_target_activity(selected.index);
-    let target_url = match Url::parse(&target_url) {
-        Ok(url) => url,
-        Err(_) => {
+    let target_url = if declared_upstream.is_some() {
+        // Declared upstream: the selected target supplies scheme/authority/TLS;
+        // the evaluated template supplies the path and query.
+        let Some(evaluated) = evaluated_url.as_ref() else {
             upstream.abandon_probe(selected);
             return upgrade_failure_response(
                 upgrade,
-                text_response(
-                    StatusCode::BAD_GATEWAY,
-                    "invalid upstream target
-",
-                ),
+                text_response(StatusCode::BAD_GATEWAY, "invalid proxy_pass target\n"),
             );
+        };
+        let mut target = selected.url.clone();
+        target.set_path(evaluated.path());
+        target.set_query(evaluated.query());
+        target
+    } else {
+        match Url::parse(&target_url) {
+            Ok(url) => url,
+            Err(_) => {
+                upstream.abandon_probe(selected);
+                return upgrade_failure_response(
+                    upgrade,
+                    text_response(
+                        StatusCode::BAD_GATEWAY,
+                        "invalid upstream target
+",
+                    ),
+                );
+            }
         }
     };
     if upgrade == UpgradeDisposition::WebSocket {
@@ -1089,6 +1159,7 @@ async fn proxy_http_request(
         context.external_scheme,
         context.external_authority,
         context.listener_port,
+        context.map_results,
     )
     .is_err()
     {
@@ -1145,7 +1216,11 @@ async fn proxy_http_request(
             ))
         };
         let mut upstream_request = Request::new(upstream_body);
-        *upstream_request.method_mut() = request_parts.method.clone();
+        *upstream_request.method_mut() = match context.proxy_method {
+            Some(method) => Method::from_bytes(method.as_bytes())
+                .unwrap_or_else(|_| request_parts.method.clone()),
+            None => request_parts.method.clone(),
+        };
         *upstream_request.uri_mut() = target_uri;
         *upstream_request.headers_mut() = headers.clone();
 
@@ -1284,6 +1359,38 @@ async fn proxy_http_request(
                 }
             };
         response_parts.headers = response_headers;
+        // nginx proxy response-header policy runs while the upstream response
+        // is copied into the client response, so it observes the final upstream
+        // header set (after hop-by-hop removal).
+        if let Some(policy) = context.response_policy {
+            // nginx `proxy_redirect default` is expanded to a literal rule at
+            // materialization time; a typed-plane `default` declaration is
+            // expanded here from the attempt target.
+            let typed_default_from = match policy.redirect.as_ref() {
+                Some(sdkwork_webserver_core::ProxyRedirectPolicyConfig::Default) => {
+                    let mut base = format!("{}://{}", target_url.scheme(), target_url.authority());
+                    match context.target_uri {
+                        Some(uri) => base.push_str(uri),
+                        None => base.push('/'),
+                    }
+                    Some(base)
+                }
+                _ => None,
+            };
+            let default_redirect_to = if context.target_uri.is_some() {
+                context.route.route_match.path.as_str()
+            } else {
+                "/"
+            };
+            super::proxy_response_policy::apply_proxy_response_policy(
+                &mut response_parts.headers,
+                &super::proxy_response_policy::ProxyResponsePolicyContext {
+                    policy,
+                    default_redirect_from: typed_default_from.as_deref(),
+                    default_redirect_to,
+                },
+            );
+        }
         if upstream.status_is_failure(response_parts.status) {
             upstream.record_failure(selected);
         } else {
@@ -1425,6 +1532,7 @@ async fn proxy_websocket_request(
         context.external_scheme,
         context.external_authority,
         context.listener_port,
+        context.map_results,
     )
     .is_err()
     {
@@ -1696,25 +1804,40 @@ fn build_target_url(
     path_rewritten: bool,
     query: Option<&str>,
 ) -> Result<Url, ()> {
-    // nginx `proxy_pass` URI replacement: when the target has a URI part,
-    // the location-matched prefix is replaced with that URI and the
-    // forwarded path is appended. Legacy `stripPrefix` resources (no URI
-    // part) keep the upstream target's own path as the base.
-    if strip_prefix || target_uri.is_some() {
+    // nginx `proxy_pass` URI replacement is a literal splice: the URI written
+    // on the directive replaces exactly the matched location prefix, and the
+    // remainder of the normalized request URI is appended unchanged — no slash
+    // is added or removed at the seam. Verified against nginx 1.29.6:
+    //   location /a/ { proxy_pass http://up/x; }   /a/inner -> /xinner
+    //   location /b/ { proxy_pass http://up/v1/; } /b/inner -> /v1/inner
+    //   location /d  { proxy_pass http://up/v1/; } /d/inner -> /v1//inner
+    // A trailing-slash URI therefore keeps working while a non-slash URI
+    // inherits the remainder directly (nginx's documented caveat).
+    if let Some(uri) = target_uri {
         let forwarded_path = normalized_path
             .strip_prefix(route_path)
             .unwrap_or(normalized_path);
         let mut rewritten = target.clone();
-        let replacement = match target_uri {
-            Some(uri) => uri.to_owned(),
-            None => rewritten.path().to_owned(),
-        };
-        let base_path = replacement.trim_end_matches('/');
+        let combined_path = format!("{uri}{forwarded_path}");
+        let encoded_path =
+            utf8_percent_encode(&combined_path, CANONICAL_PROXY_PATH_ENCODE_SET).to_string();
+        rewritten.set_path(&encoded_path);
+        rewritten.set_query(query);
+        return Ok(rewritten);
+    }
+    // Legacy typed-config `stripPrefix` resources (no URI part) keep the
+    // upstream target's own path as a base and join the remainder with a `/`.
+    if strip_prefix {
+        let forwarded_path = normalized_path
+            .strip_prefix(route_path)
+            .unwrap_or(normalized_path);
+        let mut rewritten = target.clone();
+        let base_path = rewritten.path().trim_end_matches('/').to_owned();
         let combined_path = if forwarded_path.is_empty() {
             if base_path.is_empty() {
                 "/".to_owned()
             } else {
-                base_path.to_owned()
+                base_path
             }
         } else {
             format!("{base_path}/{}", forwarded_path.trim_start_matches('/'))
@@ -1795,6 +1918,7 @@ fn apply_proxy_set_headers(
     external_scheme: &str,
     external_authority: &str,
     listener_port: u16,
+    maps: &super::map_variables::MapResults,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -1813,7 +1937,7 @@ fn apply_proxy_set_headers(
             external_scheme,
             external_authority,
             listener_port,
-            target,
+            maps,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -1832,7 +1956,7 @@ fn expand_proxy_header_value(
     external_scheme: &str,
     external_authority: &str,
     listener_port: u16,
-    current: &HeaderMap,
+    maps: &super::map_variables::MapResults,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -1865,10 +1989,13 @@ fn expand_proxy_header_value(
             "scheme" => out.push_str(external_scheme),
             "remote_addr" => out.push_str(&client_ip.to_string()),
             "proxy_add_x_forwarded_for" => {
-                let existing = current
-                    .get("x-forwarded-for")
-                    .and_then(|v| v.to_str().ok())
-                    .or_else(|| source.get("x-forwarded-for").and_then(|v| v.to_str().ok()));
+                // nginx's `$proxy_add_x_forwarded_for` appends the client
+                // address to the *inbound* `X-Forwarded-For` field, never to a
+                // value the proxy generated for this same request. Reading the
+                // target map here would duplicate the runtime's own safe
+                // default (`127.0.0.1` -> `127.0.0.1, 127.0.0.1`) instead of the
+                // single address nginx sends.
+                let existing = source.get("x-forwarded-for").and_then(|v| v.to_str().ok());
                 match existing {
                     Some(prior) if !prior.is_empty() => {
                         out.push_str(prior);
@@ -1905,7 +2032,22 @@ fn expand_proxy_header_value(
                     out.push_str(port);
                 }
             }
-            _ => return Err(()),
+            _ if var.starts_with("http_") => {
+                // nginx `$http_<name>`: the inbound request field, `_` standing
+                // for `-`; absent is the empty string.
+                let header = var.trim_start_matches("http_").replace('_', "-");
+                if let Some(value) = source.get(&header).and_then(|value| value.to_str().ok()) {
+                    out.push_str(value.trim());
+                }
+            }
+            _ => {
+                // A declared nginx `map` result is expanded here exactly like a
+                // built-in request variable.
+                match maps.lookup(var) {
+                    Some(value) => out.push_str(&value),
+                    None => return Err(()),
+                }
+            }
         }
     }
     Ok(out)

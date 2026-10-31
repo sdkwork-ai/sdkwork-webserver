@@ -11,7 +11,9 @@ pub fn custom_path(path: &str) -> String {
     if normalized_prefix.is_empty() {
         return normalized_path;
     }
-    if normalized_path == normalized_prefix || normalized_path.starts_with(&(normalized_prefix.clone() + "/")) {
+    if normalized_path == normalized_prefix
+        || normalized_path.starts_with(&(normalized_prefix.clone() + "/"))
+    {
         return normalized_path;
     }
 

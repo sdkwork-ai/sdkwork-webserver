@@ -1,0 +1,3 @@
+# Managed by spring-ai-plus nginx plugin.
+# Generated for HTTP site include bootstrap.
+include sites-enabled/sdkwork/*.conf;

@@ -164,11 +164,15 @@ async fn proxy_set_header_expands_supported_variables_upstream() {
     let lowered = body.to_ascii_lowercase();
     // $host expands to the request authority host.
     assert!(lowered.contains("host: header.localhost"), "body: {body}");
-    // $proxy_add_x_forwarded_for: the data plane overwrites a client-supplied
-    // X-Forwarded-For with the peer IP (spoofing guard), then appends the
-    // peer again for the proxy chain.
+    // $proxy_add_x_forwarded_for appends the peer to the inbound
+    // X-Forwarded-For field, never to the runtime's own generated default.
+    // With no inbound field this request sends nginx's single peer address.
     assert!(
-        lowered.contains("x-forwarded-for: 127.0.0.1, 127.0.0.1"),
+        lowered.contains("x-forwarded-for: 127.0.0.1"),
+        "body: {body}"
+    );
+    assert!(
+        !lowered.contains("x-forwarded-for: 127.0.0.1, 127.0.0.1"),
         "body: {body}"
     );
     // $remote_addr expands to the client IP.

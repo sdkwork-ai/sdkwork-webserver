@@ -7,7 +7,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { parseTomlSubset } from '../../sdkwork-specs/tools/webserver/toml.mjs';
-import { buildDraft, classify, emitToml, readNginxEnabled, scanDirectives, validateEmittedToml } from './import-nginx-conf.mjs';
+import { buildDraft, classify, emitToml, loadDirectiveCatalog, readNginxEnabled, scanDirectives, validateEmittedToml } from './import-nginx-conf.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -172,4 +172,148 @@ test('emitToml from product standalone conf validates as typed server.toml', () 
   const draft = buildDraft(classify(scanDirectives(source)).mapped);
   const result = validateEmittedToml(emitToml(draft, { id: 'webserver' }));
   assert.equal(result.errors.length, 0, JSON.stringify(result.errors, null, 2));
+});
+
+test('data-block bodies are data, not directives (types/charset_map/map)', () => {
+  const source = `
+http {
+  types {
+    text/html  html htm;
+    text/css   css;
+  }
+  charset_map utf-8 iso-8859-1 {
+    80 80;
+  }
+  map $http_user_agent $mobile {
+    default 0;
+    ~*iphone 1;
+  }
+  server {
+    listen 80;
+    server_name data-blocks.local;
+    location / { return 200 ok; }
+  }
+}
+`;
+  const directives = scanDirectives(source);
+  const names = directives.map((item) => item.name);
+  for (const dataChild of ['text/html', 'text/css', '80', '~*iphone']) {
+    assert.ok(!names.includes(dataChild), `${dataChild} must not be flattened as a directive`);
+  }
+  const classified = classify(directives);
+  assert.equal(classified.unsupported.length, 0, JSON.stringify(classified.unsupported, null, 2));
+  assert.ok(classified.accepted.some((item) => item.name === 'types'));
+  assert.ok(classified.accepted.some((item) => item.name === 'charset_map'));
+  // `map` executes on the runtime through typed `[[http.maps]]`, so it is
+  // rendered as a typed declaration (never as the legacy string-array `map`
+  // key, which stays accepted-but-unenforced).
+  const mapItem = classified.mapped.find((item) => item.name === 'map');
+  assert.ok(mapItem, 'map must be classified as a mapped executable directive');
+  const draft = buildDraft(classified.mapped);
+  assert.equal(draft.http.map, undefined, 'the legacy string-array map key must not be rendered');
+  assert.equal(draft.http.maps.length, 1);
+  assert.equal(draft.http.maps[0].source, '$http_user_agent');
+  assert.equal(draft.http.maps[0].result, '$mobile');
+  assert.equal(draft.http.maps[0].default, '0');
+  assert.deepEqual(draft.http.maps[0].entries, [{ key: '~*iphone', value: '1' }]);
+  const toml = emitToml(draft, { id: 'typed-map' });
+  assert.match(toml, /\[\[http\.maps\]\]/u);
+  assert.match(toml, /\[\[http\.maps\.entries\]\]/u);
+});
+
+test('executable and accepted catalogued directives are not reported unsupported', () => {
+  const source = `
+http {
+  default_type application/octet-stream;
+  server {
+    listen 80;
+    server_name catalog-drift.local;
+    location / {
+      expires 1d;
+      etag off;
+      if_modified_since exact;
+      return 200 ok;
+    }
+  }
+}
+`;
+  const classified = classify(scanDirectives(source));
+  const unsupported = classified.unsupported.map((item) => item.name);
+  assert.equal(unsupported.length, 0, JSON.stringify(classified.unsupported, null, 2));
+  // `expires`/`etag`/`if_modified_since` execute in the Rust materializer; the
+  // CLI reports them as accepted-not-rendered rather than unsupported.
+  for (const name of ['expires', 'etag', 'if_modified_since']) {
+    assert.ok(classified.accepted.some((item) => item.name === name),
+      `${name} must be accepted (executes in the nginx materializer)`);
+  }
+  assert.ok(classified.accepted.some((item) => item.name === 'default_type'));
+});
+
+test('profile-excluded directives are blocked without becoming unsupported', () => {
+  const source = `
+http {
+  server {
+    listen 80;
+    server_name excluded.local;
+    location / { perl_set $x 'sub { 1 }'; }
+  }
+}
+`;
+  const classified = classify(scanDirectives(source));
+  assert.equal(classified.blocked.length, 1);
+  assert.equal(classified.blocked[0].name, 'perl_set');
+  assert.equal(classified.blocked[0].reason, 'notExecutableByRust');
+  assert.match(classified.blocked[0].catalog, /perl/);
+  assert.equal(classified.unsupported.length, 0);
+});
+
+test('every CLI-rendered name is classified by the committed support catalog', () => {
+  const { catalog } = loadDirectiveCatalog();
+  const byName = new Map();
+  for (const entry of catalog.directives) {
+    const list = byName.get(entry.name) ?? [];
+    list.push(entry);
+    byName.set(entry.name, list);
+  }
+  const source = fs.readFileSync(STANDALONE_CONF, 'utf8');
+  for (const item of scanDirectives(source)) {
+    const entries = byName.get(item.name);
+    assert.ok(entries && entries.length > 0, `${item.name} is not in the support catalog`);
+  }
+});
+
+test('unenforced typed TOML keys are never rendered as enforced', () => {
+  const source = `
+http {
+  map $http_user_agent $mobile { default 0; }
+  server {
+    listen 80;
+    server_name unenforced.local;
+    ssl_certificate cert.pem;
+    ssl_certificate_key key.pem;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_stapling on;
+    server_tokens off;
+    location / {
+      proxy_pass http://127.0.0.1:9001;
+      proxy_buffering on;
+    }
+  }
+}
+`;
+  const classified = classify(scanDirectives(source));
+  for (const name of ['ssl_prefer_server_ciphers', 'ssl_session_cache', 'ssl_stapling', 'server_tokens', 'proxy_buffering']) {
+    assert.ok(classified.accepted.some((item) => item.name === name),
+      `${name} must be reported accepted, not rendered`);
+    assert.ok(!classified.mapped.some((item) => item.name === name),
+      `${name} must not be rendered into the draft`);
+  }
+  // `map` is executable through typed `[[http.maps]]`; it is covered by the
+  // data-block test above and must render as a typed declaration.
+  assert.ok(classified.mapped.some((item) => item.name === 'map'));
+  const toml = emitToml(buildDraft(classified.mapped), { id: 'unenforced' });
+  for (const key of ['preferServerCiphers', 'sessionCache', 'ocspStapling', 'stapling =', 'serverTokens', 'proxyBuffering', 'map =']) {
+    assert.ok(!toml.includes(key), `draft must not emit unenforced typed key ${key}`);
+  }
 });

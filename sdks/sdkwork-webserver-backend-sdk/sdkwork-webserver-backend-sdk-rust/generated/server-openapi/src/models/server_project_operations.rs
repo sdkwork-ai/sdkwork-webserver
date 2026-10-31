@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ServerProjectOperation};
+use crate::models::ServerProjectOperation;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ServerProjectOperations {

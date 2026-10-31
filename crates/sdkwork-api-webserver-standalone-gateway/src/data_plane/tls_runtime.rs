@@ -762,6 +762,11 @@ fn compile_candidate(
         let loaded = load_certified_key(
             &certificate_file,
             &private_key_file,
+            None,
+            // Dynamic certificate assignments have no config certificate source
+            // to carry `ssl_stapling_file`; static stapling is a configured-
+            // certificate feature.
+            None,
             &assignment.server_names,
             provider,
         )
@@ -783,7 +788,7 @@ fn compile_candidate(
                 assignment_uuid: assignment.assignment_uuid.clone(),
             });
         }
-        certificates.push((assignment.server_names.clone(), loaded));
+        certificates.push((assignment.server_names.clone(), Vec::new(), loaded));
         assigned.push(AssignedCertificate {
             certificate_id: assignment.certificate_uuid.clone(),
             server_names: assignment.server_names.clone(),

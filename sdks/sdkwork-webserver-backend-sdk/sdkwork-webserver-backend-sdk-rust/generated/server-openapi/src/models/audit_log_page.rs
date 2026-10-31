@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{AuditLogResponse};
+use crate::models::AuditLogResponse;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AuditLogPage {

@@ -12,6 +12,7 @@ See `DOCUMENTATION_SPEC.md` section 2.
 | [docker-install.md](docker-install.md) / [docker-install.en.md](docker-install.en.md) | Canonical Docker install: five environments, bin/ entrypoints, WSL + remote Ubuntu |
 | [bare-metal-install.md](bare-metal-install.md) | Linux bare-metal/VM installation: canonical config directory initialization, resource deployment, systemd unit, validation, upgrade/rollback/uninstall |
 | [admin-password-reset.md](admin-password-reset.md) | Bootstrap administrator password recovery: `pnpm admin:reset:<target>` commands, options, success output, and failure modes |
+| [NGINX-COMPATIBILITY-MATRIX.md](NGINX-COMPATIBILITY-MATRIX.md) | Generated directive-by-directive nginx `http-core-v1` support matrix: executable / accepted-but-unenforced / fail-closed / excluded, what an operator loses, migration actions, known differences, and the release gate (`pnpm check:nginx-compat`) |
 
 Kubernetes deployment is covered by `../../../deployments/kubernetes/README.md`; Docker by
 `../../../deployments/docker/README.md`. Source runtime configuration authority is

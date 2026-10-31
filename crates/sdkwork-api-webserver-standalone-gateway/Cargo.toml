@@ -55,6 +55,7 @@ cap-fs-ext.workspace = true
 cap-std.workspace = true
 crc.workspace = true
 futures-util.workspace = true
+h2.workspace = true
 http.workspace = true
 http-body.workspace = true
 http-body-util = { workspace = true, features = ["channel"] }
@@ -74,7 +75,7 @@ socket2.workspace = true
 sha2.workspace = true
 sync_wrapper.workspace = true
 thiserror.workspace = true
-time.workspace = true
+time = { workspace = true, features = ["local-offset"] }
 tokio.workspace = true
 tokio-rustls.workspace = true
 tower.workspace = true
@@ -108,6 +109,9 @@ psl = { workspace = true, optional = true }
 sdkwork_deploy_contract = { workspace = true }
 sdkwork_deploy_core = { workspace = true }
 sdkwork-webserver-core.workspace = true
+sdkwork-webserver-mail-protocol.workspace = true
+sdkwork-webserver-upstream-protocol.workspace = true
+regex.workspace = true
 sdkwork-webserver-tunnel.workspace = true
 sdkwork-webserver-cluster.workspace = true
 sdkwork-webserver-tunnel-transport.workspace = true

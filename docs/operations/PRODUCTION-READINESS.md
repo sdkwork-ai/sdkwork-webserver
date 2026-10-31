@@ -105,15 +105,48 @@ Both are mandatory CI gates (`pnpm test:postgres:required`, wired into the relea
 
 ## 4. Data plane behaviour
 
-- `cargo test -p sdkwork-api-webserver-standalone-gateway --lib` — 333 unit tests (admission, cache,
+- `cargo test -p sdkwork-api-webserver-standalone-gateway --lib` — 347 unit tests (admission, cache,
   timeouts, TLS material, shutdown, usage metering).
-- `tests/data_plane_integration.rs` — 58 end-to-end cases (HTTP/1 semantics, cache, ACME challenge,
+- `tests/data_plane_integration.rs` — 59 end-to-end cases (HTTP/1 semantics, cache, ACME challenge,
   admission, shutdown).
 - `cargo test --workspace --no-fail-fast` — 125 test targets, zero failures (2026-10-21, after
   making the nginx include/webroot tests spell paths portably on Windows).
 - `tests/tunnel_relay.rs` — 8 tunnel relay cases.
 - `tests/stream_proxy.rs` / `tests/http1_connection_semantics.rs` / `tests/sub_filter.rs` — TLS
   termination, pipelining, half-close, substitution.
+
+### 4.1 Nginx compatibility evidence (`http-core-v1`)
+
+The compatibility profile, reference build and known differences are assessed in
+`docs/reports/2026-10-30-nginx-commercial-compatibility-assessment.md`; the directive-level authority
+is `specs/nginx-directive-support.catalog.json` rendered as
+`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md`. All of it is gated:
+
+| Gate | Command | 2026-10-30 result |
+| --- | --- | --- |
+| Aggregate release gate (wired into `_sdkwork:verify` as `check:nginx-compat`) | `node tools/run-nginx-compat-gate.mjs` | PASS — static gates, in-process corpus and all three differential slices executed |
+| In-process full-surface behavioural corpus | `python3 tests/nginx/full-surface/probe.py` | 76/76 |
+| Conditional/range/cache differential vs nginx 1.29.6 | `node tools/run-nginx-differential.mjs` | 50/50, 0 unexpected (44 documented allowances) |
+| Broad HTTP differential vs nginx 1.29.6 | `node tools/run-nginx-differential-http.mjs` | 259/259, 0 unexpected |
+| Upstream-protocol differential vs nginx 1.29.6 (FastCGI/uWSGI/SCGI/memcached/gRPC) | `node tools/run-nginx-differential-protocols.mjs` | 77/77 byte-identical (transport, TLS, CGI cache, store/rate/ranges/buffering included) |
+| Stream differential vs nginx 1.29.6 (limit_conn/dry-run/ACL/return/set/map/SNI) | `node tools/run-nginx-differential-stream.mjs` | 9/9 |
+| Real production config acceptance (api.birdcoder.com snapshot, 33 files) | `node tools/check-nginx-real-world.mjs` | 41 vhosts / 4 listeners / 150 resources / 88 upstreams / 0 skipped |
+| Mail proxy differential vs nginx 1.29.6 (auth_http + POP3/IMAP/SMTP + STARTTLS) | `node tools/run-nginx-differential-mail.mjs` | 9/9 byte/transcript-identical |
+| Virtual-host selection and named locations vs nginx 1.29.6 | `node tools/run-nginx-differential-host.mjs` | 39/39, 0 unexpected (3 documented allowances) |
+| Directive catalog drift (inventory ↔ catalog ↔ implementation ↔ CLI ↔ docs) | `node tools/check-nginx-directive-matrix.mjs` | 12/12 |
+| Migration CLI consumes the catalog | `node --test tools/import-nginx-conf.test.mjs` | 14/14 |
+| Directive-by-directive audit ledger (744 rows) current + evidence verified | `node tools/gen-nginx-directive-audit.mjs --check --verify-evidence` | PASS |
+
+The differential oracles are committed and pinned to nginx 1.29.6, so CI compares without a real
+nginx binary; `SDKWORK_REQUIRE_NGINX_EVIDENCE=1` (set by the aggregate gate) turns any "this machine
+cannot execute the evidence" skip into a failure. The directive catalog now classifies 328 directives
+executable, 170 accepted-but-unenforced (each with a located diagnostic and a migration action), 334
+fail-closed and 64 excluded out of the 744 nginx 1.29.6 directives; a generated 744-row audit ledger
+records one decision and rationale per directive (116 enforced / 143 runtime-owned / 17 security-difference / 29 behavior-gap / 229 out-of-profile / 210 fail-closed). Remaining catalogued gaps (`tls.ocsp-stapling`,
+`http.websocket.rfc8441`, `ops.reload.listener-handoff`, nested locations, chunked_transfer_encoding,
+charset/autoindex families, HTTP/2 tuning, stream module gaps) are listed with commercial impact and
+priorities in the assessment report and are never claimed as supported.
+
 
 ## 5. Browser clients
 

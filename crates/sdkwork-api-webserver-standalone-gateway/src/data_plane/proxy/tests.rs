@@ -169,6 +169,9 @@ fn rewritten_target_encodes_canonical_reserved_and_unicode_path_bytes() {
 
 #[test]
 fn target_uri_replaces_the_route_prefix() {
+    // nginx splices the proxy_pass URI onto the remainder of the matched
+    // location prefix without adding a slash; every expectation below was
+    // confirmed against nginx 1.29.6 on the differential fixture.
     let target = Url::parse("https://origin.example").expect("valid target");
     let rewritten = build_target_url(
         &target,
@@ -181,7 +184,7 @@ fn target_uri_replaces_the_route_prefix() {
         Some("x=1"),
     )
     .expect("replacement URL");
-    assert_eq!(rewritten.as_str(), "https://origin.example/api/items?x=1");
+    assert_eq!(rewritten.as_str(), "https://origin.example/apiitems?x=1");
     let rewritten = build_target_url(
         &target,
         false,
@@ -194,6 +197,51 @@ fn target_uri_replaces_the_route_prefix() {
     )
     .expect("root replacement URL");
     assert_eq!(rewritten.as_str(), "https://origin.example/items");
+}
+
+#[test]
+fn target_uri_splice_keeps_slashes_exactly_as_nginx_does() {
+    let target = Url::parse("https://origin.example").expect("valid target");
+    // Trailing-slash URI + trailing-slash location: one slash at the seam.
+    let rewritten = build_target_url(
+        &target,
+        false,
+        Some("/v1/"),
+        "/b/",
+        "/b/inner",
+        "/b/inner",
+        false,
+        None,
+    )
+    .expect("trailing slash splice");
+    assert_eq!(rewritten.as_str(), "https://origin.example/v1/inner");
+    // Exact location request: the URI part is the whole forwarded path.
+    let rewritten = build_target_url(
+        &target,
+        false,
+        Some("/v1/"),
+        "/b/",
+        "/b/",
+        "/b/",
+        false,
+        None,
+    )
+    .expect("exact location splice");
+    assert_eq!(rewritten.as_str(), "https://origin.example/v1/");
+    // Location without a trailing slash: nginx forwards the remainder with its
+    // own leading slash, producing the documented double slash.
+    let rewritten = build_target_url(
+        &target,
+        false,
+        Some("/v1/"),
+        "/d",
+        "/d/inner",
+        "/d/inner",
+        false,
+        None,
+    )
+    .expect("no trailing slash splice");
+    assert_eq!(rewritten.as_str(), "https://origin.example/v1//inner");
 }
 
 #[test]
@@ -1153,12 +1201,15 @@ fn business_success_cannot_restore_an_actively_unhealthy_target() {
     );
 }
 
+fn no_maps() -> crate::data_plane::map_variables::MapResults {
+    crate::data_plane::map_variables::MapResults::default()
+}
+
 #[test]
 fn proxy_set_header_expands_supported_nginx_variables() {
     let mut source = HeaderMap::new();
     source.insert("upgrade", HeaderValue::from_static("websocket"));
     source.insert("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
-    let current = HeaderMap::new();
     let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
     assert_eq!(
         expand_proxy_header_value(
@@ -1168,7 +1219,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
-            &current
+            &no_maps(),
         )
         .expect("expand"),
         "server.sdkwork.com"
@@ -1181,7 +1232,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
-            &current
+            &no_maps(),
         )
         .expect("expand"),
         "https"
@@ -1194,7 +1245,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
-            &current
+            &no_maps(),
         )
         .expect("expand"),
         "10.0.0.1, 127.0.0.1"
@@ -1207,7 +1258,7 @@ fn proxy_set_header_expands_supported_nginx_variables() {
             "https",
             "server.sdkwork.com",
             443,
-            &current
+            &no_maps(),
         )
         .expect("expand"),
         "websocket"
@@ -1219,16 +1270,61 @@ fn proxy_set_header_expands_supported_nginx_variables() {
         "https",
         "server.sdkwork.com",
         443,
-        &current
+        &no_maps(),
     )
     .is_err());
 }
 
 #[test]
+fn proxy_set_header_expands_map_results_and_omits_empty_ones() {
+    let mut source = HeaderMap::new();
+    source.insert("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
+    let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
+    let maps = crate::data_plane::map_variables::MapResults::from_pairs(&[
+        ("tenant_zone", "acme-zone"),
+        ("empty_tag", ""),
+    ]);
+
+    assert_eq!(
+        expand_proxy_header_value(
+            "$host/$tenant_zone",
+            &source,
+            client,
+            "https",
+            "app.example.com",
+            443,
+            &maps,
+        )
+        .expect("expand"),
+        "app.example.com/acme-zone"
+    );
+
+    // An empty map result removes the forwarded header, exactly like an empty
+    // `proxy_set_header` value.
+    let mut target = HeaderMap::new();
+    target.insert("x-tenant", HeaderValue::from_static("stale"));
+    apply_proxy_set_headers(
+        &mut target,
+        &["X-Tenant $empty_tag".to_owned()],
+        &source,
+        client,
+        "https",
+        "app.example.com",
+        443,
+        &maps,
+    )
+    .expect("apply");
+    assert!(!target.contains_key("x-tenant"));
+}
+
+#[test]
 fn apply_proxy_set_headers_overrides_host_and_forwarded_chain() {
     let mut target = HeaderMap::new();
-    target.insert("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
-    let source = HeaderMap::new();
+    // The runtime's safe default already put the direct peer in the target map;
+    // `$proxy_add_x_forwarded_for` must not append to that generated value.
+    target.insert("x-forwarded-for", HeaderValue::from_static("127.0.0.1"));
+    let mut source = HeaderMap::new();
+    source.insert("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
     let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
     apply_proxy_set_headers(
         &mut target,
@@ -1242,6 +1338,7 @@ fn apply_proxy_set_headers_overrides_host_and_forwarded_chain() {
         "https",
         "app.example.com:443",
         443,
+        &no_maps(),
     )
     .expect("apply");
     assert_eq!(
@@ -1257,5 +1354,31 @@ fn apply_proxy_set_headers_overrides_host_and_forwarded_chain() {
             .get("x-forwarded-proto")
             .and_then(|v| v.to_str().ok()),
         Some("https")
+    );
+}
+
+#[test]
+fn proxy_add_x_forwarded_for_does_not_chain_the_generated_default() {
+    // Without an inbound `X-Forwarded-For`, nginx sends exactly the client
+    // address. The runtime's target map already holds that address as its safe
+    // default, so expanding from it would produce `127.0.0.1, 127.0.0.1`.
+    let mut target = HeaderMap::new();
+    target.insert("x-forwarded-for", HeaderValue::from_static("127.0.0.1"));
+    let source = HeaderMap::new();
+    let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
+    apply_proxy_set_headers(
+        &mut target,
+        &["X-Forwarded-For $proxy_add_x_forwarded_for".to_owned()],
+        &source,
+        client,
+        "http",
+        "diff.example.com",
+        80,
+        &no_maps(),
+    )
+    .expect("apply");
+    assert_eq!(
+        target.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
+        Some("127.0.0.1")
     );
 }

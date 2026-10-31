@@ -3,7 +3,7 @@
 Status: active
 Owner: SDKWork maintainers
 Application: sdkwork-web
-Updated: 2026-07-16
+Updated: 2026-10-29
 Parent: [PRD.md](PRD.md)
 Specs: NGINX_SPEC.md, REQUIREMENTS_SPEC.md, SECURITY_SPEC.md, PERFORMANCE_SPEC.md, TEST_SPEC.md
 
@@ -17,6 +17,15 @@ Operators enable or disable the compatibility surface with
 W16 checks are skipped and `tools/import-nginx-conf.mjs` refuses activation.
 Living capability status for `http-core-v1` is tracked in
 `specs/nginx-gap.catalog.json`.
+
+The directive-level contract required by §3 is
+`specs/nginx-directive-support.catalog.json`, generated and checked against both
+the pinned nginx OSS directive inventory (`specs/nginx-directive-inventory.json`)
+and the implementation sources by `tools/check-nginx-directive-matrix.mjs`
+(`check:nginx-matrix`). Its operator-facing rendering is
+`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` (§13). The migration CLI
+`tools/import-nginx-conf.mjs` consumes that catalog instead of maintaining its
+own classifier, so an import report and the published matrix cannot disagree.
 
 The Rust engine is the primary runtime. Nginx import and rendering are migration and interoperability capabilities. A configuration may activate on the Rust engine only when every behavior-affecting directive is mapped to the normalized intermediate representation or rejected with a blocking diagnostic.
 
@@ -44,11 +53,12 @@ The conformance catalog, not this summary, is the machine-readable authority for
 | Structure | `http`, `server`, `location`, bounded and sandboxed `include`, directive context validation, inheritance, and deterministic source order. |
 | Listeners and hosts | `listen`, `server_name`, default server, IPv4/IPv6, HTTP/1.0 compatibility, HTTP/1.1, HTTP/2 mapping, Proxy Protocol policy, and host validation. |
 | Static content | `root`, `alias`, `index`, `try_files`, `autoindex` policy, MIME types, conditional requests, ranges, and precompressed assets. |
-| Proxying | `proxy_pass`, upstream URI mapping, request/response headers, forwarding identity, buffering, streaming, WebSocket upgrade, SSE, timeouts, body limits, and bounded retries. |
+| Proxying | `proxy_pass`, upstream URI mapping, request/response headers, forwarding identity, buffering, streaming, WebSocket upgrade, SSE, timeouts, body limits, and bounded retries. Upstream protocol adapters: FastCGI (`fastcgi_pass/param/index/split_path_info` + settings), uWSGI (`uwsgi_pass/param` + settings), SCGI (`scgi_pass/param` + settings), `memcached_pass` with the bounded `set $memcached_key` idiom, and gRPC (`grpc_pass`) — each bounded and fail-closed outside its implemented forms. |
 | Upstreams | `upstream`, server weights, backup/drain behavior, failure policy, keepalive, round robin, least connections, IP hash, and supported hash policies. |
 | Routing | Exact, prefix, `^~`, case-sensitive regex, case-insensitive regex locations, named-location mapping where supported, `return`, and the supported `rewrite` subset. |
 | TLS | `ssl` listeners, certificate selection, protocols, policy-safe cipher mapping, session behavior, client certificate validation, OCSP policy, and SNI. |
 | Response behavior | Header transforms, error-page mapping, redirects, gzip, cache control, proxy cache subset, access control, connection limits, and rate limits. |
+| Mail proxy | `mail {}` listeners with `listen`, `protocol`, `server_name`, `timeout`, `so_keepalive`, inbound `proxy_protocol`, `starttls on|only`, `ssl_certificate`/`_key`/`ssl_protocols`, `auth_http` (+ headers/timeout), POP3/IMAP/SMTP `*_auth`, client buffers, `max_errors`, `xclient`, `proxy*` relay controls — with a real-nginx 1.29.6 differential (9/9 cases). rustls-unsupported `ssl_*` knobs (ciphers/CRL/session/ticket/dhparam/ecdh/prefer-server-ciphers/certificate-compression) and client-certificate/auth_http-pass-client-cert flows fail closed with located diagnostics. |
 | Operations | Config test, explain, source-mapped diagnostics, atomic reload, graceful drain, access/error logs, and revision status. |
 
 Every directive has a catalog entry containing allowed contexts, argument grammar, inheritance, normalized field, runtime support, renderer support, risk classification, diagnostics, comparison fixture, and known differences.
@@ -60,9 +70,11 @@ V1 excludes:
 - Arbitrary third-party or dynamically loaded Nginx modules.
 - OpenResty/Lua, Perl, njs, and embedded executable configuration.
 - Nginx Plus proprietary APIs, active health-check implementation details, key-value zones, and commercial-only features unless separately licensed and specified.
-- Mail proxy and generic TCP/UDP `stream` proxying.
+- HTTP/3 (QUIC). Generic TCP/UDP `stream` proxying is **in profile**: plaintext TCP relay, stream SSL termination, `ssl_preread` passthrough and UDP datagram forwarding execute on the Rust data plane and are cataloged as `stream.*` capabilities. The POP3/IMAP/SMTP mail proxy is **in profile as of the mail-listener expansion** (Wave 9A/9B): plaintext and TLS listeners, STARTTLS, nginx `auth_http` authentication service, XCLIENT and backend relay execute end-to-end, proven by a 9-case real-nginx differential; the rustls-unsupported TLS knobs and client-certificate flows remain fail-closed. HTTP/3 (QUIC) remains excluded pending a QUIC/h3 listener plane.
 - OS-specific directives that cannot be reproduced safely and portably.
-- Embedded CGI, FastCGI, uWSGI, SCGI, and arbitrary forward-proxy/`CONNECT` execution. These require separate protocol and security requirements; dynamic apps use HTTP/gRPC upstreams in the declared V1 profile.
+- Arbitrary forward-proxy/`CONNECT` execution and executable embedded configuration.
+- Perl, `geoip`, and dynamically loaded third-party modules. (The nginx mail proxy modules are no longer excluded: see the mail-proxy row above; mail client-certificate verification and custom capability lists remain fail-closed.)
+- FastCGI, uWSGI, SCGI, `memcached` and gRPC are **in profile as of the upstream-protocol expansion**: the edge implements its own bounded protocol adapters: FastCGI/uWSGI/SCGI/memcached and gRPC are executable end-to-end with real-nginx differential evidence. They are not "embedded CGI" — no process is spawned; the edge is only a protocol client to a configured upstream, with SSRF policy, bounded bodies, timeouts and retry gates identical to HTTP proxying.
 - Arbitrary directives carried as opaque text into Rust activation.
 
 The importer may preserve unsupported source text only for inspection or Nginx-target round-trip. Preserved text is marked `notExecutableByRust`, cannot contribute hidden behavior, and blocks Rust publication when it is in an active context.
@@ -211,15 +223,15 @@ Reference versions, build flags, kernel settings, certificates, fixture artifact
 - Request diagnostics identify the selected listener, host, route, upstream, configuration revision, and compatibility profile without exposing secrets or unbounded labels.
 - Import and runtime metrics count directives by classification, validation failures, intentional differences, reload outcomes, and conformance regressions.
 - Support bundles include redacted normalized configuration, checksums, diagnostic codes, versions, node convergence, and recent bounded events.
-- Product documentation publishes a searchable directive support matrix, differences from Nginx, migration guide, version policy, and deprecation schedule.
+- Product documentation publishes a searchable directive support matrix, differences from Nginx, migration guide, version policy, and deprecation schedule. The matrix is generated, never hand-maintained: `docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md` is rendered from `specs/nginx-directive-support.catalog.json`, and `tools/check-nginx-directive-matrix.mjs` fails release verification when the document, the catalog, the pinned nginx inventory, the migration CLI classifier, or the implementation sources disagree.
 - Compatibility claims in marketing, UI, APIs, and release notes must name the profile and evidence version.
 
 ## 14. Acceptance Criteria
 
 - Every parsed directive receives a catalog classification and source-mapped diagnostic where applicable.
-- No active unsupported behavior is silently ignored, approximated, or reported as deployed.
+- No active unsupported behavior is silently ignored, approximated, or reported as deployed. The nginx-conf import plane reports one diagnostic per accepted-but-unenforced directive; the typed TOML plane reports the same for behaviour-affecting keys (`server_toml::UNENFORCED_BEHAVIOR_TOML_KEYS`) so `validate` prints `compatibility:` lines instead of dropping them.
 - Server-name, location, URI mapping, proxy streaming, static files, TLS, and reload conformance suites pass for the pinned Nginx reference.
 - Import-normalize-render-normalize is idempotent for the supported corpus.
 - Regex, include, rewrite, body, buffer, retry, connection, and configuration limits are enforced under adversarial tests without OOM.
 - Existing accepted connections survive compatible reloads; invalid revisions never replace the last verified revision.
-- The public support matrix and machine-readable catalog agree with implementation and conformance evidence.
+- The public support matrix and machine-readable catalog agree with implementation and conformance evidence. `pnpm check:nginx-compat` (wired into `_sdkwork:verify`) executes the static gates, the in-process behavioural corpus and every indexed differential slice with `SDKWORK_REQUIRE_NGINX_EVIDENCE=1`, so a release cannot pass while an nginx compatibility gate declined to run.

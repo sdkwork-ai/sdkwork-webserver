@@ -1,0 +1,219 @@
+{
+  "_server": "nginx/1.29.6",
+  "imap.auth-failure": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: bad",
+        "Auth-Pass: secret",
+        "Auth-Protocol: imap",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {},
+    "client": "* OK IMAP4 ready\r\na1 NO invalid credentials\r\n"
+  },
+  "imap.login.relay": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: imap",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {
+      "imap": [
+        [
+          "a1 LOGIN {5}",
+          "alice {6}",
+          "secret",
+          "a2 NOOP",
+          "a3 LOGOUT"
+        ]
+      ]
+    },
+    "client": "* OK IMAP4 ready\r\na1 OK logged in\r\na2 OK echo\r\n* BYE\r\na3 OK\r\n"
+  },
+  "pop3.auth-failure": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: bad",
+        "Auth-Pass: secret",
+        "Auth-Protocol: pop3",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {},
+    "client": "+OK POP3 ready\r\n+OK\r\n-ERR invalid credentials\r\n"
+  },
+  "pop3.auth-login.dialog": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: pop3",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {
+      "pop3": [
+        [
+          "USER alice",
+          "PASS secret",
+          "NOOP"
+        ]
+      ]
+    },
+    "client": "+OK POP3 ready\r\n+ VXNlcm5hbWU6\r\n+ UGFzc3dvcmQ6\r\n+OK logged in\r\n+OK echo NOOP\r\n"
+  },
+  "pop3.login.relay": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: pop3",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {
+      "pop3": [
+        [
+          "USER alice",
+          "PASS secret",
+          "NOOP",
+          "QUIT"
+        ]
+      ]
+    },
+    "client": "+OK POP3 ready\r\n+OK\r\n+OK logged in\r\n+OK echo NOOP\r\n+OK bye\r\n"
+  },
+  "smtp.auth-failure": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: bad",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {},
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n535 5.7.0 invalid credentials\r\n"
+  },
+  "smtp.auth-xclient.relay": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {
+      "smtp": [
+        [
+          "EHLO mail.example.com",
+          "XCLIENT ADDR=127.0.0.1 LOGIN=alice NAME=[UNAVAILABLE]",
+          "EHLO client.example",
+          "QUIT"
+        ]
+      ]
+    },
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n221 bye\r\n"
+  },
+  "smtp.implicit-tls": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {
+      "smtp": [
+        [
+          "EHLO mail.example.com",
+          "XCLIENT ADDR=127.0.0.1 LOGIN=alice NAME=[UNAVAILABLE]",
+          "EHLO client.example",
+          "QUIT"
+        ]
+      ]
+    },
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n221 bye\r\n"
+  },
+  "smtp.starttls": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "X-Tenant: acme"
+      ]
+    ],
+    "backend_sessions": {
+      "smtp": [
+        [
+          "EHLO mail.example.com",
+          "XCLIENT ADDR=127.0.0.1 LOGIN=alice NAME=[UNAVAILABLE]",
+          "QUIT"
+        ]
+      ]
+    },
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 STARTTLS\r\n220 2.0.0 Start TLS\r\n235 2.0.0 OK\r\n221 bye\r\n"
+  }
+}

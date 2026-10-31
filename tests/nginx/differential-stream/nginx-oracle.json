@@ -1,0 +1,95 @@
+{
+  "cases": {
+    "access.deny-loopback": [
+      {
+        "closed": true
+      }
+    ],
+    "echo.roundtrip": [
+      {
+        "received": "stream-echo-one\n",
+        "sent": "stream-echo-one\n"
+      },
+      {
+        "received": "stream-echo-two\n",
+        "sent": "stream-echo-two\n"
+      }
+    ],
+    "half_close.on": [
+      {
+        "received": "got:18",
+        "sent": "half-close-payload"
+      }
+    ],
+    "limit_conn.dry-run": [
+      {
+        "received": "dry-run-second\n",
+        "sent": "dry-run-second\n"
+      },
+      {
+        "received": "dry-run-first\n"
+      }
+    ],
+    "limit_conn.enforce": [
+      {
+        "received": "limit-holder\n"
+      },
+      {
+        "sent": "over-limit-probe\n"
+      },
+      {
+        "received": "after-release\n",
+        "sent": "after-release\n"
+      }
+    ],
+    "map.return-remote-addr": [
+      {
+        "received": "loopback"
+      }
+    ],
+    "preread.map.return-default": [
+      {
+        "received": "none",
+        "sni": "b.example"
+      }
+    ],
+    "preread.map.return-sni": [
+      {
+        "received": "backend-a",
+        "sni": "a.example"
+      }
+    ],
+    "proxy_protocol.inbound-v1": [
+      {
+        "received": "proxy-in-echo\n",
+        "sent": "proxy-in-echo\n"
+      }
+    ],
+    "proxy_protocol.missing-header": [
+      {
+        "sent": "payload\n"
+      }
+    ],
+    "proxy_ssl.untrusted-ca": [
+      {
+        "sent": "must-not-arrive\n"
+      }
+    ],
+    "proxy_ssl.verified": [
+      {
+        "received": "tls-echo-payload\n",
+        "sent": "tls-echo-payload\n"
+      }
+    ],
+    "return.403": [
+      {
+        "received": "403"
+      }
+    ],
+    "set.return-literal": [
+      {
+        "received": "tagged"
+      }
+    ]
+  }
+}

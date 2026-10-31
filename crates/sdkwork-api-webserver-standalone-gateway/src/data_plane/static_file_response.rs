@@ -1,4 +1,9 @@
-use std::{io, ops::RangeInclusive, path::Path};
+use std::{
+    io,
+    ops::RangeInclusive,
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use axum::{
     body::Body,
@@ -7,19 +12,25 @@ use axum::{
 use bytes::Bytes;
 use futures_util::stream;
 use httpdate::HttpDate;
-use sdkwork_webserver_core::{CachePolicyConfig, IfModifiedSinceMode};
+use sdkwork_webserver_core::{CachePolicyConfig, IfModifiedSinceMode, DEFAULT_MAX_RANGES};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 
 use super::static_path::OpenedStaticFile;
 
 const FILE_CHUNK_BYTES: usize = 64 * 1024;
 
+/// nginx formats its `multipart/byteranges` boundary as a per-process counter
+/// rendered as a 20-digit decimal token (`00000000000000000001`, …). Matching the
+/// width keeps `Content-Length` identical for the same range set, so the
+/// differential battery compares lengths as well as the decoded parts.
+static MULTIPART_BOUNDARY: AtomicU64 = AtomicU64::new(1);
+
 pub(crate) async fn serve_opened_file(
     opened: OpenedStaticFile,
     method: &Method,
     headers: &HeaderMap,
 ) -> Response<Body> {
-    serve_opened_file_with_cache_policy(opened, method, headers, None).await
+    serve_opened_file_with_cache_policy(opened, method, headers, None, DEFAULT_MAX_RANGES).await
 }
 
 /// `serve_opened_file` with the route's nginx `etag` / `if_modified_since`
@@ -41,6 +52,42 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
     method: &Method,
     headers: &HeaderMap,
     policy: Option<&CachePolicyConfig>,
+    max_ranges: u64,
+) -> Response<Body> {
+    let content_type = static_content_type(&opened.path_hint);
+    let cache_control_path = opened.path_hint.clone();
+    let hints = RepresentationHints {
+        content_type,
+        content_encoding: None,
+        vary_accept_encoding: false,
+        cache_control_path: &cache_control_path,
+    };
+    serve_opened_file_representation(opened, method, headers, policy, &hints, max_ranges).await
+}
+
+/// Response metadata that differs between the identity representation and a
+/// precompressed `<path>.gz` sidecar.
+pub(crate) struct RepresentationHints<'a> {
+    /// `Content-Type` of the decoded representation. For a gzip sidecar it is
+    /// the type of the *original* path (nginx derives it from the request URI).
+    pub(crate) content_type: HeaderValue,
+    /// `Content-Encoding` of the stored bytes (`gzip` for a sidecar).
+    pub(crate) content_encoding: Option<&'static str>,
+    /// Emit `Vary: Accept-Encoding` (nginx `gzip_vary on` with a sidecar in
+    /// `gzip_static on` mode).
+    pub(crate) vary_accept_encoding: bool,
+    /// Path whose extension drives the deployment freshness policy. A sidecar
+    /// inherits the original representation's policy.
+    pub(crate) cache_control_path: &'a Path,
+}
+
+pub(crate) async fn serve_opened_file_representation(
+    opened: OpenedStaticFile,
+    method: &Method,
+    headers: &HeaderMap,
+    policy: Option<&CachePolicyConfig>,
+    hints: &RepresentationHints<'_>,
+    max_ranges: u64,
 ) -> Response<Body> {
     let modified = opened.metadata.modified().ok().map(HttpDate::from);
     let etag_enabled = policy.map(|policy| policy.etag).unwrap_or(true);
@@ -71,38 +118,59 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
         let serves_on_inm =
             !serves_on_ims && inm_present && if_none_match_passes(headers, etag.as_deref());
         if !serves_on_ims && !serves_on_inm {
-            return not_modified_response(&opened.path_hint, etag.as_deref(), modified);
+            let mut response = not_modified_response(&opened.path_hint, etag.as_deref(), modified);
+            if hints.vary_accept_encoding {
+                insert_vary_accept_encoding(response.headers_mut());
+            }
+            return response;
         }
     }
 
     let size = opened.metadata.len();
-    // `If-Range` gates the range handling: a mismatching validator makes the
-    // server ignore `Range` and answer the whole representation with 200.
-    let ranges = if if_range_allows_ranges(headers, etag.as_deref(), modified) {
-        parse_range(headers, size)
-    } else {
+    // nginx `max_ranges` (`ngx_http_range_header_filter` /
+    // `ngx_http_range_parse`, differential-confirmed against nginx 1.29.6):
+    // - `0` disables byte-range processing entirely, so even a valid `Range`
+    //   answers 200 with the whole representation and no `Accept-Ranges`;
+    // - a ceiling `n` accepts at most `n` ranges; when the request asks for
+    //   more, nginx declines range processing and answers the full 200.
+    // `If-Range` gates the range handling first: a mismatching validator makes
+    // the server ignore `Range` and answer the whole representation with 200.
+    let range_processing_disabled = max_ranges == 0;
+    let ranges = if range_processing_disabled
+        || !if_range_allows_ranges(headers, etag.as_deref(), modified)
+    {
         None
+    } else {
+        match parse_range(headers, size) {
+            Some(Ok(parsed)) if parsed.len() as u64 > max_ranges => None,
+            other => other,
+        }
     };
-    let mime = mime_guess::from_path(&opened.path_hint)
-        .first_raw()
-        .and_then(|value| HeaderValue::from_str(value).ok())
-        .unwrap_or_else(|| HeaderValue::from_static("application/octet-stream"));
+    let mime = hints.content_type.clone();
     // nginx attaches `Accept-Ranges` from the range filter's fall-through path
     // only, which every non-partial outcome reaches; a 206 or 416 never carries
     // it, so advertising it on the partial response would be a difference the
     // differential battery can see.
     let partial = ranges.is_some();
     let mut builder = Response::builder()
-        .header(header::CONTENT_TYPE, mime)
+        .header(header::CONTENT_TYPE, mime.clone())
         // Deployment-level freshness policy (ENVIRONMENT_SPEC §13, SDKWORK_DEPLOY_SPEC
         // §8.1): fingerprinted immutable assets get long-lived caching, the public
         // runtime env document never caches, everything else revalidates through
         // ETag/Last-Modified conditional requests.
         .header(
             header::CACHE_CONTROL,
-            cache_control_for_path(&opened.path_hint),
+            cache_control_for_path(hints.cache_control_path),
         );
-    if !partial {
+    if let Some(encoding) = hints.content_encoding {
+        builder = builder.header(header::CONTENT_ENCODING, encoding);
+    }
+    if hints.vary_accept_encoding {
+        builder = builder.header(header::VARY, "Accept-Encoding");
+    }
+    // nginx `max_ranges 0` returns before its range filter's fall-through path,
+    // so it advertises neither a partial representation nor `Accept-Ranges`.
+    if !partial && !range_processing_disabled {
         builder = builder.header(header::ACCEPT_RANGES, "bytes");
     }
     if let Some(modified) = modified {
@@ -136,9 +204,14 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
                 body,
             )
         }
-        Some(Ok(_)) => {
-            range_not_satisfiable(size, Body::from("Cannot serve multipart range requests"))
-        }
+        Some(Ok(ranges)) => multipart_range_response(
+            builder,
+            opened.file,
+            ranges,
+            size,
+            mime,
+            method == Method::HEAD,
+        ),
         Some(Err(())) => range_not_satisfiable(size, Body::empty()),
         None => {
             let body = if method == Method::HEAD {
@@ -151,6 +224,20 @@ pub(crate) async fn serve_opened_file_with_cache_policy(
     }
 }
 
+/// Append `Accept-Encoding` to an existing `Vary` field list (idempotent).
+pub(crate) fn insert_vary_accept_encoding(headers: &mut HeaderMap) {
+    let already_present = headers.get_all(header::VARY).iter().any(|value| {
+        value.to_str().is_ok_and(|value| {
+            value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case("accept-encoding"))
+        })
+    });
+    if !already_present {
+        headers.append(header::VARY, HeaderValue::from_static("Accept-Encoding"));
+    }
+}
+
 fn parse_range(headers: &HeaderMap, size: u64) -> Option<Result<Vec<RangeInclusive<u64>>, ()>> {
     let value = headers.get(header::RANGE)?.to_str().ok()?;
     Some(
@@ -158,6 +245,167 @@ fn parse_range(headers: &HeaderMap, size: u64) -> Option<Result<Vec<RangeInclusi
             .and_then(|range| range.validate(size))
             .map_err(|_| ()),
     )
+}
+
+/// nginx's `mime.types` maps the `js` extension to `application/javascript`.
+/// `mime-db`/`mime_guess` now answer `text/javascript` for the same extension,
+/// so an nginx-compatible edge would advertise a type the nginx deployment it
+/// replaces never sends. The runtime pins the nginx-canonical type for that one
+/// extension and keeps `mime_guess` for the rest of its table; an unknown
+/// extension keeps the runtime's safe `application/octet-stream` fallback.
+fn static_content_type(path: &Path) -> HeaderValue {
+    if path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("js"))
+    {
+        return HeaderValue::from_static("application/javascript");
+    }
+    mime_guess::from_path(path)
+        .first_raw()
+        .and_then(|value| HeaderValue::from_str(value).ok())
+        .unwrap_or_else(|| HeaderValue::from_static("application/octet-stream"))
+}
+
+/// nginx `ngx_http_range_filter_module` multi-range answer: 206 with a
+/// `multipart/byteranges` body, one part per requested range, each carrying its
+/// own `Content-Type` and `Content-Range`. The body streams from the
+/// already-open handle range by range, so a multi-range request for a large file
+/// never buffers the representation in memory.
+///
+/// The framing matches nginx exactly (leading CRLF before every boundary, a
+/// 20-digit counter token, `\r\n--<boundary>--\r\n` terminator), which is why the
+/// `Content-Length` is byte-identical for the same range set and content type.
+fn multipart_range_response(
+    builder: http::response::Builder,
+    file: std::fs::File,
+    ranges: Vec<RangeInclusive<u64>>,
+    size: u64,
+    content_type: HeaderValue,
+    head_only: bool,
+) -> Response<Body> {
+    let boundary = format!("{:020}", MULTIPART_BOUNDARY.fetch_add(1, Ordering::Relaxed));
+    let content_type_text = content_type
+        .to_str()
+        .unwrap_or("application/octet-stream")
+        .to_owned();
+    let mut total_length = 0_u64;
+    for range in &ranges {
+        total_length = total_length
+            .saturating_add(part_header_length(
+                &boundary,
+                &content_type_text,
+                range,
+                size,
+            ))
+            .saturating_add(range.end().saturating_sub(*range.start()) + 1);
+    }
+    // nginx closing delimiter: "\r\n--<boundary>--\r\n".
+    total_length = total_length.saturating_add(2 + 2 + boundary.len() as u64 + 2 + 2);
+
+    let multipart_type = format!("multipart/byteranges; boundary={boundary}");
+    let mut response = finish_response(
+        builder
+            .status(StatusCode::PARTIAL_CONTENT)
+            .header(header::CONTENT_LENGTH, total_length),
+        Body::empty(),
+    );
+    if let Ok(value) = HeaderValue::from_str(&multipart_type) {
+        response.headers_mut().insert(header::CONTENT_TYPE, value);
+    }
+    if head_only {
+        return response;
+    }
+    // Spawned owner: the task owns the response body channel and ends when the
+    // client consumes the body or the connection is dropped, so it cannot
+    // outlive the response it feeds.
+    let (sender, receiver) =
+        tokio::sync::mpsc::channel::<Result<Bytes, io::Error>>(MULTIPART_CHANNEL_CAPACITY);
+    tokio::spawn(async move {
+        let mut file = tokio::fs::File::from_std(file);
+        for range in ranges {
+            let start = *range.start();
+            let part_header = part_header_bytes(
+                &boundary,
+                &content_type_text,
+                range.start(),
+                range.end(),
+                size,
+            );
+            if sender.send(Ok(Bytes::from(part_header))).await.is_err() {
+                return;
+            }
+            if file.seek(SeekFrom::Start(start)).await.is_err() {
+                let _ = sender
+                    .send(Err(io::Error::other(
+                        "multipart range source became unreadable",
+                    )))
+                    .await;
+                return;
+            }
+            let mut remaining = range.end().saturating_sub(start) + 1;
+            while remaining > 0 {
+                let length = remaining.min(FILE_CHUNK_BYTES as u64) as usize;
+                let mut buffer = vec![0_u8; length];
+                match file.read(&mut buffer).await {
+                    Ok(0) => {
+                        let _ = sender
+                            .send(Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "static file changed while streaming a multipart range",
+                            )))
+                            .await;
+                        return;
+                    }
+                    Ok(read) => {
+                        buffer.truncate(read);
+                        remaining = remaining.saturating_sub(read as u64);
+                        if sender.send(Ok(Bytes::from(buffer))).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = sender.send(Err(error)).await;
+                        return;
+                    }
+                }
+            }
+        }
+        let _ = sender
+            .send(Ok(Bytes::from(format!("\r\n--{boundary}--\r\n"))))
+            .await;
+    });
+    let streamed = stream::unfold(receiver, |mut receiver| async move {
+        receiver.recv().await.map(|item| (item, receiver))
+    });
+    let (parts, _) = response.into_parts();
+    Response::from_parts(parts, Body::from_stream(streamed))
+}
+
+/// Frames between the multipart reader task and the client body. Small enough
+/// that a slow client cannot make the server hold more than a few chunks of the
+/// ranged representation.
+const MULTIPART_CHANNEL_CAPACITY: usize = 4;
+
+fn part_header_bytes(
+    boundary: &str,
+    content_type: &str,
+    start: &u64,
+    end: &u64,
+    size: u64,
+) -> String {
+    format!(
+        "\r\n--{boundary}\r\nContent-Type: {content_type}\r\nContent-Range: bytes {start}-{end}/{size}\r\n\r\n"
+    )
+}
+
+fn part_header_length(
+    boundary: &str,
+    content_type: &str,
+    range: &RangeInclusive<u64>,
+    size: u64,
+) -> u64 {
+    part_header_bytes(boundary, content_type, range.start(), range.end(), size).len() as u64
 }
 
 /// Deployment-level `Cache-Control` freshness for a static file.
@@ -477,6 +725,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn max_ranges_caps_or_disables_range_processing() {
+        // Differential-confirmed against nginx 1.29.6
+        // (`ngx_http_range_header_filter` / `ngx_http_range_parse`):
+        // `max_ranges 0` disables range processing entirely (200 full body and
+        // no Accept-Ranges), and a request that asks for more ranges than the
+        // ceiling declines range processing (200 full body + Accept-Ranges).
+        let mut temp = NamedTempFile::new().unwrap();
+        temp.write_all(b"0123456789").unwrap();
+        let path = PathBuf::from("test.txt");
+        let hints = RepresentationHints {
+            content_type: HeaderValue::from_static("text/plain"),
+            content_encoding: None,
+            vary_accept_encoding: false,
+            cache_control_path: &path,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, HeaderValue::from_static("bytes=0-0,2-2"));
+        let response = serve_opened_file_representation(
+            opened(&temp),
+            &Method::GET,
+            &headers,
+            None,
+            &hints,
+            2,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert!(response.headers()[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("multipart/byteranges"));
+    }
+
+    #[tokio::test]
     async fn if_match_is_a_precondition_with_412() {
         let temp = NamedTempFile::new().unwrap();
         temp.as_file().write_all(b"0123456789").unwrap();
@@ -690,6 +972,63 @@ mod tests {
                 "{name} should revalidate"
             );
         }
+    }
+
+    #[test]
+    fn javascript_uses_the_nginx_canonical_mime_type() {
+        assert_eq!(
+            static_content_type(Path::new("app.js")).to_str().unwrap(),
+            "application/javascript"
+        );
+        assert_eq!(
+            static_content_type(Path::new("app.JS")).to_str().unwrap(),
+            "application/javascript"
+        );
+        assert_eq!(
+            static_content_type(Path::new("data.json"))
+                .to_str()
+                .unwrap(),
+            "application/json"
+        );
+        assert_eq!(
+            static_content_type(Path::new("blob.zzz")).to_str().unwrap(),
+            "application/octet-stream"
+        );
+    }
+
+    #[tokio::test]
+    async fn multi_range_request_answers_nginx_multipart_byteranges() {
+        let mut temp = NamedTempFile::new().unwrap();
+        temp.write_all(b"0123456789abcdef").unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, HeaderValue::from_static("bytes=0-1,4-5"));
+
+        let response = serve_opened_file(opened(&temp), &Method::GET, &headers).await;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        let content_type = response.headers()[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        assert!(
+            content_type.starts_with("multipart/byteranges; boundary="),
+            "content type {content_type:?}"
+        );
+        // nginx's framing has a fixed width for the boundary token, so the
+        // representation length is part of the contract.
+        assert_eq!(response.headers()[header::CONTENT_LENGTH], "198");
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8_lossy(&body);
+        assert!(text.starts_with("\r\n--"), "{text:?}");
+        assert!(
+            text.contains("Content-Type: text/plain\r\nContent-Range: bytes 0-1/16\r\n\r\n01\r\n"),
+            "{text:?}"
+        );
+        assert!(
+            text.contains("Content-Type: text/plain\r\nContent-Range: bytes 4-5/16\r\n\r\n45\r\n"),
+            "{text:?}"
+        );
+        assert!(text.ends_with("--\r\n"), "{text:?}");
     }
 
     fn opened(temp: &NamedTempFile) -> OpenedStaticFile {

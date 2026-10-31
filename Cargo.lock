@@ -2993,6 +2993,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "num_threads"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cabcc654086861f9e1bc5115258de62ef92c79b20f4615a1b0cc57c4e82027d4"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "oid-registry"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4108,6 +4117,7 @@ dependencies = [
  "percent-encoding",
  "psl",
  "rcgen",
+ "regex",
  "reqwest",
  "rustls",
  "sdkwork-api-deployments-assembly",
@@ -4142,10 +4152,12 @@ dependencies = [
  "sdkwork-webserver-http-host",
  "sdkwork-webserver-internal-sdk-generated-rust",
  "sdkwork-webserver-knowledgebase-provider",
+ "sdkwork-webserver-mail-protocol",
  "sdkwork-webserver-resolver-cache",
  "sdkwork-webserver-tunnel",
  "sdkwork-webserver-tunnel-core",
  "sdkwork-webserver-tunnel-transport",
+ "sdkwork-webserver-upstream-protocol",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -5796,6 +5808,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-webserver-grpc-mock"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "h2",
+ "http",
+ "rustls",
+ "serde_json",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
 name = "sdkwork-webserver-http-host"
 version = "0.1.0"
 dependencies = [
@@ -5831,6 +5856,14 @@ dependencies = [
  "sdkwork-webserver-core",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "sdkwork-webserver-mail-protocol"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -5934,6 +5967,13 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sdkwork-webserver-upstream-protocol"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -6634,7 +6674,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
 dependencies = [
  "deranged",
+ "libc",
  "num-conv",
+ "num_threads",
  "powerfmt",
  "serde_core",
  "time-core",

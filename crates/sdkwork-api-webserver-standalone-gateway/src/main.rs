@@ -216,9 +216,31 @@ fn config_loader() -> WebServerConfigLoader {
     WebServerConfigLoader::new()
 }
 
+/// Operator settings the nginx grammar cannot express.
+///
+/// `SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST` is a comma-separated list of
+/// absolute directory prefixes for request-time `root $variable` /
+/// `alias $variable` values (the typed plane carries the same setting as
+/// `[http] documentRootAllowlist`). Without it, a variable document root fails
+/// closed at materialization.
+fn document_root_allowlist_from_env() -> Vec<String> {
+    std::env::var("SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn load_options(format: Option<ConfigFormat>) -> ConfigLoadOptions {
     ConfigLoadOptions {
         format,
+        document_root_allowlist: document_root_allowlist_from_env(),
         ..ConfigLoadOptions::default()
     }
 }
@@ -260,6 +282,7 @@ async fn run_nginx_compat_until(
         virtual_hosts = loaded.app.virtual_hosts.len(),
         upstreams = loaded.app.upstreams.len(),
         streams = loaded.app.streams.len(),
+        mail_servers = loaded.app.mail.servers.len(),
         skipped = loaded.skipped.len(),
         ignored_directives = loaded.compatibility.len(),
         "nginx compatibility configuration materialized"
@@ -300,13 +323,14 @@ fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
     })?;
     let compiled_app = compiled.config();
     println!(
-        "validated nginx compatibility: appKey={} virtualHosts={} listeners={} resources={} upstreams={} streams={} skipped={}",
+        "validated nginx compatibility: appKey={} virtualHosts={} listeners={} resources={} upstreams={} streams={} mailServers={} skipped={}",
         compiled_app.app_key,
         compiled_app.virtual_hosts.len(),
         compiled_app.listeners.len(),
         compiled_app.resources.len(),
         compiled_app.upstreams.len(),
         compiled_app.streams.len(),
+        compiled_app.mail.servers.len(),
         loaded.skipped.len(),
     );
     Ok(())
@@ -360,8 +384,15 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
         .as_ref()
         .map(|value| value.sha256().to_owned())
         .unwrap_or_else(|| "-".to_owned());
+    // PRD-nginx-compatibility §11: an accepted-but-unenforced directive must be
+    // reported, never silently dropped. The nginx-conf plane already prints its
+    // diagnostics; the typed TOML plane now carries the same information, so
+    // `validate` shows an operator which declared values have no runtime effect.
+    for diagnostic in &revision.compatibility {
+        eprintln!("compatibility: {}: {}", diagnostic.path, diagnostic.message);
+    }
     println!(
-        "validated format={} appKey={} revision={} bytes={} listeners={} virtualHosts={} routes={} resources={} upstreams={} tlsPolicies={} skipped={}",
+        "validated format={} appKey={} revision={} bytes={} listeners={} virtualHosts={} routes={} resources={} upstreams={} tlsPolicies={} skipped={} acceptedButUnenforced={}",
         revision.format.as_str(),
         compiled.config().app_key,
         revision_text,
@@ -373,6 +404,7 @@ fn validate_config(path: PathBuf, format_override: Option<ConfigFormat>) -> Main
         compiled.config().upstreams.len(),
         compiled.config().tls_policies.len(),
         revision.skipped.len(),
+        revision.compatibility.len(),
     );
     validate_tunnel_section(compiled.config())?;
     Ok(())

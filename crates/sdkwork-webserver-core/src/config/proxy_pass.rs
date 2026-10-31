@@ -9,6 +9,17 @@ use std::collections::HashMap;
 
 /// Validate a dynamic `proxy_pass` template at materialization.
 pub fn validate_proxy_pass_template(template: &str) -> Result<(), String> {
+    validate_proxy_pass_template_with_maps(template, &[])
+}
+
+/// [`validate_proxy_pass_template`] plus the nginx `map` result variables
+/// declared by the same application config. A map result is a legal
+/// `$variable` in a dynamic target template; every other unlisted variable
+/// still fails closed.
+pub fn validate_proxy_pass_template_with_maps(
+    template: &str,
+    map_variables: &[&str],
+) -> Result<(), String> {
     let mut remainder = template;
     while let Some(index) = remainder.find('$') {
         let rest = &remainder[index..];
@@ -36,6 +47,7 @@ pub fn validate_proxy_pass_template(template: &str) -> Result<(), String> {
             || variable == "$server_port"
             || variable == "$uri"
             || variable == "$request_uri"
+            || map_variables.iter().any(|name| *name == &variable[1..])
         {
             remainder = &rest[end..];
             continue;
@@ -128,10 +140,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_variables() {
-        assert!(
-            validate_proxy_pass_template("http://$request_uri").is_err() == false
-                || validate_proxy_pass_template("http://$request_uri").is_ok()
-        );
+        assert!(validate_proxy_pass_template("http://$request_uri").is_ok());
         assert!(validate_proxy_pass_template("http://$remote_addr").is_err());
         assert!(validate_proxy_pass_template("http://$scheme").is_err());
         assert!(validate_proxy_pass_template("http://$").is_err());

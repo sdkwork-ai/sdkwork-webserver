@@ -1,0 +1,1338 @@
+{
+ "_cases": 77,
+ "_server": "nginx/1.29.6",
+ "cases": {
+  "args-get": {
+   "body": "{\"body_hex\":\"\",\"connection\":2,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"beta\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"name=value&flag\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/args?name=value&flag\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/args\"],[\"SCRIPT_NAME\",\"/echo/args\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/echo/args\"}",
+   "headers": {
+    "content-length": [
+     "657"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "basic-get": {
+   "body": "{\"body_hex\":\"\",\"connection\":1,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"alpha\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"x=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/hello?x=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/hello\"],[\"SCRIPT_NAME\",\"/echo/hello\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/echo/hello\"}",
+   "headers": {
+    "content-length": [
+     "638"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "basic-get-again": {
+   "body": "{\"body_hex\":\"\",\"connection\":9,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"mu\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"again=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/second?again=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/second\"],[\"SCRIPT_NAME\",\"/echo/second\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/echo/second\"}",
+   "headers": {
+    "content-length": [
+     "647"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-bypass": {
+   "body": "first=gen=4 bypassed=gen=5 third=gen=4",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-convert-head": {
+   "body": "get=gen=17 head_body=0 second=gen=17",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-default": {
+   "body": "first=gen=2 second=gen=3 cached=False",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-hit": {
+   "body": "first=gen=1 second=gen=1 cached=True",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-key": {
+   "body": "first=gen=10 second=gen=10 shared=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-lock": {
+   "body": "bodies=gen=13,gen=13 coalesced=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-min-uses": {
+   "body": "first=gen=11 second=gen=12 third=gen=12",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-no-cache": {
+   "body": "first=gen=6 second=gen=7 third=gen=7",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-range": {
+   "body": "cached=True",
+   "headers": {},
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-range-beyond": {
+   "body": "cached=False",
+   "headers": {},
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-range-default": {
+   "body": "cached=True",
+   "headers": {},
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-revalidate": {
+   "body": "prime=gen=16 revalidated=gen=16 refreshed=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "etag": [
+     "\"stable\""
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-scgi-hit": {
+   "body": "first=gen=1 second=gen=1 cached=True",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-stale": {
+   "body": "prime=gen=14 stale=gen=14 served_stale=True",
+   "headers": {
+    "content-length": [
+     "6"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-uwsgi-hit": {
+   "body": "first={\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4565002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f63616368652d75777367692f6f6e650b005343524950545f4e414d4510002f63616368652d75777367692f6f6e650900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f63616368652d75777367692f6f6e650c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5400000900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"} second={\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4565002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f63616368652d75777367692f6f6e650b005343524950545f4e414d4510002f63616368652d75777367692f6f6e650900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f63616368652d75777367692f6f6e650c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5400000900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"} cached=True",
+   "headers": {
+    "content-length": [
+     "1034"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "cache-valid": {
+   "body": "first=gen=8 expired=gen=9 refetched=True",
+   "headers": {
+    "content-length": [
+     "5"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-bufsize": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502,
+   "trailers": {}
+  },
+  "d7-ignore": {
+   "body": "normal-body",
+   "headers": {
+    "content-length": [
+     "11"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-memcached-gzip-off": {
+   "body": "cached-value:/d7/gz-off/plain-key:peer=127.0.0.1",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "48"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-memcached-gzip-on": {
+   "body": "cached-value:/d7/gz-on/gzip-key:peer=127.0.0.1",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-encoding": [
+     "gzip"
+    ],
+    "content-length": [
+     "46"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-passbody": {
+   "body": "{\"body_hex\":\"\",\"connection\":<id>,\"params\":[[\"CONTENT_LENGTH\",\"18\"],[\"CONTENT_TYPE\",\"text/plain\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_CONTENT_LENGTH\",\"18\"],[\"HTTP_CONTENT_TYPE\",\"text/plain\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"POST\"],[\"REQUEST_URI\",\"/echo-noreq/upload\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo-noreq/upload\"],[\"SCRIPT_NAME\",\"/echo-noreq/upload\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"POST\",\"script_name\":\"/echo-noreq/upload\"}",
+   "headers": {
+    "content-length": [
+     "733"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-range-invalid": {
+   "body": "<html>\r\n<head><title>416 Requested Range Not Satisfiable</title></head>\r\n<body>\r\n<center><h1>416 Requested Range Not Satisfiable</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "197"
+    ],
+    "content-range": [
+     "bytes */16"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 416,
+   "trailers": {}
+  },
+  "d7-range-multipart": {
+   "body": "0123456789abcdef",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "16"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-range-off": {
+   "body": "{\"body_hex\":\"\",\"connection\":<id>,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_RANGE\",\"bytes=0-3\"],[\"HTTP_X_SENT\",\"\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/range-off\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/range-off\"],[\"SCRIPT_NAME\",\"/echo/range-off\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/echo/range-off\"}",
+   "headers": {
+    "content-length": [
+     "670"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-range-single": {
+   "body": "2345",
+   "headers": {
+    "content-length": [
+     "4"
+    ],
+    "content-range": [
+     "bytes 2-5/16"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 206,
+   "trailers": {}
+  },
+  "d7-range-suffix": {
+   "body": "cdef",
+   "headers": {
+    "content-length": [
+     "4"
+    ],
+    "content-range": [
+     "bytes 12-15/16"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 206,
+   "trailers": {}
+  },
+  "d7-rate": {
+   "body": "bytes=20000 rate-window=ok",
+   "headers": {
+    "content-length": [
+     "20000"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "d7-store": {
+   "body": "stored-content-123\nstored=d7/store/f1|644|stored-content-123",
+   "headers": {
+    "content-length": [
+     "18"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "dir-index": {
+   "body": "{\"body_hex\":\"\",\"connection\":6,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"zeta\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/dir/\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/dir/index.php\"],[\"SCRIPT_NAME\",\"/dir/index.php\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/dir/index.php\"}",
+   "headers": {
+    "content-length": [
+     "633"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "fastcgi-bind-peer": {
+   "body": "{\"body_hex\":\"\",\"connection\":13,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"bind\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/bind/peer\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/bind/peer\"],[\"SCRIPT_NAME\",\"/bind/peer\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.2\",\"request_method\":\"GET\",\"script_name\":\"/bind/peer\"}",
+   "headers": {
+    "content-length": [
+     "627"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "fastcgi-keepconn-reuse": {
+   "body": "same-connection=True",
+   "headers": {
+    "content-length": [
+     "645"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "grpc-bad-trailers": {
+   "body": "\u0000\u0000\u0000\u0000\u0001x",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "grpc-dead": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502,
+   "trailers": {}
+  },
+  "grpc-error-trailers-only": {
+   "body": "",
+   "headers": {
+    "content-length": [
+     "0"
+    ],
+    "content-type": [
+     "application/grpc"
+    ],
+    "grpc-message": [
+     "not%20found"
+    ],
+    "grpc-status": [
+     "5"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "grpc-hide-pass": {
+   "body": "\u0000\u0000\u0000\u0000\u0004hide",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ],
+    "x-mock-normal": [
+     "normal"
+    ],
+    "x-mock-pass": [
+     "pass-me"
+    ]
+   },
+   "status": 200,
+   "trailers": {
+    "grpc-status": "0"
+   }
+  },
+  "grpc-intercept-http": {
+   "body": "grpc-fallback",
+   "headers": {
+    "content-length": [
+     "13"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 503,
+   "trailers": {}
+  },
+  "grpc-read-timeout": {
+   "body": "<html>\r\n<head><title>504 Gateway Time-out</title></head>\r\n<body>\r\n<center><h1>504 Gateway Time-out</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "167"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 504,
+   "trailers": {}
+  },
+  "grpc-retry": {
+   "body": "",
+   "headers": {
+    "content-length": [
+     "0"
+    ],
+    "content-type": [
+     "application/grpc"
+    ],
+    "grpc-message": [
+     "unimplemented"
+    ],
+    "grpc-status": [
+     "12"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "grpc-set-header": {
+   "body": "\u0000\u0000\u0000\u0000\ufffd{\"authority\":\"127.0.0.1:<grpc>\",\"headers\":[[\"content-length\",\"9\"],[\"content-type\",\"application/grpc\"],[\"te\",\"trailers\"],[\"x-host\",\"fcgi.example.com\"],[\"x-sent\",\"literal-sent\"]],\"method\":\"POST\",\"path\":\"/grpc.test.Echo/Headers\",\"scheme\":\"http\"}",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ]
+   },
+   "status": 200,
+   "trailers": {
+    "grpc-status": "0"
+   }
+  },
+  "grpc-status-error": {
+   "body": "\u0000\u0000\u0000\u0000\u0006failed",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ]
+   },
+   "status": 200,
+   "trailers": {
+    "grpc-message": "invalid%20argument",
+    "grpc-status": "3"
+   }
+  },
+  "grpc-stream": {
+   "body": "\u0000\u0000\u0000\u0000\u0003one\u0000\u0000\u0000\u0000\u0003two\u0000\u0000\u0000\u0000\u0005three",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ]
+   },
+   "status": 200,
+   "trailers": {
+    "grpc-status": "0"
+   }
+  },
+  "grpc-tls-ok": {
+   "body": "\u0000\u0000\u0000\u0000\u0004ping",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ]
+   },
+   "status": 200,
+   "trailers": {
+    "grpc-status": "0"
+   }
+  },
+  "grpc-tls-untrusted": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502,
+   "trailers": {}
+  },
+  "grpc-unary": {
+   "body": "\u0000\u0000\u0000\u0000\u0004ping",
+   "headers": {
+    "content-type": [
+     "application/grpc"
+    ]
+   },
+   "status": 200,
+   "trailers": {
+    "grpc-status": "0"
+   }
+  },
+  "head": {
+   "body": "",
+   "headers": {
+    "content-length": [
+     "631"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "headers-policy": {
+   "body": "{\"body_hex\":\"\",\"connection\":7,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"eta\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/headers\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/headers\"],[\"SCRIPT_NAME\",\"/headers\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/headers\"}",
+   "headers": {
+    "content-length": [
+     "617"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "intercept-404": {
+   "body": "FastCGI error-page fallback body\n",
+   "headers": {
+    "content-length": [
+     "33"
+    ],
+    "content-type": [
+     "text/plain"
+    ],
+    "etag": [
+     "\"6ae3cb95-21\""
+    ]
+   },
+   "status": 404,
+   "trailers": {}
+  },
+  "memcached-bind-peer": {
+   "body": "cached-value:/bind-cache/bind:peer=127.0.0.2",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "44"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "memcached-head": {
+   "body": "",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "36"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "memcached-hit": {
+   "body": "cached-value:/mc/hit:peer=127.0.0.1",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "35"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "memcached-large": {
+   "body": "cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-cached-large-ca",
+   "headers": {
+    "accept-ranges": [
+     "bytes"
+    ],
+    "content-length": [
+     "8192"
+    ],
+    "content-type": [
+     "text/plain"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "memcached-miss": {
+   "body": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "153"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 404,
+   "trailers": {}
+  },
+  "memcached-post": {
+   "body": "<html>\r\n<head><title>405 Not Allowed</title></head>\r\n<body>\r\n<center><h1>405 Not Allowed</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 405,
+   "trailers": {}
+  },
+  "memcached-raw-502": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502,
+   "trailers": {}
+  },
+  "post-upload": {
+   "body": "{\"body_hex\":\"68656c6c6f2d75706c6f6164\",\"connection\":3,\"params\":[[\"CONTENT_LENGTH\",\"12\"],[\"CONTENT_TYPE\",\"text/plain\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_CONTENT_LENGTH\",\"12\"],[\"HTTP_CONTENT_TYPE\",\"text/plain\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"gamma\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"q=2\"],[\"REQUEST_METHOD\",\"POST\"],[\"REQUEST_URI\",\"/echo/upload?q=2\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/upload\"],[\"SCRIPT_NAME\",\"/echo/upload\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"POST\",\"script_name\":\"/echo/upload\"}",
+   "headers": {
+    "content-length": [
+     "744"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "retry-upstream": {
+   "body": "{\"body_hex\":\"\",\"connection\":11,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"kappa\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/retry/ok\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/retry/ok\"],[\"SCRIPT_NAME\",\"/retry/ok\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/retry/ok\"}",
+   "headers": {
+    "content-length": [
+     "624"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "scgi-auto-headers": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_NORMAL\",\"yes\"],[\"HTTP_X_SENT\",\"tau\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/scgi/headers\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/headers\"],[\"SCRIPT_NAME\",\"/scgi/headers\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"peer\":\"127.0.0.1\",\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "580"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "scgi-basic": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"rho\"],[\"QUERY_STRING\",\"x=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/scgi/hello?x=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/hello\"],[\"SCRIPT_NAME\",\"/scgi/hello\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"peer\":\"127.0.0.1\",\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "557"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "scgi-bind-peer": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"bind-scgi\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/bind-scgi/peer\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/bind-scgi/peer\"],[\"SCRIPT_NAME\",\"/bind-scgi/peer\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"peer\":\"127.0.0.2\",\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "568"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "scgi-intercept-404": {
+   "body": "{\"body_hex\":\"\",\"params\":[[\"CONTENT_LENGTH\",\"0\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"upsilon\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/scgi/errors/missing\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/errors/missing\"],[\"SCRIPT_NAME\",\"/scgi/errors/missing\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"peer\":\"127.0.0.1\",\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "581"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 404,
+   "trailers": {}
+  },
+  "scgi-post": {
+   "body": "{\"body_hex\":\"68656c6c6f2d73636769\",\"params\":[[\"CONTENT_LENGTH\",\"10\"],[\"CONTENT_TYPE\",\"text/plain\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_CONTENT_LENGTH\",\"10\"],[\"HTTP_CONTENT_TYPE\",\"text/plain\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"sigma\"],[\"QUERY_STRING\",\"q=2\"],[\"REQUEST_METHOD\",\"POST\"],[\"REQUEST_URI\",\"/scgi/upload?q=2\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/scgi/upload\"],[\"SCRIPT_NAME\",\"/scgi/upload\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"peer\":\"127.0.0.1\",\"protocol\":\"scgi\"}",
+   "headers": {
+    "content-length": [
+     "658"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-scgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "split-info": {
+   "body": "{\"body_hex\":\"\",\"connection\":4,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"delta\"],[\"PATH_INFO\",\"/extra/path\"],[\"QUERY_STRING\",\"a=b\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/split/info.php/extra/path?a=b\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/split/info.php\"],[\"SCRIPT_NAME\",\"/split/info.php\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"/extra/path\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/split/info.php\"}",
+   "headers": {
+    "content-length": [
+     "687"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "split-nomatch": {
+   "body": "{\"body_hex\":\"\",\"connection\":5,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"epsilon\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/split/plain\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/split/plain\"],[\"SCRIPT_NAME\",\"/split/plain\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/split/plain\"}",
+   "headers": {
+    "content-length": [
+     "637"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "status-503": {
+   "body": "{\"body_hex\":\"\",\"connection\":10,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"fcgi.example.com\"],[\"HTTP_X_SENT\",\"iota\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/echo/status/503\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/echo/status/503\"],[\"SCRIPT_NAME\",\"/echo/status/503\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"127.0.0.1\",\"request_method\":\"GET\",\"script_name\":\"/echo/status/503\"}",
+   "headers": {
+    "content-length": [
+     "651"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 503,
+   "trailers": {}
+  },
+  "unix-fastcgi": {
+   "body": "{\"body_hex\":\"\",\"connection\":1,\"params\":[[\"CONTENT_LENGTH\",\"\"],[\"CONTENT_TYPE\",\"\"],[\"DOCUMENT_ROOT\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public\"],[\"HTTP_CONNECTION\",\"close\"],[\"HTTP_HOST\",\"unix.example.com\"],[\"HTTP_X_SENT\",\"unix-fcgi\"],[\"PATH_INFO\",\"\"],[\"QUERY_STRING\",\"x=1\"],[\"REQUEST_METHOD\",\"GET\"],[\"REQUEST_URI\",\"/unix-fcgi/hello?x=1\"],[\"SCRIPT_FILENAME\",\"/opt/source/sdkwork-space/sdkwork-webserver/tests/nginx/differential-protocols/public/unix-fcgi/hello\"],[\"SCRIPT_NAME\",\"/unix-fcgi/hello\"],[\"SERVER_PROTOCOL\",\"HTTP/1.1\"]],\"path_info\":\"\",\"peer\":\"unix\",\"request_method\":\"GET\",\"script_name\":\"/unix-fcgi/hello\"}",
+   "headers": {
+    "content-length": [
+     "657"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-fcgi": [
+     "yes"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "unix-uwsgi": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4566002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f756e69782d75777367692f68656c6c6f0b005343524950545f4e414d4511002f756e69782d75777367692f68656c6c6f0900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524915002f756e69782d75777367692f68656c6c6f3f783d310c0051554552595f535452494e470300783d310e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e540a00756e69782d75777367690900485454505f484f53541000756e69782e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"unix\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1069"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-auto-headers": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4563002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f686561646572730b005343524950545f4e414d450e002f75777367692f686561646572730900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f5552490e002f75777367692f686561646572730c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5407006f6d6963726f6e0900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f73650d00485454505f585f4e4f524d414c030079657365787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1090"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-basic": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4561002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f68656c6c6f0b005343524950545f4e414d450c002f75777367692f68656c6c6f0900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f75777367692f68656c6c6f3f783d310c0051554552595f535452494e470300783d310e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e5402006e750900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f736565787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1042"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-bind-peer": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4565002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f62696e642d75777367692f706565720b005343524950545f4e414d4510002f62696e642d75777367692f706565720900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524910002f62696e642d75777367692f706565720c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e540a0062696e642d75777367690900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.2\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1054"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-intercept-404": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d456a002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f6572726f72732f6d697373696e670b005343524950545f4e414d4515002f75777367692f6572726f72732f6d697373696e670900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524915002f75777367692f6572726f72732f6d697373696e670c0051554552595f535452494e4700000e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e54020070690900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f736565787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1082"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-post": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4562002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692f75706c6f61640b005343524950545f4e414d450d002f75777367692f75706c6f61640900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f440400504f53540b00524551554553545f55524911002f75777367692f75706c6f61643f713d320c0051554552595f535452494e470300713d320e00434f4e54454e545f4c454e475448020031310c00434f4e54454e545f545950450a00746578742f706c61696e0f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e54020078690900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f73651100485454505f434f4e54454e545f545950450a00746578742f706c61696e1300485454505f434f4e54454e545f4c454e4754480200313165787472613d31\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1186"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-tls-mtls": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d456a002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692d746c732d6d746c732f68656c6c6f0b005343524950545f4e414d4515002f75777367692d746c732d6d746c732f68656c6c6f0900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524919002f75777367692d746c732d6d746c732f68656c6c6f3f783d310c0051554552595f535452494e470300783d310e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e540800746c732d626574610900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1094"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-tls-ok": {
+   "body": "{\"body_hex\":\"\",\"extra_hex\":\"0f005343524950545f46494c454e414d4565002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69632f75777367692d746c732f68656c6c6f0b005343524950545f4e414d4510002f75777367692d746c732f68656c6c6f0900504154485f494e464f00000d00444f43554d454e545f524f4f5455002f6f70742f736f757263652f73646b776f726b2d73706163652f73646b776f726b2d7765627365727665722f74657374732f6e67696e782f646966666572656e7469616c2d70726f746f636f6c732f7075626c69630e00524551554553545f4d4554484f4403004745540b00524551554553545f55524914002f75777367692d746c732f68656c6c6f3f783d310c0051554552595f535452494e470300783d310e00434f4e54454e545f4c454e47544800000c00434f4e54454e545f5459504500000f005345525645525f50524f544f434f4c0800485454502f312e310b00485454505f585f53454e540900746c732d616c7068610900485454505f484f53541000666367692e6578616d706c652e636f6d0f00485454505f434f4e4e454354494f4e0500636c6f7365\",\"modifier1\":0,\"modifier2\":0,\"params\":[],\"peer\":\"127.0.0.1\",\"protocol\":\"uwsgi\"}",
+   "headers": {
+    "content-length": [
+     "1066"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "x-mock-hide": [
+     "hidden"
+    ],
+    "x-mock-pass": [
+     "passed"
+    ],
+    "x-mock-uwsgi": [
+     "yes"
+    ]
+   },
+   "status": 200,
+   "trailers": {}
+  },
+  "uwsgi-tls-untrusted": {
+   "body": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.29.6</center>\r\n</body>\r\n</html>\r\n",
+   "headers": {
+    "content-length": [
+     "157"
+    ],
+    "content-type": [
+     "text/html"
+    ]
+   },
+   "status": 502,
+   "trailers": {}
+  }
+ }
+}

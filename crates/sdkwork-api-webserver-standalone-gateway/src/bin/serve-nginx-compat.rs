@@ -27,6 +27,17 @@ async fn main() -> MainResult<()> {
     let loader = WebServerConfigLoader::new();
     let options = ConfigLoadOptions {
         format: Some(ConfigFormat::NginxConf),
+        document_root_allowlist: std::env::var("SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST")
+            .ok()
+            .map(|value| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|entry| !entry.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
         ..ConfigLoadOptions::default()
     };
     let loaded = loader.load(&path, &options)?;

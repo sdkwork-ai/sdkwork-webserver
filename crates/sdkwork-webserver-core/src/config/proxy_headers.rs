@@ -13,6 +13,17 @@ pub const SUPPORTED_PROXY_HEADER_VARS: &[&str] = &[
 
 /// Validate one `"Name value"` entry. Unknown `$…` variables fail closed.
 pub fn validate_proxy_set_header_entry(entry: &str) -> Result<(), String> {
+    validate_proxy_set_header_entry_with_maps(entry, &[])
+}
+
+/// [`validate_proxy_set_header_entry`] plus the nginx `map` result variables
+/// declared by the same application config. A map result is a legal
+/// `$variable` in a forwarded request header value; every other unlisted
+/// variable still fails closed.
+pub fn validate_proxy_set_header_entry_with_maps(
+    entry: &str,
+    map_variables: &[&str],
+) -> Result<(), String> {
     let trimmed = entry.trim();
     let (name, value) = trimmed
         .split_once(char::is_whitespace)
@@ -43,9 +54,15 @@ pub fn validate_proxy_set_header_entry(entry: &str) -> Result<(), String> {
         if var.is_empty() {
             return Err("proxy_set_header contains a bare `$`".to_owned());
         }
-        if !SUPPORTED_PROXY_HEADER_VARS.contains(&var) {
+        let generic_request_header = var
+            .strip_prefix("http_")
+            .is_some_and(|name| !name.is_empty());
+        if !SUPPORTED_PROXY_HEADER_VARS.contains(&var)
+            && !map_variables.contains(&var)
+            && !generic_request_header
+        {
             return Err(format!(
-                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_upgrade/$server_port or a literal"
+                "proxy_set_header variable `${var}` is not supported by the runtime; use $host/$scheme/$remote_addr/$proxy_add_x_forwarded_for/$http_<request-header>/$server_port or a literal"
             ));
         }
         rest = &after[end..];
@@ -55,6 +72,14 @@ pub fn validate_proxy_set_header_entry(entry: &str) -> Result<(), String> {
 
 /// Format a nginx directive's args into a single `"Name value"` string.
 pub fn format_proxy_set_header_entry(args: &[String]) -> Result<String, String> {
+    format_proxy_set_header_entry_with_maps(args, &[])
+}
+
+/// [`format_proxy_set_header_entry`] with the nginx `map` result vocabulary.
+pub fn format_proxy_set_header_entry_with_maps(
+    args: &[String],
+    map_variables: &[&str],
+) -> Result<String, String> {
     if args.is_empty() {
         return Err("proxy_set_header requires a header name".to_owned());
     }
@@ -68,7 +93,7 @@ pub fn format_proxy_set_header_entry(args: &[String]) -> Result<String, String> 
     } else {
         format!("{name} {value}")
     };
-    validate_proxy_set_header_entry(&entry)?;
+    validate_proxy_set_header_entry_with_maps(&entry, map_variables)?;
     Ok(entry)
 }
 

@@ -1,5 +1,7 @@
 use axum::http::Uri;
-use sdkwork_webserver_core::{normalize_uri_path, UriPathNormalizationError, WebServerLimits};
+use sdkwork_webserver_core::{
+    normalize_uri_path_with_options, UriPathNormalizationError, WebServerLimits,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum RequestUriError {
@@ -10,13 +12,15 @@ pub(super) enum RequestUriError {
 pub(super) fn validate_request_uri(
     uri: &Uri,
     limits: &WebServerLimits,
+    merge_slashes: bool,
 ) -> Result<String, RequestUriError> {
     validate_path(uri.path().as_bytes(), limits)?;
     validate_query(uri.query().map(str::as_bytes), limits)?;
-    normalize_uri_path(
+    normalize_uri_path_with_options(
         uri.path(),
         limits.max_decoded_path_bytes,
         limits.max_path_segments,
+        merge_slashes,
     )
     .map_err(|error| match error {
         UriPathNormalizationError::Invalid => RequestUriError::Invalid,
@@ -155,21 +159,29 @@ mod tests {
             ..WebServerLimits::default()
         };
         assert_eq!(
-            validate_request_uri(&"/one/two?q=ok&x=1".parse().expect("valid URI"), &limits)
-                .as_deref(),
+            validate_request_uri(
+                &"/one/two?q=ok&x=1".parse().expect("valid URI"),
+                &limits,
+                true,
+            )
+            .as_deref(),
             Ok("/one/two")
         );
         assert_eq!(
-            validate_request_uri(&"/one/two/three/four".parse().expect("URI"), &limits),
+            validate_request_uri(&"/one/two/three/four".parse().expect("URI"), &limits, true),
             Err(RequestUriError::TooLong)
         );
         assert_eq!(
-            validate_request_uri(&"/?a=1&b=2&c=3".parse().expect("URI"), &limits),
+            validate_request_uri(&"/?a=1&b=2&c=3".parse().expect("URI"), &limits, true),
             Err(RequestUriError::TooLong)
         );
         limits.max_query_parameters = 4;
         assert_eq!(
-            validate_request_uri(&"/?component=123456789".parse().expect("URI"), &limits),
+            validate_request_uri(
+                &"/?component=123456789".parse().expect("URI"),
+                &limits,
+                true
+            ),
             Err(RequestUriError::TooLong)
         );
     }
@@ -182,7 +194,7 @@ mod tests {
                 .parse::<Uri>()
                 .expect("HTTP Uri accepts raw escape text");
             assert_eq!(
-                validate_request_uri(&uri, &limits),
+                validate_request_uri(&uri, &limits, true),
                 Err(RequestUriError::Invalid),
                 "URI {uri} must fail"
             );

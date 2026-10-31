@@ -512,13 +512,28 @@ pub fn ensure_import_bootstrap_certificates(
     app: &WebServerAppConfig,
     base: &Path,
 ) -> Result<(), String> {
-    use crate::config::CertificateSource;
     let production_like = crate::runtime_env::web_is_production_like_environment()
         || crate::runtime_env::web_environment_name() == "demo";
+    ensure_import_bootstrap_certificates_with_policy(app, base, production_like)
+}
+
+/// [`ensure_import_bootstrap_certificates`] with the environment-derived
+/// "production-like" policy supplied explicitly.
+///
+/// The policy is read from process environment variables, which other tests
+/// mutate concurrently; passing it in keeps the placeholder-generation tests
+/// deterministic without touching global state.
+pub(crate) fn ensure_import_bootstrap_certificates_with_policy(
+    app: &WebServerAppConfig,
+    base: &Path,
+    production_like: bool,
+) -> Result<(), String> {
+    use crate::config::CertificateSource;
     for certificate in &app.certificates {
         let CertificateSource::ProtectedFile {
             certificate_file,
             private_key_file,
+            ..
         } = &certificate.source;
         let certificate_path = resolve_certificate_file_path(base, certificate_file)?;
         let private_key_path = resolve_certificate_file_path(base, private_key_file)?;
@@ -1520,7 +1535,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         assert_eq!(expanded[0].path, conf_a.to_string_lossy());
         assert_eq!(expanded[1].id, "sdkwork-b");
         assert_eq!(expanded[1].path, conf_b.to_string_lossy());
-        let _ = std::fs::remove_dir_all(&temp);
+        let _ = std::fs::remove_dir_all(temp.as_path());
     }
 
     #[test]
@@ -1808,9 +1823,12 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         crate::config::CertificateConfig {
             id: id.to_owned(),
             server_names,
+            server_name_regexes: Vec::new(),
             source: crate::config::CertificateSource::ProtectedFile {
                 certificate_file: format!("certs/{id}/fullchain.pem"),
                 private_key_file: format!("certs/{id}/privkey.pem"),
+                chain_file: None,
+                ocsp_stapling_file: None,
             },
         }
     }
@@ -1829,6 +1847,14 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             kind: "test".to_owned(),
             app_key: "test".to_owned(),
             nginx: Default::default(),
+            maps: Vec::new(),
+            geo: Vec::new(),
+            split_clients: Vec::new(),
+            stream_limit_conn_zones: Vec::new(),
+            cache_zone_names: Vec::new(),
+            stream_maps: Vec::new(),
+            mime_types: None,
+            default_type: None,
             gzip: Default::default(),
             limit_req_zones: Vec::new(),
             limit_conn_zones: Vec::new(),
@@ -1845,6 +1871,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             upstreams: Vec::new(),
             virtual_hosts: Vec::new(),
             streams: Vec::new(),
+            mail: Default::default(),
             proxy_cache: Default::default(),
             app_domain_fallback: None,
             usage_metering: None,
@@ -1852,14 +1879,14 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             deployment: Default::default(),
             metadata: Default::default(),
         };
-        ensure_import_bootstrap_certificates(&app, &temp).expect("generate");
+        ensure_import_bootstrap_certificates_with_policy(&app, &temp, false).expect("generate");
         let cert_path = temp.join("certs/sdkwork.com/fullchain.pem");
         let key_path = temp.join("certs/sdkwork.com/privkey.pem");
         assert!(cert_path.is_file());
         assert!(key_path.is_file());
         let first = std::fs::read_to_string(&cert_path).unwrap();
         // Idempotent: a second pass must not overwrite existing material.
-        ensure_import_bootstrap_certificates(&app, &temp).expect("second pass");
+        ensure_import_bootstrap_certificates_with_policy(&app, &temp, false).expect("second pass");
         assert_eq!(std::fs::read_to_string(&cert_path).unwrap(), first);
         // The material is a valid PEM pair (the leaf SAN covers the declared
         // server names; end-to-end SNI coverage is exercised by the data
@@ -1879,7 +1906,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&temp);
-        std::fs::create_dir_all(&temp.join("certs/example.com")).unwrap();
+        std::fs::create_dir_all(temp.join("certs/example.com")).unwrap();
         std::fs::write(temp.join("certs/example.com/fullchain.pem"), "stale").unwrap();
         let app = crate::config::WebServerAppConfig {
             tunnel: None,
@@ -1887,6 +1914,14 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             kind: "test".to_owned(),
             app_key: "test".to_owned(),
             nginx: Default::default(),
+            maps: Vec::new(),
+            geo: Vec::new(),
+            split_clients: Vec::new(),
+            stream_limit_conn_zones: Vec::new(),
+            cache_zone_names: Vec::new(),
+            stream_maps: Vec::new(),
+            mime_types: None,
+            default_type: None,
             gzip: Default::default(),
             limit_req_zones: Vec::new(),
             limit_conn_zones: Vec::new(),
@@ -1903,6 +1938,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             upstreams: Vec::new(),
             virtual_hosts: Vec::new(),
             streams: Vec::new(),
+            mail: Default::default(),
             proxy_cache: Default::default(),
             app_domain_fallback: None,
             usage_metering: None,
@@ -1910,7 +1946,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             deployment: Default::default(),
             metadata: Default::default(),
         };
-        let error = ensure_import_bootstrap_certificates(&app, &temp)
+        let error = ensure_import_bootstrap_certificates_with_policy(&app, &temp, false)
             .expect_err("half-present pair must fail closed");
         assert!(error.contains("only one of"), "unexpected: {error}");
         assert_eq!(

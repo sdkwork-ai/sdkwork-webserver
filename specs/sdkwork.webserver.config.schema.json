@@ -25,6 +25,30 @@
     "nginx": {
       "$ref": "#/$defs/nginx"
     },
+    "maps": {
+      "description": "nginx map variables declared at http context.",
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/map"
+      },
+      "default": []
+    },
+    "mimeTypes": {
+      "description": "nginx http-level types table; replaces the built-in table when present.",
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/mimeType"
+      }
+    },
+    "defaultType": {
+      "description": "nginx default_type: content type for a static representation whose extension is unknown.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[^\\s/]+/[^\\s/]+$"
+    },
     "gzip": {
       "$ref": "#/$defs/gzip"
     },
@@ -83,6 +107,18 @@
             "$ref": "#/$defs/proxyResource"
           },
           {
+            "$ref": "#/$defs/fastcgiResource"
+          },
+          {
+            "$ref": "#/$defs/cgiUpstreamResource"
+          },
+          {
+            "$ref": "#/$defs/grpcResource"
+          },
+          {
+            "$ref": "#/$defs/memcachedResource"
+          },
+          {
             "$ref": "#/$defs/redirectResource"
           },
           {
@@ -93,6 +129,12 @@
           },
           {
             "$ref": "#/$defs/knowledgebaseResource"
+          },
+          {
+            "$ref": "#/$defs/emptyGifResource"
+          },
+          {
+            "$ref": "#/$defs/stubStatusResource"
           }
         ]
       }
@@ -149,6 +191,9 @@
         "$ref": "#/$defs/streamServer"
       }
     },
+    "mail": {
+      "$ref": "#/$defs/mail"
+    },
     "limitConnZones": {
       "type": "array",
       "maxItems": 32,
@@ -164,9 +209,241 @@
     },
     "usageMetering": {
       "$ref": "#/$defs/usageMetering"
+    },
+    "geo": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/geo"
+      }
+    },
+    "splitClients": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/splitClients"
+      }
+    },
+    "streamLimitConnZones": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "key",
+          "maxKeys"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "key": {
+            "enum": [
+              "$binary_remote_addr",
+              "$remote_addr"
+            ]
+          },
+          "maxKeys": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000
+          }
+        }
+      }
+    },
+    "streamMaps": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/map"
+      }
+    },
+    "cacheZoneNames": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
     }
   },
   "$defs": {
+    "ifCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variable",
+        "operator"
+      ],
+      "properties": {
+        "variable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "operator": {
+          "enum": [
+            "truthy",
+            "negated-truthy",
+            "equals",
+            "not-equals",
+            "regex",
+            "not-regex",
+            "regex-ignore-case",
+            "not-regex-ignore-case"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "rewritePhaseOp": {
+      "description": "One ordered nginx rewrite-phase instruction (set / if / return / rewrite / add_header).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "variable",
+            "value"
+          ],
+          "properties": {
+            "action": {
+              "const": "set"
+            },
+            "variable": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "condition",
+            "body"
+          ],
+          "properties": {
+            "action": {
+              "const": "if"
+            },
+            "condition": {
+              "$ref": "#/$defs/ifCondition"
+            },
+            "body": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/rewritePhaseOp"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "status"
+          ],
+          "properties": {
+            "action": {
+              "const": "return"
+            },
+            "status": {
+              "type": "integer",
+              "minimum": 200,
+              "maximum": 599
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "location": {
+              "type": "string",
+              "maxLength": 8192
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "pattern",
+            "replacement",
+            "flag"
+          ],
+          "properties": {
+            "action": {
+              "const": "rewrite"
+            },
+            "pattern": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "replacement": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "flag": {
+              "enum": [
+                "last",
+                "break",
+                "redirect",
+                "permanent"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "name",
+            "value"
+          ],
+          "properties": {
+            "action": {
+              "const": "add-header"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "always": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      ]
+    },
     "id": {
       "type": "string",
       "minLength": 1,
@@ -187,13 +464,23 @@
         },
         "unknownDirectivePolicy": {
           "const": "error"
+        },
+        "unixSocketRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Operator-configured absolute directory for unix:/... upstream socket targets (typed-plane only). A unix target is accepted only when its resolved path is a strict descendant of this root."
+        },
+        "storeRoot": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
     "gzip": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Response gzip policy from http.gzip / gzipTypes / gzipMinLength.",
+      "description": "Response gzip policy from http.gzip / gzipTypes / gzipMinLength / gzipVary / gzipStatic.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -212,6 +499,168 @@
           "minimum": 0,
           "maximum": 104857600,
           "default": 20
+        },
+        "vary": {
+          "description": "nginx gzip_vary: declare Vary: Accept-Encoding whenever the policy selects a representation.",
+          "type": "boolean",
+          "default": true
+        },
+        "staticFiles": {
+          "description": "nginx gzip_static: serve a precompressed <path>.gz sidecar.",
+          "enum": [
+            "off",
+            "on",
+            "always"
+          ],
+          "default": "off"
+        },
+        "compLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "default": 1,
+          "description": "nginx gzip_comp_level, accepted-unenforced: the runtime compression layer owns its deflate level, so the value has no observable negotiation effect."
+        },
+        "disable": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "description": "nginx gzip_disable case-insensitive patterns matched against User-Agent."
+        },
+        "disableMsie6": {
+          "type": "boolean",
+          "default": false,
+          "description": "The predefined gzip_disable \"msie6\" selector."
+        },
+        "proxied": {
+          "description": "nginx gzip_proxied conditions for requests carrying a Via header; absent is nginx's default `off`.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "off": {
+              "type": "boolean",
+              "default": false
+            },
+            "any": {
+              "type": "boolean",
+              "default": false
+            },
+            "expired": {
+              "type": "boolean",
+              "default": false
+            },
+            "noCache": {
+              "type": "boolean",
+              "default": false
+            },
+            "noStore": {
+              "type": "boolean",
+              "default": false
+            },
+            "private": {
+              "type": "boolean",
+              "default": false
+            },
+            "noLastModified": {
+              "type": "boolean",
+              "default": false
+            },
+            "noEtag": {
+              "type": "boolean",
+              "default": false
+            },
+            "auth": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    "mapEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "result",
+        "entries"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^\\$[A-Za-z0-9_]+$"
+        },
+        "result": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^\\$[A-Za-z0-9_]+$"
+        },
+        "hostnames": {
+          "type": "boolean",
+          "default": false
+        },
+        "default": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/mapEntry"
+          }
+        }
+      }
+    },
+    "mimeType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mime",
+        "extensions"
+      ],
+      "properties": {
+        "mime": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^\\s/]+/[^\\s/]+$"
+        },
+        "extensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_+-]+(\\.[A-Za-z0-9_+-]+)*$"
+          }
         }
       }
     },
@@ -829,6 +1278,16 @@
             "$ref": "#/$defs/serverName"
           }
         },
+        "serverNameRegexes": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "nginx `server_name ~pattern` values attached to this certificate (values without the `~` marker); SNI regex selection evaluates them in authored order after exact and wildcard names.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
         "source": {
           "$ref": "#/$defs/protectedFileCertificateSource"
         }
@@ -855,6 +1314,17 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 4096
+        },
+        "chainFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "ocspStaplingFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "nginx ssl_stapling_file: static DER OCSP response served as the stapled response (loaded when TLS material is built; refresh requires a reload)."
         }
       }
     },
@@ -1016,6 +1486,12 @@
           "minLength": 1,
           "maxLength": 255
         },
+        "dynamicRoot": {
+          "description": "Request-time `root $variable` / `alias $variable` template; evaluated per request and confined to nginx.documentRootAllowlist.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
         "stripPrefix": {
           "type": "boolean",
           "default": false,
@@ -1077,6 +1553,16 @@
           "description": "nginx proxy_intercept_errors on: proxied responses whose status has an error_page mapping are replaced by the mapped page.",
           "type": "boolean",
           "default": false
+        },
+        "proxyResponsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "proxyMethod": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+          "description": "nginx proxy_method: method sent upstream instead of the client's method."
         }
       },
       "oneOf": [
@@ -1091,6 +1577,446 @@
           ]
         }
       ]
+    },
+    "upstreamParam": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "ifNotEmpty": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "fastcgiResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx fastcgi_pass location handler (bounded FastCGI 1.0 adapter over TCP).",
+      "required": [
+        "id",
+        "type",
+        "upstreamRef"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "fast-cgi"
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/upstreamParam"
+          },
+          "default": []
+        },
+        "index": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "splitPathInfo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "documentRoot": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "passRequestHeaders": {
+          "type": "boolean",
+          "default": true
+        },
+        "keepConn": {
+          "type": "boolean",
+          "default": false
+        },
+        "bindAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "nginx *_bind: literal source IP address to bind before connecting (hostnames and transparent forms fail closed)."
+        },
+        "socketKeepalive": {
+          "type": "boolean",
+          "description": "nginx *_socket_keepalive on: enable SO_KEEPALIVE on the upstream socket."
+        },
+        "buffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "requestBuffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "responsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "interceptErrors": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        },
+        "cache": {
+          "$ref": "#/$defs/cgiCacheConfig"
+        },
+        "bufferPolicy": {
+          "$ref": "#/$defs/upstreamBuffering"
+        },
+        "passRequestBody": {
+          "type": "boolean"
+        },
+        "store": {
+          "$ref": "#/$defs/upstreamStore"
+        },
+        "limitRateBytesPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        },
+        "forceRanges": {
+          "type": "boolean"
+        },
+        "ignoreHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "cgiUpstreamResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx uwsgi_pass / scgi_pass location handler (bounded CGI-family adapter over TCP).",
+      "required": [
+        "id",
+        "type",
+        "protocol",
+        "upstreamRef"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "cgi-upstream"
+        },
+        "protocol": {
+          "enum": [
+            "uwsgi",
+            "scgi"
+          ]
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "params": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/upstreamParam"
+          },
+          "default": []
+        },
+        "documentRoot": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "passRequestHeaders": {
+          "type": "boolean",
+          "default": true
+        },
+        "bindAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "nginx *_bind: literal source IP address to bind before connecting (hostnames and transparent forms fail closed)."
+        },
+        "socketKeepalive": {
+          "type": "boolean",
+          "description": "nginx *_socket_keepalive on: enable SO_KEEPALIVE on the upstream socket."
+        },
+        "buffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "requestBuffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "responsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "interceptErrors": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        },
+        "modifier1": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "modifier2": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "extraString": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "cache": {
+          "$ref": "#/$defs/cgiCacheConfig"
+        },
+        "bufferPolicy": {
+          "$ref": "#/$defs/upstreamBuffering"
+        },
+        "passRequestBody": {
+          "type": "boolean"
+        },
+        "store": {
+          "$ref": "#/$defs/upstreamStore"
+        },
+        "limitRateBytesPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824
+        },
+        "forceRanges": {
+          "type": "boolean"
+        },
+        "ignoreHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "grpcResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx grpc_pass location handler (gRPC over HTTP/2: h2c for grpc:// or verified TLS for grpcs://).",
+      "required": [
+        "id",
+        "type",
+        "upstreamRef"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "grpc"
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "requestSetHeaders": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "nginx grpc_set_header entries as \"Name value\" strings using the runtime's bounded proxy-header variable vocabulary.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "default": []
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "bufferSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "responsePolicy": {
+          "$ref": "#/$defs/proxyResponsePolicy"
+        },
+        "interceptErrors": {
+          "type": "boolean",
+          "default": false
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        },
+        "ignoreHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "memcachedResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx memcached_pass location handler (bounded memcached text-protocol GET/HEAD).",
+      "required": [
+        "id",
+        "type",
+        "upstreamRef",
+        "keyTemplate"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "memcached"
+        },
+        "upstreamRef": {
+          "$ref": "#/$defs/id"
+        },
+        "keyTemplate": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4096
+        },
+        "bindAddress": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "nginx *_bind: literal source IP address to bind before connecting (hostnames and transparent forms fail closed)."
+        },
+        "socketKeepalive": {
+          "type": "boolean",
+          "description": "nginx *_socket_keepalive on: enable SO_KEEPALIVE on the upstream socket."
+        },
+        "buffering": {
+          "type": "boolean",
+          "default": true
+        },
+        "connectTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "sendTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "readTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "retry": {
+          "$ref": "#/$defs/upstreamRetry"
+        },
+        "bufferBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576
+        },
+        "gzipFlag": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "redirectPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx redirect construction policy (absolute_redirect / port_in_redirect / server_name_in_redirect); nginx defaults are absolute Location, port included off the scheme default, request Host as the authority.",
+      "properties": {
+        "absoluteRedirect": {
+          "type": "boolean",
+          "default": true
+        },
+        "portInRedirect": {
+          "type": "boolean",
+          "default": true
+        },
+        "serverNameInRedirect": {
+          "type": "boolean",
+          "default": false
+        }
+      }
     },
     "redirectResource": {
       "type": "object",
@@ -1148,6 +2074,11 @@
           "minLength": 1,
           "maxLength": 255,
           "default": "text/plain; charset=utf-8"
+        },
+        "contentTypeFromUri": {
+          "description": "Derive the response content type from the request URI extension through the resolved types table (nginx return-body semantics).",
+          "type": "boolean",
+          "default": false
         },
         "body": {
           "type": "string",
@@ -1423,6 +2354,11 @@
           ],
           "default": "system"
         },
+        "serverName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
         "caCertificateFiles": {
           "type": "array",
           "maxItems": 8,
@@ -1457,6 +2393,16 @@
             "tls1.3"
           ],
           "default": "tls1.3"
+        },
+        "sendSni": {
+          "type": "boolean",
+          "default": true,
+          "description": "Send the TLS SNI extension. nginx uwsgi_ssl_server_name off disables it; the verification name is still serverName (or the target host)."
+        },
+        "dangerousAcceptAnyVerify": {
+          "type": "boolean",
+          "default": false,
+          "description": "Explicit dangerous accept-any server-certificate verifier (nginx uwsgi_ssl_verify off). Never enable implicitly; it disables peer-chain validation for this upstream and must not be combined with caCertificateFiles or a custom trustMode."
         }
       }
     },
@@ -1643,6 +2589,36 @@
         "routes"
       ],
       "properties": {
+        "redirectPolicy": {
+          "$ref": "#/$defs/redirectPolicy"
+        },
+        "limitReqStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "limitConnStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "maxRanges": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rewritePhase": {
+          "description": "Ordered nginx rewrite-phase instructions executed before (server) or after (location) selection.",
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/rewritePhaseOp"
+          }
+        },
+        "maxRequestBodyBytes": {
+          "description": "Effective nginx client_max_body_size for this route; absent means the app-level limit.",
+          "type": "integer",
+          "minimum": 1
+        },
         "id": {
           "$ref": "#/$defs/id"
         },
@@ -1686,6 +2662,28 @@
             }
           ]
         },
+        "mimeTypes": {
+          "description": "Server-level nginx types block; replaces the inherited table.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/mimeType"
+              }
+            }
+          ]
+        },
+        "defaultType": {
+          "description": "Server-level nginx default_type; absent inherits the http-level value.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^\\s/]+/[^\\s/]+$"
+        },
         "errorPages": {
           "description": "nginx error_page mappings declared at http/server level for this host, in declaration order (later entries override earlier codes).",
           "type": "array",
@@ -1709,6 +2707,30 @@
               "$ref": "#/$defs/cachePolicy"
             }
           ]
+        },
+        "mergeSlashes": {
+          "description": "nginx merge_slashes (default on): when off, repeated adjacent slashes stay in the canonical request path (exact-location matching, $uri, static/proxy path identity).",
+          "type": "boolean",
+          "default": true
+        },
+        "underscoresInHeaders": {
+          "description": "nginx underscores_in_headers resolved for this host (nginx default off: request header names containing `_` are dropped at the request boundary). The nginx materializer always emits the resolved value; the schema default is true so typed configs keep the historical permissive behavior.",
+          "type": "boolean",
+          "default": true
+        },
+        "ignoreInvalidHeaders": {
+          "description": "nginx ignore_invalid_headers (default on). The runtime always rejects non-token header names at its HTTP boundary with 400 (stricter, documented divergence).",
+          "type": "boolean",
+          "default": true
+        },
+        "charset": {
+          "$ref": "#/$defs/charset"
+        },
+        "autoindex": {
+          "$ref": "#/$defs/autoindex"
+        },
+        "referer": {
+          "$ref": "#/$defs/referer"
         }
       }
     },
@@ -1760,25 +2782,7 @@
           "type": "array",
           "maxItems": 16,
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "name",
-              "value"
-            ],
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
-              },
-              "value": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 1024
-              }
-            }
+            "$ref": "#/$defs/customHeader"
           }
         }
       }
@@ -1798,6 +2802,36 @@
         "resourceRef"
       ],
       "properties": {
+        "redirectPolicy": {
+          "$ref": "#/$defs/redirectPolicy"
+        },
+        "limitReqStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "limitConnStatus": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "maxRanges": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rewritePhase": {
+          "description": "Ordered nginx rewrite-phase instructions executed before (server) or after (location) selection.",
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/rewritePhaseOp"
+          }
+        },
+        "maxRequestBodyBytes": {
+          "description": "Effective nginx client_max_body_size for this route; absent means the app-level limit.",
+          "type": "integer",
+          "minimum": 1
+        },
         "id": {
           "$ref": "#/$defs/id"
         },
@@ -1855,11 +2889,42 @@
             }
           ]
         },
+        "mimeTypes": {
+          "description": "Location-level nginx types block; replaces the inherited table.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/mimeType"
+              }
+            }
+          ]
+        },
+        "defaultType": {
+          "description": "Location-level nginx default_type; absent inherits the host value.",
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[^\\s/]+/[^\\s/]+$"
+        },
         "errorPages": {
           "description": "Location-level nginx error_page mappings; non-empty replaces the host-level set for this route.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/errorPage"
+          },
+          "default": []
+        },
+        "responseHeaders": {
+          "description": "Location-level nginx add_header entries in declaration order; a non-empty list replaces the host securityHeaders.customHeaders policy (nginx inherits only when the level declares none).",
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/customHeader"
           },
           "default": []
         },
@@ -1873,6 +2938,57 @@
               "$ref": "#/$defs/cachePolicy"
             }
           ]
+        },
+        "internal": {
+          "description": "nginx internal: the location is reachable only through an internal redirect (rewrite last, error_page, try_files named target); an external request is answered with nginx's generated 404.",
+          "type": "boolean",
+          "default": false
+        },
+        "charset": {
+          "description": "Location-level nginx charset policy resolved over the host value.",
+          "$ref": "#/$defs/charset"
+        },
+        "autoindex": {
+          "description": "Location-level nginx autoindex policy resolved over the host value.",
+          "$ref": "#/$defs/autoindex"
+        },
+        "referer": {
+          "$ref": "#/$defs/referer"
+        },
+        "addition": {
+          "$ref": "#/$defs/additionConfig"
+        },
+        "authRequest": {
+          "$ref": "#/$defs/authRequestConfig"
+        },
+        "mirror": {
+          "$ref": "#/$defs/mirrorConfig"
+        }
+      }
+    },
+    "customHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One nginx add_header (or equivalent custom response header) entry.",
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "always": {
+          "description": "nginx add_header ... always: emit on every status, including 4xx/5xx. Without it the field is only emitted for 200, 201, 204, 206, 301, 302, 303, 304, 307, and 308.",
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -1912,6 +3028,22 @@
             "off"
           ],
           "default": "exact"
+        },
+        "nativeCompatibility": {
+          "description": "Set by the nginx-configuration materializer only: stock nginx does not stat document roots or certificate files at load, so a relocated configuration tree still validates; typed configurations keep strict existence checks.",
+          "type": "boolean",
+          "default": false
+        },
+        "documentRootAllowlist": {
+          "description": "Absolute directory prefixes a request-time `root $variable` / `alias $variable` may resolve to; empty means variable document roots fail closed.",
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 4096
+          }
         }
       },
       "required": [
@@ -2239,14 +3371,328 @@
         }
       }
     },
+    "mail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "servers"
+      ],
+      "properties": {
+        "servers": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/mailServer"
+          }
+        }
+      }
+    },
+    "mailServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "bind",
+        "port"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "bind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "description": "nginx mail `protocol pop3|imap|smtp`; nginx defaults to imap.",
+          "type": "string",
+          "enum": [
+            "pop3",
+            "imap",
+            "smtp"
+          ],
+          "default": "imap"
+        },
+        "serverName": {
+          "description": "nginx mail `server_name`: the name used in the SMTP greeting. Absent means the runtime resolves the host name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "timeoutMs": {
+          "description": "nginx mail `timeout`: idle timeout for the whole session.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 60000
+        },
+        "soKeepalive": {
+          "description": "nginx mail `so_keepalive on|off` on the listener socket.",
+          "type": "boolean",
+          "default": false
+        },
+        "proxyProtocol": {
+          "description": "nginx mail `proxy_protocol on|off`: accept a PROXY protocol v1 header from the mail client.",
+          "type": "boolean",
+          "default": false
+        },
+        "authHttp": {
+          "$ref": "#/$defs/mailAuthHttp"
+        },
+        "tls": {
+          "$ref": "#/$defs/mailTls"
+        },
+        "proxy": {
+          "$ref": "#/$defs/mailProxy"
+        },
+        "maxErrors": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 5
+        },
+        "smtpClientBuffer": {
+          "description": "nginx `smtp_client_buffer`: SMTP client command line bound.",
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "imapClientBuffer": {
+          "description": "nginx `imap_client_buffer`: IMAP client command line bound.",
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "pop3Auth": {
+          "description": "nginx `pop3_auth`: enabled POP3 auth mechanisms (Wave 9A parses PLAIN/LOGIN only).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/mailAuthMechanism"
+          },
+          "default": [
+            "plain",
+            "login"
+          ]
+        },
+        "imapAuth": {
+          "description": "nginx `imap_auth`: enabled IMAP auth mechanisms (Wave 9A parses PLAIN/LOGIN only).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/mailAuthMechanism"
+          },
+          "default": [
+            "plain"
+          ]
+        },
+        "smtpAuth": {
+          "description": "nginx `smtp_auth`: enabled SMTP auth mechanisms (Wave 9A parses PLAIN/LOGIN only).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/mailAuthMechanism"
+          },
+          "default": [
+            "plain",
+            "login"
+          ]
+        },
+        "smtpGreetingDelayMs": {
+          "description": "nginx `smtp_greeting_delay`: delay before the SMTP 220 greeting.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000,
+          "default": 0
+        }
+      }
+    },
+    "mailAuthHttp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx mail auth_http authentication service (bounded GET exchange).",
+      "required": [
+        "uri"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "host[:port][/path], with an optional http:// prefix (nginx auth_http grammar)."
+        },
+        "hostHeader": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000,
+          "default": 60000
+        },
+        "passClientCert": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "mailTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx mail frontend TLS (ssl_certificate/ssl_certificate_key/ssl_protocols) and STARTTLS mode.",
+      "required": [
+        "certificateFile",
+        "privateKeyFile"
+      ],
+      "properties": {
+        "certificateFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "privateKeyFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "protocols": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "TLSv1.2",
+              "TLSv1.3"
+            ]
+          }
+        },
+        "starttls": {
+          "enum": [
+            "off",
+            "on",
+            "only"
+          ],
+          "default": "off"
+        },
+        "implicit": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "mailProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx mail backend relay policy (proxy_*/xclient) plus the typed-plane backend TLS extension.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "xclient": {
+          "type": "boolean",
+          "default": true
+        },
+        "smtpAuth": {
+          "type": "boolean",
+          "default": false
+        },
+        "proxyProtocol": {
+          "type": "boolean",
+          "default": false
+        },
+        "passErrorMessage": {
+          "type": "boolean",
+          "default": false
+        },
+        "bufferBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "default": 4096
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 86400000
+        },
+        "tls": {
+          "$ref": "#/$defs/mailProxyTls"
+        }
+      }
+    },
+    "mailProxyTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "SDKWork typed-config extension: TLS for the mail backend leg (nginx has no proxy_ssl in the mail module).",
+      "properties": {
+        "verify": {
+          "type": "boolean",
+          "default": true
+        },
+        "trustedCertificateFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "certificateFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "certificateKeyFile": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "serverName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        }
+      }
+    },
+    "mailAuthMechanism": {
+      "description": "Bounded mail auth mechanism vocabulary for Wave 9A (apop/cram-md5/external need the auth_http exchange and fail closed).",
+      "type": "string",
+      "enum": [
+        "plain",
+        "login"
+      ]
+    },
     "streamServer": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "id",
         "bind",
-        "port",
-        "target"
+        "port"
       ],
       "properties": {
         "id": {
@@ -2314,6 +3760,103 @@
         "proxyProtocol": {
           "type": "boolean"
         },
+        "upstreamTls": {
+          "$ref": "#/$defs/upstreamTlsPolicy"
+        },
+        "bindAddress": {
+          "description": "nginx stream `proxy_bind <address>`: bind the upstream connection source address (IP literal only).",
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "halfClose": {
+          "description": "nginx stream `proxy_half_close on|off` (nginx default off).",
+          "type": "boolean",
+          "default": false
+        },
+        "requests": {
+          "description": "nginx stream `proxy_requests`: client request counter (nginx applies it to UDP connections; a TCP stream connection has no request framing, so it is accepted with nginx-identical no-op behaviour).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "responses": {
+          "description": "nginx stream `proxy_responses`: response counter (nginx applies it to UDP connections; nginx-identical no-op for a TCP stream connection).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "downloadRate": {
+          "description": "nginx stream `proxy_download_rate`: upstream-to-client byte rate in bytes per second (0 = unlimited).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "uploadRate": {
+          "description": "nginx stream `proxy_upload_rate`: client-to-upstream byte rate in bytes per second (0 = unlimited).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "nextUpstream": {
+          "description": "nginx stream `proxy_next_upstream`: retry conditions when another upstream target remains.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["error", "timeout"]
+          }
+        },
+        "nextUpstreamTries": {
+          "description": "nginx stream `proxy_next_upstream_tries` (0 = one attempt per target, bounded by the target count).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "nextUpstreamTimeoutMs": {
+          "description": "nginx stream `proxy_next_upstream_timeout`: total retry budget.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "serverNames": {
+          "description": "nginx stream `server_name`: SNI virtual-server names on one listening socket (ssl_preread / TLS termination).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
+        },
+        "defaultServer": {
+          "description": "nginx stream `listen … default_server`: selected when no `server_name` matches.",
+          "type": "boolean",
+          "default": false
+        },
+        "acceptProxyProtocol": {
+          "description": "nginx stream `listen … proxy_protocol`: accept an inbound PROXY protocol v1/v2 header before proxying.",
+          "type": "boolean",
+          "default": false
+        },
+        "proxyProtocolTimeoutMs": {
+          "description": "nginx stream `proxy_protocol_timeout`: deadline for the inbound PROXY protocol header.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000,
+          "default": 30000
+        },
+        "realIpTrustedCidrs": {
+          "description": "nginx stream `set_real_ip_from`: trusted peers whose inbound PROXY header source replaces the connection address.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
         "tls": {
           "oneOf": [
             {
@@ -2356,6 +3899,71 @@
             "tcp",
             "udp"
           ]
+        },
+        "access": {
+          "type": "array",
+          "maxItems": 256,
+          "description": "Ordered nginx stream allow/deny rules: first match wins; a peer matching no rule is allowed.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "network"
+            ],
+            "properties": {
+              "action": {
+                "enum": [
+                  "allow",
+                  "deny"
+                ]
+              },
+              "network": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "`all`, an IP, or a CIDR."
+              }
+            }
+          }
+        },
+        "returnValue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "nginx stream `return <value>`: literal bytes written to the connection before it is closed; mutually exclusive with `target`."
+        },
+        "limitConn": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/streamLimitConnRule"
+          },
+          "description": "Stream limit_conn rules checked at accept time; over-limit connections are closed silently."
+        },
+        "limitConnDryRun": {
+          "type": "boolean",
+          "description": "Stream limit_conn_dry_run: count but do not deny."
+        },
+        "setVariables": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/streamSetVariable"
+          },
+          "description": "Stream set $variable value assignments (bounded accept/preread variable engine)."
+        },
+        "prereadTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000,
+          "description": "Stream preread_timeout: TLS ClientHello read deadline."
+        },
+        "prereadBufferBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "description": "Stream preread_buffer_size: ClientHello peek buffer bound."
         }
       }
     },
@@ -2744,6 +4352,665 @@
           ],
           "minimum": 200,
           "maximum": 599
+        }
+      }
+    },
+    "proxyRewriteRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "to": {
+          "type": "string",
+          "maxLength": 2048
+        }
+      }
+    },
+    "proxyRedirectPolicy": {
+      "description": "nginx proxy_redirect policy: off, default, or ordered literal <from> <to> rules (regular-expression and variable forms fail closed at materialization).",
+      "oneOf": [
+        {
+          "const": "off"
+        },
+        {
+          "const": "default"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules"
+          ],
+          "properties": {
+            "rules": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/proxyRewriteRule"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "cookieRewritePolicy": {
+      "description": "nginx proxy_cookie_path / proxy_cookie_domain policy: off or ordered <from> <to> rules.",
+      "oneOf": [
+        {
+          "const": "off"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules"
+          ],
+          "properties": {
+            "rules": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/proxyRewriteRule"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "proxyResponsePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx proxy response-header policy resolved for one proxy resource: proxy_hide_header / proxy_pass_header (added to / removed from nginx's default-hidden upstream header set), proxy_redirect, proxy_cookie_path and proxy_cookie_domain.",
+      "properties": {
+        "hideHeaders": {
+          "description": "proxy_hide_header entries, added to the default-hidden set (Date, Server, X-Pad, X-Accel-*).",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "passHeaders": {
+          "description": "proxy_pass_header entries, removed from the hidden set (pass wins over hide).",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "redirect": {
+          "$ref": "#/$defs/proxyRedirectPolicy"
+        },
+        "cookiePath": {
+          "$ref": "#/$defs/cookieRewritePolicy"
+        },
+        "cookieDomain": {
+          "$ref": "#/$defs/cookieRewritePolicy"
+        }
+      }
+    },
+    "charset": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx charset family resolved for a host or route: `charset` appends `; charset=<name>` to matching Content-Types; `charsetTypes` replaces the type list (a declared list is seeded with text/html, `*` matches everything); `sourceCharset` that differs from `charset` needs byte transcoding and is accepted-unenforced.",
+      "properties": {
+        "charset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Effective charset name; absent means `charset off`."
+        },
+        "types": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "description": "Effective charset_types list (text/html first when declared); absent keeps nginx's default list."
+        },
+        "sourceCharset": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "overrideCharset": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "autoindex": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx autoindex family resolved for a host or route: directory requests without an index file render a bounded nginx-compatible listing (html/json/jsonp/xml) instead of 403.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "exactSize": {
+          "type": "boolean",
+          "default": true
+        },
+        "localtime": {
+          "type": "boolean",
+          "default": false
+        },
+        "format": {
+          "enum": [
+            "html",
+            "json",
+            "jsonp",
+            "xml"
+          ],
+          "default": "html"
+        }
+      }
+    },
+    "emptyGifResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "empty-gif"
+        }
+      }
+    },
+    "stubStatusResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "stub-status"
+        }
+      }
+    },
+    "refererHost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      }
+    },
+    "referer": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx valid_referers policy for $invalid_referer.",
+      "properties": {
+        "none": {
+          "type": "boolean"
+        },
+        "blocked": {
+          "type": "boolean"
+        },
+        "serverNames": {
+          "type": "boolean"
+        },
+        "hosts": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/refererHost"
+          }
+        },
+        "regexes": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "geoEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "geo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "result",
+        "entries"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^\\$"
+        },
+        "result": {
+          "type": "string",
+          "pattern": "^\\$"
+        },
+        "ranges": {
+          "type": "boolean"
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/geoEntry"
+          }
+        }
+      }
+    },
+    "splitClientsPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "percent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "splitClients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "result",
+        "parts"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string",
+          "pattern": "^\\$"
+        },
+        "parts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/splitClientsPart"
+          }
+        }
+      }
+    },
+    "streamLimitConnRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone",
+        "maxConnections"
+      ],
+      "properties": {
+        "zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "maxConnections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "streamSetVariable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_]+$"
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "cgiCacheValidRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seconds"
+      ],
+      "properties": {
+        "statuses": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "default": []
+        },
+        "seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31536000
+        }
+      }
+    },
+    "cgiCacheConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone",
+        "key",
+        "methods",
+        "minUses",
+        "lock",
+        "lockTimeoutMs",
+        "convertHead"
+      ],
+      "description": "resolved nginx fastcgi_cache / uwsgi_cache / scgi_cache policy for one location",
+      "properties": {
+        "zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "valid": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cgiCacheValidRule"
+          },
+          "default": []
+        },
+        "bypass": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^\\$"
+          }
+        },
+        "noCache": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^\\$"
+          }
+        },
+        "revalidate": {
+          "type": "boolean"
+        },
+        "useStale": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string"
+          }
+        },
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          }
+        },
+        "minUses": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "lock": {
+          "type": "boolean"
+        },
+        "lockTimeoutMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "lockAgeMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "backgroundUpdate": {
+          "type": "boolean"
+        },
+        "convertHead": {
+          "type": "boolean"
+        },
+        "maxRangeOffset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "upstreamBuffering": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headerBytes",
+        "chunkBytes",
+        "chunks",
+        "busyBytes"
+      ],
+      "properties": {
+        "headerBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576
+        },
+        "chunkBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576
+        },
+        "chunks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "busyBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 8388608
+        }
+      }
+    },
+    "upstreamStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "accessMode"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accessMode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4095
+        }
+      }
+    },
+    "additionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx addition filter: splice one-level subrequest bodies around the main response body",
+      "properties": {
+        "before": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 2048
+        },
+        "after": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 2048
+        },
+        "types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "default": [
+            "text/html"
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "before"
+          ]
+        },
+        {
+          "required": [
+            "after"
+          ]
+        }
+      ]
+    },
+    "authRequestSetConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variable",
+        "value"
+      ],
+      "properties": {
+        "variable": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+$",
+          "maxLength": 128
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "authRequestConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri"
+      ],
+      "description": "nginx auth_request access gate",
+      "properties": {
+        "uri": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 2048
+        },
+        "set": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/authRequestSetConfig"
+          },
+          "default": []
+        }
+      }
+    },
+    "mirrorConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targets"
+      ],
+      "description": "nginx mirror: fire-and-forget one-level subrequests",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "pattern": "^/",
+            "maxLength": 2048
+          }
+        },
+        "requestBody": {
+          "type": "boolean",
+          "const": false,
+          "default": false
         }
       }
     }

@@ -44,6 +44,19 @@ const RENDERED = path.join(differentialDir, 'nginx.rendered.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-ours.json');
 const GATEWAY_PORT = 20991;
 const CASE_FLOOR = 50;
+/**
+ * The exact nginx build the committed oracle was captured from. Bump it only
+ * together with a fresh `--refresh-oracle` capture and the per-slice note in
+ * `specs/nginx-behavioral-corpus.manifest.json`, so the expected behaviour and
+ * its reference always move as one reviewed change.
+ */
+const REFERENCE_NGINX = 'nginx/1.29.6';
+/**
+ * Developer runs skip loudly when the local machine cannot execute the battery
+ * (no python, no gateway build). A release gate must not accept that: with
+ * `SDKWORK_REQUIRE_NGINX_EVIDENCE=1`, an unexecuted slice is a failure.
+ */
+const REQUIRE_EVIDENCE = process.env.SDKWORK_REQUIRE_NGINX_EVIDENCE === '1';
 /** 2020-01-01T00:00:00Z — the epoch the fixture's ETag is derived from. */
 const PINNED_MTIME_SECONDS = 1577836800;
 const ORACLE_UNAVAILABLE_EXITS = new Set([3, 4, 5]);
@@ -212,7 +225,7 @@ async function main() {
   const python = resolvePython();
   if (!python) {
     log('SKIP: no python3/python on PATH; the battery cannot run');
-    return requireOracle ? 1 : 0;
+    return requireOracle || REQUIRE_EVIDENCE ? 1 : 0;
   }
   if (!fs.existsSync(FIXTURE)) {
     log(`FAIL: missing fixture ${FIXTURE}`);
@@ -239,7 +252,7 @@ async function main() {
           return 1;
         }
         log('SKIP: no baseline to compare against; the differential slice did NOT run');
-        return 0;
+        return REQUIRE_EVIDENCE ? 1 : 0;
       }
       log('falling back to the committed baseline');
     }
@@ -251,7 +264,33 @@ async function main() {
     log(`FAIL: baseline is not a real nginx capture (_server=${JSON.stringify(recorded._server)})`);
     return 1;
   }
-  log(`baseline identity: server=${recordedServer}`);
+  // The oracle is only meaningful against the build it was captured from. The
+  // reference is pinned in specs/nginx-behavioral-corpus.manifest.json; a
+  // baseline captured from a different nginx fails here instead of quietly
+  // redefining the expected behaviour.
+  if (recordedServer !== REFERENCE_NGINX) {
+    log(
+      `FAIL: baseline was captured from ${recordedServer}, but this gate pins ${REFERENCE_NGINX}; ` +
+        're-capture with --refresh-oracle against the pinned build and update the manifest note',
+    );
+    return 1;
+  }
+  // `ETag` is `<mtime>-<size>`, so the byte size of the fixture is part of the
+  // expected contract. Git normalises line endings on checkout, and the first
+  // committed baseline was captured from a CRLF working tree; on a clean LF
+  // checkout every tag and length then differed. `.gitattributes` pins the
+  // fixture as `-text`, and this guard proves the working tree still matches the
+  // baseline before a behavioural difference is reported.
+  const fixtureBytes = fs.statSync(FIXTURE).size;
+  const recordedBytes = Number(recorded['cond.baseline']?.body_len);
+  if (!Number.isInteger(recordedBytes) || fixtureBytes !== recordedBytes) {
+    log(
+      `FAIL: fixture is ${fixtureBytes} bytes but the baseline recorded ${recordedBytes}; ` +
+        'the fixture checkout changed (line endings?) - restore it or re-capture the oracle',
+    );
+    return 1;
+  }
+  log(`baseline identity: server=${recordedServer} fixture=${fixtureBytes} bytes`);
 
   if (!(await portFree(GATEWAY_PORT))) {
     log(`FAIL: 127.0.0.1:${GATEWAY_PORT} is already listening; refusing to measure someone else's server`);
@@ -261,7 +300,7 @@ async function main() {
   const binary = findBinary();
   if (!binary) {
     log('SKIP: no gateway binary found (build it, or set SDKWORK_WEBSERVER_GATEWAY_BIN)');
-    return requireOracle ? 1 : 0;
+    return requireOracle || REQUIRE_EVIDENCE ? 1 : 0;
   }
   if (staleness(binary, root).stale) {
     log(`FAIL: ${stalenessMessage(binary, root, 'node tools/run-nginx-differential.mjs')}`);

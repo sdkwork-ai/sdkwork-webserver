@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{WebsiteRuntimeSetSnapshot};
+use crate::models::WebsiteRuntimeSetSnapshot;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct PublishRuntimeAssignmentRequest {

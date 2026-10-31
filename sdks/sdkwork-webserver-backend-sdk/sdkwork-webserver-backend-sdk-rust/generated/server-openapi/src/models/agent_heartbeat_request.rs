@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{AgentCertificateObservation};
+use crate::models::AgentCertificateObservation;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AgentHeartbeatRequest {

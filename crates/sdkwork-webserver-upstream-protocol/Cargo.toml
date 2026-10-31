@@ -1,0 +1,15 @@
+[package]
+name = "sdkwork-webserver-upstream-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Pure bounded codecs for nginx upstream protocols (FastCGI 1.0, uWSGI, SCGI, memcached text, gRPC framing) used by the SDKWork edge upstream adapter"
+
+[lib]
+name = "sdkwork_webserver_upstream_protocol"
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

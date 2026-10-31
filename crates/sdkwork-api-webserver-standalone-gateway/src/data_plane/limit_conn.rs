@@ -92,6 +92,59 @@ impl LimitConnRuntime {
             client_ip,
         })
     }
+
+    /// Admit one **stream** connection against its `limit_conn` rules.
+    ///
+    /// nginx's stream module checks the rules at accept time and closes an
+    /// over-limit connection silently. `dry_run` (nginx `limit_conn_dry_run on`)
+    /// keeps counting the connection without denying it; the returned flag reports
+    /// that a rule *would* have rejected it.
+    pub(super) fn stream_admit(
+        &self,
+        client_ip: IpAddr,
+        rules: &[LimitConnConfig],
+        dry_run: bool,
+    ) -> Result<(ConnectionLease, bool), LimitConnDecision> {
+        let mut acquired: Vec<Arc<Mutex<ZoneState>>> = Vec::with_capacity(rules.len());
+        let mut would_reject = false;
+        for rule in rules {
+            let Some(zone) = self.zones.get(&rule.zone) else {
+                release_all(&acquired, client_ip);
+                return Err(LimitConnDecision::Reject);
+            };
+            let Ok(mut state) = zone.lock() else {
+                release_all(&acquired, client_ip);
+                return Err(LimitConnDecision::Reject);
+            };
+            if dry_run {
+                // Dry run counts every connection (even an over-limit one) but
+                // never rejects; an untracked key past the zone capacity has no
+                // slot to release.
+                let (tracked, over_limit) =
+                    state.try_acquire_stream(client_ip, rule.max_connections);
+                drop(state);
+                would_reject |= over_limit;
+                if tracked {
+                    acquired.push(Arc::clone(zone));
+                }
+                continue;
+            }
+            let admitted = state.try_acquire(client_ip, rule.max_connections);
+            drop(state);
+            if !admitted {
+                release_all(&acquired, client_ip);
+                return Err(LimitConnDecision::Reject);
+            }
+            acquired.push(Arc::clone(zone));
+        }
+        Ok((
+            ConnectionLease {
+                zones: acquired,
+                client_ip,
+            },
+            would_reject,
+        ))
+    }
 }
 
 /// Roll back every slot a rejected admission already took.
@@ -119,6 +172,25 @@ impl ZoneState {
         }
         self.entries.insert(client_ip, 1);
         true
+    }
+
+    /// Acquire one stream-connection slot, reporting `(tracked, over_limit)`.
+    ///
+    /// A dry-run admission still counts an over-limit connection (the zone
+    /// reflects real concurrency), but never allocates a new key past the
+    /// zone's `max_keys` capacity: an untracked connection has no slot to
+    /// release.
+    fn try_acquire_stream(&mut self, client_ip: IpAddr, max_connections: u32) -> (bool, bool) {
+        if let Some(count) = self.entries.get_mut(&client_ip) {
+            let over_limit = *count >= max_connections;
+            *count = count.saturating_add(1);
+            return (true, over_limit);
+        }
+        if self.entries.len() as u32 >= self.max_keys {
+            return (false, true);
+        }
+        self.entries.insert(client_ip, 1);
+        (true, max_connections == 0)
     }
 
     fn release_slot(&mut self, client_ip: IpAddr) {
@@ -203,6 +275,13 @@ mod tests {
     }
 
     /// Current counted connections for one key in one zone.
+    fn rule(zone: &str, max_connections: u32) -> super::LimitConnConfig {
+        super::LimitConnConfig {
+            zone: zone.to_owned(),
+            max_connections,
+        }
+    }
+
     fn counted(runtime: &LimitConnRuntime, zone_name: &str, ip: IpAddr) -> u32 {
         runtime
             .zones
@@ -210,6 +289,60 @@ mod tests {
             .and_then(|zone| zone.lock().ok())
             .and_then(|state| state.entries.get(&ip).copied())
             .unwrap_or(0)
+    }
+
+    #[test]
+    fn stream_admission_denies_over_limit_and_counts_until_release() {
+        let runtime = LimitConnRuntime::from_zones(&[named_zone("perip")]);
+        let ip = "127.0.0.1".parse().unwrap();
+        let rules = vec![rule("perip", 1)];
+        let (lease, dry_run_reject) = runtime
+            .stream_admit(ip, &rules, false)
+            .expect("first connection admitted");
+        assert!(!dry_run_reject);
+        assert_eq!(counted(&runtime, "perip", ip), 1);
+        assert!(matches!(
+            runtime.stream_admit(ip, &rules, false),
+            Err(super::LimitConnDecision::Reject)
+        ));
+        drop(lease);
+        assert_eq!(counted(&runtime, "perip", ip), 0);
+        runtime
+            .stream_admit(ip, &rules, false)
+            .expect("slot released");
+    }
+
+    #[test]
+    fn stream_dry_run_counts_but_never_denies() {
+        let runtime = LimitConnRuntime::from_zones(&[named_zone("perip")]);
+        let ip = "127.0.0.1".parse().unwrap();
+        let rules = vec![rule("perip", 1)];
+        let (first, rejected) = runtime.stream_admit(ip, &rules, true).expect("first");
+        assert!(!rejected);
+        let (second, rejected) = runtime
+            .stream_admit(ip, &rules, true)
+            .expect("dry run allows");
+        assert!(rejected, "dry run reports the would-be rejection");
+        assert_eq!(counted(&runtime, "perip", ip), 2, "both are counted");
+        drop(first);
+        drop(second);
+        assert_eq!(counted(&runtime, "perip", ip), 0);
+    }
+
+    #[test]
+    fn stream_admission_rejects_an_unknown_zone() {
+        let runtime = LimitConnRuntime::from_zones(&[]);
+        let ip = "127.0.0.1".parse().unwrap();
+        assert!(matches!(
+            runtime.stream_admit(ip, &[rule("missing", 1)], false),
+            Err(super::LimitConnDecision::Reject)
+        ));
+        // Dry run cannot track an unknown zone either; fail closed instead of
+        // silently admitting.
+        assert!(matches!(
+            runtime.stream_admit(ip, &[rule("missing", 1)], true),
+            Err(super::LimitConnDecision::Reject)
+        ));
     }
 
     #[test]

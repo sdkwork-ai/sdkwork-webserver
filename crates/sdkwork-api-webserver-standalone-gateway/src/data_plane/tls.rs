@@ -99,6 +99,10 @@ pub(crate) fn compile_policy_tls_material(
         let loaded = match load_certified_key(
             certificate_file,
             private_key_file,
+            generation.app.certificate_chain_file(&certificate.id),
+            generation
+                .app
+                .certificate_ocsp_stapling_file(&certificate.id),
             &certificate.server_names,
             provider,
         ) {
@@ -113,7 +117,11 @@ pub(crate) fn compile_policy_tls_material(
             }
             Err(error) => return Err(error),
         };
-        certificates.push((certificate.server_names.clone(), loaded));
+        certificates.push((
+            certificate.server_names.clone(),
+            certificate.server_name_regexes.clone(),
+            loaded,
+        ));
     }
     // Relative `clientAuth.caCertificateFiles` are chrooted to the config
     // directory by the compiler; substitute the resolved paths.

@@ -1,0 +1,16 @@
+# Parseable nginx `map` declarations included by nginx.conf.
+#
+# The maps with an empty-string key live in `maps-empty-key.inc` and are injected
+# at the `# @EMPTY_KEY_MAP@` marker by the differential runner and the oracle
+# script, because the repository's JS config parser cannot tokenise `"" key;`.
+map $http_x_hostkey $host_role {
+    hostnames;
+    default             generic-role;
+    *.wild.example.com  wild-role;
+    exact.example.com   exact-role;
+}
+
+map $request_method $method_tag {
+    default  other-method;
+    GET      read-method;
+}

@@ -1,10 +1,15 @@
 use std::sync::Arc;
 
-use crate::api::base::{RequestHeaders};
-use crate::api::paths::backend_path;
+use crate::api::base::RequestHeaders;
 use crate::api::paths::append_query_string;
+use crate::api::paths::backend_path;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ClusterHostResponse, ClusterInstanceResponse, ClusterOverviewResponse, ClusterProbeRunResponse, ClusterResponse, ClusterSyncManifest, CreateClusterRequest, EnqueueClusterPeerMessagesRequest, EnqueueClusterPeerMessagesResponse, ProbeClusterInstanceRequest, PublishClusterSyncRequest, UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest};
+use crate::models::{
+    ClusterHostResponse, ClusterInstanceResponse, ClusterOverviewResponse, ClusterProbeRunResponse,
+    ClusterResponse, ClusterSyncManifest, CreateClusterRequest, EnqueueClusterPeerMessagesRequest,
+    EnqueueClusterPeerMessagesResponse, ProbeClusterInstanceRequest, PublishClusterSyncRequest,
+    UpdateClusterHostRequest, UpdateClusterInstanceRequest, UpdateClusterRequest,
+};
 
 #[derive(Clone)]
 pub struct ClusterApi {
@@ -17,7 +22,11 @@ impl ClusterApi {
     }
 
     /// List Web Server clusters
-    pub async fn clusters_list(&self, page: Option<i64>, page_size: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_list(
+        &self,
+        page: Option<i64>,
+        page_size: Option<i64>,
+    ) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
@@ -27,55 +36,126 @@ impl ClusterApi {
     }
 
     /// Create a Web Server cluster
-    pub async fn clusters_create(&self, body: &CreateClusterRequest, idempotency_key: &str) -> Result<ClusterResponse, SdkworkError> {
+    pub async fn clusters_create(
+        &self,
+        body: &CreateClusterRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterResponse, SdkworkError> {
         let path = backend_path(&"/clusters".to_string());
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .post(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Retrieve a Web Server cluster
-    pub async fn clusters_retrieve(&self, cluster_id: &str) -> Result<ClusterResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/{}", serialize_path_parameter(cluster_id, PathParameterSpec::new("clusterId", "simple", false))));
+    pub async fn clusters_retrieve(
+        &self,
+        cluster_id: &str,
+    ) -> Result<ClusterResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/{}",
+            serialize_path_parameter(
+                cluster_id,
+                PathParameterSpec::new("clusterId", "simple", false)
+            )
+        ));
         self.client.get(&path, None, None).await
     }
 
     /// Update a Web Server cluster
-    pub async fn clusters_update(&self, cluster_id: &str, body: &UpdateClusterRequest, idempotency_key: &str) -> Result<ClusterResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/{}", serialize_path_parameter(cluster_id, PathParameterSpec::new("clusterId", "simple", false))));
+    pub async fn clusters_update(
+        &self,
+        cluster_id: &str,
+        body: &UpdateClusterRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/{}",
+            serialize_path_parameter(
+                cluster_id,
+                PathParameterSpec::new("clusterId", "simple", false)
+            )
+        ));
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .patch(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Delete an empty Web Server cluster
-    pub async fn clusters_delete(&self, cluster_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
-        let path = backend_path(&format!("/clusters/{}", serialize_path_parameter(cluster_id, PathParameterSpec::new("clusterId", "simple", false))));
+    pub async fn clusters_delete(
+        &self,
+        cluster_id: &str,
+        idempotency_key: &str,
+    ) -> Result<(), SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/{}",
+            serialize_path_parameter(
+                cluster_id,
+                PathParameterSpec::new("clusterId", "simple", false)
+            )
+        ));
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
         self.client.delete(&path, None, headers.as_ref()).await
     }
 
     /// Publish a desired-state revision to every instance of the cluster
-    pub async fn clusters_sync(&self, cluster_id: &str, body: &PublishClusterSyncRequest) -> Result<ClusterSyncManifest, SdkworkError> {
-        let path = backend_path(&format!("/clusters/{}/sync", serialize_path_parameter(cluster_id, PathParameterSpec::new("clusterId", "simple", false))));
-        self.client.post(&path, Some(body), None, None, Some("application/json")).await
+    pub async fn clusters_sync(
+        &self,
+        cluster_id: &str,
+        body: &PublishClusterSyncRequest,
+    ) -> Result<ClusterSyncManifest, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/{}/sync",
+            serialize_path_parameter(
+                cluster_id,
+                PathParameterSpec::new("clusterId", "simple", false)
+            )
+        ));
+        self.client
+            .post(&path, Some(body), None, None, Some("application/json"))
+            .await
     }
 
     /// List cluster hosts with system and network identity
-    pub async fn clusters_hosts_list(&self, page_size: Option<i64>, cursor: Option<&str>, cluster_id: Option<&str>, status: Option<i64>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_hosts_list(
+        &self,
+        page_size: Option<i64>,
+        cursor: Option<&str>,
+        cluster_id: Option<&str>,
+        status: Option<i64>,
+    ) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
@@ -87,37 +167,81 @@ impl ClusterApi {
     }
 
     /// Retrieve a cluster host
-    pub async fn clusters_hosts_retrieve(&self, host_id: &str) -> Result<ClusterHostResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/hosts/{}", serialize_path_parameter(host_id, PathParameterSpec::new("hostId", "simple", false))));
+    pub async fn clusters_hosts_retrieve(
+        &self,
+        host_id: &str,
+    ) -> Result<ClusterHostResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/hosts/{}",
+            serialize_path_parameter(host_id, PathParameterSpec::new("hostId", "simple", false))
+        ));
         self.client.get(&path, None, None).await
     }
 
     /// Rename a host or reassign it to another cluster
-    pub async fn clusters_hosts_update(&self, host_id: &str, body: &UpdateClusterHostRequest, idempotency_key: &str) -> Result<ClusterHostResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/hosts/{}", serialize_path_parameter(host_id, PathParameterSpec::new("hostId", "simple", false))));
+    pub async fn clusters_hosts_update(
+        &self,
+        host_id: &str,
+        body: &UpdateClusterHostRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterHostResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/hosts/{}",
+            serialize_path_parameter(host_id, PathParameterSpec::new("hostId", "simple", false))
+        ));
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .patch(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Remove an instance-free host from the cluster inventory
-    pub async fn clusters_hosts_delete(&self, host_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
-        let path = backend_path(&format!("/clusters/hosts/{}", serialize_path_parameter(host_id, PathParameterSpec::new("hostId", "simple", false))));
+    pub async fn clusters_hosts_delete(
+        &self,
+        host_id: &str,
+        idempotency_key: &str,
+    ) -> Result<(), SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/hosts/{}",
+            serialize_path_parameter(host_id, PathParameterSpec::new("hostId", "simple", false))
+        ));
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
         self.client.delete(&path, None, headers.as_ref()).await
     }
 
     /// List webserver process instances with liveness state
-    pub async fn clusters_instances_list(&self, page_size: Option<i64>, cursor: Option<&str>, cluster_id: Option<&str>, host_id: Option<&str>, status: Option<i64>, health_state: Option<&str>, join_mode: Option<i64>, sync_status: Option<i64>, labels: Option<&str>, q: Option<&str>, build_version: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_instances_list(
+        &self,
+        page_size: Option<i64>,
+        cursor: Option<&str>,
+        cluster_id: Option<&str>,
+        host_id: Option<&str>,
+        status: Option<i64>,
+        health_state: Option<&str>,
+        join_mode: Option<i64>,
+        sync_status: Option<i64>,
+        labels: Option<&str>,
+        q: Option<&str>,
+        build_version: Option<&str>,
+    ) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
@@ -136,37 +260,84 @@ impl ClusterApi {
     }
 
     /// Retrieve a webserver process instance
-    pub async fn clusters_instances_retrieve(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+    pub async fn clusters_instances_retrieve(
+        &self,
+        instance_id: &str,
+    ) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
         self.client.get(&path, None, None).await
     }
 
     /// Update an instance display name, status, or advertised endpoint
-    pub async fn clusters_instances_update(&self, instance_id: &str, body: &UpdateClusterInstanceRequest, idempotency_key: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+    pub async fn clusters_instances_update(
+        &self,
+        instance_id: &str,
+        body: &UpdateClusterInstanceRequest,
+        idempotency_key: &str,
+    ) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .patch(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
 
     /// Unregister a webserver process instance
-    pub async fn clusters_instances_delete(&self, instance_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
+    pub async fn clusters_instances_delete(
+        &self,
+        instance_id: &str,
+        idempotency_key: &str,
+    ) -> Result<(), SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
         self.client.delete(&path, None, headers.as_ref()).await
     }
 
     /// List cluster lifecycle events
-    pub async fn clusters_events_list(&self, page_size: Option<i64>, cursor: Option<&str>, cluster_id: Option<&str>, severity: Option<&str>, instance_id: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_events_list(
+        &self,
+        page_size: Option<i64>,
+        cursor: Option<&str>,
+        cluster_id: Option<&str>,
+        severity: Option<&str>,
+        instance_id: Option<&str>,
+    ) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
@@ -179,73 +350,171 @@ impl ClusterApi {
     }
 
     /// Retrieve the cluster health overview for status polling
-    pub async fn clusters_overview_retrieve(&self) -> Result<ClusterOverviewResponse, SdkworkError> {
+    pub async fn clusters_overview_retrieve(
+        &self,
+    ) -> Result<ClusterOverviewResponse, SdkworkError> {
         let path = backend_path(&"/clusters/overview".to_string());
         self.client.get(&path, None, None).await
     }
 
     /// List one instance's stored heartbeat samples
-    pub async fn clusters_instances_heartbeats_list(&self, instance_id: &str, page_size: Option<i64>, cursor: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_instances_heartbeats_list(
+        &self,
+        instance_id: &str,
+        page_size: Option<i64>,
+        cursor: Option<&str>,
+    ) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
         ]);
-        let path = append_query_string(backend_path(&format!("/clusters/instances/{}/heartbeats", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false)))), &query);
+        let path = append_query_string(
+            backend_path(&format!(
+                "/clusters/instances/{}/heartbeats",
+                serialize_path_parameter(
+                    instance_id,
+                    PathParameterSpec::new("instanceId", "simple", false)
+                )
+            )),
+            &query,
+        );
         self.client.get(&path, None, None).await
     }
 
     /// List one instance's heartbeat metric samples for trend charts
-    pub async fn clusters_instances_metrics_list(&self, instance_id: &str, page_size: Option<i64>, cursor: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn clusters_instances_metrics_list(
+        &self,
+        instance_id: &str,
+        page_size: Option<i64>,
+        cursor: Option<&str>,
+    ) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
         ]);
-        let path = append_query_string(backend_path(&format!("/clusters/instances/{}/metrics/history", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false)))), &query);
+        let path = append_query_string(
+            backend_path(&format!(
+                "/clusters/instances/{}/metrics/history",
+                serialize_path_parameter(
+                    instance_id,
+                    PathParameterSpec::new("instanceId", "simple", false)
+                )
+            )),
+            &query,
+        );
         self.client.get(&path, None, None).await
     }
 
     /// Probe one instance's connectivity and record the outcome
-    pub async fn clusters_instances_probe(&self, instance_id: &str, body: &ProbeClusterInstanceRequest) -> Result<ClusterProbeRunResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}/probe", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
-        self.client.post(&path, Some(body), None, None, Some("application/json")).await
+    pub async fn clusters_instances_probe(
+        &self,
+        instance_id: &str,
+        body: &ProbeClusterInstanceRequest,
+    ) -> Result<ClusterProbeRunResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}/probe",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
+        self.client
+            .post(&path, Some(body), None, None, Some("application/json"))
+            .await
     }
 
     /// Gracefully drain one instance out of routing
-    pub async fn clusters_instances_drain(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}/drain", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
-        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    pub async fn clusters_instances_drain(
+        &self,
+        instance_id: &str,
+    ) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}/drain",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
+        self.client
+            .post(&path, Option::<&serde_json::Value>::None, None, None, None)
+            .await
     }
 
     /// Clear the drain flag and restore routing participation
-    pub async fn clusters_instances_undrain(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}/undrain", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
-        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    pub async fn clusters_instances_undrain(
+        &self,
+        instance_id: &str,
+    ) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}/undrain",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
+        self.client
+            .post(&path, Option::<&serde_json::Value>::None, None, None, None)
+            .await
     }
 
     /// Cordon one instance out of routing without draining it
-    pub async fn clusters_instances_cordon(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}/cordon", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
-        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    pub async fn clusters_instances_cordon(
+        &self,
+        instance_id: &str,
+    ) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}/cordon",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
+        self.client
+            .post(&path, Option::<&serde_json::Value>::None, None, None, None)
+            .await
     }
 
     /// Uncordon one instance back into routing
-    pub async fn clusters_instances_uncordon(&self, instance_id: &str) -> Result<ClusterInstanceResponse, SdkworkError> {
-        let path = backend_path(&format!("/clusters/instances/{}/uncordon", serialize_path_parameter(instance_id, PathParameterSpec::new("instanceId", "simple", false))));
-        self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
+    pub async fn clusters_instances_uncordon(
+        &self,
+        instance_id: &str,
+    ) -> Result<ClusterInstanceResponse, SdkworkError> {
+        let path = backend_path(&format!(
+            "/clusters/instances/{}/uncordon",
+            serialize_path_parameter(
+                instance_id,
+                PathParameterSpec::new("instanceId", "simple", false)
+            )
+        ));
+        self.client
+            .post(&path, Option::<&serde_json::Value>::None, None, None, None)
+            .await
     }
 
     /// Enqueue a peer message to one instance or broadcast to online members
-    pub async fn clusters_messages_create(&self, body: &EnqueueClusterPeerMessagesRequest, idempotency_key: &str) -> Result<EnqueueClusterPeerMessagesResponse, SdkworkError> {
+    pub async fn clusters_messages_create(
+        &self,
+        body: &EnqueueClusterPeerMessagesRequest,
+        idempotency_key: &str,
+    ) -> Result<EnqueueClusterPeerMessagesResponse, SdkworkError> {
         let path = backend_path(&"/clusters/messages".to_string());
         let headers = build_request_headers(
-            &[
-                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
-            ],
+            &[(
+                "Idempotency-Key",
+                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
+            )],
             &[],
         );
-        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client
+            .post(
+                &path,
+                Some(body),
+                None,
+                headers.as_ref(),
+                Some("application/json"),
+            )
+            .await
     }
-
 }
 
 struct PathParameterSpec<'a> {
@@ -256,7 +525,11 @@ struct PathParameterSpec<'a> {
 
 impl<'a> PathParameterSpec<'a> {
     fn new(name: &'a str, style: &'a str, explode: bool) -> Self {
-        Self { name, style, explode }
+        Self {
+            name,
+            style,
+            explode,
+        }
     }
 }
 
@@ -265,15 +538,32 @@ fn serialize_path_parameter<T: serde::Serialize>(value: T, spec: PathParameterSp
     if value.is_null() {
         return String::new();
     }
-    let style = if spec.style.is_empty() { "simple" } else { spec.style };
+    let style = if spec.style.is_empty() {
+        "simple"
+    } else {
+        spec.style
+    };
     match value {
-        serde_json::Value::Array(values) => serialize_path_array(spec.name, &values, style, spec.explode),
-        serde_json::Value::Object(values) => serialize_path_object(spec.name, &values, style, spec.explode),
-        value => format!("{}{}", path_primitive_prefix(spec.name, style), percent_encode(&primitive_to_string(&value))),
+        serde_json::Value::Array(values) => {
+            serialize_path_array(spec.name, &values, style, spec.explode)
+        }
+        serde_json::Value::Object(values) => {
+            serialize_path_object(spec.name, &values, style, spec.explode)
+        }
+        value => format!(
+            "{}{}",
+            path_primitive_prefix(spec.name, style),
+            percent_encode(&primitive_to_string(&value))
+        ),
     }
 }
 
-fn serialize_path_array(name: &str, values: &[serde_json::Value], style: &str, explode: bool) -> String {
+fn serialize_path_array(
+    name: &str,
+    values: &[serde_json::Value],
+    style: &str,
+    explode: bool,
+) -> String {
     let serialized = values
         .iter()
         .filter(|value| !value.is_null())
@@ -284,7 +574,11 @@ fn serialize_path_array(name: &str, values: &[serde_json::Value], style: &str, e
     }
     if style == "matrix" {
         if explode {
-            return serialized.iter().map(|item| format!(";{}={}", name, item)).collect::<Vec<_>>().join("");
+            return serialized
+                .iter()
+                .map(|item| format!(";{}={}", name, item))
+                .collect::<Vec<_>>()
+                .join("");
         }
         return format!(";{}={}", name, serialized.join(","));
     }
@@ -367,7 +661,10 @@ impl HeaderParameterSpec {
     }
 }
 
-fn build_request_headers(headers: &[(&str, HeaderParameterSpec)], cookies: &[(&str, HeaderParameterSpec)]) -> Option<RequestHeaders> {
+fn build_request_headers(
+    headers: &[(&str, HeaderParameterSpec)],
+    cookies: &[(&str, HeaderParameterSpec)],
+) -> Option<RequestHeaders> {
     let mut request_headers = RequestHeaders::new();
     for (name, parameter) in headers {
         if let Some(value) = serialize_header_parameter(parameter) {
@@ -509,12 +806,36 @@ fn append_serialized_parameter(pairs: &mut Vec<String>, parameter: &QueryParamet
         return;
     }
 
-    let style = if parameter.style.is_empty() { "form" } else { parameter.style };
+    let style = if parameter.style.is_empty() {
+        "form"
+    } else {
+        parameter.style
+    };
     match &parameter.value {
-        serde_json::Value::Array(values) => append_array_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
-        serde_json::Value::Object(values) if style == "deepObject" => append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved),
-        serde_json::Value::Object(values) => append_object_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
-        value => pairs.push(format!("{}={}", percent_encode(parameter.name), encode_query_value(&primitive_to_string(value), parameter.allow_reserved))),
+        serde_json::Value::Array(values) => append_array_parameter(
+            pairs,
+            parameter.name,
+            values,
+            style,
+            parameter.explode,
+            parameter.allow_reserved,
+        ),
+        serde_json::Value::Object(values) if style == "deepObject" => {
+            append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved)
+        }
+        serde_json::Value::Object(values) => append_object_parameter(
+            pairs,
+            parameter.name,
+            values,
+            style,
+            parameter.explode,
+            parameter.allow_reserved,
+        ),
+        value => pairs.push(format!(
+            "{}={}",
+            percent_encode(parameter.name),
+            encode_query_value(&primitive_to_string(value), parameter.allow_reserved)
+        )),
     }
 }
 
@@ -526,17 +847,29 @@ fn append_array_parameter(
     explode: bool,
     allow_reserved: bool,
 ) {
-    let serialized = values.iter().filter(|value| !value.is_null()).map(primitive_to_string).collect::<Vec<_>>();
+    let serialized = values
+        .iter()
+        .filter(|value| !value.is_null())
+        .map(primitive_to_string)
+        .collect::<Vec<_>>();
     if serialized.is_empty() {
         return;
     }
     if style == "form" && explode {
         for item in serialized {
-            pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&item, allow_reserved)));
+            pairs.push(format!(
+                "{}={}",
+                percent_encode(name),
+                encode_query_value(&item, allow_reserved)
+            ));
         }
         return;
     }
-    pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
+    pairs.push(format!(
+        "{}={}",
+        percent_encode(name),
+        encode_query_value(&serialized.join(","), allow_reserved)
+    ));
 }
 
 fn append_object_parameter(
@@ -553,14 +886,22 @@ fn append_object_parameter(
             continue;
         }
         if style == "form" && explode {
-            pairs.push(format!("{}={}", percent_encode(key), encode_query_value(&primitive_to_string(value), allow_reserved)));
+            pairs.push(format!(
+                "{}={}",
+                percent_encode(key),
+                encode_query_value(&primitive_to_string(value), allow_reserved)
+            ));
         } else {
             serialized.push(key.clone());
             serialized.push(primitive_to_string(value));
         }
     }
     if !serialized.is_empty() {
-        pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
+        pairs.push(format!(
+            "{}={}",
+            percent_encode(name),
+            encode_query_value(&serialized.join(","), allow_reserved)
+        ));
     }
 }
 
@@ -572,7 +913,11 @@ fn append_deep_object_parameter(
 ) {
     for (key, value) in values {
         if !value.is_null() {
-            pairs.push(format!("{}={}", percent_encode(&format!("{}[{}]", name, key)), encode_query_value(&primitive_to_string(value), allow_reserved)));
+            pairs.push(format!(
+                "{}={}",
+                percent_encode(&format!("{}[{}]", name, key)),
+                encode_query_value(&primitive_to_string(value), allow_reserved)
+            ));
         }
     }
 }
@@ -583,11 +928,24 @@ fn encode_query_value(value: &str, allow_reserved: bool) -> String {
         return encoded;
     }
     for (escaped, reserved) in [
-        ("%3A", ":"), ("%2F", "/"), ("%3F", "?"), ("%23", "#"),
-        ("%5B", "["), ("%5D", "]"), ("%40", "@"), ("%21", "!"),
-        ("%24", "$"), ("%26", "&"), ("%27", "'"), ("%28", "("),
-        ("%29", ")"), ("%2A", "*"), ("%2B", "+"), ("%2C", ","),
-        ("%3B", ";"), ("%3D", "="),
+        ("%3A", ":"),
+        ("%2F", "/"),
+        ("%3F", "?"),
+        ("%23", "#"),
+        ("%5B", "["),
+        ("%5D", "]"),
+        ("%40", "@"),
+        ("%21", "!"),
+        ("%24", "$"),
+        ("%26", "&"),
+        ("%27", "'"),
+        ("%28", "("),
+        ("%29", ")"),
+        ("%2A", "*"),
+        ("%2B", "+"),
+        ("%2C", ","),
+        ("%3B", ";"),
+        ("%3D", "="),
     ] {
         encoded = encoded.replace(escaped, reserved);
     }

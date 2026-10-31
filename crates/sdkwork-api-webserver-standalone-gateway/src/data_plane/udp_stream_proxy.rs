@@ -168,9 +168,13 @@ pub(crate) async fn serve_udp_stream_listener(
                                 continue;
                             }
                             state.pending.insert(client, now);
+                            let Some(target) = stream_config.target.as_ref() else {
+                                state.pending.remove(&client);
+                                continue;
+                            };
                             let Some((host, port, _health)) = resolve_udp_target(
                                 &generation,
-                                &stream_config.target,
+                                target,
                                 client.ip(),
                                 &round_robin,
                             ) else {

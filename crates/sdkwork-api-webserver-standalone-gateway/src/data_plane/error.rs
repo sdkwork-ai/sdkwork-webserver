@@ -119,6 +119,18 @@ pub enum DataPlaneError {
     #[error("stream {stream_id} TLS material cannot be prepared: {detail}")]
     StreamTlsMaterial { stream_id: String, detail: String },
 
+    #[error("mail server {mail_server_id} is misconfigured: {detail}")]
+    MailConfiguration {
+        mail_server_id: String,
+        detail: String,
+    },
+
+    #[error("mail server {mail_server_id} TLS material cannot be prepared: {detail}")]
+    MailTlsMaterial {
+        mail_server_id: String,
+        detail: String,
+    },
+
     #[error("active upstream health supervisor failed: {0}")]
     ActiveHealthTask(#[source] tokio::task::JoinError),
 

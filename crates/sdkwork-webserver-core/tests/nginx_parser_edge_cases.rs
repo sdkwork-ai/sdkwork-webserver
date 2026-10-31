@@ -166,11 +166,10 @@ fn dollar_brace_variables_and_dollar_sequences() {
 fn errors_report_the_file_and_line() {
     // nginx reports the offending token's line: the `}` that ends the
     // unterminated directive sits on line 3.
-    let error = parse("server {\n    listen 80\n}\n").err().expect("error");
+    let error = parse("server {\n    listen 80\n}\n").expect_err("error");
     assert!(error.to_string().contains("edge.conf:3"), "{error}");
     let error = parse("server {\n\n\n    location / {\n        proxy_pass http://x\n    }\n}\n")
-        .err()
-        .expect("error");
+        .expect_err("error");
     assert!(error.to_string().contains("edge.conf:6"), "{error}");
 }
 

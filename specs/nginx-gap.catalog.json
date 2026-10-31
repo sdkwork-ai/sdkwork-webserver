@@ -8,6 +8,30 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Subrequest engine (Wave 8, 2026-10-30): addition/auth_request/auth_request_set/mirror execute with 9 real-nginx differential-http cases (274/274). Reported blockers (not faked): chunked_transfer_encoding off needs close-delimited framing hyper cannot emit; http2_chunk_size needs a body re-chunker + h2 frame-capture harness; userid/browser/random_index/degradation/slice need their own bounded waves (UA tables, RNG evidence strategy, partial-object cache indexing). Catalog: 328 executable / 171 accepted-unenforced / 232 fail-closed / 13 excluded.",
+    "Protocol response policy (Wave 7D, 2026-10-30): CGI buffering/store/limit_rate/force_ranges/ignore_headers/pass_request_body plus memcached buffer/gzip-flag and grpc ignore_headers execute; differential-protocols 65->77 with 12 cases vs nginx 1.29.6 (store path+content+mode, rate window, range modes, oversized header block 502, X-Accel-Redirect ignore, body suppression, memcached gzip flag). Fail-closed residuals recorded: temp-spool family (no bounded spool), *_ignore_client_abort, fastcgi_catch_stderr, fastcgi_send_lowat, *_store on, uWSGI TLS leftovers, grpc bind/keepalive/TLS leftovers. Catalog: 321 executable / 171 accepted-unenforced / 239 fail-closed / 13 excluded.",
+    "CGI cache family (Wave 7C, 2026-10-30): fastcgi/uwsgi/scgi *_cache* directives execute on the shared HTTP cache store with a CGI key/policy layer; differential-protocols grew 49->65 with 16 cache cases against nginx 1.29.6 (hit, no-default-caching, bypass, no_cache, valid-by-status, custom key, min_uses, lock coalescing, use_stale, conditional revalidate, convert_head, range/max_range_offset, uWSGI/SCGI hits). Bounded differences recorded: cache_lock_age cannot preempt an in-flight fill; background_update serves stale instead of a detached task; X-Accel-Expires not consulted; one process store backs all zones. Catalog: 291 executable / 171 accepted-unenforced / 269 fail-closed / 13 excluded.",
+    "uWSGI upstream TLS (Wave 7B, 2026-10-30): uwsgi_ssl_* executes end-to-end with 3 new real-nginx differential cases (trusted CA, mTLS, untrusted CA -> 502); differential-protocols now 49/49. FastCGI and SCGI have no *_ssl_* directives in nginx 1.29.6 (verified from the committed inventory), so scgi_ssl_* names stay rejected as non-nginx extensions. Catalog: 246 executable / 171 accepted-unenforced / 314 fail-closed / 13 excluded.",
+    "Mail module end-to-end (Waves 9A/9B, 2026-10-30): the POP3/IMAP/SMTP mail proxy is in profile with 9/9 real-nginx mail differential (auth_http exchange, login/relay, AUTH failures, SMTP AUTH+XCLIENT, implicit TLS, STARTTLS). Catalog: 239 executable / 171 accepted-unenforced / 321 fail-closed / 13 excluded (perl 4, geoip 8, load_module 1). HTTP/3 remains excluded pending a QUIC/h3 listener plane; rustls-unsupported mail ssl_* knobs and client-certificate flows fail closed.",
+    "Rewrite/variable engine wave (Wave 10, 2026-10-30): the REAL production nginx snapshot from api.birdcoder.com (nginx/1.28.0, 33 config files) now materializes cleanly (virtualHosts=41, listeners=4, resources=150, upstreams=88, skipped=0) through the new bounded rewrite/variable engine and a new aggregate-gate step tools/check-nginx-real-world.mjs. differential-http 259->265 (6 rewrite-engine cases, 265/265). Bounded gaps recorded: if-body proxy_pass/root/error_page fail closed; multiple matched if add_header approximated by last applied set; dynamic-proxy retries rebuild a static target (expanded path not preserved); per-route client_max_body_size on Content-Length only; regex SNI needs its own differential slice. Catalog: 212 executable / 170 accepted-unenforced / 298 fail-closed / 64 excluded.",
+    "Mail listener plane (Wave 9A, 2026-10-30): mail config plane + nginx mail{} materialization + gateway mail listener with plaintext POP3/IMAP/SMTP dialog and PROXY v1 landed (10 integration tests, aggregate gate green). The nginx mail module remains out-of-profile until Wave 9B (auth_http, frontend/backend TLS, XCLIENT, relay, real-nginx differential). Also: a real production nginx snapshot (Ubuntu nginx/1.28.0, 3692-line resolved config, 30 files) was pulled from api.birdcoder.com for compatibility work; it fails materialization on server/location `set` and uses 75 `if` blocks, 324 `set` statements, 53 variable proxy_pass targets and variable root — the rewrite/variable engine wave is queued as the top compatibility priority.",
+    "CGI transport wave (2026-10-30, REQ-2026-0073 wave 7A): *_bind, *_socket_keepalive, typed unixSocketRoot with confined unix targets and a bounded FastCGI keep_conn pool are executable; differential-protocols grew 39->46 and the aggregate gate now runs 5 slices. Catalog: 211 executable / 170 accepted-unenforced / 299 fail-closed / 64 excluded. Still open: gRPC bind/keepalive, hostname/transparent binds, uWSGI/SCGI/memcached reuse, TLS-over-unix (7B), nginx-plane unix targets (typed-only by design).",
+    "Stream & OCSP wave (2026-10-30, REQ-2026-0073 wave 4b): stream limit_conn/zone/dry_run, bounded stream map/set/variable-return, preread_timeout/buffer_size and static OCSP stapling (ssl_stapling_file via rustls CertifiedKey.ocsp) moved to executable; new differential-stream slice 9/9 vs nginx 1.29.6 wired into the aggregate gate (5 slices). Mail-proxy substrate crate landed (45 tests) for the next wave. Still open in the stream plane: upstream TLS client, half-close, rate limits, request/response counting, retry budget, proxy_bind, pass/SNI routing. Catalog: 203 executable / 171 accepted-unenforced / 306 fail-closed / 64 excluded.",
+    "gRPC wiring (2026-10-30, REQ-2026-0073 wave 6): grpc_pass/h2 client landed end-to-end with 13 differential cases against nginx 1.29.6 (protocol slice 26 -> 39, byte-identical where the contract allows); upstream TLS is always verified and non-zero grpc-status follows nginx (forwarded, not 502). The conditional-cache differential was hardened against daily `expires @<time>` midnight rollover so the committed oracle no longer depends on capture time. Catalog: 195 executable / 171 accepted-unenforced / 314 fail-closed / 64 excluded. Remaining: stream advanced gaps, subrequest filters, module-sized modules, OCSP (rustls), chunked/http2_chunk (hyper), open_file_cache, mail/geoip/Perl/dynamic modules.",
+    "Upstream-protocol expansion (2026-10-30, REQ-2026-0073 wave 5): FastCGI, uWSGI, SCGI and memcached moved from out-of-profile to executable end-to-end with a new committed differential-protocols slice (26/26 byte-identical vs nginx 1.29.6). A substrate codec crate for FastCGI/uWSGI/SCGI/memcached/gRPC landed with 89 tests; gRPC wiring is the next wave. Remaining out-of-profile after this wave: perl, geoip, mail proxy and third-party/Lua/njs modules. Catalog counts moved to 175 executable / 171 accepted-unenforced / 334 fail-closed / 64 excluded.",
+    "Wave 4a execution (2026-10-30, REQ-2026-0073): referer module (valid_referers + $invalid_referer) and geo/split_clients variable blocks moved to executable; differential-http grew 237 -> 259 cases. chunked_transfer_encoding keeps a truthful diagnostic (pinned hyper HTTP/1.1 encoder cannot emit a close-delimited 1.1 body) and open_file_cache keeps its precise cache/staleness rationale. Subrequest filters (addition/auth_request/mirror) and userid/browser/random_index/degradation/slice remain fail-closed pending a bounded subrequest engine / module-sized work.",
+    "Wave 3b execution (2026-10-30, REQ-2026-0073): http2_max_concurrent_streams (real ALPN h2 SETTINGS proof), proxy_method (differential), stream allow/deny and stream return moved to executable; the HTTP/2 directives nginx 1.29.6 made obsolete are accepted no-ops with truthful diagnostics; stream limit_conn/set/preread/proxy_protocol_timeout/stream-map/upstream-TLS and OCSP stapling stay unimplemented with exact architecture blockers reported. differential-http grew 236 -> 237 cases. Remaining behavior-gap after wave 3b: chunked framing, addition filter, referer, open_file_cache, http2_chunk_size, stream advanced gaps, OCSP.",
+    "Wave 3a-2 execution (2026-10-30, REQ-2026-0073): autoindex family, empty_gif and stub_status moved to executable; differential-http grew 218 -> 236 cases against nginx 1.29.6. Remaining in this area: addition filter (needs a bounded subrequest engine), referer module ($invalid_referer threading; `if` still unsupported), typed-TOML parity for charset/gzip/autoindex. Later waves: HTTP/2 tuning, stream module gaps, OCSP/trust chain, open_file_cache, proxy_method, chunked_transfer_encoding.",
+    "Wave 3a directive execution (2026-10-30, REQ-2026-0073): charset family (charset/charset_types/source_charset/override_charset) and gzip refinements (gzip_disable/gzip_proxied) moved to executable with real-nginx differential evidence; differential-http grew 182 -> 218 cases. `charset_map` (byte transcoding) and `gzip_comp_level` remain accepted-unenforced with truthful diagnostics. Autoindex family, stub_status/empty_gif/addition/referer and typed-TOML parity continue in wave 3a-2.",
+    "Wave 2b directive execution (2026-10-30, REQ-2026-0073): proxy response-header policies (hide/pass/redirect/cookie path+domain), internal locations, merge_slashes and request-header acceptance moved from accepted-unenforced/fail-closed to executable. tests/nginx/differential-http grew 150 -> 182 cases against nginx 1.29.6. Still open after wave 2b: chunked_transfer_encoding, charset family, autoindex family, gzip refinements, HTTP/2 tuning, stream module gaps (wave 3).",
+    "Wave 2 directive execution (2026-10-30, REQ-2026-0073): redirect construction policies (absolute_redirect/port_in_redirect/server_name_in_redirect), limit_req_status/limit_conn_status, max_ranges, certificate chainFile consumption and typed TOML [[http.maps]] moved from accepted-unenforced/silent to executable. tests/nginx/differential-http grew 130 -> 150 cases against nginx 1.29.6. The three upstream proxy timeout keys became explicit accepted-unenforced diagnostics instead of silent drops. Still open in this wave: proxy response header policies, internal locations, merge_slashes, header acceptance policy (wave 2b).",
+    "Wave 1 directive execution (2026-10-30, REQ-2026-0073): nginx `map` (http), `types`/`default_type`, `gzip_static` and `gzip_vary` moved from accepted-unenforced to executable with real-nginx differential evidence. tests/nginx/differential-http grew 87 -> 130 cases (oracle recaptured from nginx 1.29.6, floor 130); the migration CLI no longer treats them as unenforced. Bounded gaps: map source is a single supported variable and evaluates once before the rewrite loop; typed TOML exposes MIME types only at http level; gzip_static does not serve orphan .gz sidecars and `gunzip` remains out of scope.",
+    "Response-semantics closure (2026-10-29, REQ-2026-0073): add_header now executes nginx semantics at http/server/location (replace-on-declare inheritance, authored order and duplicates, default status list plus `always`, bounded variable expansion, one response choke point covering static/proxy/cache/return/redirect/error/named-hop/generated responses); nginx-materialized hosts stop promoting add_header into the unconditional dedicated security fields. A directory without an index answers 403 instead of 404, and error_page also maps statuses produced by return/redirect routes. The broad differential slice grew to 87 cases (0 unexpected); two nginx generated-416 header-filter quirks are documented intentional differences (nginx runs its headers filter twice on a range-generated 416), and gzip policy on generated error pages remains a documented bounded gap because the compression layer sits outside the handler.",
+    "Release-gate repair (2026-10-29): the committed conditional-cache oracle had been captured from a CRLF working tree while the committed fixture is LF, so on a clean Linux checkout every tag/length/range asserted by tests/nginx/differential differed (103 unexpected differences, 4/50 matched). The oracle was recaptured from nginx 1.29.6 against the LF fixture, .gitattributes pins every differential fixture directory as `-text`, tests/nginx/differential/run-nginx.sh runs an unprivileged package binary by injecting its http temp paths, and tools/run-nginx-differential.mjs now pins REFERENCE_NGINX, rejects a baseline captured from another build, and rejects a fixture whose byte size no longer matches the recorded representation. The gate reports 50/50 with only allowlisted known differences. tools/run-nginx-compat-gate.mjs is the new release entrypoint (wired into _sdkwork:verify as check:nginx-compat): it discovers differential orchestrators from specs/nginx-behavioral-corpus.manifest.json and executes them with SDKWORK_REQUIRE_NGINX_EVIDENCE=1, so a gate that declines to run fails the release instead of passing silently.",
+    "Directive-level contract (2026-10-29): specs/nginx-directive-inventory.json snapshots the 744 nginx 1.29.6 OSS directives from the real ngx_command_t tables; specs/nginx-directive-support.catalog.json classifies each directive for http-core-v1 (executable / accepted-unenforced / unsupported-fail-closed / excluded) with runtime field, importer mapping, risk, migration impact/action and executable evidence; tools/check-nginx-directive-matrix.mjs (11 checks, offline, mutation-tested) binds inventory, catalog, mapping.rs, fixtures, the migration CLI and the generated docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md together. tools/import-nginx-conf.mjs no longer owns a classifier: it consumes the catalog, treats types/charset_map/map bodies as data, and never renders an accepted-but-unenforced typed TOML key.",
+    "Host-selection parity (2026-10-29, task REQ-2026-0073): nginx server_name forms now execute: exact, leading wildcard any depth (longest), trailing wildcard (longest), .suffix (claims bare + wildcard), ~ regex in authored order with nginx's real case-folding rule, then the listener default host; duplicate ownership fails closed. SNI certificate selection remains exact plus one-level wildcard, so regex/trailing-wildcard names on ssl listeners are rejected at import. Bounded named locations (location @name) execute for try_files … @name and error_page … = @name with one internal redirect, compile-time cycle rejection and nginx-faithful gate/phase behaviour. Evidence: tests/nginx/differential-host/ (39 cases against nginx 1.29.6, tools/run-nginx-differential-host.mjs).",
+    "Broad real-nginx surface evidence (2026-10-29): tests/nginx/differential-http/ compares 75 cases field by field with nginx 1.29.6 (static delivery/MIME/HEAD/multipart ranges/conditionals, rewrite/return/try_files, header emission for the covered response kinds (http/location add_header model gap tracked separately), error_page mapping, gzip negotiation, allow/deny + auth_basic, limit_req/limit_conn, proxy_pass URI splice/Host/forwarded/hop-by-hop/upstream status). It exposed and closed seven real divergences: proxy_pass non-slash URI splice, multi-range 416→multipart/byteranges, directory redirect 307→301, .js MIME, duplicate $proxy_add_x_forwarded_for, strong ETag on gzip-compressed responses, add_header on rewrite-generated redirects, spurious Retry-After on limit_req rejections, and error_page retained-status header details.",
+    "Accepted-but-unenforced awareness (2026-10-29): the typed TOML plane now reports behaviour-affecting accepted keys (TLS cipher/session/OCSP policy, proxy buffering/retry/header policy, map, autoindex, charset, MIME defaults) through server_toml::UNENFORCED_BEHAVIOR_TOML_KEYS and LoadedWebServerConfig.compatibility; `validate` prints one `compatibility:` line per occurrence and `acceptedButUnenforced=` in its summary, matching the nginx-conf import plane's per-directive diagnostics.",
     "This catalog tracks Rust data-plane and import/render progress toward the declared http-core-v1 profile.",
     "It is not a claim of full nginx OSS behavioral parity. Grades follow PRD-nginx-compatibility.md §2.",
     "Toggle: deployments/webserver/server.*.toml [nginx].enabled (nginx.enabled)",
@@ -173,7 +197,7 @@
       "id": "tls.ocsp-stapling",
       "group": "tls",
       "status": "missing",
-      "summary": "OCSP stapling"
+      "summary": "OCSP stapling is not implemented. Commercial impact is bounded: Let's Encrypt ended OCSP service (2025) and the declared fleet uses short-lived ACME certificates, nginx defaults ssl_stapling off, and rustls (0.23) supports the ocsp field only for TLS 1.2-style stapling with no refresh task. Declarations are now reported as accepted-but-unenforced instead of silently ignored (server_toml typed diagnostics + nginx-conf import diagnostics); implementation requires an OCSP fetch/refresh/verification owner and is not part of the declared commercial profile"
     },
     {
       "id": "tls.upstream-verify-mtls",
@@ -221,7 +245,7 @@
       "id": "nginx.behavioral-corpus",
       "group": "operations",
       "status": "implemented",
-      "summary": "Indexed REQ-linked Nginx differential slices under tests/nginx/ via specs/nginx-behavioral-corpus.manifest.json (pnpm check:nginx-corpus); the conditional-cache slice (REQ-2026-0071) additionally compares the data plane against a captured real-nginx oracle field by field (pnpm check:nginx-differential), so a conditional-request or cache-policy regression fails a gate instead of relying on a hand-run fixture; full OSS parity remains out of profile"
+      "summary": "Indexed real-nginx differential slices under tests/nginx/: conditional-cache (50 cases, tools/run-nginx-differential.mjs, captured nginx 1.29.6 oracle), broad HTTP surface (75 cases, tools/run-nginx-differential-http.mjs), virtual-host selection + named locations (39 cases, tools/run-nginx-differential-host.mjs), plus the in-process full-surface behavioural corpus (76 cases, tools/run-nginx-behavioral-corpus.mjs). tools/run-nginx-compat-gate.mjs executes them all as the release gate. Oracles are committed and pinned; a real nginx binary is needed only to refresh them. Full OSS parity remains out of profile"
     },
     {
       "id": "config.source-unified-loader",
@@ -233,7 +257,7 @@
       "id": "http.error-page",
       "group": "response",
       "status": "implemented",
-      "summary": "error_page http/server/location mappings with nginx replace-on-declare inheritance; generated static errors (including ACL 403) and proxy_intercept_errors-mapped upstream errors internally redirect to the target with optional =code replacement; recursive_error_pages chains through per-route sets bounded to three hops (REQ-2026-0042)"
+      "summary": "error_page http/server/location mappings with nginx replace-on-declare inheritance; generated static errors (including ACL 403), proxy_intercept_errors-mapped upstream errors, Respond/Redirect statuses and rewrite-generated redirects internally redirect to the target with optional =code status replacement; targets are static paths or bounded @named locations (one internal redirect); recursive_error_pages chains are bounded to three hops (REQ-2026-0042, REQ-2026-0073)"
     },
     {
       "id": "http.sub-filter",
@@ -264,6 +288,336 @@
       "group": "proxying",
       "status": "implemented",
       "summary": "proxy_pass_request_headers off strips client request headers upstream (fixed safe defaults still applied)"
+    },
+    {
+      "id": "routing.server-name-forms",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx server_name forms: exact, leading wildcard of any depth (longest wins), trailing wildcard (longest), .suffix (claims bare + wildcard), ~ regex in authored order with nginx case folding, and listener default fallback; duplicate ownership fails closed. TLS SNI stays exact plus one-level wildcard, so regex/trailing-wildcard names on ssl listeners fail closed. Evidence: core/server_name.rs + tests/server_name_selection.rs and tests/nginx/differential-host (39 cases)"
+    },
+    {
+      "id": "routing.named-location",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "Bounded named locations (location @name) as try_files … @name / error_page … = @name targets with exactly one internal redirect, compile-time rejection of chains/cycles, request-path unreachability, and nginx-faithful phase order (gates re-applied; named return short-circuits before access; header filters on the final response)"
+    },
+    {
+      "id": "nginx.directive-catalog",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Directive-level http-core-v1 contract: specs/nginx-directive-inventory.json (744 nginx 1.29.6 OSS directives from ngx_command_t tables), specs/nginx-directive-support.catalog.json (executable / accepted-unenforced / fail-closed / excluded with runtime field, evidence, risk, migration action), generated operator matrix docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md, and the offline drift gate tools/check-nginx-directive-matrix.mjs (11 checks)"
+    },
+    {
+      "id": "nginx.release-gate",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "tools/run-nginx-compat-gate.mjs wired into _sdkwork:verify as check:nginx-compat: runs the gap catalog, corpus manifest, directive matrix, in-process behavioural corpus and every manifest-indexed differential orchestrator with SDKWORK_REQUIRE_NGINX_EVIDENCE=1, so an unexecuted compatibility gate fails the release"
+    },
+    {
+      "id": "nginx.accepted-unenforced-diagnostics",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Both configuration planes report accepted-but-unenforced behaviour: nginx-conf import emits one diagnostic per accepted-ignored directive (mapping::ignored_directive_diagnostics); typed TOML reports behaviour-affecting accepted keys via server_toml::UNENFORCED_BEHAVIOR_TOML_KEYS, surfaced in LoadedWebServerConfig.compatibility and printed by `validate` (compatibility: lines + acceptedButUnenforced count)"
+    },
+    {
+      "id": "http.multi-range",
+      "group": "response",
+      "status": "implemented",
+      "summary": "Multipart byte-range responses: a multi-range request answers 206 multipart/byteranges with nginx-exact framing and 20-digit boundary (previously 416); unsatisfiable/invalid single ranges still answer 416 with nginx headers (REQ-2026-0073 differential-http)"
+    },
+    {
+      "id": "http.proxy-uri-splice",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "proxy_pass URI-part splice is nginx-exact: the matched location prefix is replaced by the proxy_pass URI without inserting a slash (/d + /v1/ -> /v1//inner for prefix locations, exact location keeps /v1/), proven against nginx 1.29.6"
+    },
+    {
+      "id": "http.add-header",
+      "group": "response",
+      "status": "implemented",
+      "summary": "nginx add_header semantics at http/server/location: a level that declares any add_header replaces the inherited array; authored order and duplicate names preserved; the nginx default status list (200,201,204,206,301,302,303,304,307,308) gates emission unless `always`; bounded $var expansion ($host/$scheme/$remote_addr/$server_port/$request_uri/$uri/$document_uri/$args/$is_args/$request_method/$server_name); unknown variables, non-ASCII and oversize declarations fail closed. Applied at one choke point on every response kind (static, proxy, cache, Respond/Redirect, rewrite redirects, error pages, named-location hops, generated and access-control rejections). nginx-materialized hosts no longer promote headers into the unconditional dedicated security fields; an explicit nosniff declaration is status-gated like nginx"
+    },
+    {
+      "id": "static.directory-no-index",
+      "group": "response",
+      "status": "implemented",
+      "summary": "A directory request with no index file answers 403 (nginx autoindex-off) without an ETag, and does not fall through to the SPA fallback; differential case static.dir-no-index against nginx 1.29.6"
+    },
+    {
+      "id": "http.map",
+      "group": "variables",
+      "status": "implemented",
+      "summary": "Bounded nginx map execution at http context: default/exact/hostnames wildcard/ordered regex keys with $0-$9 captures, empty-result omission, result variables usable in add_header/proxy_set_header/return URL+body/rewrite replacement/variable proxy_pass; supported source vocabulary is the 11 fixed variables plus $http_/$arg_/$cookie_ families; unsupported sources/values/volatile/duplicate results fail closed with located diagnostics (REQ-2026-0073 wave 1, differential-http maps.* cases vs nginx 1.29.6)"
+    },
+    {
+      "id": "http.mime-types",
+      "group": "static",
+      "status": "implemented",
+      "summary": "nginx types + default_type: replace-on-declare MIME table and independently inherited default_type at http/server/location; static responses and return bodies resolve Content-Type from the configured table, unknown extension uses default_type, 204 omits Content-Type; typed TOML [http] defaultType + ordered [[http.mimeTypes]] materialized (REQ-2026-0073 wave 1)"
+    },
+    {
+      "id": "http.gzip-static",
+      "group": "response",
+      "status": "implemented",
+      "summary": "gzip_static off|on|always: precompressed <path>.gz sidecars served inside the approved static root (symlink/.. safe) with nginx-exact sidecar Content-Length/ETag/Last-Modified, original-path Content-Type, Content-Encoding gzip, range/HEAD/304 behavior, q=0 and identity fallback, and always-mode without Vary; orphan sidecars and gunzip remain documented gaps (REQ-2026-0073 wave 1)"
+    },
+    {
+      "id": "http.gzip-vary",
+      "group": "response",
+      "status": "implemented",
+      "summary": "gzip_vary on|off at http/server/location: nginx default off, and the runtime strips tower-http's automatic Vary: Accept-Encoding when the policy is off; sidecar/negotiated responses follow the policy (REQ-2026-0073 wave 1)"
+    },
+    {
+      "id": "http.redirect-policy",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx redirect construction policies at http/server/location: absolute_redirect (off -> relative Location), port_in_redirect (omit scheme-default port), server_name_in_redirect (first server_name instead of request Host); one handler choke point covers static directory redirects, return 3xx /path, rewrite redirect/permanent and error_page-mapped 3xx, proven byte-for-byte against nginx 1.29.6 (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "http.limit-status",
+      "group": "response",
+      "status": "implemented",
+      "summary": "limit_req_status / limit_conn_status: configurable 400-599 rejection status with http->server->location inheritance (default 503), proven against nginx 1.29.6 (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "http.max-ranges",
+      "group": "response",
+      "status": "implemented",
+      "summary": "max_ranges n at http/server/location: 0 disables range processing (full 200, no Accept-Ranges) and a ceiling declines over-limit multi-range requests to a full 200 with Accept-Ranges, matching nginx range-filter behaviour (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "tls.chain-file",
+      "group": "tls",
+      "status": "implemented",
+      "summary": "Typed TOML certificate chainFile is consumed end-to-end: validated, resolved to a readable file, decoded and appended to the served certificate chain (DER-deduped, fail-closed on empty/malformed PEM); previously the key was silently dropped (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "config.typed-maps",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Typed TOML [[http.maps]] materializes ordered map definitions (source/result/hostnames/default/entries) into WebServerAppConfig.maps with the same validation as the nginx-conf plane; the legacy string-array map key remains accepted-unenforced with a located diagnostic pointing at [[http.maps]] (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "config.accepted-unenforced-timeouts",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "proxyConnectTimeout / proxyReadTimeout / proxySendTimeout are advertised in the location supported-key list but not consumed; they now emit located accepted-unenforced diagnostics instead of being silently dropped (REQ-2026-0073 wave 2)"
+    },
+    {
+      "id": "http.proxy-response-headers",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "proxy_hide_header / proxy_pass_header / proxy_redirect / proxy_cookie_path / proxy_cookie_domain execute nginx response-header policy: pinned default-hidden set (Date, Server, X-Pad, X-Accel-*), pass-list wins on conflict, Location/Refresh rewriting for off|default|explicit from/to, Set-Cookie Path/Domain rewriting with attribute preservation, replace-on-declare inheritance; regex and $variable forms fail closed. 18 real-nginx differential cases (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "routing.internal-location",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx `internal` locations: parsed at location context, unreachable by external request (nginx-style 404 with the location's add_header and host error_page mapping intact), reachable via rewrite last / error_page / named targets; http/server contexts still fail closed (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "routing.merge-slashes",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "merge_slashes on|off resolves per host; off keeps repeated slashes in the canonical path for exact-location identity, $uri, %2F decoding, alias/static resolution and dot-segment handling, matching nginx in both modes; the nginx pre-vhost-selection quirk is documented as a bounded divergence (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "http.header-acceptance",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "underscores_in_headers / ignore_invalid_headers: per-host request-header acceptance policy; nginx-plane default drops underscore headers before all modules, typed TOML keeps its historical permissive default, and the runtime HTTP boundary always rejects non-token header names with 400 (documented stricter divergence) (REQ-2026-0073 wave 2b)"
+    },
+    {
+      "id": "http.charset",
+      "group": "response",
+      "status": "implemented",
+      "summary": "nginx charset header filter: charset on|off, charset_types (declared list seeded with text/html like nginx, `*` wildcard), source_charset and override_charset (kept/normalized/left when a charset_map codec would be needed) at http/server/location with nginx inheritance; no charset on 301/302, `off` disables, variables/invalid names fail closed. `charset_map` byte transcoding remains accepted-unenforced. 21 real-nginx differential cases (REQ-2026-0073 wave 3a)"
+    },
+    {
+      "id": "http.gzip-refinements",
+      "group": "response",
+      "status": "implemented",
+      "summary": "gzip_disable (case-insensitive UA regex + nginx msie6 selector with exact MSIE 4/5/6 detection and SV1/Opera carve-outs) and gzip_proxied (Via-gated condition order, nginx default off) execute with nginx inheritance; gzip_comp_level remains accepted-unenforced because the compression layer owns the level and no observable contract differs. 15 real-nginx differential cases (REQ-2026-0073 wave 3a)"
+    },
+    {
+      "id": "http.autoindex",
+      "group": "static",
+      "status": "implemented",
+      "summary": "nginx autoindex module: autoindex on|off, autoindex_exact_size, autoindex_localtime, autoindex_format html|json|jsonp|xml at http/server/location. Byte-exact HTML/JSON/JSONP/XML templates vs nginx 1.29.6 (escaping, 50-char column, truncation, date/size columns, JSONP callback validation and no-callback downgrade, directories-first ordering, hidden skipped, bounded 4096 entries), streamed chunked framing without Content-Length like nginx, `index` wins over the listing, `autoindex off` keeps 403. 12 differential cases (REQ-2026-0073 wave 3a-2)"
+    },
+    {
+      "id": "http.empty-gif",
+      "group": "response",
+      "status": "implemented",
+      "summary": "nginx empty_gif location handler: canonical 43-byte 1x1 transparent GIF, image/gif, nginx's fixed Last-Modified, GET/HEAD only (405 otherwise); 3 differential cases (REQ-2026-0073 wave 3a-2)"
+    },
+    {
+      "id": "http.stub-status",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "nginx stub_status location page backed by the data-plane metrics (Active/accepts/handled/requests/Reading/Writing/Waiting, text/plain), location context only, loopback-gated on top of allow/deny, GET/HEAD only; counters are process-local so the differential battery canonicalizes digits (field shape/headers compared); 3 differential cases (REQ-2026-0073 wave 3a-2)"
+    },
+    {
+      "id": "http.http2-tuning",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "http2_max_concurrent_streams is executable at http/server and materialized into the ingress h2 stream ceiling, proven over a real TLS/ALPN connection by parsing the server SETTINGS frame; the directives nginx 1.29.6 made obsolete (http2_max_field_size/http2_max_header_size/http2_max_requests/http2_idle_timeout/http2_recv_timeout/http2_max_concurrent_pushes/http2_push/http2_push_preload) are accepted no-ops with truthful diagnostics; buffer/table sizing keys (recv_buffer_size/body_preread_size/pool_size/streams_index_size) stay runtime-owned; http2_chunk_size fails closed because the pinned hyper/h2 ingress does not expose DATA-frame chunking. Runtime advertises its own MAX_HEADER_LIST_SIZE (documented difference) (REQ-2026-0073 wave 3b)"
+    },
+    {
+      "id": "http.proxy-method",
+      "group": "proxying",
+      "status": "implemented",
+      "summary": "nginx proxy_method at http/server/location with inheritance and method-token validation: the upstream request method is overridden for static and dynamic targets (retries included), proven against nginx 1.29.6 (GET client, POST upstream); typed TOML proxyMethod executes too (REQ-2026-0073 wave 3b)"
+    },
+    {
+      "id": "stream.access",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "nginx stream allow/deny: ordered first-match-wins peer ACL with stream-context inheritance; a denied peer is closed with no bytes (nginx semantics), integration-proven and nginx-probe verified; typed TOML stream access array executes (REQ-2026-0073 wave 3b)"
+    },
+    {
+      "id": "stream.return",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "nginx stream return <literal>: writes the literal value then closes (1..4096 bytes, mutually exclusive with proxyPass), nginx-probe verified; variable-valued stream return fails closed (no stream variable engine yet) (REQ-2026-0073 wave 3b)"
+    },
+    {
+      "id": "tls.ocsp-assessment",
+      "group": "tls",
+      "status": "missing",
+      "summary": "OCSP stapling (ssl_stapling/ssl_stapling_verify/ssl_trusted_certificate) remains unimplemented: the pinned rustls TLS stack exposes no stapling/OCSP-fetch surface, so no bounded static form exists either. The directives now carry precise diagnostics (previously they implied an equivalent runtime setting existed) (REQ-2026-0073 wave 3b)"
+    },
+    {
+      "id": "http.referer",
+      "group": "routing",
+      "status": "implemented",
+      "summary": "nginx referer module: valid_referers none|blocked|server_names|wildcards|host|host/path|~regex with replace-on-declare inheritance and $invalid_referer threaded through add_header/return expansion; nginx-exact evaluation (scheme-less/blocked rules, host cut at /:, case-insensitive regex) verified by 12 differential cases (REQ-2026-0073 wave 4a)"
+    },
+    {
+      "id": "http.geo",
+      "group": "variables",
+      "status": "implemented",
+      "summary": "nginx geo block: http-context geo [$address] $variable with longest-prefix CIDR, IPv4 inclusive ranges, IPv6 CIDRs and default, evaluated into the shared result-variable table so map consumers expand it; IPv6 range entries rejected (nginx is IPv4-only for ranges); differential-proven (REQ-2026-0073 wave 4a)"
+    },
+    {
+      "id": "http.split-clients",
+      "group": "variables",
+      "status": "implemented",
+      "summary": "nginx split_clients block: nginx ngx_murmur_hash2 over the expanded source with fixed-point percentage/cumulative thresholds and `*` catch-all, evaluated into the shared result-variable table; bucket assignment verified against real nginx for fixture keys (REQ-2026-0073 wave 4a)"
+    },
+    {
+      "id": "upstream.fastcgi",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "FastCGI 1.0 upstream adapter: fastcgi_pass (literal host:port or declared upstream; unix/variable fail closed), fastcgi_param with automatic HTTP_* mapping and nginx variable order, fastcgi_split_path_info/fastcgi_index, keep_conn wire flag (no pooling), buffering/request_buffering, connect/send/read timeouts, hide/pass headers, intercept_errors, bounded next_upstream retries; real nginx 1.29.6 differential-protocols slice (12 cases) byte-identical against a deterministic mock responder (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.uwsgi",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "uWSGI upstream adapter: uwsgi_pass/param (+if_not_empty), modifier1/modifier2, uwsgi_string, request body framing, timeouts, buffering, hide/pass, intercept_errors, bounded retries; byte-identical differential vs nginx 1.29.6 (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.scgi",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "SCGI upstream adapter: scgi_pass/param, netstring framing with synthesized CONTENT_LENGTH, timeouts, buffering, hide/pass, intercept_errors, bounded retries; byte-identical differential vs nginx 1.29.6; one documented bounded difference (declared CONTENT_LENGTH emitted once) (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.memcached",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "memcached upstream adapter: memcached_pass with bounded `set $memcached_key` (location, supported variable vocabulary), text-protocol GET/HEAD, nginx key escaping, hit/miss/404/502/504 mapping, Accept-Ranges and exact Content-Length parity, timeouts, buffering, bounded retries; 6 differential cases byte-identical vs nginx 1.29.6 (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.protocol-codecs",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "New crate sdkwork-webserver-upstream-protocol: pure bounded codecs for FastCGI/uWSGI/SCGI/memcached/gRPC framing with adversarial fail-closed tests (89 tests); the wiring plane for FastCGI/uWSGI/SCGI/memcached is live, gRPC framing is ready for the next wiring wave (REQ-2026-0073 wave 5)"
+    },
+    {
+      "id": "upstream.grpc",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "gRPC upstream adapter: grpc_pass (grpc:// h2c, grpcs:// TLS1.2/1.3 with always-verified chains, declared upstreams), grpc_set_header, connect/send/read timeouts, grpc_buffer_size, hide/pass, grpc_intercept_errors, bounded next_upstream retries, full grpc_ssl_* policy; h2 client with trailers forwarding, trailers-only promotion, 502 transport/protocol and 504 read-timeout mapping; nginx 1.29.6 differential (39/39 protocol slice incl 13 gRPC cases) with a test-only Rust h2 mock (REQ-2026-0073 wave 6)"
+    },
+    {
+      "id": "stream.limit-conn",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "stream limit_conn_zone/limit_conn/limit_conn_dry_run: separate stream zone table, accept-time checks in nginx phase order, silent-close deny and dry-run counting; new real-nginx differential-stream slice (9/9) (REQ-2026-0073 wave 4b)"
+    },
+    {
+      "id": "stream.variables",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "bounded stream variable engine: map/set and variable-valued return over the facts known at accept/preread ($remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name); unsupported sources fail closed; differential-proven including SNI map (REQ-2026-0073 wave 4b)"
+    },
+    {
+      "id": "stream.preread",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "per-listener preread_timeout/preread_buffer_size feed the TLS ClientHello peek (deadline + bounded buffer); oversized/silent connections behave like nginx; proxy_protocol_timeout fails closed because inbound PROXY headers are not parsed (REQ-2026-0073 wave 4b)"
+    },
+    {
+      "id": "tls.ocsp-static-stapling",
+      "group": "tls",
+      "status": "partial",
+      "summary": "static OCSP stapling via ssl_stapling_file: bounded DER response validated, carried into CertificateSource.ocspStaplingFile and rustls CertifiedKey.ocsp, wire-proven to staple exactly those bytes and nothing without the file. Dynamic fetch/refresh/verification is not implemented (refresh needs a reload; DER envelope validated only) (REQ-2026-0073 wave 4b)"
+    },
+    {
+      "id": "upstream.mail-substrate",
+      "group": "upstreams",
+      "status": "partial",
+      "summary": "mail-proxy substrate crate sdkwork-webserver-mail-protocol: POP3/IMAP/SMTP dialog state machines, SASL LOGIN/PLAIN, STARTTLS boundaries, dot-stuffing, XCLIENT/PROXY v1, frontend transition table, backend relay helpers (45 tests). The mail listener plane (auth_http exchange, TLS transport, nginx mail directive materialization) is the next wiring wave (REQ-2026-0073)"
+    },
+    {
+      "id": "upstream.cgi-transport",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "CGI-family transport completeness (Wave 7A): per-resource *_bind (IP literal or off) and *_socket_keepalive, typed [http] unixSocketRoot with strict-descendant confinement for unix:/absolute targets (nginx-conf unix targets fail closed with a located diagnostic by design), ProtocolStream{Tcp,Unix} connect seam, and a bounded per-generation FastCGI keep_conn connection pool (one in-flight, idle caps/deadline, dead-socket probe) with a framing fix that keeps pooled sockets aligned; differential-protocols 46/46 vs nginx 1.29.6 (bind peer echo, keep-conn reuse, typed-plane unix cases) (REQ-2026-0073 wave 7A)"
+    },
+    {
+      "id": "mail.listener-plane",
+      "group": "mail",
+      "status": "implemented",
+      "summary": "mail module end-to-end (Waves 9A/9B): mail{} listeners (listen/protocol/server_name/timeout/so_keepalive/proxy_protocol), frontend implicit TLS and STARTTLS, nginx auth_http exchange (request/response headers, bounded WAIT retry, credential override), POP3/IMAP/SMTP frontend auth, backend connect + relay with half-close and idle timeout, SMTP XCLIENT, outbound PROXY v1, proxy_pass_error_message, bounded buffers/max_errors, backend TLS typed extension (always-verified default); real-nginx 1.29.6 differential 9/9. Fail-closed: rustls-unsupported ssl_* knobs, client-certificate verification/auth_http_pass_client_cert, custom capability lists, mail resolver/real_ip."
+    },
+    {
+      "id": "rewrite.variable-engine",
+      "group": "rewrite",
+      "status": "implemented",
+      "summary": "bounded nginx rewrite/variable engine (Wave 10): template grammar ($name, ${name}, $1..$9, $$, bounded 8 KiB), server/location set with nginx phase ordering (server phase before selection, location phase after, rewrite last/break reselect), server/location if with truthy/= /!=/~ /!~ /~* /!~* conditions and executable bodies (set/add_header/return/rewrite), regex captures from location/if matches, request-time variable proxy_pass resolving the expanded authority to declared upstreams (real LB/health/TLS) or SSRF-policed literals, and variable root/alias confined by typed [http] documentRootAllowlist; acceptance target the committed production snapshot tests/nginx/real-world/production-api-birdcoder (41 virtual hosts, 150 resources, 88 upstreams, 0 skipped) enforced by tools/check-nginx-real-world.mjs in the aggregate gate; differential-http 265/265 vs nginx 1.29.6 (REQ-2026-0073 wave 10)"
+    },
+    {
+      "id": "mail.auth-http",
+      "group": "mail",
+      "status": "implemented",
+      "summary": "nginx auth_http authentication service client for mail listeners: nginx-exact HTTP/1.0 request headers (Auth-Method/User/Pass/Protocol/Login-Attempt, Client-IP, SMTP Client-Host [UNAVAILABLE], inbound Proxy-Protocol-*, Auth-SSL facts, auth_http_header lines), response parser (Auth-Status/Server/Port/User/Pass/Wait/Error-Code), bounded WAIT retry and credential override; backend selection by Auth-Server/Auth-Port with bounded DNS (REQ-2026-0073 wave 9B)"
+    },
+    {
+      "id": "upstream.uwsgi-tls",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "uWSGI upstream TLS (Wave 7B): uwsgi_ssl_verify/trusted_certificate/certificate/_key/server_name/name/protocols materialized at http/server/location with inheritance and dialed through the CGI transport seam (tokio-rustls, ALPN none, SNI/verification override, client certs); always-verified unless explicit verify off (dangerous verifier with diagnostic); rustls-unsupported ciphers/crl/session_reuse/conf_command/password_file/certificate_cache/verify_depth fail closed; differential-protocols 46->49 (uWSGI TLS trusted, mTLS, untrusted 502) (REQ-2026-0073 wave 7B)"
+    },
+    {
+      "id": "cache.cgi-family",
+      "group": "cache",
+      "status": "implemented",
+      "summary": "CGI cache family (Wave 7C): fastcgi/uwsgi/scgi *_cache, *_cache_path (shared cacheZoneNames registry incl. proxy_cache_path zones), *_cache_key (default $scheme$request_method$host$request_uri), *_cache_valid rules (nginx has no default caching time), *_cache_bypass (skips lookup and store), *_no_cache, *_cache_revalidate (conditional upstream validation + 304 refresh), *_cache_use_stale, *_cache_methods, *_cache_min_uses, *_cache_lock/_timeout/_age, *_cache_background_update, *_cache_convert_head, *_cache_max_range_offset — executing on the shared HttpResponseCache store with Vary-aware refinement, single-flight fill and bounded counters; differential-protocols 49->65 (16 cache cases vs nginx 1.29.6) (REQ-2026-0073 wave 7C)"
+    },
+    {
+      "id": "upstream.response-policy",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "CGI/protocol response policy (Wave 7D): *_buffer_size/*_buffers/*_busy_buffers_size bounds, atomic *_store/*_store_access (nginx path templates, temp-file+rename, [http] storeRoot confinement, 644 mode differential), *_limit_rate token-bucket pacing, *_force_ranges 206/416/multi-range semantics, *_ignore_headers recognised set, *_pass_request_body bodies, memcached_buffer_size, memcached_gzip_flag (bitwise Content-Encoding), grpc_ignore_headers; differential-protocols 65->77 (12 cases) (REQ-2026-0073 wave 7D)"
+    },
+    {
+      "id": "http.subrequest-engine",
+      "group": "core",
+      "status": "implemented",
+      "summary": "bounded re-entrant subrequest engine (Wave 8): internal dispatch re-enters routing on the same listener/generation, one level deep, 4 MiB body cap, no admission/metering consumption, targets limited to return/empty_gif/proxy_pass; drives addition (add_before_body/add_after_body/addition_types MIME-gated splice with nginx chunked framing), auth_request + auth_request_set (access-phase status matrix incl. nginx's no-WWW-Authenticate behavior; $upstream_status/$upstream_http_* published to downstream header layers) and mirror (detached timeout-bounded fire-and-forget, max 8; mirror_request_body default-on rejected truthfully); differential-http 265->274 (9 cases) (REQ-2026-0073 wave 8)"
     }
   ]
 }

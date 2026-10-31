@@ -293,12 +293,17 @@ async fn rewrite_flags_and_captures_execute_at_request_time() {
         .await
         .expect("permanent");
     assert_eq!(permanent.status(), 301);
-    assert_eq!(
-        permanent
-            .headers()
-            .get("location")
-            .and_then(|v| v.to_str().ok()),
-        Some("/new/page.html")
+    // nginx's `absolute_redirect on` default renders a redirect against the
+    // request authority; the path is preserved with the capture substituted.
+    let location = permanent
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("location");
+    assert!(location.ends_with("/new/page.html"), "location: {location}");
+    assert!(
+        location.starts_with("http://route.localhost"),
+        "location: {location}"
     );
 
     // redirect → 302.

@@ -86,6 +86,13 @@ pub(crate) struct RuntimeGeneration {
     /// generation's zones and limits, instead of a table swapped mid-request.
     pub limit_req: LimitReqRuntime,
     pub limit_conn: LimitConnRuntime,
+    /// Bounded idle-connection pool for the CGI family (`fastcgi_keep_conn`).
+    /// It belongs to the generation, so a reload drops every idle socket.
+    pub protocol_pool: Arc<super::protocol_pool::ProtocolPool>,
+    /// Stream `limit_conn_zone` counters (separate zone table from HTTP).
+    pub stream_limit_conn: LimitConnRuntime,
+    /// Per-key request counters for nginx CGI `*_cache_min_uses`.
+    pub cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters,
 }
 
 impl RuntimeGeneration {
@@ -140,6 +147,7 @@ impl RuntimeGeneration {
         });
         let limit_req = LimitReqRuntime::from_zones(&app.config().limit_req_zones);
         let limit_conn = LimitConnRuntime::from_zones(&app.config().limit_conn_zones);
+        let stream_limit_conn = LimitConnRuntime::from_zones(&app.config().stream_limit_conn_zones);
         Ok(Arc::new(Self {
             id,
             revision,
@@ -151,6 +159,9 @@ impl RuntimeGeneration {
             resolution_chain,
             limit_req,
             limit_conn,
+            protocol_pool: Arc::new(super::protocol_pool::ProtocolPool::new()),
+            stream_limit_conn,
+            cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters::default(),
         }))
     }
 

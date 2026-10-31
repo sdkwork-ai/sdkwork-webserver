@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ClusterPeer};
+use crate::models::ClusterPeer;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ClusterPeerDirectoryResponse {

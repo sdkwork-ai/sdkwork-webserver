@@ -335,10 +335,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn parse_directive(&mut self, depth: usize) -> Result<NginxDirective, NginxParseError> {
+        // An empty *name* is legal inside a `map` block, where the first token
+        // of a line is a key and `"" <value>;` declares the empty-string key
+        // (nginx's map handler parses its block itself, so the generic
+        // "directive name" rule does not apply). Any other empty name simply
+        // becomes an unknown directive with a located diagnostic.
         let name = self.parse_token()?;
-        if name.is_empty() {
-            return Err(self.syntax("expected a directive name"));
-        }
         let line = self.line;
         let mut args = Vec::new();
         let mut children = Vec::new();
