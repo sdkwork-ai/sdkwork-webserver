@@ -136,7 +136,7 @@ mini-program 都声明了；`@sdkwork/app-topology@0.2.0` 就在工作区里。
 
 ### 5.2 未取证：带会话的受保护页 ⇒ 改为对**桥接输入**静态取证
 
-开发态管理员密码不在仓库内（`apps/sdkwork-webserver-pc/.env.development.example` 只有空的
+开发态管理员密码不在仓库内（`apps/sdkwork-webserver-pc/.env.standalone.development.example` 只有空的
 `SDKWORK_ACCESS_TOKEN`，真实凭据由 credential-entry Vite 插件在 dev 进程内解析）。**不擅自重置
 用户 dev 库密码**，改为排除"桥接输入是空 ⇒ 页面静默失败"这类最危险缺陷：
 

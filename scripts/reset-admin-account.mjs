@@ -8,7 +8,7 @@
 // password never appears in the process argument list.
 //
 // `pnpm admin:reset:dev` targets the workspace PostgreSQL development profile
-// (`.env.postgres`); `pnpm admin:reset:<lifecycle>` targets an installed
+// (`config/host/postgres.env`); `pnpm admin:reset:<lifecycle>` targets an installed
 // deployment through the canonical runtime configuration file. Every script
 // requires the caller to pass `--password`, or to export
 // `SDKWORK_WEBSERVER_ADMIN_RESET_PASSWORD`.
@@ -23,8 +23,8 @@ const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 const GATEWAY_PACKAGE = 'sdkwork-api-webserver-standalone-gateway';
 const GATEWAY_BINARY = 'sdkwork-api-webserver-standalone-gateway';
 const PASSWORD_ENV = 'SDKWORK_WEBSERVER_ADMIN_RESET_PASSWORD';
-const DEFAULT_DEV_ENV_FILE = '.env.postgres';
-const FALLBACK_DEV_ENV_FILE = '.env.postgres.example';
+const DEFAULT_DEV_ENV_FILE = 'config/host/postgres.env';
+const FALLBACK_DEV_ENV_FILE = 'config/host/postgres.env.example';
 const MAX_DEV_ENV_BYTES = 256 * 1024;
 
 // ENVIRONMENT_SPEC lifecycle set. `dev` / `prod` are accepted aliases that the
@@ -318,7 +318,7 @@ function printHelp() {
 Reset the bootstrap administrator password of one Web Server environment.
 
 Targets:
-  dev          Workspace PostgreSQL development profile (.env.postgres)
+  dev          Workspace PostgreSQL development profile (config/host/postgres.env)
   test         Installed deployment, test lifecycle
   staging      Installed deployment, staging lifecycle
   release      Installed deployment, production lifecycle
@@ -330,7 +330,7 @@ Options:
                                   ${PASSWORD_ENV}
   --username <username>           Administrator username (default: admin)
   --tenant-id <tenant-id>         Tenant id (default: the platform tenant 100001)
-  --dev-env-file <path>           Development dotenv profile (default: .env.postgres)
+  --dev-env-file <path>           Development dotenv profile (default: config/host/postgres.env)
   --config-file <path>            Runtime TOML path for --mode release
   --database-url <url>            PostgreSQL URL override
   --database-max-connections <n>  Pool size override

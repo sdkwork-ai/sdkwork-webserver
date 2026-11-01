@@ -803,13 +803,13 @@ test('external host-system dependencies are the default (DEPLOYMENT_SPEC §6.1)'
   }
 });
 
-test('development container identity equals the .env.postgres profile (DEPLOYMENT_SPEC §6.1 / ENVIRONMENT_SPEC §7.1)', () => {
+test('development container identity equals the config/host/postgres.env profile (DEPLOYMENT_SPEC §6.1 / ENVIRONMENT_SPEC §7.1)', () => {
   // Docker dev and `pnpm dev` must share one workspace identity; only the
   // reachable host differs (127.0.0.1 from host processes, host.docker.internal
   // from containers).
-  const devEnvPath = existsSync(path.join(appRoot, '.env.postgres'))
-    ? path.join(appRoot, '.env.postgres')
-    : path.join(appRoot, '.env.postgres.example');
+  const devEnvPath = existsSync(path.join(appRoot, 'config/host/postgres.env'))
+    ? path.join(appRoot, 'config/host/postgres.env')
+    : path.join(appRoot, 'config/host/postgres.env.example');
   const dev = parseDotEnv(readFileSync(devEnvPath, 'utf8'));
   const dockerDev = parseDotEnv(
     readFileSync(path.join(appRoot, 'deployments', 'docker', 'env', 'development.env'), 'utf8'),

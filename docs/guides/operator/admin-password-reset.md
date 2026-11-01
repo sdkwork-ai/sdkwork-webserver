@@ -13,7 +13,7 @@ verifies the stored hash before reporting success.
 
 | Target | Command |
 | --- | --- |
-| Workspace development database (`.env.postgres`) | `pnpm admin:reset:dev -- --password "<new-password>"` |
+| Workspace development database (`config/host/postgres.env`) | `pnpm admin:reset:dev -- --password "<new-password>"` |
 | Installed deployment, test lifecycle | `pnpm admin:reset:test -- --password "<new-password>"` |
 | Installed deployment, staging lifecycle | `pnpm admin:reset:staging -- --password "<new-password>"` |
 | Installed deployment, production lifecycle | `pnpm admin:reset:release -- --password "<new-password>"` |
@@ -43,7 +43,7 @@ pnpm admin:reset:dev --dry-run -- --password '<new-password>'
 | `--environment <lifecycle>` | `development`, `test`, `staging`, `demo`, or `production` |
 | `--username <username>` | Administrator username; default `admin` |
 | `--tenant-id <tenant-id>` | Tenant id; default the platform tenant `100001` |
-| `--dev-env-file <path>` | Dotenv profile for `--mode dev`; defaults to `.env.postgres`, then `.env.postgres.example` |
+| `--dev-env-file <path>` | Dotenv profile for `--mode dev`; defaults to `config/host/postgres.env`, then `config/host/postgres.env.example` |
 | `--config-file <path>` | Runtime TOML path; equivalent to `SDKWORK_WEBSERVER_CONFIG_FILE` |
 | `--database-url <url>` | PostgreSQL URL override |
 | `--gateway-binary <path>` | Run an installed gateway binary instead of building from source |

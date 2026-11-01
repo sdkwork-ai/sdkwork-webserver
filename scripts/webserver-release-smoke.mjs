@@ -172,7 +172,7 @@ function run(command, args, options = {}) {
 
 // The smoke test boots the packaged gateway with SDKWORK_DATABASE_AUTO_MIGRATE
 // enabled, so it needs a reachable PostgreSQL. On a developer machine
-// `.env.postgres` supplies one, but CI has no such file: the only PostgreSQL the
+// `config/host/postgres.env` supplies one, but CI has no such file: the only PostgreSQL the
 // workflow starts belongs to `test:postgres:required`, which runs as a later
 // validate step and tears its container down when it finishes. Without a
 // database the smoke failed with "serve-time database lifecycle bootstrap failed:
@@ -223,7 +223,7 @@ const SMOKE_POSTGRES_INIT_COMPLETE =
   'PostgreSQL init process complete; ready for start up.';
 
 /**
- * An explicitly exported URL is trusted as-is. The workspace `.env.postgres`
+ * An explicitly exported URL is trusted as-is. The workspace `config/host/postgres.env`
  * value is not: `resolveIamDevEnv` synthesises a hard-coded fallback URL
  * ("...change-me-local-dev-only") when that file is absent, so testing for a
  * non-empty string there reports a database that nothing is listening on. That
@@ -267,7 +267,7 @@ async function resolveSmokeDatabaseUrl() {
   if (explicit) {
     return explicit;
   }
-  const derived = resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' })
+  const derived = resolveIamDevEnv(process.env, { postgresEnvFile: 'config/host/postgres.env' })
     .SDKWORK_DATABASE_URL;
   if (typeof derived === 'string' && derived.trim() && await probeReachableDatabase(derived.trim())) {
     return derived.trim();
@@ -641,7 +641,7 @@ function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseU
   // is what the guard demands: it rejects wildcards in production.
   const origins = process.env.SDKWORK_CORS_ALLOWED_ORIGINS
     ?? `http://127.0.0.1:${port}`;
-  // A smoke-owned database URL wins over the workspace `.env.postgres` value:
+  // A smoke-owned database URL wins over the workspace `config/host/postgres.env` value:
   // the disposable PostgreSQL this smoke started is the one the packaged
   // gateway must actually migrate and serve against.
   const databaseEnv = databaseUrl
@@ -652,7 +652,7 @@ function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseU
       SDKWORK_DATABASE_USERNAME: SMOKE_POSTGRES_USER,
     }
     : canonicalizeWorkspaceDatabaseEnv(
-      resolveIamDevEnv(process.env, { postgresEnvFile: '.env.postgres' }),
+      resolveIamDevEnv(process.env, { postgresEnvFile: 'config/host/postgres.env' }),
     );
   return {
     ...databaseEnv,
@@ -836,7 +836,7 @@ function hermeticEnv(runtimeConfigFile) {
 
 // The data-plane child runs with `hermeticEnv`, which inherits process.env. When
 // this smoke owns the database, publish its URL so every packaged binary in the
-// smoke resolves the same instance instead of the developer's `.env.postgres`.
+// smoke resolves the same instance instead of the developer's `config/host/postgres.env`.
 function publishSmokeDatabaseEnv(databaseUrl) {
   if (!databaseUrl || process.env.SDKWORK_DATABASE_URL) {
     return;
@@ -845,7 +845,7 @@ function publishSmokeDatabaseEnv(databaseUrl) {
   // The workspace loader rejects a URL whose schema differs from the database
   // name, and it reads the schema from the environment when the URL omits it.
   // A stale `SDKWORK_DATABASE_SCHEMA` left over from the developer's own
-  // `.env.postgres` would therefore be applied to this disposable database.
+  // `config/host/postgres.env` would therefore be applied to this disposable database.
   process.env.SDKWORK_DATABASE_SCHEMA = SMOKE_POSTGRES_DATABASE;
   process.env.SDKWORK_DATABASE_NAME = SMOKE_POSTGRES_DATABASE;
   process.env.SDKWORK_DATABASE_USERNAME = SMOKE_POSTGRES_USER;

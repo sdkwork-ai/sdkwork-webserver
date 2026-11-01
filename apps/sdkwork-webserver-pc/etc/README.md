@@ -14,7 +14,7 @@ Cloud browser profiles declare `browserOriginMode: "cross-origin"` and keep expl
 
 The schema authority is `CONFIG_SPEC.md`, `SOURCE_CONFIG_SPEC.md`, and `ENVIRONMENT_SPEC.md` in `sdkwork-specs`. Local overrides must use ignored local files or process-local environment input and must never modify tracked profiles. Secrets, access tokens, refresh tokens, API keys, certificate private keys, and bootstrap credentials are forbidden in browser runtime configuration; authenticated state comes from IAM and the shared TokenManager.
 
-The tracked `../.env.development.example` declares a blank `SDKWORK_ACCESS_TOKEN=` for the private credential-entry bootstrap input. A live development value is process-local or written only to an ignored local override by the shared IAM tooling; it must not use a `VITE_*` key or be materialized into `public/runtime-env.json`.
+The tracked `../.env.standalone.development.example` declares a blank `SDKWORK_ACCESS_TOKEN=` for the private credential-entry bootstrap input. A live development value is process-local or written only to an ignored local override by the shared IAM tooling; it must not use a `VITE_*` key or be materialized into `public/runtime-env.json`.
 
 `scripts/materialize-runtime-env.mjs --deployment-profile <standalone|cloud> --environment <environment>` materializes exactly one selected source to `public/runtime-env.json` before Vite starts or builds. Add `--check` to verify the tracked output without writing. `pnpm build:standalone` selects `standalone.production`; `pnpm build:cloud` selects `cloud.production`. Validate this root with:
 

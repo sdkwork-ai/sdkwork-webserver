@@ -14,7 +14,7 @@ function readSmokeSource() {
 
 test('release smoke provisions its own PostgreSQL when none is configured', () => {
   const source = readSmokeSource();
-  // CI has no `.env.postgres`; the only PostgreSQL the workflow starts belongs to
+  // CI has no `config/host/postgres.env`; the only PostgreSQL the workflow starts belongs to
   // a later validate step and is destroyed when that step ends. Without a
   // self-provisioned database the smoke failed with
   // "serve-time database lifecycle bootstrap failed: ... pool timed out".
@@ -59,7 +59,7 @@ test('release smoke prefers an externally configured database', () => {
 
 test('release smoke does not mistake the derived fallback URL for a real database', () => {
   const source = readSmokeSource();
-  // `resolveIamDevEnv` synthesises a hard-coded URL when `.env.postgres` is
+  // `resolveIamDevEnv` synthesises a hard-coded URL when `config/host/postgres.env` is
   // absent, so a non-empty check alone reports a database with nothing listening
   // on it. That regressed the smoke into skipping its own PostgreSQL and failing
   // with a pool timeout, so the derived URL has to survive a TCP probe.
@@ -118,7 +118,7 @@ test('release smoke names its disposable database as a canonical SDKWork identit
     'a sdkwork_ai_test_* database must authenticate as sdkwork_ai_test',
   );
   // The schema must track the disposable database, never a stale value inherited
-  // from the developer's own .env.postgres.
+  // from the developer's own config/host/postgres.env.
   assert.match(
     source,
     /SDKWORK_DATABASE_SCHEMA: SMOKE_POSTGRES_DATABASE/u,

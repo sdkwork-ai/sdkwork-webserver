@@ -17,7 +17,7 @@ import {
 } from './lib/webserver-topology.mjs';
 
 const CRITICAL_SOURCE_FILES = [
-  '.env.postgres.example',
+  'config/host/postgres.env.example',
   'Cargo.toml',
   'agent.app.config.json',
   'apps/sdkwork-webserver-pc/agent.app.config.json',
@@ -41,7 +41,7 @@ function parseArgs(argv) {
   const settings = {
     database: 'postgres',
     deploymentProfile: 'standalone',
-    devEnvFile: '.env.postgres',
+    devEnvFile: 'config/host/postgres.env',
     dryRun: false,
     environment: 'development',
   };
@@ -86,7 +86,7 @@ Options:
   --database <postgres>                     Default: postgres
   --deployment-profile <standalone|cloud>  Default: standalone
   --environment <environment>              Default: development
-  --dev-env-file <path>                    Default: .env.postgres
+  --dev-env-file <path>                    Default: config/host/postgres.env
   --dry-run                                Print the resolved plan
   --help, -h                               Show this help`);
 }
