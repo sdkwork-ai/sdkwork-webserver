@@ -25,7 +25,9 @@ use axum::{
     body::Body,
     http::{header::CONTENT_TYPE, HeaderMap, HeaderValue, Method, Request, Response, StatusCode},
 };
-use sdkwork_webserver_core::{AdditionConfig, AuthRequestConfig, MirrorConfig, ResourceConfig};
+use sdkwork_webserver_core::{
+    AdditionConfig, AuthRequestConfig, GeoIpRequestState, MirrorConfig, ResourceConfig,
+};
 
 use super::{
     delivery_policy::MimePolicy,
@@ -49,6 +51,9 @@ pub(crate) struct SubrequestEnv<'a> {
     pub(crate) method: &'a Method,
     pub(crate) headers: &'a HeaderMap,
     pub(crate) map_results: &'a MapResults,
+    /// Resolved nginx GeoIP variables for the main request (subrequests share
+    /// the same connection address and X-Forwarded-For chain).
+    pub(crate) geoip: &'a GeoIpRequestState,
     /// Upper bound on a response body a filter is willing to buffer.
     pub(crate) max_body_bytes: u64,
 }
@@ -114,7 +119,11 @@ pub(crate) async fn serve(
                     .first()
                     .map_or("", String::as_str),
                 maps: Some(env.map_results),
+                geoip: Some(env.geoip),
                 invalid_referer: false,
+                userid: None,
+                modern_browser: "",
+                ancient_browser: "",
             };
             Ok(finalize_response_headers(
                 response,
@@ -156,9 +165,15 @@ pub(crate) async fn serve(
                 metrics: &env.state.runtime.metrics,
                 cache: env.generation.proxy_cache.clone(),
                 map_results: env.map_results,
+                geoip: Some(env.geoip),
+                uid_got: "",
+                uid_set: "",
+                modern_browser: "",
+                ancient_browser: "",
                 response_policy: proxy_response_policy.as_ref(),
                 proxy_method: proxy_method.as_deref(),
                 variables: None,
+                slice_range: None,
             };
             let request_uri = if query.is_empty() {
                 path.to_owned()
@@ -185,7 +200,11 @@ pub(crate) async fn serve(
                     .first()
                     .map_or("", String::as_str),
                 maps: Some(env.map_results),
+                geoip: Some(env.geoip),
                 invalid_referer: false,
+                userid: None,
+                modern_browser: "",
+                ancient_browser: "",
             };
             Ok(finalize_response_headers(
                 response,
@@ -421,6 +440,7 @@ pub(crate) fn fire_mirror(env: &SubrequestEnv<'_>, config: &MirrorConfig) {
     let method = env.method.clone();
     let headers = env.headers.clone();
     let map_results = env.map_results.clone();
+    let geoip = env.geoip.clone();
     let max_body_bytes = env.max_body_bytes;
     let targets = config.targets.clone();
     tokio::spawn(async move {
@@ -436,6 +456,7 @@ pub(crate) fn fire_mirror(env: &SubrequestEnv<'_>, config: &MirrorConfig) {
                 method: &method,
                 headers: &headers,
                 map_results: &map_results,
+                geoip: &geoip,
                 max_body_bytes,
             };
             let _ =

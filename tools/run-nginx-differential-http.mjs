@@ -64,7 +64,7 @@ const ORACLE_UPSTREAM_PORT = ORACLE_PORT + 2;
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_UPSTREAM_PORT = GATEWAY_PORT + 2;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
-const CASE_FLOOR = 274;
+const CASE_FLOOR = 384;
 /**
  * The exact nginx build the committed oracle was captured from. Bump it only
  * together with a fresh `--refresh-oracle` capture and the per-slice note in
@@ -170,12 +170,19 @@ function posixRoot(target) {
 }
 
 function renderConf(publicRoot, listenPort, upstreamPort, deadPort) {
+  // A fresh on-disk cache directory per capture run: a warm `slice` cache from
+  // an earlier measurement would change the upstream-request log the battery
+  // compares (`slice.hits`). `mkdtemp` guarantees an empty directory, so the
+  // gate never has to delete a cache tree it did not create.
+  fs.mkdirSync(GATEWAY_CONF_DIR, { recursive: true });
+  const sliceCache = fs.mkdtempSync(path.join(GATEWAY_CONF_DIR, 'slice-cache-'));
   const template = fs
     .readFileSync(path.join(differentialDir, 'nginx.conf'), 'utf8')
     .replaceAll('@PUBLIC@', publicRoot)
     .replaceAll('@PORT@', String(listenPort))
     .replaceAll('@UPSTREAM@', String(upstreamPort))
     .replaceAll('@DEAD@', String(deadPort))
+    .replaceAll('@CACHE@', posixRoot(sliceCache))
     .replaceAll('@HTPASSWD@', posixRoot(path.join(differentialDir, 'htpasswd')));
   const emptyKeyMaps = fs.readFileSync(
     path.join(differentialDir, 'maps-empty-key.inc'),
@@ -203,6 +210,7 @@ function renderConf(publicRoot, listenPort, upstreamPort, deadPort) {
     '@PORT@',
     '@UPSTREAM@',
     '@DEAD@',
+    '@CACHE@',
     '@HTPASSWD@',
   ]) {
     if (text.includes(placeholder)) {
@@ -277,6 +285,22 @@ async function main() {
   }
   if (!fs.existsSync(FIXTURE)) {
     log(`FAIL: missing fixture ${FIXTURE}`);
+    return 1;
+  }
+
+  // `http2_chunk_size` is not wire-observable over HTTP/1 (the frame evidence
+  // is the gateway h2 test), but a real v2-enabled nginx must still accept it
+  // at http/server/location and reject a zero size. Probe that acceptance here
+  // so the compatibility claim covers both the client-visible behavior and the
+  // config-language contract. Exit 3 means this host has no v2-enabled nginx;
+  // the probe says so loudly and the slice continues with the committed oracle.
+  const http2Probe = spawnSync(
+    'node',
+    [path.join(root, 'tools', 'check-nginx-http2-chunk-acceptance.mjs')],
+    { cwd: root, stdio: 'inherit' },
+  );
+  if (http2Probe.status !== 0 && http2Probe.status !== 3) {
+    log('FAIL: the http2_chunk_size nginx config-acceptance probe failed');
     return 1;
   }
 

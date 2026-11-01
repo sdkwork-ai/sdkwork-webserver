@@ -63,6 +63,7 @@ pub(crate) async fn open_static_path(
     spa_fallback: Option<&str>,
     autoindex: bool,
     index_files: Option<&[String]>,
+    random_index: bool,
 ) -> Result<StaticPathTarget, StaticPathError> {
     let root = root.to_owned();
     let relative = relative.to_owned();
@@ -76,12 +77,14 @@ pub(crate) async fn open_static_path(
             spa_fallback.as_deref(),
             autoindex,
             index_files.as_deref(),
+            random_index,
         )
     })
     .await
     .map_err(|_| StaticPathError::Io)?
 }
 
+#[allow(clippy::too_many_arguments)]
 fn open_static_path_sync(
     root: &Path,
     relative: &str,
@@ -89,6 +92,7 @@ fn open_static_path_sync(
     spa_fallback: Option<&str>,
     autoindex: bool,
     index_files: Option<&[String]>,
+    random_index: bool,
 ) -> Result<StaticPathTarget, StaticPathError> {
     let components = validated_components(relative)?;
     let root_dir = Dir::open_ambient_dir(root, ambient_authority()).map_err(map_root_error)?;
@@ -99,6 +103,16 @@ fn open_static_path_sync(
             Ok(StaticPathTarget::RedirectToDirectory)
         }
         Ok(OpenedEntry::Directory(directory)) => {
+            // nginx `random_index on`: the module is registered in the content
+            // phase ahead of `index`/`autoindex`, so a directory request picks
+            // a random non-hidden regular file before those handlers run. An
+            // empty candidate set falls through to the ordinary index/autoindex
+            // behavior, exactly like nginx's `NGX_DECLINED`.
+            if random_index {
+                if let Some(file) = select_random_index_file(&directory, relative)? {
+                    return Ok(StaticPathTarget::File(file));
+                }
+            }
             match open_index(&directory, relative, index_files) {
                 Ok(file) => Ok(StaticPathTarget::File(file)),
                 // nginx `autoindex off` + an `index` that names no existing file
@@ -122,7 +136,19 @@ fn open_static_path_sync(
             }
         }
         Err(StaticPathError::NotFound) => open_fallback(root, spa_fallback),
-        Err(error) => Err(error),
+        Err(error) => {
+            if random_index {
+                // nginx logs the failing directory path for an unreadable
+                // directory; keep the diagnostic located without changing the
+                // client-visible status mapping.
+                tracing::warn!(
+                    directory = relative,
+                    error = ?error,
+                    "random_index could not open the requested directory"
+                );
+            }
+            Err(error)
+        }
     }
 }
 
@@ -254,6 +280,144 @@ fn open_index(
     Err(StaticPathError::NotFound)
 }
 
+/// Upper bound on directory entries inspected by `random_index`.
+///
+/// nginx has no such bound; the runtime refuses an oversized directory with
+/// 403 instead of spending unbounded blocking-pool time scanning it, matching
+/// the bounded `autoindex` listing policy.
+const MAXIMUM_RANDOM_INDEX_ENTRIES: usize = 4096;
+
+/// Deterministic per-process request counter for `random_index` selection.
+///
+/// The counter is the only shared mutable state and it is a plain atomic
+/// increment; the seed is derived from the requested directory path, so the
+/// selection is deterministic and reproducible for a given directory while
+/// successive requests still distribute across the candidate files.
+static RANDOM_INDEX_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Select one random regular file from an opened directory.
+///
+/// nginx reads every directory entry, skips hidden names (a leading `.`) and
+/// anything that is not a regular file, then chooses uniformly with
+/// `ngx_random()`. The runtime uses a bounded scan and a deterministic seeded
+/// SplitMix64 selection instead of the C library's per-process RNG (so the
+/// selection can be reproduced and the differential can assert the candidate
+/// set). Symlinks are skipped even when they resolve to a regular file: every
+/// other static delivery path in the runtime refuses symlinks, and a random
+/// index must not become a symlink-following escape hatch.
+///
+/// Returns `Ok(None)` when the directory has no regular non-hidden file, which
+/// lets the caller continue to `index`/`autoindex` like nginx's `DECLINED`.
+fn select_random_index_file(
+    directory: &Dir,
+    parent_hint: &str,
+) -> Result<Option<OpenedStaticFile>, StaticPathError> {
+    let iterator = directory.entries().map_err(|error| {
+        tracing::warn!(
+            directory = parent_hint,
+            %error,
+            "random_index directory enumeration failed"
+        );
+        map_entry_error(error)
+    })?;
+    let mut names = Vec::new();
+    let mut scanned = 0_usize;
+    for item in iterator {
+        let item = item.map_err(|error| {
+            tracing::warn!(
+                directory = parent_hint,
+                %error,
+                "random_index directory entry read failed"
+            );
+            map_entry_error(error)
+        })?;
+        scanned = scanned.saturating_add(1);
+        if scanned > MAXIMUM_RANDOM_INDEX_ENTRIES {
+            tracing::warn!(
+                directory = parent_hint,
+                limit = MAXIMUM_RANDOM_INDEX_ENTRIES,
+                "random_index directory exceeds the bounded entry scan"
+            );
+            return Err(StaticPathError::Forbidden);
+        }
+        let name = item.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        let file_type = item.file_type().map_err(|error| {
+            tracing::warn!(
+                directory = parent_hint,
+                entry = %name,
+                %error,
+                "random_index entry type lookup failed"
+            );
+            map_entry_error(error)
+        })?;
+        if file_type.is_symlink() || !file_type.is_file() {
+            continue;
+        }
+        names.push(name);
+    }
+    // Sorted candidates make the seeded selection independent of filesystem
+    // readdir order (nginx's order is implementation-defined and unobservable).
+    names.sort();
+    let Some(index) = next_random_index(&random_index_seed(parent_hint), names.len()) else {
+        return Ok(None);
+    };
+    let name = &names[index];
+    let path_hint = Path::new(parent_hint).join(name);
+    match open_entry(directory, Path::new(name), &path_hint).inspect_err(|error| {
+        tracing::warn!(
+            directory = parent_hint,
+            selected = name,
+            error = ?error,
+            "random_index selected candidate could not be opened"
+        );
+    })? {
+        OpenedEntry::File(file) => Ok(Some(file)),
+        // The file vanished between the scan and the open (or was replaced by
+        // a directory): nginx's internal redirect would then fail in the
+        // static handler, so surface the same not-found result.
+        OpenedEntry::Directory(_) => Err(StaticPathError::NotFound),
+    }
+}
+
+/// SplitMix64 finalizer: the deterministic mixing step of the seeded selector.
+fn splitmix64(mut value: u64) -> u64 {
+    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut mixed = value;
+    mixed = (mixed ^ (mixed >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    mixed = (mixed ^ (mixed >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    mixed ^ (mixed >> 31)
+}
+
+/// Stable seed for one directory: FNV-1a over the root-relative request path.
+fn random_index_seed(parent_hint: &str) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in parent_hint.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    splitmix64(hash)
+}
+
+/// The selection function, isolated so its coverage is unit-testable.
+fn select_random_index(seed: u64, counter: u64, length: usize) -> Option<usize> {
+    if length == 0 {
+        return None;
+    }
+    let mixed = splitmix64(seed ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    Some((mixed % u64::try_from(length).ok()?) as usize)
+}
+
+fn next_random_index(seed: &u64, length: usize) -> Option<usize> {
+    if length == 0 {
+        return None;
+    }
+    let counter = RANDOM_INDEX_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    select_random_index(*seed, counter, length)
+}
+
 /// Read nginx `autoindex` entries from an opened directory.
 ///
 /// Hidden names (a leading `.`) are skipped like nginx; metadata follows
@@ -362,7 +526,8 @@ mod tests {
         let public = temp.path().join("public");
         std::fs::create_dir(&public).unwrap();
         std::fs::write(public.join("asset.txt"), "original").unwrap();
-        let target = open_static_path_sync(&public, "asset.txt", false, None, false, None).unwrap();
+        let target =
+            open_static_path_sync(&public, "asset.txt", false, None, false, None, false).unwrap();
         let StaticPathTarget::File(mut opened) = target else {
             panic!("expected opened file");
         };
@@ -391,7 +556,7 @@ mod tests {
         // module refuses it.
         for spa_fallback in [None, Some("index.html")] {
             assert!(matches!(
-                open_static_path_sync(&public, "nodx/", true, spa_fallback, false, None),
+                open_static_path_sync(&public, "nodx/", true, spa_fallback, false, None, false),
                 Err(StaticPathError::Forbidden)
             ));
         }
@@ -399,13 +564,13 @@ mod tests {
         // Without the trailing slash nginx first redirects to the canonical
         // directory URI; that branch is unchanged by the 403 rule.
         assert!(matches!(
-            open_static_path_sync(&public, "nodx", false, None, false, None),
+            open_static_path_sync(&public, "nodx", false, None, false, None, false),
             Ok(StaticPathTarget::RedirectToDirectory)
         ));
 
         // A real file inside the directory is still served.
         assert!(matches!(
-            open_static_path_sync(&public, "nodx/keep.txt", false, None, false, None),
+            open_static_path_sync(&public, "nodx/keep.txt", false, None, false, None, false),
             Ok(StaticPathTarget::File(_))
         ));
     }
@@ -425,11 +590,112 @@ mod tests {
         symlink(&outside, public.join("nested")).unwrap();
 
         assert!(matches!(
-            open_static_path_sync(&public, "final.txt", false, None, false, None),
+            open_static_path_sync(&public, "final.txt", false, None, false, None, false),
             Err(StaticPathError::Forbidden)
         ));
         assert!(matches!(
-            open_static_path_sync(&public, "nested/secret.txt", false, None, false, None),
+            open_static_path_sync(
+                &public,
+                "nested/secret.txt",
+                false,
+                None,
+                false,
+                None,
+                false
+            ),
+            Err(StaticPathError::Forbidden)
+        ));
+    }
+
+    #[test]
+    fn seeded_random_index_covers_every_candidate() {
+        // Every window of `length * 64` consecutive counters must hit every
+        // candidate for the small directory sizes this selector serves. This
+        // is what makes the differential candidate-set evidence deterministic
+        // rather than relying on a lucky random draw.
+        for length in 1..=16_usize {
+            for start in 0..2048_u64 {
+                let seen = (0..length * 64)
+                    .filter_map(|offset| {
+                        select_random_index(0x5EED_1234_ABCD_0001, start + offset as u64, length)
+                    })
+                    .collect::<std::collections::BTreeSet<_>>();
+                assert_eq!(
+                    seen.len(),
+                    length,
+                    "random_index did not cover all {length} candidates from counter {start}"
+                );
+            }
+        }
+        assert_eq!(select_random_index(7, 1, 0), None);
+    }
+
+    #[test]
+    fn random_index_selects_only_visible_regular_files() {
+        let temp = TempDir::new().unwrap();
+        let public = temp.path().join("public");
+        let pick = public.join("pick");
+        std::fs::create_dir_all(pick.join("nested")).unwrap();
+        std::fs::write(pick.join(".hidden"), "hidden").unwrap();
+        std::fs::write(pick.join("one.txt"), "one").unwrap();
+        std::fs::write(pick.join("two.txt"), "two").unwrap();
+        std::fs::write(pick.join("three.txt"), "three").unwrap();
+
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..(3 * 64) {
+            let target =
+                open_static_path_sync(&public, "pick/", true, None, false, None, true).unwrap();
+            match target {
+                StaticPathTarget::File(file) => {
+                    seen.insert(
+                        file.path_hint
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .into_owned(),
+                    );
+                }
+                _ => panic!("random_index must serve an opened file"),
+            }
+        }
+        assert_eq!(
+            seen,
+            ["one.txt", "three.txt", "two.txt"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        );
+
+        // A directory with no candidate (only hidden names and a subdirectory)
+        // falls through to nginx's ordinary directory behavior: 403 with
+        // `autoindex off`, a listing with it on.
+        let empty = public.join("empty");
+        std::fs::create_dir_all(empty.join("nested")).unwrap();
+        std::fs::write(empty.join(".hidden"), "hidden").unwrap();
+        assert!(matches!(
+            open_static_path_sync(&public, "empty/", true, None, false, None, true),
+            Err(StaticPathError::Forbidden)
+        ));
+        assert!(matches!(
+            open_static_path_sync(&public, "empty/", true, None, true, None, true),
+            Ok(StaticPathTarget::Autoindex { .. })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn random_index_never_selects_a_symlinked_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().unwrap();
+        let public = temp.path().join("public");
+        let outside = temp.path().join("outside.txt");
+        std::fs::create_dir(&public).unwrap();
+        std::fs::write(&outside, "outside secret").unwrap();
+        symlink(&outside, public.join("linked.txt")).unwrap();
+
+        assert!(matches!(
+            open_static_path_sync(&public, "", true, None, false, None, true),
             Err(StaticPathError::Forbidden)
         ));
     }

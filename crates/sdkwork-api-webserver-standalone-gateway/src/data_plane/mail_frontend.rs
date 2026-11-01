@@ -45,7 +45,11 @@ use tokio::{
     time::{sleep, timeout},
 };
 
-use super::{accept, DataPlaneError, DataPlaneRuntime};
+use super::{
+    accept,
+    mail_client_auth::{MailClientAuth, MailClientCertificate, MailClientCertificateRejection},
+    DataPlaneError, DataPlaneRuntime,
+};
 
 /// Maximum client commands one session processes before closing.
 const MAX_SESSION_COMMANDS: usize = 64;
@@ -80,9 +84,14 @@ struct MailConnectionProfile {
     timeout: Duration,
     so_keepalive: bool,
     inbound_proxy_protocol: bool,
+    /// nginx mail `set_real_ip_from` trusted PROXY protocol peers.
+    real_ip_trusted: Vec<ipnet::IpNet>,
     max_line_bytes: usize,
     greeting_delay: Duration,
     mechanisms: Vec<MailAuthMechanism>,
+    /// nginx `smtp_capabilities`/`imap_capabilities`/`pop3_capabilities`: the
+    /// configured capability list (replaces the protocol default when set).
+    capabilities: Option<Vec<String>>,
     max_errors: u32,
     auth_http: Option<AuthHttpProfile>,
     tls: Option<MailTlsProfile>,
@@ -104,6 +113,50 @@ struct MailTlsProfile {
     acceptor: tokio_rustls::TlsAcceptor,
     starttls: MailStarttlsMode,
     implicit: bool,
+    /// nginx `ssl_verify_client` policy; `None` for `off` (no CertificateRequest).
+    client_auth: Option<Arc<MailClientAuth>>,
+}
+
+impl MailTlsProfile {
+    /// Run nginx's post-handshake client-certificate check on a completed TLS
+    /// session.
+    fn evaluate_client_certificate(
+        &self,
+        connection: &rustls::ServerConnection,
+    ) -> Result<Option<MailClientCertificate>, MailClientCertificateRejection> {
+        match &self.client_auth {
+            None => Ok(None),
+            Some(client_auth) => client_auth.evaluate_peer(connection.peer_certificates()),
+        }
+    }
+}
+
+/// nginx's protocol-specific client-certificate failure line
+/// (`ngx_mail_pop3_module` / `ngx_mail_imap_module` / `ngx_mail_smtp_module`).
+fn mail_certificate_error_reply(
+    protocol: MailProtocol,
+    rejection: MailClientCertificateRejection,
+) -> &'static [u8] {
+    match (protocol, rejection) {
+        (MailProtocol::Pop3, MailClientCertificateRejection::NoCertificate) => {
+            b"-ERR No required SSL certificate\r\n"
+        }
+        (MailProtocol::Pop3, MailClientCertificateRejection::CertificateError) => {
+            b"-ERR SSL certificate error\r\n"
+        }
+        (MailProtocol::Imap, MailClientCertificateRejection::NoCertificate) => {
+            b"* BYE No required SSL certificate\r\n"
+        }
+        (MailProtocol::Imap, MailClientCertificateRejection::CertificateError) => {
+            b"* BYE SSL certificate error\r\n"
+        }
+        (MailProtocol::Smtp, MailClientCertificateRejection::NoCertificate) => {
+            b"421 4.7.1 No required SSL certificate\r\n"
+        }
+        (MailProtocol::Smtp, MailClientCertificateRejection::CertificateError) => {
+            b"421 4.7.1 SSL certificate error\r\n"
+        }
+    }
 }
 
 /// Resolved backend relay profile.
@@ -190,9 +243,11 @@ impl PreparedMailListener {
             timeout: Duration::from_millis(config.timeout_ms),
             so_keepalive: config.so_keepalive,
             inbound_proxy_protocol: config.proxy_protocol,
+            real_ip_trusted: parse_mail_trusted_cidrs(&config.real_ip_trusted_cidrs),
             max_line_bytes: config.client_buffer_bytes(),
             greeting_delay,
             mechanisms: config.auth_mechanisms().to_vec(),
+            capabilities: config.capabilities.clone(),
             max_errors: config.max_errors,
             auth_http,
             tls,
@@ -213,6 +268,21 @@ impl PreparedMailListener {
             profile: Arc::new(profile),
         })
     }
+}
+
+/// Parse the mail `set_real_ip_from` trusted networks.
+fn parse_mail_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
+    values
+        .iter()
+        .filter_map(|value| {
+            value.parse::<ipnet::IpNet>().ok().or_else(|| {
+                value
+                    .parse::<std::net::IpAddr>()
+                    .ok()
+                    .map(ipnet::IpNet::from)
+            })
+        })
+        .collect()
 }
 
 /// Resolve the `auth_http` endpoint once at listener preparation.
@@ -289,17 +359,25 @@ fn build_mail_tls_profile(
             MailTlsProtocol::Tls13 => &rustls::version::TLS13,
         })
         .collect();
-    let config = ServerConfig::builder_with_protocol_versions(&versions)
-        .with_no_client_auth()
-        .with_single_cert(chain, private_key)
-        .map_err(|source| DataPlaneError::MailTlsMaterial {
-            mail_server_id: server_id.to_owned(),
-            detail: format!("invalid mail certificate/key: {source}"),
-        })?;
+    let config = ServerConfig::builder_with_protocol_versions(&versions);
+    let client_auth = MailClientAuth::from_config(server_id, tls)?.map(Arc::new);
+    let config = match &client_auth {
+        Some(client_auth) => config
+            .with_client_cert_verifier(client_auth.handshake_verifier())
+            .with_single_cert(chain, private_key),
+        None => config
+            .with_no_client_auth()
+            .with_single_cert(chain, private_key),
+    }
+    .map_err(|source| DataPlaneError::MailTlsMaterial {
+        mail_server_id: server_id.to_owned(),
+        detail: format!("invalid mail certificate/key: {source}"),
+    })?;
     Ok(MailTlsProfile {
         acceptor: tokio_rustls::TlsAcceptor::from(Arc::new(config)),
         starttls: tls.starttls,
         implicit: tls.implicit,
+        client_auth,
     })
 }
 
@@ -751,8 +829,19 @@ async fn serve_mail_connection(
         match read_proxy_v1(&mut raw, &limits, profile.timeout).await {
             Ok((header, leftover)) => {
                 pending = leftover;
-                if let Some(address) = header.source() {
-                    client_ip = address.ip();
+                // nginx mail realip (`ngx_mail_realip_module`): the PROXY
+                // protocol source replaces the client address only when the
+                // connecting peer is listed by `set_real_ip_from`. With no
+                // trusted network the header is parsed but the peer address
+                // stays authoritative (verified against nginx 1.29.6).
+                if profile
+                    .real_ip_trusted
+                    .iter()
+                    .any(|network| network.contains(&peer.ip()))
+                {
+                    if let Some(address) = header.source() {
+                        client_ip = address.ip();
+                    }
                 }
                 proxy_header = Some(header);
             }
@@ -769,10 +858,28 @@ async fn serve_mail_connection(
     }
     let local_addr = raw.local_addr().ok();
     let implicit_tls = profile.tls.as_ref().is_some_and(|tls| tls.implicit);
+    let mut client_cert: Option<MailClientCertificate> = None;
     let mut stream = if implicit_tls {
         let tls = profile.tls.as_ref().expect("checked implicit tls");
         match timeout(MAIL_TLS_HANDSHAKE_TIMEOUT, tls.acceptor.accept(raw)).await {
-            Ok(Ok(stream)) => MailStream::Tls(Box::new(stream)),
+            Ok(Ok(tls_stream)) => {
+                match tls.evaluate_client_certificate(tls_stream.get_ref().1) {
+                    Ok(facts) => {
+                        client_cert = facts;
+                        MailStream::Tls(Box::new(tls_stream))
+                    }
+                    Err(rejection) => {
+                        // nginx checks the client certificate after the
+                        // handshake and answers with the protocol's
+                        // certificate error line, not a TLS alert.
+                        let reply = mail_certificate_error_reply(profile.protocol, rejection);
+                        let mut stream = MailStream::Tls(Box::new(tls_stream));
+                        let _ = write_mail(&mut stream, reply, profile.timeout).await;
+                        stream.shutdown().await;
+                        return Err(());
+                    }
+                }
+            }
             Ok(Err(error)) => {
                 tracing::info!(mail_server_id = %profile.id, peer = %peer, error = %error, "mail implicit TLS handshake failed");
                 return Err(());
@@ -789,6 +896,7 @@ async fn serve_mail_connection(
         sleep(profile.greeting_delay).await;
     }
     let mut state = MailSessionState::new(profile, peer, client_ip, implicit_tls, &limits);
+    state.client_cert = client_cert;
     state.proxy_local_addr = local_addr;
     let greeting = state.greeting();
     if write_mail(&mut stream, &greeting, profile.timeout)
@@ -819,13 +927,27 @@ async fn serve_mail_connection(
                 };
                 match timeout(MAIL_TLS_HANDSHAKE_TIMEOUT, tls.acceptor.accept(plain)).await {
                     Ok(Ok(tls_stream)) => {
-                        // nginx restarts the protocol parser after STARTTLS but
-                        // does NOT resend the greeting (verified against nginx
-                        // 1.29.6 by the mail differential slice).
-                        slot = Some(MailStream::Tls(Box::new(tls_stream)));
-                        state.tls_established(profile, &limits);
-                        pending.clear();
-                        continue;
+                        match tls.evaluate_client_certificate(tls_stream.get_ref().1) {
+                            Ok(facts) => {
+                                // nginx restarts the protocol parser after
+                                // STARTTLS but does NOT resend the greeting
+                                // (verified against nginx 1.29.6 by the mail
+                                // differential slice).
+                                state.client_cert = facts;
+                                slot = Some(MailStream::Tls(Box::new(tls_stream)));
+                                state.tls_established(profile, &limits);
+                                pending.clear();
+                                continue;
+                            }
+                            Err(rejection) => {
+                                let reply =
+                                    mail_certificate_error_reply(profile.protocol, rejection);
+                                let mut stream = MailStream::Tls(Box::new(tls_stream));
+                                let _ = write_mail(&mut stream, reply, profile.timeout).await;
+                                stream.shutdown().await;
+                                break;
+                            }
+                        }
                     }
                     Ok(Err(error)) => {
                         tracing::info!(mail_server_id = %profile.id, peer = %peer, error = %error, "mail STARTTLS handshake failed");
@@ -1004,6 +1126,7 @@ struct MailSessionState {
     client_ip: std::net::IpAddr,
     session: FrontendSession,
     mechanisms: Vec<MailAuthMechanism>,
+    capabilities: Option<Vec<String>>,
     greeting_name: String,
     limits: Limits,
     commands: usize,
@@ -1019,6 +1142,9 @@ struct MailSessionState {
     starttls_available: bool,
     tls_active: bool,
     starttls_only: bool,
+    /// Accepted frontend client certificate and the nginx `Auth-SSL-*` facts
+    /// it contributes to the auth_http exchange (Wave 14B).
+    client_cert: Option<MailClientCertificate>,
     /// Local address of the client-facing connection (outbound PROXY header).
     proxy_local_addr: Option<SocketAddr>,
 }
@@ -1047,6 +1173,7 @@ impl MailSessionState {
             client_ip,
             session: FrontendSession::new(profile.protocol, implicit_tls),
             mechanisms: profile.mechanisms.clone(),
+            capabilities: profile.capabilities.clone(),
             greeting_name: profile.greeting_name.clone(),
             limits: *limits,
             commands: 0,
@@ -1062,6 +1189,7 @@ impl MailSessionState {
             starttls_available,
             tls_active,
             starttls_only,
+            client_cert: None,
             proxy_local_addr: None,
         }
     }
@@ -1360,13 +1488,33 @@ impl MailSessionState {
         }
     }
 
+    /// nginx POP3 `CAPA` reply (`ngx_mail_pop3_module`): the configured (or
+    /// default) capability lines, then the SASL mechanism line, then STLS when
+    /// STARTTLS is offered. A `starttls_only` listener omits `USER` and SASL and
+    /// advertises only the remaining capabilities plus `STLS`.
     fn pop3_capabilities(&self) -> Vec<u8> {
+        const DEFAULT_CAPABILITIES: &[&str] = &["TOP", "USER", "UIDL"];
+        let capabilities: Vec<&str> = match &self.capabilities {
+            Some(capabilities) => capabilities.iter().map(String::as_str).collect(),
+            None => DEFAULT_CAPABILITIES.to_vec(),
+        };
         let mut out = String::from("+OK Capability list follows\r\n");
         if self.starttls_only {
-            out.push_str("TOP\r\nUIDL\r\nSTLS\r\n.\r\n");
+            for capability in capabilities
+                .iter()
+                .filter(|capability| !capability.eq_ignore_ascii_case("USER"))
+            {
+                out.push_str(capability);
+                out.push_str("\r\n");
+            }
+            out.push_str("STLS\r\n.\r\n");
             return out.into_bytes();
         }
-        out.push_str("TOP\r\nUSER\r\nUIDL\r\nSASL");
+        for capability in capabilities {
+            out.push_str(capability);
+            out.push_str("\r\n");
+        }
+        out.push_str("SASL");
         for mechanism in self.mechanism_tokens() {
             out.push(' ');
             out.push_str(mechanism);
@@ -1440,7 +1588,16 @@ impl MailSessionState {
         let (verb, argument) = split_mail_command(rest);
         match verb.as_str() {
             "CAPABILITY" => {
-                let mut text = String::from("* CAPABILITY IMAP4 IMAP4rev1 UIDPLUS");
+                const DEFAULT_CAPABILITIES: &[&str] = &["IMAP4", "IMAP4rev1", "UIDPLUS"];
+                let capabilities: Vec<&str> = match &self.capabilities {
+                    Some(capabilities) => capabilities.iter().map(String::as_str).collect(),
+                    None => DEFAULT_CAPABILITIES.to_vec(),
+                };
+                let mut text = String::from("* CAPABILITY");
+                for capability in capabilities {
+                    text.push(' ');
+                    text.push_str(capability);
+                }
                 if self.starttls_only {
                     text.push_str(" STARTTLS LOGINDISABLED");
                 } else {
@@ -1608,26 +1765,38 @@ impl MailSessionState {
         }
     }
 
+    /// nginx SMTP `EHLO` reply (`ngx_mail_smtp_module`): the server name line,
+    /// then each configured capability line, then `AUTH …`, then `STARTTLS`
+    /// when offered. Every line but the last carries the `250-` continuation
+    /// prefix, exactly like nginx's two pre-rendered capability strings.
     fn smtp_capabilities(&self) -> Vec<u8> {
-        let mut out = String::new();
+        let mut lines: Vec<String> = vec![self.greeting_name.clone()];
+        if let Some(capabilities) = &self.capabilities {
+            lines.extend(capabilities.iter().cloned());
+        }
         if self.starttls_only {
-            out.push_str(&format!("250-{}\r\n", self.greeting_name));
-            out.push_str("250 STARTTLS\r\n");
-            return out.into_bytes();
-        }
-        out.push_str(&format!("250-{}\r\n", self.greeting_name));
-        if self.starttls_available {
-            out.push_str("250-AUTH");
+            lines.push("STARTTLS".to_owned());
         } else {
-            out.push_str("250 AUTH");
+            let mut auth = String::from("AUTH");
+            for mechanism in self.mechanism_tokens() {
+                auth.push(' ');
+                auth.push_str(mechanism);
+            }
+            lines.push(auth);
+            if self.starttls_available {
+                lines.push("STARTTLS".to_owned());
+            }
         }
-        for mechanism in self.mechanism_tokens() {
-            out.push(' ');
-            out.push_str(mechanism);
-        }
-        out.push_str("\r\n");
-        if self.starttls_available {
-            out.push_str("250 STARTTLS\r\n");
+        let mut out = String::new();
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.iter().enumerate() {
+            if index == last {
+                out.push_str("250 ");
+            } else {
+                out.push_str("250-");
+            }
+            out.push_str(line);
+            out.push_str("\r\n");
         }
         out.into_bytes()
     }
@@ -1759,6 +1928,9 @@ struct AuthHttpResponse {
 struct AuthHttpTlsFacts<'a> {
     protocol: Option<&'a str>,
     cipher: Option<&'a str>,
+    /// `Some` when `ssl_verify_client` is enabled: the accepted certificate
+    /// facts, or the `NONE` marker when no certificate was presented.
+    client_cert: Option<&'a MailClientCertificate>,
 }
 
 /// Facts the auth_http request is built from.
@@ -1770,13 +1942,14 @@ struct AuthHttpRequestFacts<'a> {
     tls: AuthHttpTlsFacts<'a>,
 }
 
-/// Percent-escape a credential the way nginx `NGX_ESCAPE_MAIL_AUTH` does for
-/// the bytes that matter to the line-oriented auth protocol.
+/// Percent-escape a credential/certificate the way nginx `NGX_ESCAPE_MAIL_AUTH`
+/// does (`NGX_ESCAPE_MAIL_AUTH` maps to nginx's `memcached` table: control
+/// bytes, space and `%`; everything else, including `?` and `+`, is literal).
 fn escape_mail_auth(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for byte in value.bytes() {
         match byte {
-            b' ' | b'%' | b'\r' | b'\n' | b'?' => {
+            0x00..=0x1f | 0x20 | b'%' => {
                 escaped.push('%');
                 escaped.push_str(&format!("{byte:02X}"));
             }
@@ -1851,16 +2024,38 @@ fn build_auth_http_request(
             request.push_str(cipher);
             request.push_str("\r\n");
         }
+        if let Some(certificate) = facts.tls.client_cert {
+            // nginx emits the verification facts whenever `ssl_verify_client`
+            // is enabled, including the `NONE` marker for an absent
+            // certificate on `optional`/`optional_no_ca`; only the raw
+            // certificate is gated by `auth_http_pass_client_cert`.
+            request.push_str("Auth-SSL-Verify: ");
+            request.push_str(&certificate.verify);
+            request.push_str("\r\n");
+            for (name, value) in [
+                ("Auth-SSL-Subject: ", &certificate.subject),
+                ("Auth-SSL-Issuer: ", &certificate.issuer),
+                ("Auth-SSL-Serial: ", &certificate.serial),
+                ("Auth-SSL-Fingerprint: ", &certificate.fingerprint),
+            ] {
+                if !value.is_empty() {
+                    request.push_str(name);
+                    request.push_str(value);
+                    request.push_str("\r\n");
+                }
+            }
+            if auth.pass_client_cert && !certificate.pem.is_empty() {
+                request.push_str("Auth-SSL-Cert: ");
+                request.push_str(&escape_mail_auth(&certificate.pem));
+                request.push_str("\r\n");
+            }
+        }
     }
     for header in &auth.headers {
         request.push_str(header);
         request.push_str("\r\n");
     }
     request.push_str("\r\n");
-    if auth.pass_client_cert {
-        // Client-certificate pass-through requires a client-auth TLS policy
-        // that the mail plane does not model; it fails closed at validation.
-    }
     request.into_bytes()
 }
 
@@ -2052,6 +2247,7 @@ async fn authenticate_and_relay(
                     .as_ref()
                     .map(|(protocol, _)| protocol.as_str()),
                 cipher: tls_facts_owned.as_ref().map(|(_, cipher)| cipher.as_str()),
+                client_cert: state.client_cert.as_ref(),
             },
         };
         let request = build_auth_http_request(auth, profile, &facts);
@@ -2538,9 +2734,11 @@ mod tests {
             timeout: Duration::from_secs(5),
             so_keepalive: false,
             inbound_proxy_protocol: false,
+            real_ip_trusted: Vec::new(),
             max_line_bytes: 4096,
             greeting_delay: Duration::ZERO,
             mechanisms: vec![MailAuthMechanism::Plain, MailAuthMechanism::Login],
+            capabilities: None,
             max_errors: 5,
             auth_http: None,
             tls: None,
@@ -2744,6 +2942,7 @@ mod tests {
             tls: AuthHttpTlsFacts {
                 protocol: None,
                 cipher: None,
+                client_cert: None,
             },
         };
         let request = String::from_utf8(build_auth_http_request(&auth, &profile, &facts))

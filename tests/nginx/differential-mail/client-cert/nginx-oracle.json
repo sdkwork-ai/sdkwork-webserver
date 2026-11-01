@@ -1,0 +1,318 @@
+{
+  "verify-depth0.direct": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=alice@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Root CA",
+        "Auth-SSL-Serial: 1001",
+        "Auth-SSL-Fingerprint: 2e409ca62850df52355166b471f6ce8c04520741",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDhzCCAm+gAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwSzEqMCgGA1UEAwwhU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBSb290IENBMRAwDgYDVQQKDAdTREtXb3Jr%0AMQswCQYDVQQGEwJDTjAeFw0yNjEwMzExOTI0MDhaFw0zNjEwMjgxOTI0MDhaMEsx%0AHzAdBgNVBAMMFmFsaWNlQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoMElNES1dv%0AcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEBAQUAA4IB%0ADwAwggEKAoIBAQCwOlCId2KzaDfuxN+qWIdQ1Y11iJrlzzSGcxgJwUIY8FsbmnNd%0Ahc+G0x5J3zPwTczd4mhGREyJUIysSmBwytvq2Ap4lFMsAoZXWu4Yu1muaCtmTABN%0ARlJdKmF0po9s0e6sBkUoqbhTbY+BTwju0Ama6qJyfdS0sThMo3vYDJQlvqQHsVpD%0AjJgjOLNvti+Egm9EfKHN2nVFWhyGZmQho85oRI8QzsF4O+9Yvu66FiToRqyA4cYN%0AidgBKfqQR7KPR7w4jOAol1+7GnDyENx/9TOwpahl0c7rpM8ADg0Leoq0lo86IbPu%0AhPX1YfSBcVmY51UTSIOkrOmmK6962rnunH+PAgMBAAGjdTBzMAwGA1UdEwEB/wQC%0AMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0GA1UdDgQW%0ABBRLaxuxRJHPNTGxcPtCjq9rQO85JzAfBgNVHSMEGDAWgBREc9Mxv5pLHplYlv0x%0AQoGDPDFZyDANBgkqhkiG9w0BAQsFAAOCAQEAGiZ/oP7jMjRnIJqAf/CKHRXiFbsT%0AqXNZInmMGBdonmxcMJLl89XSW54iKSPbTlAoLPmV4JbGRiL6ZO/m2qux6GaJxw7R%0A9SqZL1n8u/gXrcUokV7vGnQddcO0FnWfkkNIz67ZmE/XDA7JPdxGko8BrvaPDDNv%0AdpHFVzhcWya/60oFPCpyiZ6RDivvMHWHs9r/SLuVfYOstdh5o0NbghsP9sCtdxIX%0AMHur1oCx+Z5fZDjURXMU64S1Lo/Vc08xC6oF6QKiC7nsETuWHKD1u3zyyFQwykC4%0AKziRt5nXk37fzYGJAWI/NAxifqa7zfx23bO86/U8osD6pN218Xr2J1vNKA==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-depth0.intermediate": {
+    "auth_requests": [],
+    "client": "421 4.7.1 SSL certificate error\r\n"
+  },
+  "verify-depth1.intermediate": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=bob@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Intermediate CA",
+        "Auth-SSL-Serial: 2002",
+        "Auth-SSL-Fingerprint: 7192ddca300a9350dc6873b3c3e7b59026e3be73",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDjTCCAnWgAwIBAgICIAIwDQYJKoZIhvcNAQELBQAwUzEyMDAGA1UEAwwpU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBJbnRlcm1lZGlhdGUgQ0ExEDAOBgNVBAoM%0AB1NES1dvcmsxCzAJBgNVBAYTAkNOMB4XDTI2MTAzMTE5MjQwOFoXDTM2MTAyODE5%0AMjQwOFowSTEdMBsGA1UEAwwUYm9iQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoM%0AElNES1dvcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEB%0AAQUAA4IBDwAwggEKAoIBAQCcYVf1QuqJSgjJ39LOaXXjnqwzqn9t+4H7HUzSQZnh%0A2UQFO8molVeEs4IzOzMUb6B2wCUidmh3PG+DA+D87L0emB6m4ucSCVuVa4xjzfPD%0AjxRxZiNBw0eZgeSaRoSQ/hUVYFkYCX5ATOnB9vrmVEiMUvv/4L52YP84WV2XfjIB%0AIgdJ9ik0oXndHHi+q09fJbgBKNGOKnn3KbGWpNCKlYSF7/W/zz+eq1zmq2EmMHMh%0AeLzCTYOSCbNZRLbN0o88gOkSSQBi1IiAbV3gzK2xG0bw+Q+mZKkt6LSm5c0DU1U/%0A0Fj1g1T6yUVc9SLlaM8Wfk3Jbmd/4OPcAxPe0yAohApnAgMBAAGjdTBzMAwGA1Ud%0AEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0G%0AA1UdDgQWBBS6l1pGDqusYyBgp8pxev27UGSnXzAfBgNVHSMEGDAWgBQIL2BwvSCO%0A8oFwY6aMh8kgyChn9DANBgkqhkiG9w0BAQsFAAOCAQEAh8kPOtF8zgRfe6s1f3zp%0AAeJjmHsRIspHir/q+SdXSfEJSKBaJSMQWDeQpMtVIPnJO+M+tSQFjS8r0WHDupgl%0A8pth7ZwssML7CukQxdKJdf+M2DY1phRqYXghmkHaTPqN4LJJXGFIKDlN7Q9Q/N4U%0Ao32apkPdwSSfa4MdOUHeKVLGSxhovYTBHvUrTPlEXniyFMxGimpWnuwqkWH2Pry+%0AXWHuNBSxWjtL95s8x5ER9euIU6jW4zHmq2Q5t9s6e/uBF0OFUnUvSKYQDt+JuaAo%0Au761mY3c0oez07MGabPSFj0XKNLvyL7abXe5qs400W5YUiyNZS7QsbEKjcCf069M%0A8w==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-depth2.intermediate": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=bob@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Intermediate CA",
+        "Auth-SSL-Serial: 2002",
+        "Auth-SSL-Fingerprint: 7192ddca300a9350dc6873b3c3e7b59026e3be73",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDjTCCAnWgAwIBAgICIAIwDQYJKoZIhvcNAQELBQAwUzEyMDAGA1UEAwwpU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBJbnRlcm1lZGlhdGUgQ0ExEDAOBgNVBAoM%0AB1NES1dvcmsxCzAJBgNVBAYTAkNOMB4XDTI2MTAzMTE5MjQwOFoXDTM2MTAyODE5%0AMjQwOFowSTEdMBsGA1UEAwwUYm9iQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoM%0AElNES1dvcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEB%0AAQUAA4IBDwAwggEKAoIBAQCcYVf1QuqJSgjJ39LOaXXjnqwzqn9t+4H7HUzSQZnh%0A2UQFO8molVeEs4IzOzMUb6B2wCUidmh3PG+DA+D87L0emB6m4ucSCVuVa4xjzfPD%0AjxRxZiNBw0eZgeSaRoSQ/hUVYFkYCX5ATOnB9vrmVEiMUvv/4L52YP84WV2XfjIB%0AIgdJ9ik0oXndHHi+q09fJbgBKNGOKnn3KbGWpNCKlYSF7/W/zz+eq1zmq2EmMHMh%0AeLzCTYOSCbNZRLbN0o88gOkSSQBi1IiAbV3gzK2xG0bw+Q+mZKkt6LSm5c0DU1U/%0A0Fj1g1T6yUVc9SLlaM8Wfk3Jbmd/4OPcAxPe0yAohApnAgMBAAGjdTBzMAwGA1Ud%0AEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0G%0AA1UdDgQWBBS6l1pGDqusYyBgp8pxev27UGSnXzAfBgNVHSMEGDAWgBQIL2BwvSCO%0A8oFwY6aMh8kgyChn9DANBgkqhkiG9w0BAQsFAAOCAQEAh8kPOtF8zgRfe6s1f3zp%0AAeJjmHsRIspHir/q+SdXSfEJSKBaJSMQWDeQpMtVIPnJO+M+tSQFjS8r0WHDupgl%0A8pth7ZwssML7CukQxdKJdf+M2DY1phRqYXghmkHaTPqN4LJJXGFIKDlN7Q9Q/N4U%0Ao32apkPdwSSfa4MdOUHeKVLGSxhovYTBHvUrTPlEXniyFMxGimpWnuwqkWH2Pry+%0AXWHuNBSxWjtL95s8x5ER9euIU6jW4zHmq2Q5t9s6e/uBF0OFUnUvSKYQDt+JuaAo%0Au761mY3c0oez07MGabPSFj0XKNLvyL7abXe5qs400W5YUiyNZS7QsbEKjcCf069M%0A8w==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-imap.missing": {
+    "auth_requests": [],
+    "client": "* BYE No required SSL certificate\r\n"
+  },
+  "verify-no-ca.self-signed": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: FAILED:self-signed certificate",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=self@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork Mail Users,CN=self@mail.example.com",
+        "Auth-SSL-Serial: 15A02F0F1CF0A6E0FEEB22A597E11ACAD20E7597",
+        "Auth-SSL-Fingerprint: e643b3cce0c7b50c5a177cf354efdf9495342861",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDlzCCAn+gAwIBAgIUFaAvDxzwpuD+6yKll+EaytIOdZcwDQYJKoZIhvcNAQEL%0ABQAwSjEeMBwGA1UEAwwVc2VsZkBtYWlsLmV4YW1wbGUuY29tMRswGQYDVQQKDBJT%0AREtXb3JrIE1haWwgVXNlcnMxCzAJBgNVBAYTAkNOMB4XDTI2MTAzMTE5MjQwOFoX%0ADTM2MTAyODE5MjQwOFowSjEeMBwGA1UEAwwVc2VsZkBtYWlsLmV4YW1wbGUuY29t%0AMRswGQYDVQQKDBJTREtXb3JrIE1haWwgVXNlcnMxCzAJBgNVBAYTAkNOMIIBIjAN%0ABgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlR3wJf1g4sN1uMKKzwNAPXjlrvyt%0AflZ3klFB8Daj2BTAN59KclVyYAN4pB/pzDUFfhe6GjLuJmGmBrlxrPEaF9WulADi%0AGyoR3pQuVptIQvYHEJ+XTac8srD7NPhU9WE6hFsVo0LwIcCZwf1fal/XprVVib1D%0AZ/zqfWAFyVF9ZceT2vwY27IaDjT73kLEPxNFhhpngJ6ekaATVgOO+QhAfUew235L%0AIM24BEdQ/1NDde2gjFOjgX/CVhYpknqG+8us54zeJ13BQtubs8guSeEKxemRUSyD%0ADuH7EDCVaJVY0tFw9uskX4kKeyjNC5rDkO9pnXHP7l1P+bhp4y+CIAd9lwIDAQAB%0Ao3UwczAdBgNVHQ4EFgQUmfQ2FQf4Q9T3xO4NfbHBJUaGtoowHwYDVR0jBBgwFoAU%0AmfQ2FQf4Q9T3xO4NfbHBJUaGtoowDAYDVR0TAQH/BAIwADAOBgNVHQ8BAf8EBAMC%0ABaAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwDQYJKoZIhvcNAQELBQADggEBAIrLPoPI%0AKw8or6QA8vFfHX+LOVWCTe0niLFwGzTbjV7t3WTECHnt6rHf36Nk97UY2Owjm3Wo%0ASYrFBGR8xJ5YbwydzyIjFoSOAsMF+55QsYsJEdmTEN6z8hH/eJs2+b6kLDLWzaKm%0ABh6c6Ylo9nhGyfcv+QAFqAJtliV4GhmlCuPwC6g38DVwZsnIEBcHxGUHweIhLb71%0AqTtz+SZtrzvhC9qq5rW8RD+q/1RQz+zx3t1/goXhonzsdzgqnGpBg80YQqKoSSW5%0APayXCWmZ8D1J3appMyzgTNNOM6fb0/MlKPUkl1LqxlPW0AWBNF9Vx6I0R3kzGR6a%0AQ2m876i02272ejM=%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-no-ca.untrusted": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: FAILED:unable to verify the first certificate",
+        "Auth-SSL-Subject: C=CN,O=Untrusted,CN=mallory@untrusted.example.com",
+        "Auth-SSL-Issuer: C=CN,O=Untrusted,CN=Untrusted Mail Root CA",
+        "Auth-SSL-Serial: 3003",
+        "Auth-SSL-Fingerprint: fc2dd66b07ab863fe12c6116ae2c57ffdd233623",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDfDCCAmSgAwIBAgICMAMwDQYJKoZIhvcNAQELBQAwQjEfMB0GA1UEAwwWVW50%0AcnVzdGVkIE1haWwgUm9vdCBDQTESMBAGA1UECgwJVW50cnVzdGVkMQswCQYDVQQG%0AEwJDTjAeFw0yNjEwMzExOTI0MDhaFw0zNjEwMjgxOTI0MDhaMEkxJjAkBgNVBAMM%0AHW1hbGxvcnlAdW50cnVzdGVkLmV4YW1wbGUuY29tMRIwEAYDVQQKDAlVbnRydXN0%0AZWQxCzAJBgNVBAYTAkNOMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA%0Ayi7ObH1mJg3tXBe4H7q+cA5SaSgH0AIFbeRiErHRnjl6veGLfUX9fwawS0+NmNni%0AoFzTgWLS19xL5Lku5NjdOj2wasE7E4ianoJv58/orLyJoUPVOHhQinRo2AeL13Cl%0A+ouZMIBv+iruDcVcaJLFKWgM+02NgpzWYWmZq+bn6BZhXsBeIXzEjCoMTpVDlO7v%0A369v3qnANh0fvavUDzGo7vsQ3YKJr3/eOEVx64ggmqtRRT4i0opkM0Y4v8WzEH6P%0A7W/PNdJJi8a/ap9FWiOC/UtTW/3ilAi0QUnC7Wtb8nL0Rs0PL6j0n7z6+kg3lzux%0ALaOo3Scy3G9QwykCDoXHEQIDAQABo3UwczAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB%0A/wQEAwIFoDATBgNVHSUEDDAKBggrBgEFBQcDAjAdBgNVHQ4EFgQUywuHG8mHKVye%0AZQkUI0FV5W6BMKEwHwYDVR0jBBgwFoAU01M9bq4q5o+Vj6Hmni2UBhqDTWUwDQYJ%0AKoZIhvcNAQELBQADggEBAGWxPxZC1D6s6VJ3hS2bA1pQYFsLS89eXnK5gWqWBPHQ%0A29wBoGoRdoWfooKHDL4C4jeIhON5XvYaE5xoDw8DG+bckjuGuonEE0n77GFe8rLe%0APzbALzn44fNAkUVoRv0L9pxuQzov+mhhkJ9et5jzs0k1uOKr41BcYFcdZsxhdr+k%0ArqnyaviBKSBBEfzobF7Fsi/6f8WvhNKRzejAoIyIvf9vNcrz5MxSIl3dMDJMW0Tm%0AY5v5/jAxf7aSaYJMMdff8FHfpLK9+iI67Ph1H1F5yiaiqhowNRBbfU5xlJ1sJZxc%0Anm/3vONK2Zx+l4d8FNTiivmDgcOMxtdDp2yN1MukHEM=%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-off.client-cert-loaded": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-on.missing": {
+    "auth_requests": [],
+    "client": "421 4.7.1 No required SSL certificate\r\n"
+  },
+  "verify-on.pass-cert-off": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=alice@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Root CA",
+        "Auth-SSL-Serial: 1001",
+        "Auth-SSL-Fingerprint: 2e409ca62850df52355166b471f6ce8c04520741"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-on.trusted": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=alice@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Root CA",
+        "Auth-SSL-Serial: 1001",
+        "Auth-SSL-Fingerprint: 2e409ca62850df52355166b471f6ce8c04520741",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDhzCCAm+gAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwSzEqMCgGA1UEAwwhU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBSb290IENBMRAwDgYDVQQKDAdTREtXb3Jr%0AMQswCQYDVQQGEwJDTjAeFw0yNjEwMzExOTI0MDhaFw0zNjEwMjgxOTI0MDhaMEsx%0AHzAdBgNVBAMMFmFsaWNlQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoMElNES1dv%0AcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEBAQUAA4IB%0ADwAwggEKAoIBAQCwOlCId2KzaDfuxN+qWIdQ1Y11iJrlzzSGcxgJwUIY8FsbmnNd%0Ahc+G0x5J3zPwTczd4mhGREyJUIysSmBwytvq2Ap4lFMsAoZXWu4Yu1muaCtmTABN%0ARlJdKmF0po9s0e6sBkUoqbhTbY+BTwju0Ama6qJyfdS0sThMo3vYDJQlvqQHsVpD%0AjJgjOLNvti+Egm9EfKHN2nVFWhyGZmQho85oRI8QzsF4O+9Yvu66FiToRqyA4cYN%0AidgBKfqQR7KPR7w4jOAol1+7GnDyENx/9TOwpahl0c7rpM8ADg0Leoq0lo86IbPu%0AhPX1YfSBcVmY51UTSIOkrOmmK6962rnunH+PAgMBAAGjdTBzMAwGA1UdEwEB/wQC%0AMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0GA1UdDgQW%0ABBRLaxuxRJHPNTGxcPtCjq9rQO85JzAfBgNVHSMEGDAWgBREc9Mxv5pLHplYlv0x%0AQoGDPDFZyDANBgkqhkiG9w0BAQsFAAOCAQEAGiZ/oP7jMjRnIJqAf/CKHRXiFbsT%0AqXNZInmMGBdonmxcMJLl89XSW54iKSPbTlAoLPmV4JbGRiL6ZO/m2qux6GaJxw7R%0A9SqZL1n8u/gXrcUokV7vGnQddcO0FnWfkkNIz67ZmE/XDA7JPdxGko8BrvaPDDNv%0AdpHFVzhcWya/60oFPCpyiZ6RDivvMHWHs9r/SLuVfYOstdh5o0NbghsP9sCtdxIX%0AMHur1oCx+Z5fZDjURXMU64S1Lo/Vc08xC6oF6QKiC7nsETuWHKD1u3zyyFQwykC4%0AKziRt5nXk37fzYGJAWI/NAxifqa7zfx23bO86/U8osD6pN218Xr2J1vNKA==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-on.untrusted": {
+    "auth_requests": [],
+    "client": "421 4.7.1 SSL certificate error\r\n"
+  },
+  "verify-optional.missing": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: NONE"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-optional.untrusted": {
+    "auth_requests": [],
+    "client": "421 4.7.1 SSL certificate error\r\n"
+  },
+  "verify-pop3.missing": {
+    "auth_requests": [],
+    "client": "-ERR No required SSL certificate\r\n"
+  },
+  "verify-starttls.trusted": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=alice@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Root CA",
+        "Auth-SSL-Serial: 1001",
+        "Auth-SSL-Fingerprint: 2e409ca62850df52355166b471f6ce8c04520741",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDhzCCAm+gAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwSzEqMCgGA1UEAwwhU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBSb290IENBMRAwDgYDVQQKDAdTREtXb3Jr%0AMQswCQYDVQQGEwJDTjAeFw0yNjEwMzExOTI0MDhaFw0zNjEwMjgxOTI0MDhaMEsx%0AHzAdBgNVBAMMFmFsaWNlQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoMElNES1dv%0AcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEBAQUAA4IB%0ADwAwggEKAoIBAQCwOlCId2KzaDfuxN+qWIdQ1Y11iJrlzzSGcxgJwUIY8FsbmnNd%0Ahc+G0x5J3zPwTczd4mhGREyJUIysSmBwytvq2Ap4lFMsAoZXWu4Yu1muaCtmTABN%0ARlJdKmF0po9s0e6sBkUoqbhTbY+BTwju0Ama6qJyfdS0sThMo3vYDJQlvqQHsVpD%0AjJgjOLNvti+Egm9EfKHN2nVFWhyGZmQho85oRI8QzsF4O+9Yvu66FiToRqyA4cYN%0AidgBKfqQR7KPR7w4jOAol1+7GnDyENx/9TOwpahl0c7rpM8ADg0Leoq0lo86IbPu%0AhPX1YfSBcVmY51UTSIOkrOmmK6962rnunH+PAgMBAAGjdTBzMAwGA1UdEwEB/wQC%0AMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0GA1UdDgQW%0ABBRLaxuxRJHPNTGxcPtCjq9rQO85JzAfBgNVHSMEGDAWgBREc9Mxv5pLHplYlv0x%0AQoGDPDFZyDANBgkqhkiG9w0BAQsFAAOCAQEAGiZ/oP7jMjRnIJqAf/CKHRXiFbsT%0AqXNZInmMGBdonmxcMJLl89XSW54iKSPbTlAoLPmV4JbGRiL6ZO/m2qux6GaJxw7R%0A9SqZL1n8u/gXrcUokV7vGnQddcO0FnWfkkNIz67ZmE/XDA7JPdxGko8BrvaPDDNv%0AdpHFVzhcWya/60oFPCpyiZ6RDivvMHWHs9r/SLuVfYOstdh5o0NbghsP9sCtdxIX%0AMHur1oCx+Z5fZDjURXMU64S1Lo/Vc08xC6oF6QKiC7nsETuWHKD1u3zyyFQwykC4%0AKziRt5nXk37fzYGJAWI/NAxifqa7zfx23bO86/U8osD6pN218Xr2J1vNKA==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 STARTTLS\r\n220 2.0.0 Start TLS\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-starttls.untrusted": {
+    "auth_requests": [],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250-AUTH PLAIN LOGIN\r\n250 STARTTLS\r\n220 2.0.0 Start TLS\r\n421 4.7.1 SSL certificate error\r\n"
+  },
+  "verify-trusted-bundle": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=alice@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Root CA",
+        "Auth-SSL-Serial: 1001",
+        "Auth-SSL-Fingerprint: 2e409ca62850df52355166b471f6ce8c04520741",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDhzCCAm+gAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwSzEqMCgGA1UEAwwhU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBSb290IENBMRAwDgYDVQQKDAdTREtXb3Jr%0AMQswCQYDVQQGEwJDTjAeFw0yNjEwMzExOTI0MDhaFw0zNjEwMjgxOTI0MDhaMEsx%0AHzAdBgNVBAMMFmFsaWNlQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoMElNES1dv%0AcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEBAQUAA4IB%0ADwAwggEKAoIBAQCwOlCId2KzaDfuxN+qWIdQ1Y11iJrlzzSGcxgJwUIY8FsbmnNd%0Ahc+G0x5J3zPwTczd4mhGREyJUIysSmBwytvq2Ap4lFMsAoZXWu4Yu1muaCtmTABN%0ARlJdKmF0po9s0e6sBkUoqbhTbY+BTwju0Ama6qJyfdS0sThMo3vYDJQlvqQHsVpD%0AjJgjOLNvti+Egm9EfKHN2nVFWhyGZmQho85oRI8QzsF4O+9Yvu66FiToRqyA4cYN%0AidgBKfqQR7KPR7w4jOAol1+7GnDyENx/9TOwpahl0c7rpM8ADg0Leoq0lo86IbPu%0AhPX1YfSBcVmY51UTSIOkrOmmK6962rnunH+PAgMBAAGjdTBzMAwGA1UdEwEB/wQC%0AMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0GA1UdDgQW%0ABBRLaxuxRJHPNTGxcPtCjq9rQO85JzAfBgNVHSMEGDAWgBREc9Mxv5pLHplYlv0x%0AQoGDPDFZyDANBgkqhkiG9w0BAQsFAAOCAQEAGiZ/oP7jMjRnIJqAf/CKHRXiFbsT%0AqXNZInmMGBdonmxcMJLl89XSW54iKSPbTlAoLPmV4JbGRiL6ZO/m2qux6GaJxw7R%0A9SqZL1n8u/gXrcUokV7vGnQddcO0FnWfkkNIz67ZmE/XDA7JPdxGko8BrvaPDDNv%0AdpHFVzhcWya/60oFPCpyiZ6RDivvMHWHs9r/SLuVfYOstdh5o0NbghsP9sCtdxIX%0AMHur1oCx+Z5fZDjURXMU64S1Lo/Vc08xC6oF6QKiC7nsETuWHKD1u3zyyFQwykC4%0AKziRt5nXk37fzYGJAWI/NAxifqa7zfx23bO86/U8osD6pN218Xr2J1vNKA==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  },
+  "verify-trusted-intermediate.leaf-only": {
+    "auth_requests": [
+      [
+        "GET /auth HTTP/1.0",
+        "Host: 127.0.0.1",
+        "Auth-Method: plain",
+        "Auth-User: alice",
+        "Auth-Pass: secret",
+        "Auth-Protocol: smtp",
+        "Auth-Login-Attempt: 1",
+        "Client-IP: 127.0.0.1",
+        "Client-Host: [UNAVAILABLE]",
+        "Auth-SSL: on",
+        "Auth-SSL-Protocol: TLSv1.3",
+        "Auth-SSL-Cipher: <negotiated-suite>",
+        "Auth-SSL-Verify: SUCCESS",
+        "Auth-SSL-Subject: C=CN,O=SDKWork Mail Users,CN=bob@mail.example.com",
+        "Auth-SSL-Issuer: C=CN,O=SDKWork,CN=SDKWork Mail Differential Intermediate CA",
+        "Auth-SSL-Serial: 2002",
+        "Auth-SSL-Fingerprint: 7192ddca300a9350dc6873b3c3e7b59026e3be73",
+        "Auth-SSL-Cert: -----BEGIN%20CERTIFICATE-----%0AMIIDjTCCAnWgAwIBAgICIAIwDQYJKoZIhvcNAQELBQAwUzEyMDAGA1UEAwwpU0RL%0AV29yayBNYWlsIERpZmZlcmVudGlhbCBJbnRlcm1lZGlhdGUgQ0ExEDAOBgNVBAoM%0AB1NES1dvcmsxCzAJBgNVBAYTAkNOMB4XDTI2MTAzMTE5MjQwOFoXDTM2MTAyODE5%0AMjQwOFowSTEdMBsGA1UEAwwUYm9iQG1haWwuZXhhbXBsZS5jb20xGzAZBgNVBAoM%0AElNES1dvcmsgTWFpbCBVc2VyczELMAkGA1UEBhMCQ04wggEiMA0GCSqGSIb3DQEB%0AAQUAA4IBDwAwggEKAoIBAQCcYVf1QuqJSgjJ39LOaXXjnqwzqn9t+4H7HUzSQZnh%0A2UQFO8molVeEs4IzOzMUb6B2wCUidmh3PG+DA+D87L0emB6m4ucSCVuVa4xjzfPD%0AjxRxZiNBw0eZgeSaRoSQ/hUVYFkYCX5ATOnB9vrmVEiMUvv/4L52YP84WV2XfjIB%0AIgdJ9ik0oXndHHi+q09fJbgBKNGOKnn3KbGWpNCKlYSF7/W/zz+eq1zmq2EmMHMh%0AeLzCTYOSCbNZRLbN0o88gOkSSQBi1IiAbV3gzK2xG0bw+Q+mZKkt6LSm5c0DU1U/%0A0Fj1g1T6yUVc9SLlaM8Wfk3Jbmd/4OPcAxPe0yAohApnAgMBAAGjdTBzMAwGA1Ud%0AEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgWgMBMGA1UdJQQMMAoGCCsGAQUFBwMCMB0G%0AA1UdDgQWBBS6l1pGDqusYyBgp8pxev27UGSnXzAfBgNVHSMEGDAWgBQIL2BwvSCO%0A8oFwY6aMh8kgyChn9DANBgkqhkiG9w0BAQsFAAOCAQEAh8kPOtF8zgRfe6s1f3zp%0AAeJjmHsRIspHir/q+SdXSfEJSKBaJSMQWDeQpMtVIPnJO+M+tSQFjS8r0WHDupgl%0A8pth7ZwssML7CukQxdKJdf+M2DY1phRqYXghmkHaTPqN4LJJXGFIKDlN7Q9Q/N4U%0Ao32apkPdwSSfa4MdOUHeKVLGSxhovYTBHvUrTPlEXniyFMxGimpWnuwqkWH2Pry+%0AXWHuNBSxWjtL95s8x5ER9euIU6jW4zHmq2Q5t9s6e/uBF0OFUnUvSKYQDt+JuaAo%0Au761mY3c0oez07MGabPSFj0XKNLvyL7abXe5qs400W5YUiyNZS7QsbEKjcCf069M%0A8w==%0A-----END%20CERTIFICATE-----%0A"
+      ]
+    ],
+    "client": "220 mail.example.com ESMTP ready\r\n250-mail.example.com\r\n250 AUTH PLAIN LOGIN\r\n235 2.0.0 OK\r\n"
+  }
+}

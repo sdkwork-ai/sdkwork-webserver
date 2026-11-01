@@ -10,12 +10,13 @@ use url::Url;
 use super::{
     is_capture_variable, is_supported_upstream_allowed_cidr, parse_server_name,
     server_name_is_regex, template_variables, upstream_ip_is_allowed, AppDomainFallbackLookup,
-    CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig, ExpiresMode,
-    IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig, RewritePhaseOpConfig,
-    RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm, StreamTargetConfig,
-    TlsCertificateResolution, TlsVersion, UpstreamConfig, UpstreamLoadBalancingStrategy,
-    UpstreamTlsTrustMode, UsageMeteringChannel, WebServerAppConfig, WebServerConfigError,
-    WebServerLimits, MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
+    BrowserConfig, CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig,
+    ExpiresMode, IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig,
+    RewritePhaseOpConfig, RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm,
+    StreamTargetConfig, TlsCertificateResolution, TlsVersion, UpstreamConfig,
+    UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel, UserIdConfig,
+    UserIdExpires, WebServerAppConfig, WebServerConfigError, WebServerLimits,
+    MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
 };
 
 const MAX_DIAGNOSTICS: usize = 128;
@@ -35,13 +36,15 @@ fn validate_upstream_buffering_store(
     path: &str,
     resource: &ResourceConfig,
     store_root: Option<&str>,
+    temp_root: Option<&str>,
 ) {
-    let (buffering, store, limit_rate, ignore_headers) = match resource {
+    let (buffering, store, limit_rate, ignore_headers, temp_policy) = match resource {
         ResourceConfig::FastCgi {
             buffer_policy,
             store,
             limit_rate_bytes_per_second,
             ignore_headers,
+            temp_policy,
             ..
         }
         | ResourceConfig::CgiUpstream {
@@ -49,15 +52,17 @@ fn validate_upstream_buffering_store(
             store,
             limit_rate_bytes_per_second,
             ignore_headers,
+            temp_policy,
             ..
         } => (
             *buffer_policy,
             store.as_ref(),
             *limit_rate_bytes_per_second,
             ignore_headers.as_slice(),
+            temp_policy.as_ref(),
         ),
         ResourceConfig::Grpc { ignore_headers, .. } => {
-            (None, None, None, ignore_headers.as_slice())
+            (None, None, None, ignore_headers.as_slice(), None)
         }
         ResourceConfig::Memcached {
             buffer_bytes,
@@ -182,6 +187,72 @@ fn validate_upstream_buffering_store(
         }
     }
 
+    if let Some(temp) = temp_policy {
+        // nginx's merge-time `size`: the larger of `*_buffer_size` and one
+        // `*_buffers` entry (defaults 4 KiB / 4 KiB).
+        let buffer_max = buffering
+            .map(|policy| policy.header_bytes.max(policy.chunk_bytes))
+            .unwrap_or(4096);
+        if temp.max_file_bytes != 0 && temp.max_file_bytes < buffer_max {
+            validator.push(
+                format!("{path}/tempPolicy/maxFileBytes"),
+                format!(
+                    "maxFileBytes must be zero (disable the spool tier) or at least the largest response buffer ({buffer_max} bytes)"
+                ),
+            );
+        }
+        if temp.write_chunk_bytes < buffer_max {
+            validator.push(
+                format!("{path}/tempPolicy/writeChunkBytes"),
+                format!(
+                    "writeChunkBytes must be at least the largest response buffer ({buffer_max} bytes)"
+                ),
+            );
+        }
+        if temp.write_chunk_bytes > 16 * 1024 * 1024 {
+            validator.push(
+                format!("{path}/tempPolicy/writeChunkBytes"),
+                "writeChunkBytes must not exceed 16 MiB",
+            );
+        }
+        if let Some(spool_path) = &temp.path {
+            if !spool_path.starts_with('/') {
+                validator.push(
+                    format!("{path}/tempPolicy/path"),
+                    "temp path must be absolute",
+                );
+            }
+            if spool_path
+                .bytes()
+                .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+            {
+                validator.push(
+                    format!("{path}/tempPolicy/path"),
+                    "temp path must not contain NUL or line breaks",
+                );
+            } else if spool_path.split('/').any(|component| component == "..") {
+                validator.push(
+                    format!("{path}/tempPolicy/path"),
+                    "temp path must not contain `..` segments",
+                );
+            }
+            if let Some(root) = temp_root {
+                if !root.starts_with('/') {
+                    validator.push("/nginx/tempRoot", "tempRoot must be an absolute path");
+                } else {
+                    let root = root.trim_end_matches('/');
+                    let spool_path = spool_path.trim_end_matches('/');
+                    if !(spool_path == root || spool_path.starts_with(&format!("{root}/"))) {
+                        validator.push(
+                            format!("{path}/tempPolicy/path"),
+                            format!("temp path must be a descendant of nginx.tempRoot `{root}`"),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     if let Some(rate) = limit_rate {
         if rate > 1024 * 1024 * 1024 {
             validator.push(
@@ -285,6 +356,56 @@ impl SemanticValidator {
                     "/nginx/unixSocketRoot",
                     "unixSocketRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
                 );
+            }
+        }
+        if let Some(temp_root) = &config.nginx.temp_root {
+            if !valid_unix_socket_root(temp_root) {
+                self.push(
+                    "/nginx/tempRoot",
+                    "tempRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
+                );
+            }
+        }
+        if config.nginx.temp_spool_budget_bytes == 0 {
+            self.push(
+                "/nginx/tempSpoolBudgetBytes",
+                "tempSpoolBudgetBytes must be greater than 0; disable the spool tier per resource with `*_max_temp_file_size 0`",
+            );
+        }
+        if config.nginx.temp_spool_max_files == 0 {
+            self.push(
+                "/nginx/tempSpoolMaxFiles",
+                "tempSpoolMaxFiles must be greater than 0; disable the spool tier per resource with `*_max_temp_file_size 0`",
+            );
+        }
+        if let Some(geoip_root) = &config.nginx.geoip_database_root {
+            if !valid_unix_socket_root(geoip_root) {
+                self.push(
+                    "/nginx/geoipDatabaseRoot",
+                    "geoipDatabaseRoot must be an absolute directory path without parent traversal, backslashes, NUL, or control characters",
+                );
+            }
+        }
+        if let Some(geoip) = &config.geoip {
+            for (path, message) in super::geoip::validate_geoip_config(
+                geoip,
+                config.nginx.geoip_database_root.as_deref(),
+            ) {
+                self.push(path, message);
+            }
+        }
+        if let Some(stream_geoip) = &config.stream_geoip {
+            if !stream_geoip.proxies.is_empty() || stream_geoip.proxy_recursive {
+                self.push(
+                    "/streamGeoip",
+                    "the stream GeoIP module has no geoip_proxy/geoip_proxy_recursive directives; remove them (use the http GeoIP module for X-Forwarded-For trust)",
+                );
+            }
+            for (path, message) in super::geoip::validate_geoip_config(
+                stream_geoip,
+                config.nginx.geoip_database_root.as_deref(),
+            ) {
+                self.push(path.replace("/geoip", "/streamGeoip"), message);
             }
         }
         for (index, prefix) in config.nginx.document_root_allowlist.iter().enumerate() {
@@ -824,6 +945,7 @@ impl SemanticValidator {
                 &path,
                 resource,
                 config.nginx.store_root.as_deref(),
+                config.nginx.temp_root.as_deref(),
             );
             match resource {
                 ResourceConfig::Static {
@@ -1630,6 +1752,12 @@ impl SemanticValidator {
         let mut total_routes = 0usize;
         for (index, virtual_host) in config.virtual_hosts.iter().enumerate() {
             let path = format!("/virtualHosts/{index}");
+            if virtual_host.http2_chunk_size == Some(0) {
+                self.push(
+                    format!("{path}/http2ChunkSize"),
+                    "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
+                );
+            }
             let named_targets = named_location_targets(self, &path, virtual_host);
             let map_variable_names: Vec<String> = config
                 .maps
@@ -2584,6 +2712,33 @@ impl SemanticValidator {
             }
             stream_map_results.push(result);
         }
+        // nginx stream `split_clients`: the result is a per-connection variable
+        // in the same namespace as stream `map` results.
+        for (index, split) in config.stream_split_clients.iter().enumerate() {
+            let path = format!("/streamSplitClients/{index}");
+            if let Err(message) = crate::config::validate_split_clients_config(split) {
+                self.push(&path, message);
+            }
+            for reference in crate::config::stream_template_variables(&split.source) {
+                if !crate::config::STREAM_MAP_SOURCES.contains(&reference.as_str()) {
+                    self.push(
+                        format!("{path}/source"),
+                        format!(
+                            "stream split_clients source `${reference}` is not known at accept/preread time"
+                        ),
+                    );
+                }
+            }
+            if let Some(result) = split.result.strip_prefix('$') {
+                if stream_map_results.iter().any(|name| name == result) {
+                    self.push(
+                        format!("{path}/result"),
+                        format!("duplicate stream result variable `${result}`"),
+                    );
+                }
+                stream_map_results.push(result.to_owned());
+            }
+        }
         let mut stream_zone_names: HashSet<&str> = HashSet::new();
         for (index, zone) in config.stream_limit_conn_zones.iter().enumerate() {
             let path = format!("/streamLimitConnZones/{index}");
@@ -2842,9 +2997,10 @@ impl SemanticValidator {
                         );
                     }
                 }
+                (None, None) if stream.pass_address.is_some() => {}
                 (None, None) => self.push(
                     &path,
-                    "stream server requires a `target` or a `returnValue`",
+                    "stream server requires a `target`, a `returnValue`, or a `passAddress`",
                 ),
                 (None, Some(target)) => match target {
                     StreamTargetConfig::Upstream { name } => {
@@ -2900,6 +3056,23 @@ impl SemanticValidator {
                     "proxyTimeoutMs must be between 1000 and 3,600,000 milliseconds",
                 );
             }
+            if let Some(address) = &stream.pass_address {
+                match crate::config::resolve_stream_pass_target(&config.streams, address) {
+                    Ok(_) => {}
+                    Err(crate::config::StreamPassError::InvalidAddress) => self.push(
+                        format!("{path}/passAddress"),
+                        "stream pass address must be a literal `IP:port`",
+                    ),
+                    Err(crate::config::StreamPassError::NotConfigured) => self.push(
+                        format!("{path}/passAddress"),
+                        format!("stream pass `{address}` names no configured stream listener"),
+                    ),
+                    Err(crate::config::StreamPassError::Cycle) => self.push(
+                        format!("{path}/passAddress"),
+                        format!("stream pass `{address}` forms a pass cycle"),
+                    ),
+                }
+            }
         }
     }
 
@@ -2946,6 +3119,33 @@ impl SemanticValidator {
                     format!("{path}/timeoutMs"),
                     "mail timeout must be between 1 ms and 24 hours",
                 );
+            }
+            if let Some(capabilities) = &server.capabilities {
+                if capabilities.is_empty() || capabilities.len() > 64 {
+                    self.push(
+                        format!("{path}/capabilities"),
+                        "mail capabilities must contain 1..=64 entries",
+                    );
+                }
+                for (capability_index, capability) in capabilities.iter().enumerate() {
+                    if capability.is_empty()
+                        || capability.len() > 512
+                        || capability.chars().any(|character| character.is_control())
+                    {
+                        self.push(
+                            format!("{path}/capabilities/{capability_index}"),
+                            "mail capability must be 1..=512 printable bytes",
+                        );
+                    }
+                }
+            }
+            for (cidr_index, cidr) in server.real_ip_trusted_cidrs.iter().enumerate() {
+                if cidr.parse::<ipnet::IpNet>().is_err() && cidr.parse::<IpAddr>().is_err() {
+                    self.push(
+                        format!("{path}/realIpTrustedCidrs/{cidr_index}"),
+                        "mail set_real_ip_from must be an IP address or CIDR",
+                    );
+                }
             }
             for (field, value) in [
                 ("smtpClientBuffer", server.smtp_client_buffer),
@@ -3075,16 +3275,10 @@ impl SemanticValidator {
                 );
             }
         }
-        if auth.pass_client_cert {
-            // Forwarding the client certificate requires the mail plane to
-            // model downstream client-certificate verification, which it does
-            // not (mail `ssl_verify_client` fails closed). Accepting the flag
-            // would silently drop it, so it fails closed instead.
-            self.push(
-                format!("{path}/authHttp/passClientCert"),
-                "auth_http_pass_client_cert requires downstream client-certificate verification, which the mail plane does not model; remove the directive",
-            );
-        }
+        // `auth_http_pass_client_cert` is honoured only when the listener
+        // verifies a client certificate; nginx accepts the flag on a listener
+        // that requests none and simply omits `Auth-SSL-Cert`. That is the
+        // probed nginx 1.29.6 behaviour, not a silent drop.
     }
 
     /// Validate the mail frontend TLS material (Wave 9B).
@@ -3120,6 +3314,43 @@ impl SemanticValidator {
             self.push(
                 format!("{path}/tls/starttls"),
                 "implicit TLS and `starttls only` are mutually exclusive",
+            );
+        }
+        if tls.verify_depth > 1024 {
+            self.push(
+                format!("{path}/tls/verifyDepth"),
+                "ssl_verify_depth must be between 0 and 1024",
+            );
+        }
+        for (field, value) in [
+            ("clientCertificateFile", &tls.client_certificate_file),
+            ("trustedCertificateFile", &tls.trusted_certificate_file),
+        ] {
+            if value
+                .as_deref()
+                .is_some_and(|value| value.trim().is_empty())
+            {
+                self.push(
+                    format!("{path}/tls/{field}"),
+                    "a client-certificate bundle path must not be empty",
+                );
+            }
+        }
+        if tls.verify_client != crate::config::MailClientVerifyMode::Off {
+            if tls.client_certificate_file.is_none() && tls.trusted_certificate_file.is_none() {
+                // nginx `ngx_mail_ssl_module`: optional_no_ca is the only mode
+                // that accepts an empty verification store.
+                if tls.verify_client != crate::config::MailClientVerifyMode::OptionalNoCa {
+                    self.push(
+                        format!("{path}/tls/verifyClient"),
+                        "ssl_verify_client on|optional requires ssl_client_certificate or ssl_trusted_certificate",
+                    );
+                }
+            }
+        } else if tls.client_certificate_file.is_some() || tls.trusted_certificate_file.is_some() {
+            self.push(
+                format!("{path}/tls/verifyClient"),
+                "ssl_client_certificate/ssl_trusted_certificate require ssl_verify_client on|optional|optional_no_ca",
             );
         }
     }
@@ -3204,12 +3435,36 @@ impl SemanticValidator {
                     referer,
                 );
             }
+            if let Some(userid) = &virtual_host.userid {
+                validate_userid_config(self, &format!("/virtualHosts/{host_index}/userid"), userid);
+            }
+            if let Some(browser) = &virtual_host.browser {
+                validate_browser_config(
+                    self,
+                    &format!("/virtualHosts/{host_index}/browser"),
+                    browser,
+                );
+            }
             for (route_index, route) in virtual_host.routes.iter().enumerate() {
                 if let Some(referer) = &route.referer {
                     validate_referer_policy(
                         self,
                         &format!("/virtualHosts/{host_index}/routes/{route_index}/referer"),
                         referer,
+                    );
+                }
+                if let Some(userid) = &route.userid {
+                    validate_userid_config(
+                        self,
+                        &format!("/virtualHosts/{host_index}/routes/{route_index}/userid"),
+                        userid,
+                    );
+                }
+                if let Some(browser) = &route.browser {
+                    validate_browser_config(
+                        self,
+                        &format!("/virtualHosts/{host_index}/routes/{route_index}/browser"),
+                        browser,
                     );
                 }
             }
@@ -3250,6 +3505,154 @@ impl SemanticValidator {
             Err(WebServerConfigError::Validation {
                 diagnostics: self.diagnostics,
             })
+        }
+    }
+}
+
+/// Validate an nginx userid module configuration.
+///
+/// The runtime serialises every field into a `Set-Cookie` header, so a value
+/// that could break the cookie grammar (a semicolon, whitespace, or a control
+/// character) fails closed at load instead of producing a malformed field.
+fn validate_userid_config(validator: &mut SemanticValidator, path: &str, config: &UserIdConfig) {
+    let valid_cookie_token = |value: &str| {
+        !value.is_empty()
+            && value.len() <= 128
+            && value.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric()
+                    || matches!(
+                        byte,
+                        b'!' | b'#'
+                            | b'$'
+                            | b'%'
+                            | b'&'
+                            | b'\''
+                            | b'*'
+                            | b'+'
+                            | b'-'
+                            | b'.'
+                            | b'^'
+                            | b'_'
+                            | b'`'
+                            | b'|'
+                            | b'~'
+                    )
+            })
+    };
+    if !valid_cookie_token(&config.name) {
+        validator.push(
+            format!("{path}/name"),
+            "userid_name must be an RFC 9110 token of at most 128 bytes",
+        );
+    }
+    if let Some(domain) = &config.domain {
+        let valid = !domain.is_empty()
+            && domain.len() <= 253
+            && !domain
+                .bytes()
+                .any(|byte| byte <= b' ' || byte == 0x7f || matches!(byte, b';' | b',' | b'='));
+        if !valid {
+            validator.push(
+                format!("{path}/domain"),
+                "userid_domain must be a 1..=253 byte cookie domain without separators or control characters",
+            );
+        }
+    }
+    let valid_path = config.path.len() <= 512
+        && !config
+            .path
+            .bytes()
+            .any(|byte| byte <= b' ' || byte == 0x7f || byte == b';');
+    if !valid_path {
+        validator.push(
+            format!("{path}/path"),
+            "userid_path must be at most 512 bytes without separators or control characters",
+        );
+    }
+    if let Some(UserIdExpires::Seconds { seconds }) = config.expires {
+        if seconds == 0 {
+            validator.push(
+                format!("{path}/expires/seconds"),
+                "a zero userid_expires lifetime is nginx `off`; omit the field",
+            );
+        } else if seconds > 2_147_483_647 {
+            validator.push(
+                format!("{path}/expires/seconds"),
+                "userid_expires exceeds the 32-bit lifetime bound",
+            );
+        }
+    }
+    if let Some(p3p) = &config.p3p {
+        let valid = !p3p.is_empty()
+            && p3p.len() <= 512
+            && !p3p
+                .bytes()
+                .any(|byte| byte == b'\r' || byte == b'\n' || byte == 0);
+        if !valid {
+            validator.push(
+                format!("{path}/p3p"),
+                "userid_p3p must be a 1..=512 byte header value without CR/LF/NUL",
+            );
+        }
+    }
+    if let Some(mark) = config.mark {
+        if !(mark.is_ascii_alphanumeric() || mark == '=') {
+            validator.push(
+                format!("{path}/mark"),
+                "userid_mark must be a single letter, digit or `=`",
+            );
+        }
+    }
+    if let Some(service) = config.service {
+        if service > u64::from(u32::MAX) {
+            validator.push(
+                format!("{path}/service"),
+                "userid_service exceeds the 32-bit service field",
+            );
+        }
+    }
+}
+
+/// Validate an nginx browser module configuration. Values end up in headers
+/// and `return` bodies, so CR/LF is rejected.
+fn validate_browser_config(validator: &mut SemanticValidator, path: &str, config: &BrowserConfig) {
+    if config.modern.len() > 64 {
+        validator.push(
+            format!("{path}/modern"),
+            "at most 64 modern_browser rules are supported",
+        );
+    }
+    for (index, rule) in config.modern.iter().enumerate() {
+        if rule.version > 4_000_999_999 {
+            validator.push(
+                format!("{path}/modern/{index}/version"),
+                "browser version exceeds 4000.99.99.99",
+            );
+        }
+    }
+    if config.ancient.len() > 64 {
+        validator.push(
+            format!("{path}/ancient"),
+            "at most 64 ancient_browser matchers are supported",
+        );
+    }
+    for (index, matcher) in config.ancient.iter().enumerate() {
+        if matcher.len() > 512 {
+            validator.push(
+                format!("{path}/ancient/{index}"),
+                "ancient_browser matcher exceeds 512 bytes",
+            );
+        }
+    }
+    for (field, value) in [
+        ("modernValue", config.modern_value.as_str()),
+        ("ancientValue", config.ancient_value.as_str()),
+    ] {
+        if value.len() > 512 || value.bytes().any(|byte| byte == b'\r' || byte == b'\n') {
+            validator.push(
+                format!("{path}/{field}"),
+                "browser value must be at most 512 bytes without CR/LF",
+            );
         }
     }
 }
@@ -3648,6 +4051,7 @@ const REWRITE_REQUEST_VARIABLES: &[&str] = &[
 fn rewrite_variable_known(name: &str, known: &[String]) -> bool {
     is_capture_variable(name)
         || REWRITE_REQUEST_VARIABLES.contains(&name)
+        || crate::config::GEOIP_VARIABLES.contains(&name)
         || known.iter().any(|variable| variable == name)
         || name
             .strip_prefix("http_")
@@ -4069,6 +4473,12 @@ fn validate_routes(
             validator.push(
                 format!("{path}/maxRequestBodyBytes"),
                 "maxRequestBodyBytes must be greater than zero",
+            );
+        }
+        if route.http2_chunk_size == Some(0) {
+            validator.push(
+                format!("{path}/http2ChunkSize"),
+                "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
             );
         }
         let mut route_variables = server_variables.to_vec();

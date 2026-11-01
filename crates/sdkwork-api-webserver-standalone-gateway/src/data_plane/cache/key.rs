@@ -9,6 +9,13 @@ pub(crate) struct CacheKey {
     pub host: String,
     pub path: String,
     pub query: String,
+    /// nginx `slice` identity: the `Range` value of the slice this entry holds
+    /// (`bytes=<start>-<end>`). Empty for whole-object entries. nginx encodes
+    /// the same component through the operator's
+    /// `proxy_cache_key "$uri|$slice_range"`; the runtime has no key template,
+    /// so it records the identity structurally — a hit can only ever answer
+    /// the exact slice range it was stored for.
+    pub variant: String,
     /// Vary input: normalized request header values the cached response
     /// varies on (lowercase names, sorted).
     pub vary_input: BTreeMap<String, String>,
@@ -38,8 +45,18 @@ impl CacheKey {
             host: host.to_owned(),
             path: path.to_owned(),
             query: query.unwrap_or_default().to_owned(),
+            variant: String::new(),
             vary_input,
         }
+    }
+
+    /// Record the nginx slice identity (`bytes=<start>-<end>`) on this key.
+    /// Two slices of the same object never share a cache entry, exactly like
+    /// nginx's `proxy_cache_key "$uri|$slice_range"`.
+    #[must_use]
+    pub fn with_variant(mut self, variant: &str) -> Self {
+        self.variant = variant.to_owned();
+        self
     }
 
     /// Stable hex digest for durable object filenames (`proxy_cache_path`).
@@ -53,6 +70,10 @@ impl CacheKey {
         hasher.update(self.path.as_bytes());
         hasher.update([0]);
         hasher.update(self.query.as_bytes());
+        if !self.variant.is_empty() {
+            hasher.update([0]);
+            hasher.update(self.variant.as_bytes());
+        }
         for (name, value) in &self.vary_input {
             hasher.update([0]);
             hasher.update(name.as_bytes());

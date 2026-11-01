@@ -14,11 +14,11 @@ use tokio::sync::Semaphore;
 
 use super::{
     advance_ip_hash, apply_proxy_set_headers, build_target_url, classify_upgrade_request,
-    expand_proxy_header_value, is_bodyless_idempotent_request, ActiveHealthPolicy,
-    ActiveHealthTransition, AtomicBool, AtomicU32, AtomicU64, AttemptedTargets, IpAddr,
-    PassiveHealthPolicy, ProxyTarget, ProxyUpstream, RetryPolicy, SmoothWeightedState,
-    TargetActivityLease, UpgradeDisposition, UpstreamActiveHealthMethod,
-    UpstreamLoadBalancingStrategy, Url,
+    expand_proxy_header_value, expand_proxy_header_value_with_variables,
+    is_bodyless_idempotent_request, ActiveHealthPolicy, ActiveHealthTransition, AtomicBool,
+    AtomicU32, AtomicU64, AttemptedTargets, IpAddr, PassiveHealthPolicy, ProxyTarget,
+    ProxyUpstream, RetryPolicy, SmoothWeightedState, TargetActivityLease, UpgradeDisposition,
+    UpstreamActiveHealthMethod, UpstreamLoadBalancingStrategy, Url,
 };
 
 #[test]
@@ -1273,6 +1273,37 @@ fn proxy_set_header_expands_supported_nginx_variables() {
         &no_maps(),
     )
     .is_err());
+}
+
+#[test]
+fn proxy_set_header_expands_geoip_variables() {
+    let source = HeaderMap::new();
+    let client = "127.0.0.1".parse::<IpAddr>().expect("ip");
+    let geoip = sdkwork_webserver_core::GeoIpRequestState {
+        country_code: "US".to_owned(),
+        city: "Testville".to_owned(),
+        org: "Example Org".to_owned(),
+        ..sdkwork_webserver_core::GeoIpRequestState::default()
+    };
+    assert_eq!(
+        expand_proxy_header_value_with_variables(
+            "$geoip_country_code/$geoip_city/$geoip_org",
+            &source,
+            client,
+            "https",
+            "app.example.com",
+            443,
+            &no_maps(),
+            "",
+            "",
+            "",
+            "",
+            Some(&geoip),
+            None,
+        )
+        .expect("expand"),
+        "US/Testville/Example Org"
+    );
 }
 
 #[test]

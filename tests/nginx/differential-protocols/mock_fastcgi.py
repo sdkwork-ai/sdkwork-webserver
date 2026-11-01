@@ -178,6 +178,35 @@ def handle(connection: socket.socket, connection_id: int) -> None:
                     if not keep_conn:
                         return
                     continue
+            if request_uri.startswith("/d14a/"):
+                # Wave 14A temp-spool / connection-control cases: a body far
+                # larger than the fixture's 8x4k response buffers (so the
+                # temp-file tier is exercised) and a stderr stream carrying the
+                # configured `fastcgi_catch_stderr` marker only on `/catch/`.
+                if request_uri.startswith("/d14a/catch/match"):
+                    stderr = b"PHP Fatal error: BOOM here\n"
+                else:
+                    stderr = b"mock-stderr\n"
+                payload = b""
+                for index in range(48):
+                    payload += f"{index:04d}:".encode() + b"D" * 1015
+                head = (
+                    b"Status: 200 OK\r\n"
+                    b"Content-Type: text/plain\r\n"
+                    b"X-Mock-Fcgi: yes\r\n"
+                    b"Content-Length: " + str(len(payload)).encode() + b"\r\n\r\n"
+                )
+                emit_body = by_name.get("REQUEST_METHOD", "GET") != "HEAD"
+                connection.sendall(record(7, stderr))
+                connection.sendall(record(6, head))
+                if emit_body:
+                    for index in range(0, len(payload), 32768):
+                        connection.sendall(record(6, payload[index : index + 32768]))
+                connection.sendall(record(6, b""))
+                connection.sendall(record(3, struct.pack("!IB3x", 0, 0)))
+                if not keep_conn:
+                    return
+                continue
             if request_uri.startswith("/d7/"):
                 mode = request_uri.split("?")[0].split("/")[2]
                 if mode == "store":

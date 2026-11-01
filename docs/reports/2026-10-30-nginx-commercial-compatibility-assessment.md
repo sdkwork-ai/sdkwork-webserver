@@ -8,6 +8,13 @@
 - 指令级契约：`specs/nginx-directive-support.catalog.json`
 - 运维支持矩阵：`docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md`
 
+## 终态说明
+
+本报告记录各 Wave 的过程证据。**最终终态验收（2026-11-01，HEAD cab02622）见
+[2026-11-01-nginx-compatibility-final-acceptance.md](2026-11-01-nginx-compatibility-final-acceptance.md)**：
+397 executable / 173 accepted-unenforced / 169 fail-closed / 5 out-of-profile；
+剩余 34 条行为缺口全部为 pinned 依赖或 nginx Plus 阻塞，已无可实现指令。
+
 ## 0. 结论
 
 **声明档位 `http-core-v1` 内已达到可商业化落地要求；"与 nginx 所有功能完美兼容"仍是不可实现、不可验证、不应对外承诺的目标。** 本轮按 nginx 744 条指令逐条复核并分波次实施，把商业价值最高的 20 条"接受但不执行/失败关闭"指令变成真实可执行能力，并全部以真实 nginx 差分为证据。
@@ -16,10 +23,10 @@
 
 | 分类 | 轮前 | 本轮后 | 商业解读 |
 | --- | ---: | ---: | --- |
-| executable（真实执行且有测试证据） | 79 | **328** | 可承诺 |
-| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **171** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
-| rejected (fail closed)（活跃出现即报错） | 253 | **232** | 安全失败，不静默近似（原档位外模块的未实现形式转为显式失败关闭） |
-| excluded from profile（明确排除） | 229 | **13** | 仅 GeoIP 8 / Perl 4 / 动态模块 1；HTTP/3 为 fail-closed 规划项 |
+| executable（真实执行且有测试证据） | 79 | **397** | 可承诺 |
+| accepted, NOT enforced（接受但值不生效，逐条诊断） | 183 | **170** | 迁移风险集合，矩阵逐条给出损失与替代动作 |
+| rejected (fail closed)（活跃出现即报错） | 253 | **169** | 安全失败；剩余 34 条全部为 pinned 依赖/nginx Plus 阻塞项 |
+| excluded from profile（明确排除） | 229 | **5** | 仅 Perl 4 / 动态模块 1；GeoIP 已进档位，HTTP/3 为 fail-closed 规划项 |
 | **合计** | 744 | **744** | |
 
 判定：
@@ -30,7 +37,7 @@
 | 任意 nginx 配置无损迁移 | 否；166 条"接受但不执行"必须按矩阵逐条决策 |
 | 未实现能力是否静默 | 否；nginx-conf 与 typed TOML 两个平面都产生带位置诊断 |
 | 发布是否会绕过兼容验证 | 否；`check:nginx-compat` 已接入 `_sdkwork:verify`，未执行即失败 |
-| 剩余关键差距 | `chunked_transfer_encoding`、charset 族、autoindex 族、gzip 细化、HTTP/2 调优、stream 模块部分能力、OCSP/RFC8441/监听拓扑热切换（见 §5） |
+| 剩余关键差距 | 34 条全部为 pinned 依赖/nginx Plus：`chunked_transfer_encoding`（hyper 无 close-delimited）、OCSP 动态（rustls 静态）、gRPC/uWSGI/mail 的 rustls/OpenSSL TLS 旋钮、`degradation`/`degrade`（Plus）；详见终态报告 §4 |
 
 ## 1. 本轮按指令实施的内容
 
@@ -128,11 +135,11 @@
 | --- | --- | --- |
 | 进程内全表面行为回归 | `python3 tests/nginx/full-surface/probe.py` | **76/76** |
 | 条件请求/range/缓存差分 | `node tools/run-nginx-differential.mjs` | **50/50**，0 非预期 |
-| 宽面 HTTP 差分（87→274 例） | `node tools/run-nginx-differential-http.mjs` | **274/274**，0 非预期 |
-| 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **77/77** 逐字节一致（含 bind/keep-conn/unix、uWSGI TLS/mTLS、CGI cache、store/limit_rate/ranges/buffering 用例） |
+| 宽面 HTTP 差分（87→274 例） | `node tools/run-nginx-differential-http.mjs` | **384/384**，0 非预期 |
+| 上游协议差分（FastCGI/uWSGI/SCGI/memcached/gRPC vs nginx） | `node tools/run-nginx-differential-protocols.mjs` | **89/89** 逐字节一致（含 bind/keep-conn/unix、uWSGI TLS/mTLS、CGI cache、store/rate/ranges/buffering、temp-spool/catch_stderr 用例） |
 | 真实生产配置验收（api.birdcoder.com 快照） | `node tools/check-nginx-real-world.mjs` | virtualHosts=41 / listeners=4 / resources=150 / upstreams=88 / skipped=0，纳入聚合门禁 |
-| stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **9/9**（limit_conn/dry-run/ACL/return/set/map/SNI） |
-| 邮件代理差分（POP3/IMAP/SMTP vs nginx） | `node tools/run-nginx-differential-mail.mjs` | **9/9**（auth_http、登录/中继、AUTH 失败、XCLIENT、隐式 TLS、STARTTLS） |
+| stream 差分（连接级行为 vs nginx） | `node tools/run-nginx-differential-stream.mjs` | **23/23**（14 主 + 9 额外：split_clients/pass） |
+| 邮件代理差分（POP3/IMAP/SMTP vs nginx） | `node tools/run-nginx-differential-mail.mjs` | **36/36**（9 主 + 8 capabilities/realip + 19 client-cert） |
 | 虚拟主机/命名 location 差分 | `node tools/run-nginx-differential-host.mjs` | **39/39**，0 非预期 |
 | 聚合发布门禁 | `node tools/run-nginx-compat-gate.mjs` | PASS（静态门禁 + 行为回归 + 3 个差分 slice + 逐指令审计校验） |
 | 指令矩阵漂移 | `node tools/check-nginx-directive-matrix.mjs` | **12/12** |
@@ -176,7 +183,9 @@
 
 > 说明：协议模块中原先被排除的 cache/buffer/store/ssl 子族、unix socket、变量目标等未实现形式现为**带定位诊断的失败关闭**（行为缺口清单），不再是"档位外"。gRPC 已端到端落地（h2 客户端 + 始终校验的上游 TLS + trailers；非零 grpc-status 按 nginx 语义透传而非 502）。
 
-## 4.1 剩余行为缺口（审计台账 §3.2，全部有明确架构阻塞，不是静默忽略）
+## 4.1 剩余行为缺口（终态：34 条，全部为依赖/Plus 阻塞，详见终态报告）
+
+最终清单：hyper HTTP/1 close-delimited framing 1；rustls 静态 OCSP 6；gRPC rustls TLS 旋钮 6；uWSGI rustls TLS 旋钮 7；mail rustls TLS 旋钮 12；nginx Plus `degradation`/`degrade` 2。每条都有定位失败关闭诊断与上游修复路径（终态报告 §4）。
 
 | 分类 | 数量 | 指令 | 阻塞与结论 |
 | --- | ---: | --- | --- |
@@ -191,6 +200,8 @@
 这些缺口在支持矩阵与审计台账中逐条可见，且**没有任何一条被静默近似**：活跃配置要么被真实执行，要么产生带位置的诊断或被拒绝。
 
 ## 5. 未实现能力、商业影响与建议
+
+> 终态：档位外仅剩 Perl（4）+ `load_module`（1）；Lua/njs/第三方动态模块与 nginx Plus 明确排除。商业结论见终态报告 §6。
 
 | 能力 | 现状 | 商业影响 | 优先级 |
 | --- | --- | --- | --- |

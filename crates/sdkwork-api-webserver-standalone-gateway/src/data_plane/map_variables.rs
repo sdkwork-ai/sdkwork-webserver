@@ -19,7 +19,9 @@
 use std::net::IpAddr;
 
 use axum::http::HeaderMap;
-use sdkwork_webserver_core::{normalize_authority_host, MapVariables, WebServerAppConfig};
+use sdkwork_webserver_core::{
+    normalize_authority_host, GeoIpRequestState, MapVariables, WebServerAppConfig,
+};
 
 /// Per-request facts a `map` declaration is evaluated against.
 pub(crate) struct MapRequestFacts<'a> {
@@ -36,6 +38,8 @@ pub(crate) struct MapRequestFacts<'a> {
     pub method: &'a str,
     pub server_name: &'a str,
     pub headers: &'a HeaderMap,
+    /// Resolved nginx GeoIP variables for this request.
+    pub geoip: Option<&'a GeoIpRequestState>,
 }
 
 impl MapVariables for MapRequestFacts<'_> {
@@ -56,6 +60,9 @@ impl MapVariables for MapRequestFacts<'_> {
             "request_method" => self.method.to_owned(),
             "server_name" => self.server_name.to_owned(),
             _ => {
+                if let Some(value) = self.geoip.and_then(|geoip| geoip.value(name)) {
+                    return Some(value.to_owned());
+                }
                 if let Some(header) = name.strip_prefix("http_") {
                     let header_name = header.replace('_', "-");
                     return Some(joined_header(self.headers, &header_name));
@@ -314,7 +321,31 @@ mod tests {
             method: "GET",
             server_name: "web.example.com",
             headers,
+            geoip: None,
         }
+    }
+
+    #[test]
+    fn geoip_variables_are_map_sources_and_values() {
+        let headers = HeaderMap::new();
+        let geoip = GeoIpRequestState {
+            country_code: "US".to_owned(),
+            city: "Testville".to_owned(),
+            ..GeoIpRequestState::default()
+        };
+        let facts = MapRequestFacts {
+            geoip: Some(&geoip),
+            ..facts(&headers, None)
+        };
+        assert_eq!(
+            facts.map_variable("geoip_country_code").as_deref(),
+            Some("US")
+        );
+        assert_eq!(
+            facts.map_variable("geoip_city").as_deref(),
+            Some("Testville")
+        );
+        assert_eq!(facts.map_variable("geoip_org").as_deref(), Some(""));
     }
 
     #[test]

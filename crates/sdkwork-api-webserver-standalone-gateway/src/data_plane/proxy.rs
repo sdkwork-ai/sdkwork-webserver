@@ -22,9 +22,9 @@ use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use sdkwork_webserver_core::{
-    CompiledWebServerApp, ProxyResponsePolicyConfig, RouteConfig, UpstreamActiveHealthConfig,
-    UpstreamActiveHealthMethod, UpstreamConfig, UpstreamHashKeyVar, UpstreamLoadBalancingStrategy,
-    UpstreamRetryCondition,
+    CompiledWebServerApp, GeoIpRequestState, ProxyResponsePolicyConfig, RouteConfig,
+    UpstreamActiveHealthConfig, UpstreamActiveHealthMethod, UpstreamConfig, UpstreamHashKeyVar,
+    UpstreamLoadBalancingStrategy, UpstreamRetryCondition,
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use url::Url;
@@ -374,6 +374,15 @@ pub(super) struct ProxyRequestContext<'a> {
     /// nginx `map` results for this request, expandable in
     /// `proxy_set_header` values and variable `proxy_pass` targets.
     pub map_results: &'a super::map_variables::MapResults,
+    /// nginx userid module variables for this main request, expandable in
+    /// `proxy_set_header` values (`$uid_got` / `$uid_set`).
+    pub uid_got: &'a str,
+    pub uid_set: &'a str,
+    /// nginx browser module variables (`$modern_browser` / `$ancient_browser`).
+    pub modern_browser: &'a str,
+    pub ancient_browser: &'a str,
+    /// nginx GeoIP module variables (`$geoip_*`) for `proxy_set_header`.
+    pub geoip: Option<&'a GeoIpRequestState>,
     /// nginx proxy response-header policy (`proxy_hide_header`,
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`) resolved for this proxy resource.
@@ -383,6 +392,13 @@ pub(super) struct ProxyRequestContext<'a> {
     /// Rewrite-phase variables for request-time `proxy_pass` templates
     /// (arbitrary request variables, `${name}` braces, `$1..$9` captures).
     pub variables: Option<&'a super::request_variables::RequestVariables>,
+    /// nginx `$slice_range` for the upstream exchange currently being built
+    /// (`ngx_http_slice_filter_module`). `Some(bytes=<start>-<end>)` while the
+    /// slice pipeline fetches one slice; `None` on the ordinary one-exchange
+    /// path, where `$slice_range` expands to the empty string (nginx's
+    /// not-found rendering) and a `proxy_set_header Range $slice_range` entry
+    /// therefore drops the header.
+    pub slice_range: Option<&'a str>,
 }
 
 mod hash_lb;
@@ -408,6 +424,24 @@ pub(super) async fn proxy_request_cached(
 ) -> Response<Body> {
     if context.dynamic_target.is_some() {
         // Dynamic targets vary per request; caching would mix hosts.
+        return proxy_request(context, request).await;
+    }
+    // nginx `slice <size>` (`ngx_http_slice_filter_module`): once the operator
+    // wires `proxy_set_header Range $slice_range`, the proxy adapter turns one
+    // client request into per-slice Range exchanges and assembles the response.
+    // An unwired declaration stays on the ordinary one-exchange path, exactly
+    // like nginx (no `$slice_range` evaluation means no slice context).
+    if let Some(slice_size) = context.route.slice_size.filter(|size| *size > 0) {
+        if super::slice::slice_wired(context.request_set_headers) {
+            return super::slice::proxy_sliced(context, request, slice_size).await;
+        }
+    }
+    // nginx `proxy_cache` is a location/server/http directive: a route that
+    // never declares a cache zone must not use the shared cache, even when
+    // another location declares `proxy_cache_path` (that only creates the
+    // zone). `None` keeps the typed-config legacy app-level toggle.
+    if context.route.proxy_cache == Some(false) {
+        tracing::debug!("proxy cache not declared for route {}", context.route.id);
         return proxy_request(context, request).await;
     }
     let Some(cache) = context.cache.clone() else {
@@ -1151,7 +1185,7 @@ async fn proxy_http_request(
                 return text_response(StatusCode::BAD_REQUEST, "invalid Trailer declaration\n");
             }
         };
-    if apply_proxy_set_headers(
+    if apply_proxy_set_headers_with_variables(
         &mut headers,
         context.request_set_headers,
         &request_parts.headers,
@@ -1160,6 +1194,12 @@ async fn proxy_http_request(
         context.external_authority,
         context.listener_port,
         context.map_results,
+        context.uid_got,
+        context.uid_set,
+        context.modern_browser,
+        context.ancient_browser,
+        context.geoip,
+        context.slice_range,
     )
     .is_err()
     {
@@ -1524,7 +1564,7 @@ async fn proxy_websocket_request(
             ));
         }
     };
-    if apply_proxy_set_headers(
+    if apply_proxy_set_headers_with_variables(
         &mut headers,
         context.request_set_headers,
         &parts.headers,
@@ -1533,6 +1573,12 @@ async fn proxy_websocket_request(
         context.external_authority,
         context.listener_port,
         context.map_results,
+        context.uid_got,
+        context.uid_set,
+        context.modern_browser,
+        context.ancient_browser,
+        context.geoip,
+        context.slice_range,
     )
     .is_err()
     {
@@ -1910,6 +1956,8 @@ fn forwarded_request_headers(
 /// Apply nginx-style `proxy_set_header` entries onto the upstream request map.
 /// Empty list keeps the fixed safe forwarding defaults from
 /// [`forwarded_request_headers`].
+/// Test-only wrapper preserving the pre-Wave-11A call shape.
+#[cfg(test)]
 fn apply_proxy_set_headers(
     target: &mut HeaderMap,
     entries: &[String],
@@ -1919,6 +1967,69 @@ fn apply_proxy_set_headers(
     external_authority: &str,
     listener_port: u16,
     maps: &super::map_variables::MapResults,
+) -> Result<(), ()> {
+    apply_proxy_set_headers_with_variables(
+        target,
+        entries,
+        source,
+        client_ip,
+        external_scheme,
+        external_authority,
+        listener_port,
+        maps,
+        "",
+        "",
+        "",
+        "",
+        None,
+        None,
+    )
+}
+
+/// Test-only wrapper preserving the pre-Wave-11A call shape.
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+fn expand_proxy_header_value(
+    template: &str,
+    source: &HeaderMap,
+    client_ip: IpAddr,
+    external_scheme: &str,
+    external_authority: &str,
+    listener_port: u16,
+    maps: &super::map_variables::MapResults,
+) -> Result<String, ()> {
+    expand_proxy_header_value_with_variables(
+        template,
+        source,
+        client_ip,
+        external_scheme,
+        external_authority,
+        listener_port,
+        maps,
+        "",
+        "",
+        "",
+        "",
+        None,
+        None,
+    )
+}
+
+fn apply_proxy_set_headers_with_variables(
+    target: &mut HeaderMap,
+    entries: &[String],
+    source: &HeaderMap,
+    client_ip: IpAddr,
+    external_scheme: &str,
+    external_authority: &str,
+    listener_port: u16,
+    maps: &super::map_variables::MapResults,
+    uid_got: &str,
+    uid_set: &str,
+    modern_browser: &str,
+    ancient_browser: &str,
+    geoip: Option<&GeoIpRequestState>,
+    slice_range: Option<&str>,
 ) -> Result<(), ()> {
     for entry in entries {
         let trimmed = entry.trim();
@@ -1930,7 +2041,7 @@ fn apply_proxy_set_headers(
             .map(|(n, v)| (n.trim(), v.trim()))
             .unwrap_or((trimmed, ""));
         let header_name = HeaderName::from_bytes(name.as_bytes()).map_err(|_| ())?;
-        let expanded = expand_proxy_header_value(
+        let expanded = expand_proxy_header_value_with_variables(
             value_template,
             source,
             client_ip,
@@ -1938,6 +2049,12 @@ fn apply_proxy_set_headers(
             external_authority,
             listener_port,
             maps,
+            uid_got,
+            uid_set,
+            modern_browser,
+            ancient_browser,
+            geoip,
+            slice_range,
         )?;
         if expanded.is_empty() {
             target.remove(header_name);
@@ -1949,7 +2066,7 @@ fn apply_proxy_set_headers(
     Ok(())
 }
 
-fn expand_proxy_header_value(
+fn expand_proxy_header_value_with_variables(
     template: &str,
     source: &HeaderMap,
     client_ip: IpAddr,
@@ -1957,6 +2074,12 @@ fn expand_proxy_header_value(
     external_authority: &str,
     listener_port: u16,
     maps: &super::map_variables::MapResults,
+    uid_got: &str,
+    uid_set: &str,
+    modern_browser: &str,
+    ancient_browser: &str,
+    geoip: Option<&GeoIpRequestState>,
+    slice_range: Option<&str>,
 ) -> Result<String, ()> {
     let mut out = String::with_capacity(template.len());
     let bytes = template.as_bytes();
@@ -2030,6 +2153,40 @@ fn expand_proxy_header_value(
                             _ => "80",
                         });
                     out.push_str(port);
+                }
+            }
+            "uid_got" => out.push_str(uid_got),
+            "uid_set" => out.push_str(uid_set),
+            "modern_browser" => out.push_str(modern_browser),
+            "ancient_browser" => out.push_str(ancient_browser),
+            // nginx `$slice_range` (`ngx_http_slice_filter_module`): the range
+            // of the slice currently being fetched. nginx registers the
+            // variable without a default, so any context where the module has
+            // no slice context (no `slice`, `slice 0`, a non-main request, or
+            // the response already started) renders it as the empty string.
+            "slice_range" => {
+                if let Some(range) = slice_range {
+                    out.push_str(range);
+                }
+            }
+            "geoip_country_code"
+            | "geoip_country_code3"
+            | "geoip_country_name"
+            | "geoip_org"
+            | "geoip_city_continent_code"
+            | "geoip_city_country_code"
+            | "geoip_city_country_code3"
+            | "geoip_city_country_name"
+            | "geoip_region"
+            | "geoip_region_name"
+            | "geoip_city"
+            | "geoip_postal_code"
+            | "geoip_latitude"
+            | "geoip_longitude"
+            | "geoip_dma_code"
+            | "geoip_area_code" => {
+                if let Some(value) = geoip.and_then(|geoip| geoip.value(var)) {
+                    out.push_str(value);
                 }
             }
             _ if var.starts_with("http_") => {

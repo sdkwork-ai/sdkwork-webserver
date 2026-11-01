@@ -4,6 +4,10 @@ use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::browser::BrowserConfig;
+use super::geoip::GeoIpConfig;
+use super::userid::UserIdConfig;
+
 fn default_profile() -> String {
     "http-core-v1".to_owned()
 }
@@ -459,6 +463,25 @@ pub struct WebServerAppConfig {
     /// nginx `geo` address-variable blocks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub geo: Vec<GeoConfig>,
+    /// nginx GeoIP module configuration (http context only).
+    ///
+    /// The databases are MaxMind DB files; the runtime opens them once per
+    /// configuration generation and resolves `$geoip_*` from the request
+    /// address. A missing/unreadable/invalid/wrong-edition database is a
+    /// located configuration diagnostic. See `config::geoip`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geoip: Option<GeoIpConfig>,
+    /// nginx stream GeoIP module configuration (`stream { geoip_country …; }`).
+    ///
+    /// The stream module has only the three database directives (no
+    /// `geoip_proxy`/`geoip_proxy_recursive`); every connection is resolved
+    /// from its accepted peer address.
+    #[serde(
+        rename = "streamGeoip",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stream_geoip: Option<GeoIpConfig>,
     /// nginx `split_clients` buckets.
     #[serde(
         rename = "splitClients",
@@ -470,6 +493,19 @@ pub struct WebServerAppConfig {
     /// plane knows at accept/preread time).
     #[serde(rename = "streamMaps", default, skip_serializing_if = "Vec::is_empty")]
     pub stream_maps: Vec<MapConfig>,
+    /// nginx stream `split_clients` blocks. The expanded source is hashed with
+    /// nginx's MurmurHash2 and assigned to the configured bucket; the result is
+    /// a per-connection variable consumed by stream `set`/`return` templates
+    /// exactly like a stream `map` result. Sources are restricted to the
+    /// accept/preread variable set (`$remote_addr`, `$remote_port`,
+    /// `$server_addr`, `$server_port`, `$ssl_preread_server_name` and the
+    /// stream GeoIP variables).
+    #[serde(
+        rename = "streamSplitClients",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub stream_split_clients: Vec<SplitClientsConfig>,
     /// Names of nginx HTTP cache zones declared by `proxy_cache_path` or a
     /// CGI `*_cache_path` `keys_zone=` parameter. All zones share the single
     /// process cache store (bounded difference: nginx sizes each zone
@@ -672,6 +708,36 @@ pub struct NginxConfig {
     /// be a strict descendant of this absolute directory (no `..`, no NUL).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub store_root: Option<String>,
+    /// Typed-TOML `[http] tempRoot`: the operator-configured directory that
+    /// the CGI-family temp-spool tier (and any `*_temp_path`) must live under.
+    ///
+    /// The nginx plane accepts an absolute `*_temp_path` exactly like stock
+    /// nginx (the configuration file is operator-owned); the typed plane
+    /// requires this root for confinement, and every configured temp path must
+    /// be a strict descendant of it. When unset, spool files are created in a
+    /// per-process, per-generation directory under the system temp directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temp_root: Option<String>,
+    /// Overall disk budget for in-flight spool files (`[http]
+    /// tempSpoolBudgetBytes`). A body that would exceed it stops spooling and
+    /// is completed in memory (nginx's "pass the response without buffering"
+    /// degradation), bounded by the runtime response-body ceiling.
+    #[serde(default = "default_temp_spool_budget_bytes")]
+    pub temp_spool_budget_bytes: u64,
+    /// Maximum number of simultaneously open spool files (`[http]
+    /// tempSpoolMaxFiles`). Exceeding it degrades the same bounded way as the
+    /// byte budget.
+    #[serde(default = "default_temp_spool_max_files")]
+    pub temp_spool_max_files: usize,
+    /// Typed-TOML `[http] geoipDatabaseRoot`: the operator-configured directory
+    /// that GeoIP MMDB database paths must live under.
+    ///
+    /// The nginx plane accepts any absolute database path exactly like stock
+    /// nginx (the file is operator-owned); the typed plane can additionally
+    /// confine every database to this root. When present, each configured path
+    /// must be a strict lexical descendant of this absolute directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geoip_database_root: Option<String>,
     /// Typed `[http] documentRootAllowlist`: absolute directory prefixes a
     /// request-time `root $variable;` / `alias $variable;` may resolve to.
     ///
@@ -923,6 +989,10 @@ impl Default for NginxConfig {
             unknown_directive_policy: default_unknown_directive_policy(),
             unix_socket_root: None,
             store_root: None,
+            temp_root: None,
+            temp_spool_budget_bytes: default_temp_spool_budget_bytes(),
+            temp_spool_max_files: default_temp_spool_max_files(),
+            geoip_database_root: None,
             document_root_allowlist: Vec::new(),
             native_compatibility: false,
         }
@@ -963,6 +1033,32 @@ pub struct UpstreamBufferingConfig {
 pub struct UpstreamStoreConfig {
     pub path: String,
     pub access_mode: u32,
+}
+
+/// Executed nginx CGI-family temp-spool policy
+/// (`*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`).
+///
+/// nginx switches an oversized buffered upstream response to a temp file once
+/// its response buffers are exhausted. The runtime mirrors that tier with a
+/// bounded per-generation spool directory: an upstream body larger than the
+/// in-memory bound is written to a `0600` uniquely named file in `path` and
+/// served from there, then deleted on completion, error or drop.
+/// `max_file_bytes` is nginx's `*_max_temp_file_size`; `0` disables the spool
+/// tier, exactly like nginx (the response is then delivered without a temp
+/// file, bounded by the runtime's response-body ceiling).
+/// `write_chunk_bytes` is nginx's `*_temp_file_write_size`, the upper bound of
+/// one write call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpstreamTempPolicyConfig {
+    /// `*_temp_path`: absolute spool directory. `None` uses the per-generation
+    /// directory under `nginx.tempRoot` (or the system temp directory).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// `*_max_temp_file_size` in bytes (`0` disables the spool tier).
+    pub max_file_bytes: u64,
+    /// `*_temp_file_write_size` in bytes.
+    pub write_chunk_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1446,6 +1542,17 @@ fn default_upstream_pass_request_headers() -> bool {
     true
 }
 
+/// Default overall CGI-family temp-spool disk budget: 128 MiB of in-flight
+/// spool files per runtime generation.
+fn default_temp_spool_budget_bytes() -> u64 {
+    128 * 1024 * 1024
+}
+
+/// Default maximum number of simultaneously open spool files per generation.
+fn default_temp_spool_max_files() -> usize {
+    32
+}
+
 fn default_grpc_buffer_size() -> u64 {
     // nginx `grpc_buffer_size` default.
     4096
@@ -1642,6 +1749,25 @@ pub enum ResourceConfig {
         /// is exactly the ignored state the directive requests).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ignore_headers: Vec<String>,
+        /// `fastcgi_temp_path` / `fastcgi_max_temp_file_size` /
+        /// `fastcgi_temp_file_write_size`: the bounded temp-spool tier for an
+        /// upstream body larger than the in-memory response buffers. `None`
+        /// uses nginx's defaults (spool enabled, 1 GiB per-file limit, write
+        /// chunk derived from the buffer sizes).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        temp_policy: Option<UpstreamTempPolicyConfig>,
+        /// `fastcgi_ignore_client_abort on`: decouple the upstream exchange
+        /// from the client connection, so a client abort does not terminate
+        /// the in-flight upstream request. `off` (nginx default) aborts it.
+        #[serde(default)]
+        ignore_client_abort: bool,
+        /// `fastcgi_catch_stderr`: substrings searched in every FastCGI
+        /// `STDERR` record. A match makes the response invalid (nginx answers
+        /// 502 and does not retry the next upstream by default). The directive
+        /// may appear multiple times; the list accumulates in declaration
+        /// order.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        catch_stderr: Vec<String>,
     },
     /// nginx `memcached_pass` location handler: bounded text-protocol GET/HEAD
     /// against one memcached upstream. The request key is the expansion of the
@@ -1759,6 +1885,14 @@ pub enum ResourceConfig {
         /// `*_ignore_headers` resolved field list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ignore_headers: Vec<String>,
+        /// `*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`:
+        /// the bounded temp-spool tier. `None` uses nginx's defaults.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        temp_policy: Option<UpstreamTempPolicyConfig>,
+        /// `*_ignore_client_abort on`: decouple the upstream exchange from the
+        /// client connection (`off` is nginx's default and aborts it).
+        #[serde(default)]
+        ignore_client_abort: bool,
     },
     /// nginx `grpc_pass` location handler: gRPC over HTTP/2. The transport is
     /// cleartext h2c for `grpc://` targets and TLS for `grpcs://` targets (the
@@ -1802,6 +1936,15 @@ pub enum ResourceConfig {
         /// `grpc_ignore_headers` resolved field list.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         ignore_headers: Vec<String>,
+        /// nginx `grpc_bind <address>`: bind the upstream connection's source
+        /// address before connect. Only an IP literal is executable
+        /// (`grpc_bind off` clears an inherited bind).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bind_address: Option<IpAddr>,
+        /// nginx `grpc_socket_keepalive on`: enable `SO_KEEPALIVE` on the
+        /// upstream socket.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        socket_keepalive: Option<bool>,
     },
     Redirect {
         id: String,
@@ -2141,6 +2284,15 @@ pub struct StreamServerConfig {
     /// connection and close it instead of proxying.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub return_value: Option<String>,
+    /// nginx stream `pass <address>`: hand the accepted connection to the
+    /// stream server bound at `<ip>:<port>` (the `ngx_stream_pass_module`
+    /// re-dispatches the connection to that listening socket, whose default
+    /// virtual server then runs its own access phase and content handler).
+    /// IP-literal addresses with an explicit port only; a variable address
+    /// fails closed at materialization. `None` keeps the server's own content
+    /// handler.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pass_address: Option<String>,
     /// nginx stream `limit_conn <zone> <n>` rules (checked at accept time;
     /// a denied connection is closed silently, like nginx).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2341,6 +2493,18 @@ pub struct MailServerConfig {
     /// is Wave 9B's relay concern).
     #[serde(default)]
     pub proxy_protocol: bool,
+    /// nginx mail `set_real_ip_from <address…>`: PROXY protocol peers trusted
+    /// to supply the client address. The header source replaces the connection
+    /// peer only when the connecting address matches one of these networks
+    /// (nginx `ngx_mail_realip_module`); an empty list trusts nobody.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub real_ip_trusted_cidrs: Vec<String>,
+    /// nginx `smtp_capabilities` / `imap_capabilities` / `pop3_capabilities`:
+    /// the custom capability list advertised by this listener, in authored
+    /// order (each entry is one advertised capability line). `None` keeps the
+    /// protocol's built-in default list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
     /// nginx `smtp_client_buffer`: the SMTP client command line bound.
     #[serde(default = "default_mail_client_buffer_bytes")]
     pub smtp_client_buffer: usize,
@@ -2440,6 +2604,51 @@ pub struct MailTlsConfig {
     /// Listen with implicit TLS (`listen … ssl`).
     #[serde(default)]
     pub implicit: bool,
+    /// nginx mail `ssl_verify_client on|off|optional|optional_no_ca`: the
+    /// client-certificate policy of the frontend TLS listener. nginx requests a
+    /// client certificate for every mode except `off` and checks the result
+    /// after the handshake (its OpenSSL verify callback always succeeds), so
+    /// the runtime reproduces the post-handshake rejection and the
+    /// protocol-level error line instead of a TLS handshake alert.
+    #[serde(default)]
+    pub verify_client: MailClientVerifyMode,
+    /// nginx mail `ssl_verify_depth` (nginx default 1): the maximum number of
+    /// intermediate CA certificates in the verified client certificate path.
+    /// `0` allows only a certificate issued directly by a trust anchor.
+    #[serde(default = "default_mail_verify_depth")]
+    pub verify_depth: u32,
+    /// nginx mail `ssl_client_certificate`: PEM CA bundle used as the client
+    /// certificate trust store **and** as the CertificateRequest CA-name hint
+    /// list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_certificate_file: Option<String>,
+    /// nginx mail `ssl_trusted_certificate`: PEM certificates added to the
+    /// verification store for chain building, without being advertised as CA
+    /// hints (nginx distinguishes the two bundles exactly this way).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trusted_certificate_file: Option<String>,
+}
+
+/// nginx mail `ssl_verify_client` mode.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MailClientVerifyMode {
+    /// `ssl_verify_client off`: no client certificate is requested.
+    #[default]
+    Off,
+    /// `ssl_verify_client on`: a client certificate is required and must
+    /// verify. A missing or unverifiable certificate is rejected with the
+    /// protocol's error line after the TLS handshake.
+    On,
+    /// `ssl_verify_client optional`: a certificate is requested and verified
+    /// when present; a missing certificate is accepted.
+    Optional,
+    /// `ssl_verify_client optional_no_ca`: a certificate is requested and its
+    /// path is verified, but nginx's documented "optional" verification
+    /// failures (unknown issuer, self-signed, untrusted) are tolerated and
+    /// recorded. Every other verification error (expired, bad signature,
+    /// depth) is rejected; this is never an unconditional accept.
+    OptionalNoCa,
 }
 
 /// One allowed TLS protocol token from mail `ssl_protocols`.
@@ -2547,6 +2756,11 @@ fn default_mail_auth_http_timeout_ms() -> u64 {
 
 fn default_mail_tls_protocols() -> Vec<MailTlsProtocol> {
     vec![MailTlsProtocol::Tls12, MailTlsProtocol::Tls13]
+}
+
+/// nginx mail `ssl_verify_depth` merge default (`ngx_mail_ssl_module`).
+fn default_mail_verify_depth() -> u32 {
+    1
 }
 
 fn default_mail_proxy_buffer_bytes() -> usize {
@@ -3058,6 +3272,20 @@ pub struct VirtualHostConfig {
     /// declared it (`$invalid_referer` is empty).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referer: Option<RefererConfig>,
+    /// Server-level nginx userid module configuration resolved for this host;
+    /// `None` means no level declared a userid directive (the module is off).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub userid: Option<UserIdConfig>,
+    /// Server-level nginx browser module configuration resolved for this host;
+    /// `None` leaves nginx's defaults (no modern rule, no ancient matcher).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<BrowserConfig>,
+    /// Server-level nginx `http2_chunk_size` resolved for this host
+    /// (http → server inheritance); `None` keeps nginx's 8 KiB default.
+    /// The runtime re-chunks HTTP/2 response bodies at this boundary because
+    /// the pinned hyper/h2 ingress exposes no DATA-frame chunk-size knob.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http2_chunk_size: Option<usize>,
 }
 
 /// `true` is the serde default for the nginx `merge_slashes` /
@@ -3070,6 +3298,16 @@ fn is_true(value: &bool) -> bool {
 /// `NGX_MAX_INT32_VALUE`, i.e. a range-count ceiling that is effectively
 /// unbounded for any real request.
 pub const DEFAULT_MAX_RANGES: u64 = i32::MAX as u64;
+
+/// nginx `NGX_HTTP_V2_MAX_FRAME_SIZE`: the largest legal HTTP/2 frame payload
+/// (`2^24 - 1`). nginx clamps `http2_chunk_size` values above this ceiling
+/// instead of rejecting the configuration.
+pub const HTTP2_MAX_FRAME_SIZE: usize = 16_777_215;
+
+/// nginx `http2_chunk_size` default (`ngx_http_v2_merge_loc_conf`:
+/// `ngx_conf_merge_size_value(conf->chunk_size, prev->chunk_size, 8 * 1024)`),
+/// the maximum response-body bytes nginx writes into one HTTP/2 DATA frame.
+pub const DEFAULT_HTTP2_CHUNK_SIZE: usize = 8 * 1024;
 
 /// nginx proxy response-header policy (`proxy_hide_header`,
 /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
@@ -3367,6 +3605,38 @@ impl CustomHeaderConfig {
         // nginx `ngx_http_referer_module`: "1" when `valid_referers` rejects
         // the request's Referer, empty otherwise.
         "invalid_referer",
+        // nginx `ngx_http_userid_filter_module`: the inbound identifier and
+        // the identifier issued for this request (`name=` + four upper-case
+        // hexadecimal words), empty when nginx reports them not found.
+        "uid_got",
+        "uid_set",
+        // nginx `ngx_http_browser_module`: the configured value when the
+        // request is in that class, empty otherwise.
+        "modern_browser",
+        "ancient_browser",
+        // nginx `ngx_http_slice_filter_module`: `bytes=<start>-<end>` for the
+        // slice the main request is currently fetching; empty when `slice` is
+        // not configured (or is `0`), exactly like nginx's not-found rendering.
+        "slice_range",
+        // nginx `ngx_http_geoip_module`: resolved from the configured MMDB
+        // databases for the request address; empty when the module has no
+        // database or the address has no record, exactly like nginx.
+        "geoip_country_code",
+        "geoip_country_code3",
+        "geoip_country_name",
+        "geoip_org",
+        "geoip_city_continent_code",
+        "geoip_city_country_code",
+        "geoip_city_country_code3",
+        "geoip_city_country_name",
+        "geoip_region",
+        "geoip_region_name",
+        "geoip_city",
+        "geoip_postal_code",
+        "geoip_latitude",
+        "geoip_longitude",
+        "geoip_dma_code",
+        "geoip_area_code",
     ];
 
     /// Maximum header value length. nginx places no comparable bound; this is
@@ -3660,6 +3930,24 @@ pub struct RouteConfig {
     /// Location-level nginx `max_ranges`; `None` inherits the host value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_ranges: Option<u64>,
+    /// Effective nginx `slice <size>` (`ngx_http_slice_filter_module`)
+    /// resolved over the http → server → location chain. `None` means the
+    /// directive was never declared; `Some(0)` is an explicit `slice 0`
+    /// (slicing disabled, exactly like an undeclared directive for nginx).
+    /// A non-zero value enables the per-slice Range subrequest pipeline in
+    /// the proxy adapter when the location wires `$slice_range` into
+    /// `proxy_set_header`. Bounded by [`Self::MAXIMUM_SLICE_BYTES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice_size: Option<u64>,
+    /// Effective nginx `proxy_cache` for this route (`Some(true)` for a cache
+    /// zone, `Some(false)` for `proxy_cache off` or an nginx configuration
+    /// that never declares the directive). `None` keeps the typed-config legacy
+    /// behaviour where the application-level `proxyCache.enabled` toggle
+    /// decides. nginx only caches inside a location that declares a cache zone,
+    /// so an nginx-materialized route never caches merely because another
+    /// location declares `proxy_cache_path`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_cache: Option<bool>,
     /// nginx `internal`: the location is reachable only through an internal
     /// redirect (`rewrite … last`, `error_page`, a `try_files` named target,
     /// or `X-Accel-Redirect`). An external request that matches it is answered
@@ -3676,10 +3964,28 @@ pub struct RouteConfig {
     /// Location-level nginx `autoindex` family resolved over the host value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autoindex: Option<AutoindexConfig>,
+    /// Location-level nginx `random_index` (nginx allows the directive only in
+    /// `location {}`): when `Some(true)`, a directory request selects a random
+    /// non-hidden regular file before the `index`/`autoindex` handling runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub random_index: Option<bool>,
+    /// Location-level nginx `http2_chunk_size`; `None` inherits the host
+    /// (which already carries the http/server-resolved value).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http2_chunk_size: Option<usize>,
     /// Location-level nginx `valid_referers` policy resolved over the host
     /// value (a location declaration replaces the inherited list).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub referer: Option<RefererConfig>,
+    /// Location-level nginx userid configuration resolved over the host value
+    /// (nginx merges each `userid_*` field independently).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub userid: Option<UserIdConfig>,
+    /// Location-level nginx browser configuration resolved over the host value
+    /// (a level that declares the modern or ancient family replaces that
+    /// family; the values inherit independently).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<BrowserConfig>,
     /// Effective nginx `addition` filter policy (http/server/location
     /// inheritance resolved at materialization).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3690,6 +3996,19 @@ pub struct RouteConfig {
     /// Effective nginx `mirror` subrequests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mirror: Option<MirrorConfig>,
+}
+
+impl RouteConfig {
+    /// Hard ceiling on one nginx `slice <size>` slice.
+    ///
+    /// nginx keeps one slice in its upstream buffers and streams each slice to
+    /// the client; this runtime buffers exactly one sliced representation per
+    /// in-flight fill so the assembled response stays bounded. A slice size at
+    /// or below 64 MiB keeps that buffer inside the same envelope as the
+    /// response-body limit; a larger `slice` fails closed at materialization
+    /// with a located diagnostic instead of silently allocating an unbounded
+    /// buffer.
+    pub const MAXIMUM_SLICE_BYTES: u64 = 64 * 1024 * 1024;
 }
 
 /// nginx `addition` filter (`add_before_body` / `add_after_body` /

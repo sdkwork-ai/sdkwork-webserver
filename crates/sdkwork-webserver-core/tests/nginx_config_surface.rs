@@ -14,9 +14,9 @@
 use std::path::Path;
 
 use sdkwork_webserver_core::config::{
-    ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailServerProtocol,
-    MailStarttlsMode, ResourceConfig, RoutePathType, StreamTlsMode, UpstreamLoadBalancingStrategy,
-    WebServerAppConfig, WebServerConfigLoader,
+    ConfigFormat, ConfigLoadOptions, ListenerProtocol, MailAuthMechanism, MailClientVerifyMode,
+    MailServerProtocol, MailStarttlsMode, ResourceConfig, RoutePathType, StreamTlsMode,
+    UpstreamLoadBalancingStrategy, WebServerAppConfig, WebServerConfigLoader,
 };
 use sdkwork_webserver_core::nginx::{
     expand_includes, load_nginx_compat, materialize_nginx_app_default, merge_nginx_apps,
@@ -1403,10 +1403,14 @@ const FAIL_CLOSED_STREAM: &[(&str, &str, &str)] = &[
         "proxy_protocol v2;",
         "proxy_protocol v2",
     ),
+    // `listen … proxy_protocol` is implemented by the bounded stream plane
+    // (Wave 7E): the inbound header is parsed and only trusted as a source
+    // address under `set_real_ip_from`, exactly like nginx. The fail-closed
+    // form that remains is a TLS listen without certificate material.
     (
-        "stream listen inbound proxy_protocol",
-        "listen 5100 proxy_protocol;",
-        "trusted source CIDRs",
+        "stream listen ssl without certificate",
+        "listen 5100 ssl;",
+        "requires ssl_certificate",
     ),
     (
         "stream listen unsupported parameter",
@@ -2133,11 +2137,11 @@ fn grpc_unsupported_forms_fail_closed_with_located_diagnostics() {
             "grpc_ssl_conf_command",
         ),
         (
-            "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive on;",
+            "grpc_pass grpc://127.0.0.1:9100; grpc_socket_keepalive maybe;",
             "grpc_socket_keepalive",
         ),
         (
-            "grpc_pass grpc://127.0.0.1:9100; grpc_bind 127.0.0.1;",
+            "grpc_pass grpc://127.0.0.1:9100; grpc_bind unix:/tmp/source.sock;",
             "grpc_bind",
         ),
         (
@@ -2344,6 +2348,67 @@ mail {
     assert!(!pop3.proxy.xclient, "xclient off is inherited");
 }
 
+/// Wave 14B mail client-certificate verification materializes with nginx
+/// mail-context inheritance: `ssl_verify_client`, `ssl_verify_depth`,
+/// `ssl_client_certificate`, `ssl_trusted_certificate` and
+/// `auth_http_pass_client_cert` reach the typed mail TLS policy, and a
+/// server-level verify mode overrides the inherited one.
+#[test]
+fn mail_14b_client_certificate_policy_materializes_with_inheritance() {
+    let config = materialize_ok(
+        r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    auth_http_pass_client_cert on;
+    ssl_certificate cert.pem;
+    ssl_certificate_key key.pem;
+    ssl_verify_client optional_no_ca;
+    ssl_verify_depth 2;
+    ssl_client_certificate ca.pem;
+
+    server {
+        listen 127.0.0.1:2993 ssl;
+        protocol smtp;
+        ssl_trusted_certificate chain.pem;
+    }
+
+    server {
+        listen 127.0.0.1:2994 ssl;
+        protocol imap;
+        ssl_verify_client on;
+        ssl_trusted_certificate chain.pem;
+        ssl_client_certificate client-ca.pem;
+        ssl_verify_depth 0;
+    }
+}
+"#,
+    );
+    assert_eq!(config.mail.servers.len(), 2);
+    let smtp = &config.mail.servers[0];
+    let auth = smtp.auth_http.as_ref().expect("auth_http");
+    assert!(auth.pass_client_cert);
+    let tls = smtp.tls.as_ref().expect("mail TLS");
+    assert_eq!(tls.verify_client, MailClientVerifyMode::OptionalNoCa);
+    assert_eq!(tls.verify_depth, 2);
+    assert!(tls
+        .client_certificate_file
+        .as_deref()
+        .is_some_and(|path| path.ends_with("ca.pem")));
+    assert!(tls
+        .trusted_certificate_file
+        .as_deref()
+        .is_some_and(|path| path.ends_with("chain.pem")));
+
+    let imap = &config.mail.servers[1];
+    let tls = imap.tls.as_ref().expect("mail TLS");
+    assert_eq!(tls.verify_client, MailClientVerifyMode::On);
+    assert_eq!(tls.verify_depth, 0);
+    assert!(tls
+        .client_certificate_file
+        .as_deref()
+        .is_some_and(|path| path.ends_with("client-ca.pem")));
+}
+
 /// Forms the rustls TLS stack and the bounded runtime cannot honour fail
 /// closed with a located diagnostic instead of being accepted and ignored.
 #[test]
@@ -2370,12 +2435,20 @@ fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
             "ssl_session_cache",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver 127.0.0.1; } }",
-            "resolver",
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver not-an-ip; } }",
+            "IP literal",
         ),
         (
-            "mail { server { listen 127.0.0.1:2993; protocol smtp; set_real_ip_from 127.0.0.1; } }",
-            "set_real_ip_from",
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; resolver_timeout soon; } }",
+            "resolver_timeout",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; set_real_ip_from not-a-network; } }",
+            "IP address or CIDR",
+        ),
+        (
+            "mail { server { listen 127.0.0.1:2993; protocol smtp; smtp_capabilities \"\"; } }",
+            "capability",
         ),
         (
             "mail { server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
@@ -2390,8 +2463,20 @@ fn mail_9b_unsupported_forms_fail_closed_with_located_diagnostics() {
             "auth_http",
         ),
         (
-            "mail { auth_http 127.0.0.1:9000/auth; auth_http_pass_client_cert on; server { listen 127.0.0.1:2993; protocol imap; } }",
-            "auth_http_pass_client_cert",
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_verify_client on; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "requires `ssl_client_certificate`",
+        ),
+        (
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_client_certificate ca.pem; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "require `ssl_verify_client",
+        ),
+        (
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_verify_depth -1; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "non-negative integer",
+        ),
+        (
+            "mail { ssl_certificate cert.pem; ssl_certificate_key key.pem; ssl_verify_client maybe; server { listen 127.0.0.1:2993 ssl; protocol imap; } }",
+            "on|off|optional|optional_no_ca",
         ),
         (
             "mail { max_errors 0; server { listen 127.0.0.1:2993; protocol imap; } }",
@@ -2595,31 +2680,185 @@ http {
 }
 
 #[test]
-fn cgi_wave_7d_temp_spool_and_abort_forms_fail_closed_with_exact_blockers() {
+fn cgi_wave_14a_temp_spool_and_connection_control_materialize() {
+    // Wave 14A: the temp-spool family and the connection-control residuals are
+    // executed instead of fail-closed. The FastCGI resource carries the
+    // resolved nginx policy (defaults included).
+    let config = materialize_ok(
+        r#"
+events {}
+http {
+    fastcgi_param SCRIPT_NAME $fastcgi_script_name;
+    server {
+        listen 8080;
+        server_name example.com;
+        location /x {
+            fastcgi_pass 127.0.0.1:9100;
+            fastcgi_max_temp_file_size 1m;
+            fastcgi_temp_path /var/cache/nginx/fastcgi;
+            fastcgi_temp_file_write_size 16k;
+            fastcgi_ignore_client_abort on;
+            fastcgi_catch_stderr "PHP Fatal error:  ";
+            fastcgi_catch_stderr "panic:";
+            fastcgi_send_lowat 12000;
+        }
+    }
+}
+"#,
+    );
+    let resource = config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::FastCgi { .. }))
+        .expect("fastcgi resource");
+    match resource {
+        ResourceConfig::FastCgi {
+            temp_policy,
+            ignore_client_abort,
+            catch_stderr,
+            ..
+        } => {
+            let policy = temp_policy.as_ref().expect("temp policy");
+            assert_eq!(policy.max_file_bytes, 1024 * 1024);
+            assert_eq!(policy.write_chunk_bytes, 16 * 1024);
+            assert_eq!(
+                policy.path.as_deref(),
+                Some("/var/cache/nginx/fastcgi"),
+                "the single-path form is executed"
+            );
+            assert!(*ignore_client_abort);
+            assert_eq!(
+                catch_stderr,
+                &vec!["PHP Fatal error:  ".to_owned(), "panic:".to_owned()]
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    // nginx's temp-spool defaults are materialized even when undeclared.
+    let default_config = materialize_ok(
+        r#"
+events {}
+http {
+    server {
+        listen 8080;
+        server_name example.com;
+        location /x { fastcgi_pass 127.0.0.1:9100; }
+    }
+}
+"#,
+    );
+    let resource = default_config
+        .resources
+        .iter()
+        .find(|resource| matches!(resource, ResourceConfig::FastCgi { .. }))
+        .expect("fastcgi resource");
+    let ResourceConfig::FastCgi { temp_policy, .. } = resource else {
+        unreachable!()
+    };
+    let policy = temp_policy.as_ref().expect("default temp policy");
+    assert_eq!(policy.max_file_bytes, 1024 * 1024 * 1024, "nginx default");
+    assert_eq!(policy.write_chunk_bytes, 8 * 1024, "nginx default 2 * size");
+
+    // uWSGI / SCGI share the executed families.
+    let cgi_config = materialize_ok(
+        r#"
+events {}
+http {
+    server {
+        listen 8080;
+        server_name example.com;
+        location /u { uwsgi_pass 127.0.0.1:9101; uwsgi_max_temp_file_size 0; uwsgi_ignore_client_abort on; uwsgi_temp_path /spool/uwsgi; }
+        location /s { scgi_pass 127.0.0.1:9102; scgi_temp_file_write_size 8k; }
+    }
+}
+"#,
+    );
+    let uwsgi = cgi_config
+        .resources
+        .iter()
+        .find(|resource| {
+            matches!(
+                resource,
+                ResourceConfig::CgiUpstream {
+                    protocol: sdkwork_webserver_core::config::CgiUpstreamProtocol::Uwsgi,
+                    ..
+                }
+            )
+        })
+        .expect("uwsgi resource");
+    match uwsgi {
+        ResourceConfig::CgiUpstream {
+            temp_policy,
+            ignore_client_abort,
+            ..
+        } => {
+            let policy = temp_policy.as_ref().expect("uwsgi temp policy");
+            assert_eq!(policy.max_file_bytes, 0, "0 disables the spool tier");
+            assert_eq!(policy.path.as_deref(), Some("/spool/uwsgi"));
+            assert!(*ignore_client_abort);
+        }
+        _ => unreachable!(),
+    }
+
+    // `fastcgi_send_lowat` is accepted-unenforced with nginx-on-Linux semantics
+    // and an explicit diagnostic (nginx logs "not supported, ignored" too).
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("site.conf");
+    std::fs::write(
+        &path,
+        "events {} http { server { listen 8080; server_name x; location /x { fastcgi_pass 127.0.0.1:9100; fastcgi_send_lowat 12000; } } }",
+    )
+    .expect("write");
+    let report = load_nginx_compat(&path, "surface").expect("load");
+    assert!(
+        report.ignored.iter().any(
+            |diagnostic| diagnostic.message.contains("fastcgi_send_lowat")
+                && diagnostic.message.contains("SO_SNDLOWAT")
+        ),
+        "fastcgi_send_lowat must be reported as accepted-unenforced with the Linux reason: {:?}",
+        report.ignored
+    );
+}
+
+#[test]
+fn cgi_wave_14a_unsupported_temp_and_abort_forms_fail_closed_precisely() {
     for (body, expected) in [
         (
-            "fastcgi_pass 127.0.0.1:9100; fastcgi_max_temp_file_size 1m;",
-            "temp-file spool",
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path /tmp/fcgi 1 2;",
+            "single-path form",
         ),
         (
-            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path /tmp/fcgi;",
-            "temp-file spool",
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path /tmp/$host;",
+            "cannot contain variables",
         ),
         (
-            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_file_write_size 8k;",
-            "temp-file spool",
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path relative/spool;",
+            "absolute path",
         ),
         (
-            "fastcgi_pass 127.0.0.1:9100; fastcgi_ignore_client_abort on;",
-            "client-disconnect signal",
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_temp_path /var/../etc;",
+            "absolute path",
         ),
         (
-            "fastcgi_pass 127.0.0.1:9100; fastcgi_catch_stderr ERROR;",
-            "stderr stream",
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_buffer_size 8k; fastcgi_max_temp_file_size 4k;",
+            "at least the largest response buffer",
         ),
         (
-            "fastcgi_pass 127.0.0.1:9100; fastcgi_send_lowat 12000;",
-            "send low-water mark",
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_buffer_size 8k; fastcgi_temp_file_write_size 4k;",
+            "at least the largest response buffer",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_catch_stderr one two;",
+            "takes exactly one string",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_send_lowat;",
+            "requires a size",
+        ),
+        (
+            "fastcgi_pass 127.0.0.1:9100; fastcgi_send_lowat bogus;",
+            "invalid `fastcgi_send_lowat` size",
         ),
         (
             "fastcgi_pass 127.0.0.1:9100; fastcgi_store store$uri;",
@@ -2640,10 +2879,6 @@ fn cgi_wave_7d_temp_spool_and_abort_forms_fail_closed_with_exact_blockers() {
         (
             "uwsgi_pass 127.0.0.1:9101; uwsgi_busy_buffers_size 256;",
             "outside the executable",
-        ),
-        (
-            "scgi_pass 127.0.0.1:9102; scgi_max_temp_file_size 1m;",
-            "temp-file spool",
         ),
         (
             "memcached_pass 127.0.0.1:9103; memcached_gzip_flag 0;",

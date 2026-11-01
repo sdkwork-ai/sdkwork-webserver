@@ -32,7 +32,7 @@ const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-protocols-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
-const CASE_FLOOR = 77;
+const CASE_FLOOR = 89;
 /**
  * nginx renders its own generated error page for a memcached miss/upstream
  * failure; the status mapping is the contract under test there, while the body
@@ -59,6 +59,10 @@ const STATUS_ONLY_CASES = new Set([
   // nginx renders its generated 416 page body; status and Content-Range are
   // the contract, the generated HTML body is the documented difference.
   'd7-range-invalid',
+  // Wave 14A: `fastcgi_catch_stderr` makes nginx treat the response as invalid
+  // and answer its generated 502 page; the runtime answers the same 502, and
+  // the generated page body is the same documented deployment difference.
+  'd14a-catch-stderr',
 ]);
 const ORACLE_PORT = 21092;
 const GATEWAY_PORT = 21093;

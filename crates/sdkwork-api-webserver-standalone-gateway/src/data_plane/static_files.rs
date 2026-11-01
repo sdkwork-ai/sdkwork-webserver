@@ -32,6 +32,9 @@ pub(crate) struct StaticDeliveryPolicy<'a> {
     pub(crate) autoindex: Option<&'a AutoindexConfig>,
     /// nginx `index` file names, tried in order for directory requests.
     pub(crate) index_files: &'a [String],
+    /// Effective nginx `random_index` flag for this location (nginx allows the
+    /// directive only inside `location {}`).
+    pub(crate) random_index: bool,
 }
 
 pub async fn serve_static(
@@ -57,6 +60,7 @@ pub async fn serve_static(
             .autoindex
             .is_some_and(|autoindex| autoindex.enabled),
         Some(delivery.index_files),
+        delivery.random_index,
     )
     .await
     {
@@ -273,7 +277,7 @@ async fn open_gzip_sidecar(
     let mut sidecar = path_hint.as_os_str().to_os_string();
     sidecar.push(".gz");
     let sidecar = sidecar.to_str()?;
-    match open_static_path(root, sidecar, false, None, false, None).await {
+    match open_static_path(root, sidecar, false, None, false, None, false).await {
         Ok(StaticPathTarget::File(file)) => Some(file),
         _ => None,
     }

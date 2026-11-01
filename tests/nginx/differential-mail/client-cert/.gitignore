@@ -1,0 +1,5 @@
+# The repository root ignores test key material globally. This slice commits
+# deterministic client-certificate fixtures that the battery and nginx must
+# load, so re-include them under this directory only.
+!*.pem
+!*.key

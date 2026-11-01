@@ -10,8 +10,8 @@ use std::{
 use arc_swap::ArcSwap;
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sdkwork_webserver_core::{
-    CertificateConfig, CompiledWebServerApp, CompiledWebServerRevision, ListenerProtocol,
-    ReloadConfig, TlsPolicyConfig,
+    CertificateConfig, CompiledWebServerApp, CompiledWebServerRevision, GeoIpDatabases,
+    ListenerProtocol, ReloadConfig, TlsPolicyConfig,
 };
 use sdkwork_webserver_resolver_cache::{FileResolverSource, ResolutionChain};
 use sha2::{Digest, Sha256};
@@ -93,6 +93,15 @@ pub(crate) struct RuntimeGeneration {
     pub stream_limit_conn: LimitConnRuntime,
     /// Per-key request counters for nginx CGI `*_cache_min_uses`.
     pub cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters,
+    /// nginx GeoIP MMDB readers and `geoip_proxy` trust policy, built once per
+    /// generation (never reopened per request).
+    pub geoip: Option<Arc<GeoIpDatabases>>,
+    /// nginx **stream** GeoIP MMDB readers (accept-time lookup).
+    pub stream_geoip: Option<Arc<GeoIpDatabases>>,
+    /// Bounded CGI-family temp-spool tier for this generation. It belongs to
+    /// the generation, so a reload starts a fresh budget and a per-generation
+    /// directory; every spool file is removed on completion/error/drop.
+    pub temp_spool: Arc<super::temp_spool::TempSpool>,
 }
 
 impl RuntimeGeneration {
@@ -148,6 +157,30 @@ impl RuntimeGeneration {
         let limit_req = LimitReqRuntime::from_zones(&app.config().limit_req_zones);
         let limit_conn = LimitConnRuntime::from_zones(&app.config().limit_conn_zones);
         let stream_limit_conn = LimitConnRuntime::from_zones(&app.config().stream_limit_conn_zones);
+        let geoip = app
+            .config()
+            .geoip
+            .as_ref()
+            .map(|config| {
+                GeoIpDatabases::load(config, app.config().nginx.geoip_database_root.as_deref())
+                    .map(Arc::new)
+            })
+            .transpose()?;
+        let stream_geoip = app
+            .config()
+            .stream_geoip
+            .as_ref()
+            .map(|config| {
+                GeoIpDatabases::load(config, app.config().nginx.geoip_database_root.as_deref())
+                    .map(Arc::new)
+            })
+            .transpose()?;
+        let temp_spool = Arc::new(super::temp_spool::TempSpool::new(
+            app.config().nginx.temp_root.as_deref(),
+            id,
+            app.config().nginx.temp_spool_budget_bytes,
+            app.config().nginx.temp_spool_max_files,
+        ));
         Ok(Arc::new(Self {
             id,
             revision,
@@ -162,6 +195,9 @@ impl RuntimeGeneration {
             protocol_pool: Arc::new(super::protocol_pool::ProtocolPool::new()),
             stream_limit_conn,
             cgi_cache_min_uses: super::cgi_cache::CgiMinUsesCounters::default(),
+            geoip,
+            stream_geoip,
+            temp_spool,
         }))
     }
 

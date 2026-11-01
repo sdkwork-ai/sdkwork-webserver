@@ -1,11 +1,14 @@
 mod access;
 mod acme_webroot;
 mod auth_basic;
+mod browser;
 pub mod cache_policy;
 mod compiled;
 mod discovery;
 mod error;
 pub mod geo;
+mod geoip;
+mod geoip_country_codes;
 mod gzip_disable;
 mod limit_conn;
 mod limit_req;
@@ -25,6 +28,7 @@ pub mod stream_variables;
 mod sub_filter;
 mod upstream_params;
 mod uri;
+mod userid;
 mod validate;
 mod variables;
 
@@ -32,6 +36,10 @@ pub use access::{evaluate_access, evaluate_access_first_match_allow, AccessDecis
 pub use acme_webroot::{AcmeWebrootReport, AcmeWebrootVerdict};
 pub use auth_basic::{
     apr1_hash, evaluate_auth_basic, parse_htpasswd, AuthBasicDecision, HtpasswdParseError,
+};
+pub use browser::{
+    browser_variable_values, classify_browser, parse_browser_version, BrowserClass, BrowserConfig,
+    ModernBrowserName, ModernBrowserRule, UNREACHABLE_OPERA_VERSION,
 };
 pub use compiled::{normalize_authority_host, CompiledWebServerApp, SelectedRoute};
 pub use discovery::{
@@ -43,6 +51,11 @@ pub use error::{ConfigDiagnostic, WebServerConfigError};
 pub use geo::{
     evaluate_geo, evaluate_split_clients, murmur_hash2, parse_split_percent, validate_geo_config,
     validate_split_clients_config,
+};
+pub use geoip::{
+    parse_geoip_proxy, validate_geoip_config, GeoIpConfig, GeoIpDatabaseError, GeoIpDatabaseKind,
+    GeoIpDatabaseMetadata, GeoIpDatabases, GeoIpRequestState, GEOIP_VARIABLES,
+    MAX_GEOIP_DATABASE_BYTES, MAX_GEOIP_PROXIES, MAX_GEOIP_XFF_BYTES, MAX_GEOIP_XFF_HOPS,
 };
 pub use gzip_disable::{
     gzip_disabled_for_user_agent, user_agent_is_msie6, user_agent_matches_disable_patterns,
@@ -69,26 +82,27 @@ pub use model::{
     GzipConfig, GzipProxiedConfig, GzipStaticMode, IfConditionConfig, IfModifiedSinceMode,
     IfOperatorConfig, LimitConnConfig, LimitConnZoneConfig, LimitReqConfig, LimitReqZoneConfig,
     ListenerConfig, ListenerProtocol, ListenerTlsRuntime, MailAuthHttpConfig, MailAuthMechanism,
-    MailConfig, MailProxyConfig, MailProxyTlsConfig, MailServerConfig, MailServerProtocol,
-    MailStarttlsMode, MailTlsConfig, MailTlsProtocol, MapConfig, MapEntryConfig, MimeTypeConfig,
-    MirrorConfig, NginxConfig, ObservabilityConfig, ProviderCachePolicy, ProxyCacheConfig,
-    ProxyProtocolConfig, ProxyProtocolCrc32cPolicy, ProxyProtocolVersion,
-    ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRegexRuleConfig,
-    ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry, ReloadConfig,
-    ReloadMode, ResolverConfig, ResourceConfig, ResourcePressureConfig,
-    ResourceSampleFailurePolicy, RewriteFlag, RewritePhaseOpConfig, RewriteRuleConfig, RouteConfig,
-    RouteMatchConfig, RoutePathType, SecureLinkMode, SecurityHeadersConfig, SplitClientsConfig,
-    SplitClientsPartConfig, StreamProtocol, StreamServerConfig, StreamSetVariableConfig,
-    StreamTargetConfig, StreamTlsMode, StrictTransportSecurityConfig, SubFilterConfig,
-    SubFilterRule, TlsCertificateResolution, TlsPolicyConfig, TlsVersion, TrustedProxyConfig,
-    TrustedProxyHeader, UpstreamActiveHealthConfig, UpstreamActiveHealthMethod,
-    UpstreamAddressPolicyConfig, UpstreamBufferingConfig, UpstreamConfig, UpstreamHashConfig,
-    UpstreamHashKeyVar, UpstreamLoadBalancingStrategy, UpstreamParamConfig,
-    UpstreamPassiveHealthConfig, UpstreamRetryCondition, UpstreamRetryConfig, UpstreamStoreConfig,
-    UpstreamTargetConfig, UpstreamTlsConfig, UpstreamTlsTrustMode, UsageMeteringChannel,
+    MailClientVerifyMode, MailConfig, MailProxyConfig, MailProxyTlsConfig, MailServerConfig,
+    MailServerProtocol, MailStarttlsMode, MailTlsConfig, MailTlsProtocol, MapConfig,
+    MapEntryConfig, MimeTypeConfig, MirrorConfig, NginxConfig, ObservabilityConfig,
+    ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
+    ProxyProtocolVersion, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
+    ProxyRewriteRegexRuleConfig, ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig,
+    RefererHostEntry, ReloadConfig, ReloadMode, ResolverConfig, ResourceConfig,
+    ResourcePressureConfig, ResourceSampleFailurePolicy, RewriteFlag, RewritePhaseOpConfig,
+    RewriteRuleConfig, RouteConfig, RouteMatchConfig, RoutePathType, SecureLinkMode,
+    SecurityHeadersConfig, SplitClientsConfig, SplitClientsPartConfig, StreamProtocol,
+    StreamServerConfig, StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode,
+    StrictTransportSecurityConfig, SubFilterConfig, SubFilterRule, TlsCertificateResolution,
+    TlsPolicyConfig, TlsVersion, TrustedProxyConfig, TrustedProxyHeader,
+    UpstreamActiveHealthConfig, UpstreamActiveHealthMethod, UpstreamAddressPolicyConfig,
+    UpstreamBufferingConfig, UpstreamConfig, UpstreamHashConfig, UpstreamHashKeyVar,
+    UpstreamLoadBalancingStrategy, UpstreamParamConfig, UpstreamPassiveHealthConfig,
+    UpstreamRetryCondition, UpstreamRetryConfig, UpstreamStoreConfig, UpstreamTargetConfig,
+    UpstreamTempPolicyConfig, UpstreamTlsConfig, UpstreamTlsTrustMode, UsageMeteringChannel,
     UsageMeteringConfig, VirtualHostConfig, WebServerAppConfig, WebServerLimits, XFrameOptions,
-    ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_MAX_RANGES, MAX_REWRITE_PHASE_OPS,
-    MAX_REWRITE_PHASE_VARIABLES,
+    ACME_HTTP_01_CHALLENGE_PREFIX, DEFAULT_HTTP2_CHUNK_SIZE, DEFAULT_MAX_RANGES,
+    HTTP2_MAX_FRAME_SIZE, MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
 };
 pub use network::{
     hostname_upstream_allowed_cidrs, is_supported_upstream_allowed_cidr, upstream_ip_is_allowed,
@@ -128,9 +142,9 @@ pub use source::{
     DEFAULT_TOML_PROFILE,
 };
 pub use stream_variables::{
-    evaluate_stream_sets, expand_stream_template, stream_template_variables,
-    validate_stream_return, validate_stream_set, StreamVariableFacts, STREAM_MAP_SOURCES,
-    STREAM_TEMPLATE_VARIABLES,
+    evaluate_stream_sets, expand_stream_template, resolve_stream_pass_target,
+    stream_template_variables, validate_stream_return, validate_stream_set, StreamPassError,
+    StreamVariableFacts, STREAM_MAP_SOURCES, STREAM_PASS_MAX_PASSES, STREAM_TEMPLATE_VARIABLES,
 };
 pub use sub_filter::{
     apply_sub_filters, sub_filter_content_type_matches, MAX_SUB_FILTER_BODY_BYTES,
@@ -139,6 +153,10 @@ pub use upstream_params::{
     validate_param_name, validate_param_value, UPSTREAM_PARAM_PREFIXES, UPSTREAM_PARAM_VARIABLES,
 };
 pub use uri::{normalize_uri_path, normalize_uri_path_with_options, UriPathNormalizationError};
+pub use userid::{
+    evaluate_userid, format_cookie_time, UserIdConfig, UserIdExpires, UserIdFlags, UserIdMode,
+    UserIdRequestState, UserIdSameSite,
+};
 pub use validate::{
     normalize_server_name, normalize_tls_server_name, server_name_covers, unix_path_is_confined,
     unix_target_path, wildcard_server_name_covers,

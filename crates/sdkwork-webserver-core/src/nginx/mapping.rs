@@ -48,14 +48,16 @@ use crate::config::{
     format_proxy_set_header_entry_with_maps, hostname_upstream_allowed_cidrs,
     map_variables::{map_result_name, validate_map_definitions, validate_map_source},
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
-    AutoindexConfig, AutoindexFormat, CachePolicyConfig, CharsetConfig, ConfigDiagnostic,
-    CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig, GeoEntryConfig,
-    GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig, MapEntryConfig,
-    MimeTypeConfig, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
+    AutoindexConfig, AutoindexFormat, BrowserConfig, CachePolicyConfig, CharsetConfig,
+    ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig,
+    GeoEntryConfig, GeoIpConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
+    MapEntryConfig, MimeTypeConfig, ModernBrowserName, ModernBrowserRule,
+    ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
     RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
-    SplitClientsPartConfig, StreamSetVariableConfig, StreamTargetConfig, StreamTlsMode, TlsVersion,
-    UpstreamRetryCondition, UpstreamRetryConfig, WebServerAppConfig, WebServerConfigError,
-    ACME_HTTP_01_CHALLENGE_PREFIX,
+    SplitClientsPartConfig, StreamServerConfig, StreamSetVariableConfig, StreamTargetConfig,
+    StreamTlsMode, TlsVersion, UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig,
+    UserIdExpires, UserIdFlags, UserIdMode, UserIdSameSite, WebServerAppConfig,
+    WebServerConfigError, ACME_HTTP_01_CHALLENGE_PREFIX, HTTP2_MAX_FRAME_SIZE,
 };
 
 use super::parser::NginxDirective;
@@ -165,6 +167,12 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_max_temp_file_size",
     "proxy_temp_file_write_size",
     "proxy_send_lowat",
+    // `fastcgi_send_lowat` is accepted-unenforced exactly like nginx on Linux:
+    // the reference build is not compiled with SO_SNDLOWAT support, so nginx
+    // warns "'fastcgi_send_lowat' is not supported, ignored" and zeroes the
+    // value (`ngx_http_fastcgi_lowat_check`). The runtime never fakes a
+    // low-water mark the kernel would ignore.
+    "fastcgi_send_lowat",
     "ssl_conf_command",
     "proxy_pass_header",
     "accept_mutex_delay",
@@ -323,6 +331,8 @@ pub(crate) fn ignored_directive_diagnostics(
                 "`{}` cannot be honored by the pinned hyper HTTP/1.1 encoder: hyper emits a close-delimited body only for HTTP/1.0 responses, so an HTTP/1.1 response with an unknown body length always uses `Transfer-Encoding: chunked`; the value is accepted but has no effect",
                 directive.name
             )
+        } else if directive.name == "fastcgi_send_lowat" {
+            "`fastcgi_send_lowat` is accepted-unenforced, which is exactly nginx 1.29.6 on Linux: the reference build is not compiled with SO_SNDLOWAT support, so nginx logs \"\'fastcgi_send_lowat\' is not supported, ignored\" and zeroes the value at configuration time. Linux ignores a socket send low-water mark (nginx documents the directive as BSD-only), and the pinned socket seam cannot set it, so the runtime never fakes enforcement".to_string()
         } else if RUNTIME_OWNED_MEMORY_TUNING.contains(&directive.name.as_str()) {
             format!(
                 "`{}` is accepted for nginx compatibility; the runtime owns its buffer and hash-table sizing, so the imported value has no effect",
@@ -526,6 +536,38 @@ pub fn materialize_nginx_app(
     // `auth_request_set` variables declared in the same context are request
     // variables for header expansion.
     let http_auth_request_variables = subrequest_set_variables(&http_directives);
+    // nginx resolves these two module configurations at merge time, so
+    // directive order inside `http {}` does not matter: collect the http-level
+    // declarations before any server is materialized.
+    let mut http_userid_declarations = UserIdDeclarations::default();
+    let mut http_browser_declarations = BrowserDeclarations::default();
+    for directive in &http_directives {
+        if USERID_DIRECTIVES.contains(&directive.name.as_str()) {
+            apply_userid_directive(&mut http_userid_declarations, directive)?;
+        }
+        if BROWSER_DIRECTIVES.contains(&directive.name.as_str()) {
+            apply_browser_directive(&mut http_browser_declarations, directive)?;
+        }
+    }
+    if http_userid_declarations.any() {
+        mapper.http_userid = http_userid_declarations.resolve_over(&UserIdConfig::default());
+        mapper.http_userid_declared = true;
+    }
+    if http_browser_declarations.any() {
+        mapper.http_browser = http_browser_declarations.resolve_over(&BrowserConfig::default());
+        mapper.http_browser_declared = true;
+    }
+    // nginx GeoIP declarations are also http-context-only and order
+    // independent: collect them before any server is materialized.
+    let mut http_geoip_declarations = GeoIpDeclarations::default();
+    for directive in &http_directives {
+        if GEOIP_DIRECTIVES.contains(&directive.name.as_str()) {
+            apply_geoip_directive(&mut http_geoip_declarations, directive)?;
+        }
+    }
+    if http_geoip_declarations.any() {
+        mapper.http_geoip = Some(http_geoip_declarations.resolve());
+    }
     for directive in &http_directives {
         if directive.name == "add_header" {
             let mut map_variables = mapper.map_variable_refs();
@@ -575,7 +617,9 @@ pub fn materialize_nginx_app(
                 )?;
             }
             "proxy_cache_valid" => mapper.apply_proxy_cache_valid(directive)?,
-            "proxy_cache" => mapper.materialize_proxy_cache(directive)?,
+            "proxy_cache" => {
+                mapper.http_proxy_cache = Some(mapper.materialize_proxy_cache(directive)?);
+            }
             // Collected by the order-independent pre-scan above.
             "map" | "geo" | "split_clients" => {}
             "fastcgi_pass" => {
@@ -648,6 +692,9 @@ pub fn materialize_nginx_app(
             }
             // Collected by the order-independent pre-scan above.
             "add_header" => {}
+            name if USERID_DIRECTIVES.contains(&name) || BROWSER_DIRECTIVES.contains(&name) => {}
+            // Collected by the order-independent GeoIP pre-scan above.
+            name if GEOIP_DIRECTIVES.contains(&name) => {}
             "recursive_error_pages" => {
                 mapper.http_recursive_error_pages =
                     parse_on_off(directive, "recursive_error_pages")?;
@@ -690,18 +737,16 @@ pub fn materialize_nginx_app(
             // nginx HTTP/2 ingress tuning. `http2_max_concurrent_streams` maps
             // onto the runtime ingress profile (the value hyper/h2 publishes
             // as SETTINGS_MAX_CONCURRENT_STREAMS). `http2_chunk_size` controls
-            // DATA-frame chunking, which the pinned hyper/h2 ingress does not
-            // expose to callers, so it fails closed instead of being faked.
+            // DATA-frame chunking; hyper/h2 exposes no server-side chunk knob,
+            // so the data plane re-chunks the response body into bounded chunks
+            // before h2 sends them (see `data_plane/http2_chunk.rs`).
             "http2_max_concurrent_streams" => {
                 mapper.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
                     directive,
                 )?);
             }
             "http2_chunk_size" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`http2_chunk_size` is not exposed by the pinned hyper/h2 ingress (it controls DATA-frame chunking); remove it or declare `http2_max_concurrent_streams` instead",
-                ));
+                mapper.http_http2_chunk_size = Some(parse_http2_chunk_size(directive)?);
             }
             "proxy_method" => {
                 mapper.http_proxy_method = Some(parse_proxy_method(directive)?);
@@ -818,6 +863,9 @@ pub fn materialize_nginx_app(
                 mapper.http_autoindex.format = Some(parse_autoindex_format(directive)?);
             }
             "stream" | "events" | "http" | "mail" => {}
+            "slice" => {
+                mapper.http_slice_size = Some(parse_slice_size(directive)?);
+            }
             name if ACCEPTED_IGNORED.contains(&name) => {}
             name if UNSUPPORTED_SECURITY.contains(&name) => {
                 return Err(NginxConfigError::unsupported(
@@ -851,6 +899,43 @@ pub fn materialize_nginx_app(
         ));
     }
     mapper.finish()
+}
+
+/// nginx `slice <size>` (`ngx_http_slice_filter_module`).
+///
+/// nginx 1.29.6 spells the directive `slice <size>` (the legacy `slice on|off`
+/// plus `slice_size` form no longer exists; `slice_size` is not an nginx 1.29.6
+/// directive at all). `ngx_conf_set_size_slot` accepts exactly one size
+/// argument with an optional `k`/`m`/`g` multiplier; `slice 0` is a valid
+/// declaration that disables slicing (`ngx_http_slice_merge_loc_conf` merges
+/// the unset default to 0). A size above the runtime's bounded slice buffer
+/// fails closed here, with the directive's file:line, instead of allocating an
+/// unbounded per-response buffer at request time.
+fn parse_slice_size(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
+    let [value] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "slice takes exactly one size argument (`slice <size>`); the legacy `slice on|off` form and the non-existent `slice_size` directive are not nginx 1.29.6",
+        ));
+    };
+    let Some(size) = parse_size_bytes(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "slice size `{value}` is not a byte size; use a non-negative integer with an optional k/m/g multiplier (for example `slice 1m;`)"
+            ),
+        ));
+    };
+    if size > crate::config::RouteConfig::MAXIMUM_SLICE_BYTES {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "slice size `{value}` exceeds the runtime's bounded slice buffer of {} bytes; choose a smaller slice size",
+                crate::config::RouteConfig::MAXIMUM_SLICE_BYTES
+            ),
+        ));
+    }
+    Ok(size)
 }
 
 /// When the input is a full `nginx.conf`, unwrap the `http { }` block; site
@@ -1214,6 +1299,13 @@ struct LocationExtras {
     limit_conn_status: Option<u16>,
     /// Location-level nginx `max_ranges`.
     max_ranges: Option<u64>,
+    /// Effective nginx `slice <size>`: the location declaration, else the
+    /// resolved http → server value (nginx scalar merge).
+    slice_size: Option<u64>,
+    /// Location-level nginx `proxy_cache` declaration (zone enables, `off`
+    /// disables); the effective value is resolved over http → server →
+    /// location in [`Mapper::attach_location_extras`].
+    proxy_cache: Option<bool>,
     /// nginx `internal`: reachable only through an internal redirect.
     internal: bool,
     /// Location-level proxy response-header directives.
@@ -1224,12 +1316,27 @@ struct LocationExtras {
     gzip_refinements: GzipRefinementDeclarations,
     /// Location-level nginx autoindex-family declarations.
     autoindex: AutoindexDeclarations,
+    /// Location-level nginx `random_index` flag (nginx allows the directive
+    /// only in `location {}`).
+    random_index: Option<bool>,
+    /// Location-level nginx `http2_chunk_size`; `None` inherits the host.
+    http2_chunk_size: Option<usize>,
     /// nginx `empty_gif` location handler.
     empty_gif: bool,
     /// nginx `stub_status` location handler.
     stub_status: bool,
     /// Location-level nginx `valid_referers` policy (replaces the server one).
     referer: Option<RefererConfig>,
+    /// Location-level nginx userid declarations collected while walking the
+    /// block; resolved over the server configuration when the walk ends.
+    userid_declarations: UserIdDeclarations,
+    /// Effective location userid configuration (resolved).
+    userid: Option<UserIdConfig>,
+    /// Location-level nginx browser declarations collected while walking the
+    /// block; resolved over the server configuration when the walk ends.
+    browser_declarations: BrowserDeclarations,
+    /// Effective location browser configuration (resolved).
+    browser: Option<BrowserConfig>,
     /// Ordered location-level `set` / `if` rewrite-phase instructions.
     rewrite_phase: Vec<Value>,
     /// Effective location `client_max_body_size` (inherited when undeclared).
@@ -1524,6 +1631,9 @@ struct Mapper<'a> {
     /// http-level `http2 on|off` inherited by every server's ssl listeners
     /// (nginx 1.25.1+ `http2` directive).
     http_http2: Option<bool>,
+    /// http-level nginx `http2_chunk_size` (the maximum body bytes written
+    /// into one HTTP/2 DATA frame); inherited by every server and location.
+    http_http2_chunk_size: Option<usize>,
     /// http-level `ssl_protocols` window inherited by every server that does
     /// not declare its own (nginx http-context inheritance).
     http_ssl_protocols: Option<SslProtocolRange>,
@@ -1539,6 +1649,14 @@ struct Mapper<'a> {
     http_limit_conn_status: Option<u16>,
     /// http-level nginx `max_ranges` (default: effectively unbounded).
     http_max_ranges: Option<u64>,
+    /// http-level nginx `slice <size>` (`ngx_http_slice_filter_module`);
+    /// inherited by every server unless it declares its own.
+    http_slice_size: Option<u64>,
+    /// http-level nginx `proxy_cache` declaration: `Some(true)` for a zone,
+    /// `Some(false)` for `off`. Locations resolve it with nginx's
+    /// replace-on-declare rule; an nginx route that never declares the
+    /// directive does not cache, even though the app-level cache exists.
+    http_proxy_cache: Option<bool>,
     /// http-level proxy response-header directives (`proxy_hide_header`,
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`); each directive family inherits with nginx's
@@ -1547,6 +1665,14 @@ struct Mapper<'a> {
     /// Proxy response-header directives resolved for the server currently being
     /// materialized (http ⊕ server). Locations overlay this.
     server_proxy_response: ProxyResponseDirectives,
+    /// nginx `slice` resolved for the server currently being materialized
+    /// (http ⊕ server); locations inherit it unless they declare their own,
+    /// exactly like nginx's scalar `ngx_conf_merge_size_value`.
+    server_slice_size: Option<u64>,
+    /// nginx `proxy_cache` resolved for the server currently being
+    /// materialized (http ⊕ server); locations inherit it unless they declare
+    /// their own.
+    server_proxy_cache: Option<bool>,
     /// http-level `merge_slashes` declaration (nginx default `on`).
     http_merge_slashes: Option<bool>,
     /// http-level `underscores_in_headers` declaration (nginx default `off`).
@@ -1605,12 +1731,36 @@ struct Mapper<'a> {
     /// materialized (nginx allows the directive at server/location only, so
     /// there is no http-level inheritance).
     server_referer: Option<RefererConfig>,
+    /// nginx userid module configuration resolved from the http context.
+    http_userid: UserIdConfig,
+    /// Whether any `userid*` directive was declared at the http context.
+    http_userid_declared: bool,
+    /// nginx browser module configuration resolved from the http context.
+    http_browser: BrowserConfig,
+    /// Whether any browser directive was declared at the http context.
+    http_browser_declared: bool,
+    /// nginx GeoIP module configuration resolved from the http context.
+    http_geoip: Option<GeoIpConfig>,
+    /// nginx stream GeoIP module configuration resolved from the stream context.
+    stream_geoip: Option<GeoIpConfig>,
+    /// Userid configuration resolved for the server currently being
+    /// materialized (inherited by its locations when they declare none).
+    server_userid: Option<UserIdConfig>,
+    /// Browser configuration resolved for the server currently being
+    /// materialized (inherited by its locations when they declare none).
+    server_browser: Option<BrowserConfig>,
     /// Ordered nginx stream-context `allow`/`deny` rules inherited by every
     /// stream server that declares none.
     stream_access: Vec<Value>,
     /// nginx stream `map` blocks (bounded per-connection variable engine).
     stream_maps: Vec<MapConfig>,
     stream_map_results: Vec<String>,
+    /// nginx stream `split_clients` blocks (bounded per-connection distribution).
+    stream_split_clients: Vec<SplitClientsConfig>,
+    stream_split_results: Vec<String>,
+    /// `pass <address>` declarations awaiting the cross-server target check
+    /// (the target may be declared after the passing server).
+    stream_pass_declarations: Vec<(NginxDirective, String)>,
     /// nginx stream `limit_conn_zone` declarations (separate from HTTP zones).
     stream_limit_conn_zones: Vec<Value>,
     stream_limit_conn_zone_names: Vec<String>,
@@ -1680,14 +1830,19 @@ impl<'a> Mapper<'a> {
             http_proxy_intercept_errors: false,
             http_proxy_ssl: ProxySslSettings::default(),
             http_http2: None,
+            http_http2_chunk_size: None,
             http_ssl_protocols: None,
             http_cache: CacheDirectives::default(),
             http_redirect_policy: RedirectPolicyDeclarations::default(),
             http_limit_req_status: None,
             http_limit_conn_status: None,
             http_max_ranges: None,
+            http_slice_size: None,
+            http_proxy_cache: None,
             http_proxy_response: ProxyResponseDirectives::default(),
             server_proxy_response: ProxyResponseDirectives::default(),
+            server_slice_size: None,
+            server_proxy_cache: None,
             http_merge_slashes: None,
             http_underscores_in_headers: None,
             http_ignore_invalid_headers: None,
@@ -1720,9 +1875,20 @@ impl<'a> Mapper<'a> {
             http_proxy_method: None,
             server_proxy_method: None,
             server_referer: None,
+            http_userid: UserIdConfig::default(),
+            http_userid_declared: false,
+            http_browser: BrowserConfig::default(),
+            http_browser_declared: false,
+            http_geoip: None,
+            stream_geoip: None,
+            server_userid: None,
+            server_browser: None,
             stream_access: Vec::new(),
             stream_maps: Vec::new(),
             stream_map_results: Vec::new(),
+            stream_split_clients: Vec::new(),
+            stream_split_results: Vec::new(),
+            stream_pass_declarations: Vec::new(),
             stream_limit_conn_zones: Vec::new(),
             stream_limit_conn_zone_names: Vec::new(),
             stream_limit_conn_dry_run: false,
@@ -2179,6 +2345,7 @@ impl<'a> Mapper<'a> {
         let mut inherited_auth_off = false;
         let mut inherited_proxy_set_headers: Vec<String> = Vec::new();
         let mut server_http2: Option<bool> = None;
+        let mut server_http2_chunk_size: Option<usize> = None;
         let mut server_proxy_ssl = ProxySslSettings::default();
         let mut server_real_ip = RealIpSettings::default();
         let mut ssl_verify_client: Option<&str> = None;
@@ -2192,6 +2359,11 @@ impl<'a> Mapper<'a> {
         let mut server_limit_req_status: Option<u16> = None;
         let mut server_limit_conn_status: Option<u16> = None;
         let mut server_max_ranges: Option<u64> = None;
+        // nginx `slice` inherits http → server → location with nginx's scalar
+        // merge: a child that declares the directive replaces the inherited
+        // value; an undeclared child keeps it (`slice 0` is a declaration).
+        let mut server_slice_size: Option<u64> = None;
+        let mut server_proxy_cache: Option<bool> = None;
         // nginx http→server→location inheritance for the proxy
         // response-header policy and the request-boundary policies.
         let mut server_proxy_response = ProxyResponseDirectives::default();
@@ -2211,6 +2383,12 @@ impl<'a> Mapper<'a> {
         let mut server_autoindex = AutoindexDeclarations::default();
         // nginx `valid_referers` has no http context; each server starts unset.
         self.server_referer = None;
+        // Userid/browser declarations collected for the server currently being
+        // walked; resolved after the walk so directive order does not matter.
+        let mut server_userid_declarations = UserIdDeclarations::default();
+        let mut server_browser_declarations = BrowserDeclarations::default();
+        self.server_userid = None;
+        self.server_browser = None;
         let mut server_proxy_method: Option<String> = None;
         // nginx http-level gzip state snapshot: server-level `gzip*`
         // directives overlay it (single-value on/off inherits; the type list
@@ -2421,16 +2599,19 @@ impl<'a> Mapper<'a> {
                 "valid_referers" => {
                     self.server_referer = Some(parse_valid_referers(child)?);
                 }
+                name if USERID_DIRECTIVES.contains(&name) => {
+                    apply_userid_directive(&mut server_userid_declarations, child)?;
+                }
+                name if BROWSER_DIRECTIVES.contains(&name) => {
+                    apply_browser_directive(&mut server_browser_declarations, child)?;
+                }
                 "http2_max_concurrent_streams" => {
                     self.note_http2_max_concurrent_streams(parse_http2_max_concurrent_streams(
                         child,
                     )?);
                 }
                 "http2_chunk_size" => {
-                    return Err(NginxConfigError::unsupported(
-                        child,
-                        "`http2_chunk_size` is not exposed by the pinned hyper/h2 ingress (it controls DATA-frame chunking); remove it or declare `http2_max_concurrent_streams` instead",
-                    ));
+                    server_http2_chunk_size = Some(parse_http2_chunk_size(child)?);
                 }
                 "proxy_method" => {
                     server_proxy_method = Some(parse_proxy_method(child)?);
@@ -2486,7 +2667,7 @@ impl<'a> Mapper<'a> {
                     inherited_limit_req.push(self.parse_limit_req_rule(child)?);
                 }
                 "proxy_cache" => {
-                    self.materialize_proxy_cache(child)?;
+                    server_proxy_cache = Some(self.materialize_proxy_cache(child)?);
                 }
                 "proxy_ssl_verify"
                 | "proxy_ssl_trusted_certificate"
@@ -2724,12 +2905,47 @@ impl<'a> Mapper<'a> {
                     }
                     server_rewrite_phase.push(operation);
                 }
+                name if GEOIP_DIRECTIVES.contains(&name) => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!("`{name}` is only allowed in the `http` block"),
+                    ));
+                }
+                "slice" => {
+                    server_slice_size = Some(parse_slice_size(child)?);
+                }
                 name => {
                     return Err(NginxConfigError::unsupported(
                         child,
                         format!("unsupported server directive `{name}`"),
                     ));
                 }
+            }
+        }
+
+        self.server_userid = if server_userid_declarations.any() {
+            Some(server_userid_declarations.resolve_over(&self.http_userid))
+        } else if self.http_userid_declared {
+            Some(self.http_userid.clone())
+        } else {
+            None
+        };
+        self.server_browser = if server_browser_declarations.any() {
+            Some(server_browser_declarations.resolve_over(&self.http_browser))
+        } else if self.http_browser_declared {
+            Some(self.http_browser.clone())
+        } else {
+            None
+        };
+        // nginx fills the modern-browser masks only for a list declared at the
+        // level being merged. A list inherited from `http` keeps its raw
+        // declaration slots (see `BrowserConfig::modern_masks_filled`).
+        if !server_browser_declarations.modern_declared()
+            && self.http_browser_declared
+            && !self.http_browser.modern.is_empty()
+        {
+            if let Some(browser) = self.server_browser.as_mut() {
+                browser.modern_masks_filled = false;
             }
         }
 
@@ -2760,6 +2976,23 @@ impl<'a> Mapper<'a> {
             }
             None => None,
         };
+        let mut catch_all_return = catch_all_return;
+        if let Some((route, _resource)) = catch_all_return.as_mut() {
+            if let Some(userid) = self.server_userid.as_ref() {
+                route["userid"] = serde_json::to_value(userid).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(browser) = self.server_browser.as_ref() {
+                route["browser"] = serde_json::to_value(browser).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+        }
         let catch_all_iterations = if catch_all_return.is_none() {
             usize::MAX
         } else {
@@ -2877,6 +3110,17 @@ impl<'a> Mapper<'a> {
         let effective_limit_req_status = server_limit_req_status.or(self.http_limit_req_status);
         let effective_limit_conn_status = server_limit_conn_status.or(self.http_limit_conn_status);
         let effective_max_ranges = server_max_ranges.or(self.http_max_ranges);
+        // nginx `slice` scalar merge: the server declaration replaces the
+        // http-level value; locations inherit the result unless they declare
+        // their own (handled in `materialize_location`).
+        self.server_slice_size = server_slice_size.or(self.http_slice_size);
+        // nginx `proxy_cache` (http → server → location, replace-on-declare).
+        // The default below is `false`: a location that never declares a cache
+        // zone must not serve through the application-level cache.
+        self.server_proxy_cache = server_proxy_cache.or(self.http_proxy_cache);
+        // nginx http → server inheritance for the HTTP/2 DATA-frame chunk size;
+        // locations inherit this value unless they declare their own.
+        let effective_http2_chunk_size = server_http2_chunk_size.or(self.http_http2_chunk_size);
         self.server_proxy_response = self
             .http_proxy_response
             .clone()
@@ -3196,6 +3440,11 @@ impl<'a> Mapper<'a> {
         if let Some(max_ranges) = effective_max_ranges {
             virtual_host["maxRanges"] = json!(max_ranges);
         }
+        // nginx http/server-resolved `http2_chunk_size`; a location that
+        // declares its own value overlays it on the route.
+        if let Some(chunk_size) = effective_http2_chunk_size {
+            virtual_host["http2ChunkSize"] = json!(chunk_size);
+        }
         // nginx `merge_slashes` / `underscores_in_headers` /
         // `ignore_invalid_headers` resolved for this host; only the non-default
         // value is emitted (the model defaults are on / off / on).
@@ -3221,6 +3470,16 @@ impl<'a> Mapper<'a> {
         }
         if let Some(referer) = &self.server_referer {
             virtual_host["referer"] = serde_json::to_value(referer).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(userid) = self.server_userid.as_ref() {
+            virtual_host["userid"] = serde_json::to_value(userid).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(browser) = self.server_browser.as_ref() {
+            virtual_host["browser"] = serde_json::to_value(browser).map_err(|error| {
                 NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
@@ -3494,6 +3753,16 @@ impl<'a> Mapper<'a> {
         if let Some(max_ranges) = extras.max_ranges {
             route["maxRanges"] = json!(max_ranges);
         }
+        // nginx `slice <size>` (http → server → location resolved above). The
+        // proxy adapter reads this effective value off the selected route.
+        if let Some(slice_size) = extras.slice_size {
+            route["sliceSize"] = json!(slice_size);
+        }
+        // nginx `proxy_cache`: only a route that effectively declares a cache
+        // zone uses the shared cache (an undeclared route is `false`, so one
+        // location's `proxy_cache_path` never turns caching on for the rest of
+        // the configuration).
+        route["proxyCache"] = json!(extras.proxy_cache.unwrap_or(false));
         // nginx `addition` / `auth_request` / `mirror` inheritance: the
         // effective policy is the location declaration when present, else the
         // inherited http → server one.
@@ -3542,6 +3811,16 @@ impl<'a> Mapper<'a> {
                 NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
             })?;
         }
+        if let Some(userid) = extras.userid.as_ref() {
+            route["userid"] = serde_json::to_value(userid).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(browser) = extras.browser.as_ref() {
+            route["browser"] = serde_json::to_value(browser).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         // nginx autoindex family: a location that declares any directive gets
         // the fully resolved policy (its declarations over the inherited ones).
         if !extras.autoindex.is_empty() {
@@ -3557,6 +3836,12 @@ impl<'a> Mapper<'a> {
                     ))
                 })?;
             }
+        }
+        if let Some(random_index) = extras.random_index {
+            route["randomIndex"] = json!(random_index);
+        }
+        if let Some(chunk_size) = extras.http2_chunk_size {
+            route["http2ChunkSize"] = json!(chunk_size);
         }
         Ok(())
     }
@@ -3938,8 +4223,20 @@ impl<'a> Mapper<'a> {
                 "autoindex_format" => {
                     extras.autoindex.format = Some(parse_autoindex_format(child)?);
                 }
+                "random_index" => {
+                    extras.random_index = Some(parse_on_off(child, "random_index")?);
+                }
+                "http2_chunk_size" => {
+                    extras.http2_chunk_size = Some(parse_http2_chunk_size(child)?);
+                }
                 "valid_referers" => {
                     extras.referer = Some(parse_valid_referers(child)?);
+                }
+                name if USERID_DIRECTIVES.contains(&name) => {
+                    apply_userid_directive(&mut extras.userid_declarations, child)?;
+                }
+                name if BROWSER_DIRECTIVES.contains(&name) => {
+                    apply_browser_directive(&mut extras.browser_declarations, child)?;
                 }
                 "empty_gif" => {
                     if !child.args.is_empty() {
@@ -4237,7 +4534,7 @@ impl<'a> Mapper<'a> {
                 | "proxy_connect_timeout"
                 | "proxy_request_buffering" => {}
                 "proxy_cache" => {
-                    self.materialize_proxy_cache(child)?;
+                    extras.proxy_cache = Some(self.materialize_proxy_cache(child)?);
                 }
                 "proxy_cache_key" => {
                     self.proxy_cache_enabled = true;
@@ -4267,12 +4564,21 @@ impl<'a> Mapper<'a> {
                     self.proxy_cache_enabled = true;
                     self.apply_proxy_cache_valid(child)?;
                 }
+                name if GEOIP_DIRECTIVES.contains(&name) => {
+                    return Err(NginxConfigError::unsupported(
+                        child,
+                        format!("`{name}` is only allowed in the `http` block"),
+                    ));
+                }
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name if UNSUPPORTED_SECURITY.contains(&name) => {
                     return Err(NginxConfigError::unsupported(
                         child,
                         format!("`{name}` cannot be enforced by the SDKWork runtime"),
                     ));
+                }
+                "slice" => {
+                    extras.slice_size = Some(parse_slice_size(child)?);
                 }
                 name => {
                     return Err(NginxConfigError::unsupported(
@@ -4760,6 +5066,25 @@ impl<'a> Mapper<'a> {
             if let Some(ignore_headers) = &effective_fastcgi.ignore_headers {
                 resource["ignoreHeaders"] = json!(ignore_headers);
             }
+            // The temp-spool tier is always materialized with nginx's defaults
+            // (spool enabled, 1 GiB per-file cap) so an oversized upstream body
+            // is spilled under the per-generation temp directory even when the
+            // configuration declares no `fastcgi_temp_*` directive.
+            if let Some(policy) = effective_fastcgi
+                .temp
+                .resolve(effective_fastcgi.buffering_policy.buffer_max(), location)?
+            {
+                resource["tempPolicy"] = serde_json::to_value(policy).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            resource["ignoreClientAbort"] =
+                json!(effective_fastcgi.ignore_client_abort.unwrap_or(false));
+            if let Some(patterns) = &effective_fastcgi.catch_stderr {
+                resource["catchStderr"] = json!(patterns);
+            }
             if let Some(cache) = cache_policy {
                 resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
                     NginxConfigError::ValidationFailed(format!(
@@ -5046,6 +5371,18 @@ impl<'a> Mapper<'a> {
             if let Some(ignore_headers) = &effective_cgi.ignore_headers {
                 resource["ignoreHeaders"] = json!(ignore_headers);
             }
+            if let Some(policy) = effective_cgi
+                .temp
+                .resolve(effective_cgi.buffering_policy.buffer_max(), location)?
+            {
+                resource["tempPolicy"] = serde_json::to_value(policy).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
+            }
+            resource["ignoreClientAbort"] =
+                json!(effective_cgi.ignore_client_abort.unwrap_or(false));
             if let Some(cache) = cache_policy {
                 resource["cache"] = serde_json::to_value(&cache).map_err(|error| {
                     NginxConfigError::ValidationFailed(format!(
@@ -5311,6 +5648,8 @@ impl<'a> Mapper<'a> {
                 "readTimeoutMs": effective_grpc.read_timeout_ms.unwrap_or(60_000),
                 "bufferSize": effective_grpc.buffer_size.unwrap_or(4096),
                 "ignoreHeaders": effective_grpc.ignore_headers.clone().unwrap_or_default(),
+                "bindAddress": effective_grpc.bind_address.flatten().map(|address| address.to_string()),
+                "socketKeepalive": effective_grpc.socket_keepalive,
                 "responsePolicy": proxy_response_policy_json(&response_policy)?,
                 "interceptErrors": effective_grpc.intercept_errors.unwrap_or(false),
                 "retry": json!({
@@ -5580,6 +5919,14 @@ impl<'a> Mapper<'a> {
             client_max_body_size.or(inherited_client_max_body_size);
         self.note_client_max_body_size(effective_client_max_body_size);
         extras.max_request_body_bytes = effective_client_max_body_size;
+        // nginx `slice` handler merge: an undeclared location inherits the
+        // http → server value; a declared `slice 0` stays an explicit 0.
+        if extras.slice_size.is_none() {
+            extras.slice_size = self.server_slice_size;
+        }
+        if extras.proxy_cache.is_none() {
+            extras.proxy_cache = self.server_proxy_cache;
+        }
         extras.rewrite_phase = location_rewrite_phase;
         // nginx `mirror_request_body` defaults to `on`; the runtime cannot tee
         // request bodies into fire-and-forget subrequests, so an effective
@@ -5600,6 +5947,31 @@ impl<'a> Mapper<'a> {
         extras.addition = location_addition;
         extras.auth_request = location_auth;
         extras.mirror = location_mirror;
+        // nginx merges each userid field independently over http → server →
+        // location; the browser module merges the modern family, the ancient
+        // family and the two values separately.
+        extras.userid = if extras.userid_declarations.any() {
+            Some(
+                extras.userid_declarations.resolve_over(
+                    self.server_userid
+                        .as_ref()
+                        .unwrap_or(&UserIdConfig::default()),
+                ),
+            )
+        } else {
+            self.server_userid.clone()
+        };
+        extras.browser = if extras.browser_declarations.any() {
+            Some(
+                extras.browser_declarations.resolve_over(
+                    self.server_browser
+                        .as_ref()
+                        .unwrap_or(&BrowserConfig::default()),
+                ),
+            )
+        } else {
+            self.server_browser.clone()
+        };
         let _ = (server_name, client_max_body_size);
         Ok(extras)
     }
@@ -5809,7 +6181,7 @@ impl<'a> Mapper<'a> {
     fn materialize_proxy_cache(
         &mut self,
         directive: &NginxDirective,
-    ) -> Result<(), NginxConfigError> {
+    ) -> Result<bool, NginxConfigError> {
         let Some(zone) = directive.args.first() else {
             return Err(NginxConfigError::unsupported(
                 directive,
@@ -5817,8 +6189,10 @@ impl<'a> Mapper<'a> {
             ));
         };
         if zone == "off" {
+            // The application-level cache object stays available for other
+            // locations; this declaration only turns caching off here.
             self.proxy_cache_enabled = false;
-            return Ok(());
+            return Ok(false);
         }
         if !self.proxy_cache_zone_names.contains(zone) {
             return Err(NginxConfigError::unsupported(
@@ -5829,7 +6203,7 @@ impl<'a> Mapper<'a> {
             ));
         }
         self.proxy_cache_enabled = true;
-        Ok(())
+        Ok(true)
     }
 
     fn materialize_proxy_cache_path(
@@ -6110,6 +6484,29 @@ impl<'a> Mapper<'a> {
         &mut self,
         directives: &[NginxDirective],
     ) -> Result<(), NginxConfigError> {
+        // nginx stream GeoIP is an accept-time lookup from the connection
+        // address. It shares the three database directives with the HTTP
+        // module but has no proxy-trust directives.
+        let mut stream_geoip = GeoIpDeclarations::default();
+        for directive in directives {
+            // Deliberately an `if` chain rather than a `match`: the
+            // directive-matrix gate derives each context's execute set from the
+            // first `match directive.name.as_str()` arm block in this function.
+            let name = directive.name.as_str();
+            if name == "geoip_country" || name == "geoip_city" || name == "geoip_org" {
+                apply_geoip_database_directive(&mut stream_geoip, directive)?;
+            } else if name == "geoip_proxy" || name == "geoip_proxy_recursive" {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "`{name}` is an HTTP GeoIP directive; the stream GeoIP module resolves the accepted connection address only"
+                    ),
+                ));
+            }
+        }
+        if !stream_geoip.is_empty() {
+            self.stream_geoip = Some(stream_geoip.resolve());
+        }
         let mut stream_index = 0usize;
         for directive in directives {
             match directive.name.as_str() {
@@ -6118,6 +6515,7 @@ impl<'a> Mapper<'a> {
                     self.materialize_stream_server(directive, stream_index)?;
                     stream_index += 1;
                 }
+                name if GEOIP_DIRECTIVES.contains(&name) => {}
                 "log_format" | "access_log" | "error_log" | "resolver" => {}
                 "proxy_ssl" => {
                     self.stream_proxy_ssl.apply(directive)?;
@@ -6170,16 +6568,34 @@ impl<'a> Mapper<'a> {
                         ));
                     }
                 }
+                // nginx stream `split_clients`: the expanded accept/preread
+                // source is hashed with nginx's MurmurHash2 (`ngx_murmur_hash2`)
+                // and assigned to the configured bucket; the result is a
+                // per-connection variable for `set`/`return` templates.
                 "split_clients" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "stream `split_clients` is not executable in this round: the bounded per-connection variable engine evaluates only the fixed accept/preread vocabulary, and a stream split_clients distribution needs a per-variable hash context; no silent approximation is performed",
-                    ));
+                    let split = parse_stream_split_clients(directive)?;
+                    if let Some(result) = split.result.strip_prefix('$') {
+                        if self.stream_map_results.iter().any(|name| name == result)
+                            || self.stream_split_results.iter().any(|name| name == result)
+                        {
+                            return Err(NginxConfigError::unsupported(
+                                directive,
+                                format!(
+                                    "duplicate stream split_clients result variable `${result}`"
+                                ),
+                            ));
+                        }
+                        self.stream_split_results.push(result.to_owned());
+                    }
+                    self.stream_split_clients.push(split);
                 }
+                // nginx stream `pass`: the value is a listen address with a
+                // port; at connection time the session is re-dispatched to the
+                // default virtual server of that listening socket.
                 "pass" => {
                     return Err(NginxConfigError::unsupported(
                         directive,
-                        "stream `pass` (raw-address proxy handler) requires a per-connection variable-expanded dial target and the proxy handler it is embedded in; the bounded stream plane executes `proxy_pass` targets only and fails closed rather than approximating the pass module",
+                        "stream `pass` is a server-content directive (`pass <address>` inside `stream server {}`), not a stream-context directive",
                     ));
                 }
                 // nginx `stream` context `map`: executable over the bounded
@@ -6253,18 +6669,69 @@ impl<'a> Mapper<'a> {
                     }
                     self.stream_preread_buffer_bytes = Some(bytes as usize);
                 }
-                "proxy_protocol_timeout" => {
-                    return Err(NginxConfigError::unsupported(
-                        directive,
-                        "`proxy_protocol_timeout` bounds reading an inbound PROXY protocol header, which the runtime does not parse; the runtime emits PROXY protocol v1 to the upstream (`proxy_protocol on`) and has no inbound header to time out",
-                    ));
-                }
                 name if ACCEPTED_IGNORED.contains(&name) => {}
                 name => {
                     return Err(NginxConfigError::unsupported(
                         directive,
                         format!("unsupported stream directive `{name}`"),
                     ));
+                }
+            }
+        }
+        // `pass` may name a server declared later in the same stream block, so
+        // the target and cycle check run once every server has materialized.
+        self.validate_stream_passes()?;
+        Ok(())
+    }
+
+    /// Validate every stream `pass <address>` declaration against the
+    /// materialized stream servers.
+    ///
+    /// nginx resolves the address to a listening socket at connection time and
+    /// re-dispatches the session to that socket's default virtual server; a
+    /// mismatch is a runtime "port not found" log. The bounded plane resolves
+    /// it at configuration time so a typo is a located diagnostic, and it
+    /// rejects pass cycles (nginx counts them per connection and fails after
+    /// `NGX_STREAM_PASS_MAX_PASSES` = 10).
+    fn validate_stream_passes(&mut self) -> Result<(), NginxConfigError> {
+        if self.stream_pass_declarations.is_empty() {
+            return Ok(());
+        }
+        let mut configs: Vec<StreamServerConfig> = Vec::with_capacity(self.streams.len());
+        for stream in &self.streams {
+            let config: StreamServerConfig =
+                serde_json::from_value(stream.clone()).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "stream server materialization failed: {error}"
+                    ))
+                })?;
+            configs.push(config);
+        }
+        for (directive, address) in self.stream_pass_declarations.clone() {
+            match crate::config::resolve_stream_pass_target(&configs, &address) {
+                Ok(_) => {}
+                Err(crate::config::StreamPassError::InvalidAddress) => {
+                    return Err(NginxConfigError::unsupported(
+                        &directive,
+                        format!("stream `pass {address}` must be a literal `IP:port` address"),
+                    ))
+                }
+                Err(crate::config::StreamPassError::NotConfigured) => {
+                    return Err(NginxConfigError::unsupported(
+                        &directive,
+                        format!(
+                            "stream `pass {address}` does not name a configured stream listener; nginx logs \"port not found\" and closes the connection"
+                        ),
+                    ))
+                }
+                Err(crate::config::StreamPassError::Cycle) => {
+                    return Err(NginxConfigError::unsupported(
+                        &directive,
+                        format!(
+                            "stream `pass {address}` forms a pass cycle (nginx fails after {} passes)",
+                            crate::config::STREAM_PASS_MAX_PASSES
+                        ),
+                    ))
                 }
             }
         }
@@ -6287,6 +6754,7 @@ impl<'a> Mapper<'a> {
         let mut ssl_client_certificate: Option<String> = None;
         let mut access: Vec<Value> = Vec::new();
         let mut return_value: Option<String> = None;
+        let mut pass_address: Option<String> = None;
         let mut limit_conn: Vec<Value> = Vec::new();
         let mut limit_conn_dry_run: Option<bool> = None;
         let mut set_variables: Vec<StreamSetVariableConfig> = Vec::new();
@@ -6305,9 +6773,10 @@ impl<'a> Mapper<'a> {
         let mut next_upstream_tries: Option<u8> = None;
         let mut next_upstream_timeout_ms: Option<u64> = None;
         let mut server_names: Vec<String> = Vec::new();
-        // Variables a `set`/`return` template may reference: stream map
-        // results plus earlier `set` assignments of this server.
+        // Variables a `set`/`return` template may reference: stream map and
+        // split_clients results plus earlier `set` assignments of this server.
         let mut available_variables: Vec<String> = self.stream_map_results.clone();
+        available_variables.extend(self.stream_split_results.iter().cloned());
         for child in &directive.children {
             match child.name.as_str() {
                 "listen" => {
@@ -6328,6 +6797,14 @@ impl<'a> Mapper<'a> {
                         ));
                     };
                     proxy_pass = Some(target.clone());
+                }
+                // nginx stream `pass <address>`: content handler that hands the
+                // accepted connection to another listening socket.
+                "pass" => {
+                    let address = parse_stream_pass_address(child)?;
+                    self.stream_pass_declarations
+                        .push((child.clone(), address.clone()));
+                    pass_address = Some(address);
                 }
                 "proxy_timeout" => {
                     let Some(value) = child.args.first() else {
@@ -6689,6 +7166,22 @@ impl<'a> Mapper<'a> {
                 "a stream server cannot combine `return` with `proxy_pass`",
             ));
         }
+        // nginx installs the content handler at directive-parse time (the last
+        // of `pass`/`proxy_pass`/`return` wins). The bounded plane executes one
+        // content handler per server and rejects the ambiguous combination
+        // instead of silently choosing one.
+        if pass_address.is_some() && (proxy_pass.is_some() || return_value.is_some()) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "a stream server cannot combine `pass` with `proxy_pass` or `return`; nginx keeps the last content handler, while the bounded stream plane requires exactly one",
+            ));
+        }
+        if pass_address.is_some() && ssl_preread {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                "stream `pass` cannot follow `ssl_preread on`: nginx refuses to pass a connection with buffered preread data (\"cannot pass connection with preread data\")",
+            ));
+        }
         let target =
             if let Some(target_name) = proxy_pass.as_ref().filter(|_| return_value.is_none()) {
                 Some(if self.upstream_names.contains(target_name) {
@@ -6712,10 +7205,10 @@ impl<'a> Mapper<'a> {
             } else {
                 None
             };
-        if target.is_none() && return_value.is_none() {
+        if target.is_none() && return_value.is_none() && pass_address.is_none() {
             return Err(NginxConfigError::unsupported(
                 directive,
-                "stream server requires proxy_pass or return",
+                "stream server requires `proxy_pass`, `return`, or `pass`",
             ));
         }
         // nginx allows one `stream server` block with several `listen`
@@ -6745,6 +7238,9 @@ impl<'a> Mapper<'a> {
             }
             if let Some(value) = &return_value {
                 stream["returnValue"] = Value::String(value.clone());
+            }
+            if let Some(address) = &pass_address {
+                stream["passAddress"] = Value::String(address.clone());
             }
             if !limit_conn.is_empty() {
                 stream["limitConn"] = Value::Array(limit_conn.clone());
@@ -7026,13 +7522,49 @@ impl<'a> Mapper<'a> {
                     "mail `listen … ssl` and `starttls only` are mutually exclusive",
                 ));
             }
-            if let Some(tls) = tls.as_mut() {
-                if !implicit_tls && server.starttls == "off" {
-                    // TLS material is declared but unused by this listener;
-                    // nginx accepts it (main-context certificate for a
-                    // STARTTLS listener). Keep it for a later `starttls on` in
-                    // the same server block: the value is not silently dropped.
-                    let _ = tls;
+            // The declared TLS material may be inherited and unused by a
+            // plaintext listener; nginx accepts that (main-context certificate
+            // for a STARTTLS listener), so the value is kept, not dropped.
+            // nginx's mail SSL module initializes one SSL context per server
+            // that declares certificate material, whether or not a listener
+            // uses it, and validates the verification bundles there. Apply the
+            // same rule: a server with TLS material also materializes its
+            // client-certificate policy, even when the listener is plaintext.
+            let tls_active = tls.is_some();
+            if tls_active {
+                if server.tls_verify_client != "off" {
+                    if server.tls_verify_client != "optional-no-ca"
+                        && server.tls_client_certificate.is_none()
+                        && server.tls_trusted_certificate.is_none()
+                    {
+                        // nginx `ngx_mail_ssl_module` init: `on`/`optional`
+                        // without a verification bundle is a configuration error.
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            "mail `ssl_verify_client on|optional` requires `ssl_client_certificate` or `ssl_trusted_certificate`",
+                        ));
+                    }
+                    let tls = tls.as_mut().expect("checked active TLS");
+                    tls["verifyClient"] = Value::String(server.tls_verify_client.clone());
+                    tls["verifyDepth"] = json!(server.tls_verify_depth);
+                    if let Some(client_certificate) = &server.tls_client_certificate {
+                        tls["clientCertificateFile"] = Value::String(client_certificate.clone());
+                    }
+                    if let Some(trusted_certificate) = &server.tls_trusted_certificate {
+                        tls["trustedCertificateFile"] = Value::String(trusted_certificate.clone());
+                    }
+                } else if server.tls_client_certificate.is_some()
+                    || server.tls_trusted_certificate.is_some()
+                {
+                    // The runtime refuses to accept a verification bundle that
+                    // is never consulted (the HTTP/stream planes apply the same
+                    // policy): nginx would load it only for a non-zero verify
+                    // mode, so an operator who declared it without one almost
+                    // certainly expects verification.
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "mail `ssl_client_certificate`/`ssl_trusted_certificate` require `ssl_verify_client on|optional|optional_no_ca`",
+                    ));
                 }
             }
             let mut entry = json!({
@@ -7059,6 +7591,30 @@ impl<'a> Mapper<'a> {
             });
             if let Some(server_name) = &server.server_name {
                 entry["serverName"] = Value::String(server_name.clone());
+            }
+            let capabilities = match protocol {
+                "smtp" => server.smtp_capabilities.as_ref(),
+                "imap" => server.imap_capabilities.as_ref(),
+                _ => server.pop3_capabilities.as_ref(),
+            };
+            if let Some(capabilities) = capabilities {
+                entry["capabilities"] = Value::Array(
+                    capabilities
+                        .iter()
+                        .cloned()
+                        .map(Value::String)
+                        .collect::<Vec<_>>(),
+                );
+            }
+            if !server.real_ip_cidrs.is_empty() {
+                entry["realIpTrustedCidrs"] = Value::Array(
+                    server
+                        .real_ip_cidrs
+                        .iter()
+                        .cloned()
+                        .map(Value::String)
+                        .collect::<Vec<_>>(),
+                );
             }
             for (key, mechanisms) in [
                 ("pop3Auth", &pop3_auth),
@@ -7148,11 +7704,22 @@ impl<'a> Mapper<'a> {
             "mail": { "servers": self.mail_servers },
             "streamLimitConnZones": self.stream_limit_conn_zones,
             "streamMaps": self.stream_maps,
+            "streamSplitClients": self.stream_split_clients,
             "cacheZoneNames": self.proxy_cache_zone_names,
             "proxyCache": proxy_cache,
             "metadata": { "source": "nginx configuration" },
         });
         let mut instance = instance;
+        if let Some(geoip) = self.http_geoip {
+            instance["geoip"] = serde_json::to_value(&geoip).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
+        if let Some(geoip) = self.stream_geoip {
+            instance["streamGeoip"] = serde_json::to_value(&geoip).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!("nginx materialization failed: {error}"))
+            })?;
+        }
         if self.http2_max_concurrent_streams_conflict {
             return Err(NginxConfigError::unsupported(
                 &NginxDirective {
@@ -7310,6 +7877,8 @@ struct GrpcSettings {
     next_upstream_tries: Option<u8>,
     next_upstream_timeout_ms: Option<u64>,
     ignore_headers: Option<Vec<String>>,
+    bind_address: Option<Option<std::net::IpAddr>>,
+    socket_keepalive: Option<bool>,
 }
 
 impl GrpcSettings {
@@ -7344,6 +7913,8 @@ impl GrpcSettings {
                 .ignore_headers
                 .clone()
                 .or_else(|| self.ignore_headers.clone()),
+            bind_address: inner.bind_address.or(self.bind_address),
+            socket_keepalive: inner.socket_keepalive.or(self.socket_keepalive),
         }
     }
 
@@ -7435,11 +8006,15 @@ impl GrpcSettings {
             "grpc_next_upstream_timeout" => {
                 self.next_upstream_timeout_ms = Some(parse_fastcgi_timeout(directive)?)
             }
+            "grpc_bind" => self.bind_address = Some(parse_upstream_bind(directive)?),
+            "grpc_socket_keepalive" => {
+                self.socket_keepalive = Some(parse_on_off(directive, "grpc_socket_keepalive")?)
+            }
             other => {
                 return Err(NginxConfigError::unsupported(
                     directive,
                     format!(
-                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_ignore_headers/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_ssl_*"
+                        "`{other}` is not executable by the bounded gRPC adapter; supported: grpc_pass/grpc_set_header/grpc_connect_timeout/grpc_send_timeout/grpc_read_timeout/grpc_buffer_size/grpc_ignore_headers/grpc_hide_header/grpc_pass_header/grpc_intercept_errors/grpc_next_upstream/_tries/_timeout/grpc_bind/grpc_socket_keepalive/grpc_ssl_*"
                     ),
                 ))
             }
@@ -8360,6 +8935,12 @@ struct MailContextDefaults {
     tls_cert: Option<String>,
     tls_key: Option<String>,
     tls_protocols: Vec<String>,
+    /// nginx mail `ssl_verify_client` / `ssl_verify_depth` and the two
+    /// verification bundles, inherited from the `mail {}` context.
+    tls_verify_client: String,
+    tls_verify_depth: u32,
+    tls_client_certificate: Option<String>,
+    tls_trusted_certificate: Option<String>,
     starttls: String,
     proxy_enabled: bool,
     xclient: bool,
@@ -8369,6 +8950,14 @@ struct MailContextDefaults {
     proxy_buffer_bytes: usize,
     proxy_timeout_ms: u64,
     max_errors: u32,
+    /// `smtp_capabilities` / `imap_capabilities` / `pop3_capabilities` are
+    /// protocol-scoped in nginx (each is inherited by the matching protocol
+    /// module), so the inherited defaults keep one list per protocol.
+    smtp_capabilities: Option<Vec<String>>,
+    imap_capabilities: Option<Vec<String>>,
+    pop3_capabilities: Option<Vec<String>>,
+    /// `set_real_ip_from` inherited from the `mail {}` context.
+    real_ip_cidrs: Vec<String>,
 }
 
 impl Default for MailContextDefaults {
@@ -8384,6 +8973,10 @@ impl Default for MailContextDefaults {
             tls_cert: None,
             tls_key: None,
             tls_protocols: default_mail_tls_protocols(),
+            tls_verify_client: "off".to_owned(),
+            tls_verify_depth: 1,
+            tls_client_certificate: None,
+            tls_trusted_certificate: None,
             starttls: "off".to_owned(),
             // nginx mail proxy module defaults (ngx_mail_proxy_module merge).
             proxy_enabled: true,
@@ -8394,6 +8987,10 @@ impl Default for MailContextDefaults {
             proxy_buffer_bytes: 4096,
             proxy_timeout_ms: 24 * 60 * 60 * 1000,
             max_errors: 5,
+            smtp_capabilities: None,
+            imap_capabilities: None,
+            pop3_capabilities: None,
+            real_ip_cidrs: Vec::new(),
         }
     }
 }
@@ -8420,6 +9017,10 @@ struct MailServerDraft {
     tls_cert: Option<String>,
     tls_key: Option<String>,
     tls_protocols: Vec<String>,
+    tls_verify_client: String,
+    tls_verify_depth: u32,
+    tls_client_certificate: Option<String>,
+    tls_trusted_certificate: Option<String>,
     starttls: String,
     proxy_enabled: bool,
     xclient: bool,
@@ -8430,6 +9031,11 @@ struct MailServerDraft {
     proxy_timeout_ms: u64,
     max_errors: u32,
     proxy_tls: Option<Value>,
+    smtp_capabilities: Option<Vec<String>>,
+    imap_capabilities: Option<Vec<String>>,
+    pop3_capabilities: Option<Vec<String>>,
+    real_ip_cidrs: Vec<String>,
+    real_ip_declared: bool,
 }
 
 impl MailServerDraft {
@@ -8455,6 +9061,10 @@ impl MailServerDraft {
             tls_cert: defaults.tls_cert.clone(),
             tls_key: defaults.tls_key.clone(),
             tls_protocols: defaults.tls_protocols.clone(),
+            tls_verify_client: defaults.tls_verify_client.clone(),
+            tls_verify_depth: defaults.tls_verify_depth,
+            tls_client_certificate: defaults.tls_client_certificate.clone(),
+            tls_trusted_certificate: defaults.tls_trusted_certificate.clone(),
             starttls: defaults.starttls.clone(),
             proxy_enabled: defaults.proxy_enabled,
             xclient: defaults.xclient,
@@ -8465,6 +9075,11 @@ impl MailServerDraft {
             proxy_timeout_ms: defaults.proxy_timeout_ms,
             max_errors: defaults.max_errors,
             proxy_tls: None,
+            smtp_capabilities: defaults.smtp_capabilities.clone(),
+            imap_capabilities: defaults.imap_capabilities.clone(),
+            pop3_capabilities: defaults.pop3_capabilities.clone(),
+            real_ip_cidrs: defaults.real_ip_cidrs.clone(),
+            real_ip_declared: false,
         }
     }
 
@@ -8533,6 +9148,22 @@ fn parse_mail_context_directive(
             defaults.tls_protocols = parse_mail_ssl_protocols(directive)?;
             Ok(())
         }
+        "ssl_verify_client" => {
+            defaults.tls_verify_client = parse_mail_ssl_verify_client(directive)?;
+            Ok(())
+        }
+        "ssl_verify_depth" => {
+            defaults.tls_verify_depth = parse_mail_ssl_verify_depth(directive)?;
+            Ok(())
+        }
+        "ssl_client_certificate" => {
+            defaults.tls_client_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
+        "ssl_trusted_certificate" => {
+            defaults.tls_trusted_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
         "starttls" => {
             defaults.starttls = parse_mail_starttls(directive)?;
             Ok(())
@@ -8569,6 +9200,19 @@ fn parse_mail_context_directive(
             defaults.max_errors = parse_mail_max_errors(directive)?;
             Ok(())
         }
+        "smtp_capabilities" => parse_mail_capabilities(directive, &mut defaults.smtp_capabilities),
+        "imap_capabilities" => parse_mail_capabilities(directive, &mut defaults.imap_capabilities),
+        "pop3_capabilities" => parse_mail_capabilities(directive, &mut defaults.pop3_capabilities),
+        "set_real_ip_from" => parse_mail_real_ip_from(directive, &mut defaults.real_ip_cidrs, None),
+        // nginx mail `resolver`/`resolver_timeout` configure the DNS resolver
+        // used for `Auth-Server` host names and the SMTP client-host lookup.
+        // The bounded mail plane resolves through the runtime's own bounded
+        // system resolver (`lookup_host` with a timeout), exactly like the HTTP
+        // plane's accepted-unenforced `resolver`; the directive is validated
+        // and accepted so a migrated configuration does not fail closed on a
+        // setting whose observable effect the runtime already owns.
+        "resolver" => validate_mail_resolver(directive),
+        "resolver_timeout" => validate_mail_resolver_timeout(directive),
         name if ACCEPTED_IGNORED.contains(&name) => Ok(()),
         name => Err(NginxConfigError::unsupported(
             directive,
@@ -8681,6 +9325,22 @@ fn parse_mail_server_directive(
             server.tls_protocols = parse_mail_ssl_protocols(directive)?;
             Ok(())
         }
+        "ssl_verify_client" => {
+            server.tls_verify_client = parse_mail_ssl_verify_client(directive)?;
+            Ok(())
+        }
+        "ssl_verify_depth" => {
+            server.tls_verify_depth = parse_mail_ssl_verify_depth(directive)?;
+            Ok(())
+        }
+        "ssl_client_certificate" => {
+            server.tls_client_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
+        "ssl_trusted_certificate" => {
+            server.tls_trusted_certificate = Some(parse_mail_single_path(mapper, directive)?);
+            Ok(())
+        }
         "starttls" => {
             server.starttls = parse_mail_starttls(directive)?;
             Ok(())
@@ -8714,22 +9374,12 @@ fn parse_mail_server_directive(
             Ok(())
         }
         "pop3_capabilities" | "imap_capabilities" | "smtp_capabilities" => {
-            Err(NginxConfigError::unsupported(
-                directive,
-                format!(
-                    "mail `{}` (custom capability advertisement) is not executable; the runtime advertises nginx's default capability set",
-                    directive.name
-                ),
-            ))
-        }
-        "ssl_client_certificate" | "ssl_verify_client" | "ssl_verify_depth" => {
-            Err(NginxConfigError::unsupported(
-                directive,
-                format!(
-                    "mail `{}` (client certificate verification) is not executable yet; client-cert auth is not modeled in the mail plane",
-                    directive.name
-                ),
-            ))
+            let target = match directive.name.as_str() {
+                "smtp_capabilities" => &mut server.smtp_capabilities,
+                "imap_capabilities" => &mut server.imap_capabilities,
+                _ => &mut server.pop3_capabilities,
+            };
+            parse_mail_capabilities(directive, target)
         }
         "ssl_ciphers"
         | "ssl_conf_command"
@@ -8749,23 +9399,194 @@ fn parse_mail_server_directive(
                 directive.name
             ),
         )),
-        "resolver" | "resolver_timeout" => Err(NginxConfigError::unsupported(
-            directive,
-            format!(
-                "mail `{}` (SMTP client-host PTR/forward-confirmed resolution) is not executable; the runtime resolves the `Auth-Server` backend with its own bounded DNS policy",
-                directive.name
-            ),
-        )),
-        "set_real_ip_from" => Err(NginxConfigError::unsupported(
-            directive,
-            "mail `set_real_ip_from` (mail realip module) is not executable",
-        )),
+        // Accepted-unenforced, same policy as the HTTP plane: the nameserver
+        // list is validated but the mail plane resolves names through the
+        // runtime's bounded system resolver, and `resolver_timeout` is a
+        // property of that resolver's own bounded timeout.
+        "resolver" => validate_mail_resolver(directive),
+        "resolver_timeout" => validate_mail_resolver_timeout(directive),
+        "set_real_ip_from" => {
+            parse_mail_real_ip_from(directive, &mut server.real_ip_cidrs, Some(&mut server.real_ip_declared))
+        }
         name if ACCEPTED_IGNORED.contains(&name) => Ok(()),
         name => Err(NginxConfigError::unsupported(
             directive,
             format!("unsupported mail server directive `{name}`"),
         )),
     }
+}
+
+/// Parse one mail capability-list directive
+/// (`smtp_capabilities` / `imap_capabilities` / `pop3_capabilities`).
+///
+/// nginx stores each directive argument as one advertised capability string
+/// (`ngx_mail_capabilities`); a quoted argument may contain spaces. The list
+/// *replaces* the protocol's built-in default list; the runtime renders it with
+/// nginx's line protocol (every line but the last uses the continuation prefix).
+fn parse_mail_capabilities(
+    directive: &NginxDirective,
+    target: &mut Option<Vec<String>>,
+) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `{}` requires at least one capability", directive.name),
+        ));
+    }
+    if directive.args.len() > 64 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `{}` supports at most 64 advertised capabilities",
+                directive.name
+            ),
+        ));
+    }
+    let mut capabilities = Vec::with_capacity(directive.args.len());
+    for capability in &directive.args {
+        if capability.is_empty() || capability.len() > 512 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `{}` capability must be 1..=512 bytes", directive.name),
+            ));
+        }
+        if capability.chars().any(|character| {
+            character.is_control() || character.is_whitespace() && character != ' '
+        }) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "mail `{}` capability `{capability}` contains a control character",
+                    directive.name
+                ),
+            ));
+        }
+        capabilities.push(capability.clone());
+    }
+    *target = Some(capabilities);
+    Ok(())
+}
+
+/// Parse mail `set_real_ip_from <address…>` trusted PROXY protocol peers.
+///
+/// A server-level declaration replaces the inherited `mail {}` list (nginx
+/// `ngx_mail_realip_merge_srv_conf`).
+fn parse_mail_real_ip_from(
+    directive: &NginxDirective,
+    target: &mut Vec<String>,
+    declared: Option<&mut bool>,
+) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `set_real_ip_from` requires at least one address or CIDR",
+        ));
+    }
+    if let Some(declared) = declared {
+        if !*declared {
+            target.clear();
+            *declared = true;
+        }
+    }
+    for value in &directive.args {
+        if value.parse::<ipnet::IpNet>().is_err() && value.parse::<std::net::IpAddr>().is_err() {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `set_real_ip_from {value}` must be an IP address or CIDR"),
+            ));
+        }
+        target.push(value.clone());
+    }
+    Ok(())
+}
+
+/// Validate a mail `resolver <address…> [valid=time] [ipv4=on|off]
+/// [ipv6=on|off] [status_zone=zone]` declaration.
+///
+/// The bounded mail plane accepts and validates the declaration but resolves
+/// names through the runtime's own bounded system resolver (the same
+/// accepted-unenforced policy as the HTTP `resolver`), so the nameserver list
+/// is not applied.
+fn validate_mail_resolver(directive: &NginxDirective) -> Result<(), NginxConfigError> {
+    if directive.args.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `resolver` requires at least one nameserver address",
+        ));
+    }
+    for argument in &directive.args {
+        if argument == "off" {
+            continue;
+        }
+        if let Some((name, value)) = argument.split_once('=') {
+            let valid_parameter = match name {
+                "valid" => value.parse::<u64>().is_ok() || parse_nginx_time_millis(value).is_some(),
+                "ipv4" | "ipv6" => matches!(value, "on" | "off"),
+                "status_zone" => {
+                    !value.is_empty()
+                        && value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                }
+                _ => false,
+            };
+            if !valid_parameter {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("mail `resolver` parameter `{argument}` is not supported"),
+                ));
+            }
+            continue;
+        }
+        let Some((host, port)) = split_mail_resolver_address(argument) else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `resolver` address `{argument}` must be an IP literal, optionally with a port"),
+            ));
+        };
+        if host.parse::<std::net::IpAddr>().is_err()
+            || port.is_some_and(|port| port.parse::<u16>().is_err())
+        {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("mail `resolver` address `{argument}` must be an IP literal, optionally with a port"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Split an optional `host:port` nameserver token (bracketed IPv6 supported).
+fn split_mail_resolver_address(value: &str) -> Option<(&str, Option<&str>)> {
+    if let Some(rest) = value.strip_prefix('[') {
+        let (host, tail) = rest.split_once(']')?;
+        if tail.is_empty() {
+            return Some((host, None));
+        }
+        return Some((host, Some(tail.strip_prefix(':')?)));
+    }
+    match value.rsplit_once(':') {
+        Some((host, port)) if !host.contains(':') => Some((host, Some(port))),
+        Some(_) => None,
+        None => Some((value, None)),
+    }
+}
+
+/// Validate a mail `resolver_timeout <time>` declaration.
+fn validate_mail_resolver_timeout(directive: &NginxDirective) -> Result<(), NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `resolver_timeout` requires a duration",
+        ));
+    };
+    if directive.args.len() != 1 || parse_nginx_time_millis(value).is_none() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid mail `resolver_timeout {value}`"),
+        ));
+    }
+    Ok(())
 }
 
 fn parse_mail_auth_http(
@@ -8895,6 +9716,61 @@ fn parse_mail_starttls(directive: &NginxDirective) -> Result<String, NginxConfig
             format!("mail `starttls` accepts on|off|only, found `{other:?}`"),
         )),
     }
+}
+
+/// nginx mail `ssl_verify_client on|off|optional|optional_no_ca`
+/// (`ngx_mail_ssl_module`).
+fn parse_mail_ssl_verify_client(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `ssl_verify_client` takes exactly one argument",
+        ));
+    }
+    match directive.args[0].as_str() {
+        "on" => Ok("on".to_owned()),
+        "off" => Ok("off".to_owned()),
+        "optional" => Ok("optional".to_owned()),
+        "optional_no_ca" => Ok("optional-no-ca".to_owned()),
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "mail `ssl_verify_client` accepts on|off|optional|optional_no_ca, found `{other}`"
+            ),
+        )),
+    }
+}
+
+/// nginx mail `ssl_verify_depth` (`ngx_conf_set_num_slot`, merge default 1).
+fn parse_mail_ssl_verify_depth(directive: &NginxDirective) -> Result<u32, NginxConfigError> {
+    let Some(value) = directive.args.first() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "mail `ssl_verify_depth` requires a number",
+        ));
+    };
+    if directive.args.len() != 1
+        || value.is_empty()
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `ssl_verify_depth` requires a non-negative integer, found `{value}`"),
+        ));
+    }
+    let depth = value.parse::<u32>().map_err(|_| {
+        NginxConfigError::unsupported(
+            directive,
+            format!("mail `ssl_verify_depth` value `{value}` is out of range"),
+        )
+    })?;
+    if depth > 1024 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("mail `ssl_verify_depth` `{value}` is outside 0..=1024"),
+        ));
+    }
+    Ok(depth)
 }
 
 fn parse_mail_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigError> {
@@ -10355,6 +11231,141 @@ fn parse_stream_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfig
     })
 }
 
+/// Parse nginx stream `split_clients <source-template> $variable { <percent>% <value>; … }`.
+///
+/// The distribution engine is the shared nginx-compatible one
+/// (`config::geo::evaluate_split_clients`: MurmurHash2 buckets, cumulative
+/// percentage thresholds, `*` catch-all). The stream plane restricts the source
+/// template to the variables it resolves at accept/preread time; a source that
+/// names anything else fails closed instead of hashing an empty string.
+fn parse_stream_split_clients(
+    directive: &NginxDirective,
+) -> Result<SplitClientsConfig, NginxConfigError> {
+    let [source, result] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream split_clients takes `split_clients <source> $variable { … }`",
+        ));
+    };
+    if !result.starts_with('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream split_clients result `{result}` must be a `$variable`"),
+        ));
+    }
+    if source.len() > crate::config::map_variables::MAX_MAP_VALUE_BYTES {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream split_clients source exceeds the 4096-byte bound",
+        ));
+    }
+    for reference in crate::config::stream_template_variables(source) {
+        if !crate::config::STREAM_MAP_SOURCES.contains(&reference.as_str()) {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!(
+                    "stream split_clients source `${reference}` is not known at accept/preread time; supported: {}",
+                    crate::config::STREAM_MAP_SOURCES
+                        .iter()
+                        .map(|name| format!("${name}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ),
+            ));
+        }
+    }
+    if directive.children.is_empty() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream split_clients requires a `{ … }` block",
+        ));
+    }
+    let mut parts: Vec<SplitClientsPartConfig> = Vec::new();
+    for child in &directive.children {
+        let Some(percent) = crate::config::parse_split_percent(&child.name) else {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "invalid stream split_clients percentage `{}`; expected `NN%`, `NN.NN%`, or `*`",
+                    child.name
+                ),
+            ));
+        };
+        if child.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                child,
+                format!(
+                    "stream split_clients bucket `{}` requires exactly one value",
+                    child.name
+                ),
+            ));
+        }
+        let value = &child.args[0];
+        if value.contains('$') {
+            return Err(NginxConfigError::unsupported(
+                child,
+                "stream split_clients values must be literal strings; variable values are not supported",
+            ));
+        }
+        parts.push(SplitClientsPartConfig {
+            percent,
+            value: value.clone(),
+        });
+    }
+    let split = SplitClientsConfig {
+        source: source.clone(),
+        result: result.clone(),
+        parts,
+    };
+    crate::config::validate_split_clients_config(&split)
+        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    Ok(split)
+}
+
+/// Parse one nginx stream `pass <address>` content handler.
+///
+/// nginx parses the value as a URL with `no_resolve`: the target must be a
+/// literal address plus an explicit port (a hostname yields "no addresses" and
+/// a variable expands at connection time). The bounded plane accepts the
+/// literal `IP:port` / `[IPv6]:port` form and fails closed on variables.
+fn parse_stream_pass_address(directive: &NginxDirective) -> Result<String, NginxConfigError> {
+    let [address] = directive.args.as_slice() else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream `pass` takes exactly one address",
+        ));
+    };
+    if address.contains('$') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "stream `pass` with a variable address is not executable: the bounded plane resolves the pass target once at configuration time",
+        ));
+    }
+    let (host, port) = if let Some(rest) = address.strip_prefix('[') {
+        let Some((host, tail)) = rest.split_once("]:") else {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("stream `pass {address}` must be an `[IPv6]:port` address"),
+            ));
+        };
+        (host, tail)
+    } else if let Some((host, port)) = address.rsplit_once(':') {
+        (host, port)
+    } else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream `pass {address}` requires an explicit port"),
+        ));
+    };
+    if host.parse::<std::net::IpAddr>().is_err() || port.parse::<u16>().is_err() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("stream `pass {address}` must be a literal `IP:port` address"),
+        ));
+    }
+    Ok(address.clone())
+}
+
 /// Parse nginx `geo [$address] $variable { … }` (http context).
 fn parse_geo(directive: &NginxDirective) -> Result<GeoConfig, NginxConfigError> {
     if directive.children.is_empty() {
@@ -11133,6 +12144,606 @@ fn apply_sub_filter_types(
     Ok(())
 }
 
+/// nginx `ngx_http_geoip_module` directives. All are http-context only.
+pub(crate) const GEOIP_DIRECTIVES: &[&str] = &[
+    "geoip_country",
+    "geoip_city",
+    "geoip_org",
+    "geoip_proxy",
+    "geoip_proxy_recursive",
+];
+
+/// Per-http-context nginx `geoip_*` declarations collected by the
+/// order-independent pre-scan in `materialize_nginx_app`.
+#[derive(Default)]
+struct GeoIpDeclarations {
+    country: Option<String>,
+    city: Option<String>,
+    org: Option<String>,
+    proxies: Vec<String>,
+    proxy_recursive: Option<bool>,
+}
+
+impl GeoIpDeclarations {
+    fn any(&self) -> bool {
+        self.country.is_some()
+            || self.city.is_some()
+            || self.org.is_some()
+            || !self.proxies.is_empty()
+            || self.proxy_recursive.is_some()
+    }
+
+    fn is_empty(&self) -> bool {
+        !self.any()
+    }
+
+    fn resolve(&self) -> GeoIpConfig {
+        GeoIpConfig {
+            country: self.country.clone(),
+            city: self.city.clone(),
+            org: self.org.clone(),
+            proxies: self.proxies.clone(),
+            proxy_recursive: self.proxy_recursive.unwrap_or(false),
+        }
+    }
+}
+
+/// Validate one `geoip_country`/`geoip_city`/`geoip_org` declaration (shared by
+/// the http and stream GeoIP modules).
+fn apply_geoip_database_directive(
+    declarations: &mut GeoIpDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let slot = match directive.name.as_str() {
+        "geoip_country" => &mut declarations.country,
+        "geoip_city" => &mut declarations.city,
+        "geoip_org" => &mut declarations.org,
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("`{other}` is not a GeoIP database directive"),
+            ));
+        }
+    };
+    if slot.is_some() {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("`{}` is duplicate", directive.name),
+        ));
+    }
+    if directive.args.is_empty() || directive.args.len() > 2 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` requires `<absolute-mmdb-path>` and an optional `utf8`",
+                directive.name
+            ),
+        ));
+    }
+    let path = directive.args[0].trim();
+    if directive.args.len() == 2 && directive.args[1] != "utf8" {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "invalid parameter `{}`; only `utf8` is accepted",
+                directive.args[1]
+            ),
+        ));
+    }
+    if !path.starts_with('/') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` database path `{path}` must be absolute; the runtime does not resolve nginx prefix-relative database paths",
+                directive.name
+            ),
+        ));
+    }
+    if path.contains('\\') || path.contains('\0') || path.ends_with('/') {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` database path `{path}` must be a file path without backslashes, NUL, or a trailing slash",
+                directive.name
+            ),
+        ));
+    }
+    if Path::new(path).components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir | std::path::Component::CurDir
+        )
+    }) {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!(
+                "`{}` database path `{path}` must not contain `.` or `..` components",
+                directive.name
+            ),
+        ));
+    }
+    *slot = Some(path.to_owned());
+    Ok(())
+}
+
+fn apply_geoip_directive(
+    declarations: &mut GeoIpDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    match directive.name.as_str() {
+        "geoip_country" | "geoip_city" | "geoip_org" => {
+            apply_geoip_database_directive(declarations, directive)
+        }
+        "geoip_proxy" => {
+            let Some(value) = directive.args.first() else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`geoip_proxy` requires a network",
+                ));
+            };
+            if directive.args.len() != 1 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "`geoip_proxy` takes exactly one network",
+                ));
+            }
+            crate::config::parse_geoip_proxy(value)
+                .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+            declarations.proxies.push(value.clone());
+            Ok(())
+        }
+        "geoip_proxy_recursive" => {
+            let value = parse_on_off(directive, "geoip_proxy_recursive")?;
+            declarations.proxy_recursive = Some(value);
+            Ok(())
+        }
+        other => Err(NginxConfigError::unsupported(
+            directive,
+            format!("unsupported geoip directive `{other}`"),
+        )),
+    }
+}
+
+/// Directives of `ngx_http_userid_filter_module` (http/server/location).
+const USERID_DIRECTIVES: &[&str] = &[
+    "userid",
+    "userid_name",
+    "userid_domain",
+    "userid_path",
+    "userid_expires",
+    "userid_p3p",
+    "userid_flags",
+    "userid_mark",
+    "userid_service",
+];
+
+/// Directives of `ngx_http_browser_module` (http/server/location).
+const BROWSER_DIRECTIVES: &[&str] = &[
+    "modern_browser",
+    "ancient_browser",
+    "modern_browser_value",
+    "ancient_browser_value",
+];
+
+/// Per-context `userid*` declarations. Every scalar directive is single-use in
+/// nginx (`is duplicate`), while `userid_flags` may repeat (bitmask OR).
+#[derive(Debug, Clone, Default)]
+struct UserIdDeclarations {
+    mode: Option<UserIdMode>,
+    name: Option<String>,
+    /// `Some(None)` represents an explicit `userid_domain none`: the declared
+    /// value is empty, and nginx's merge keeps the empty value (it checks the
+    /// string pointer, not its length), so it overrides an inherited domain.
+    domain: Option<Option<String>>,
+    path: Option<String>,
+    expires: Option<Option<UserIdExpires>>,
+    p3p: Option<Option<String>>,
+    flags: Option<UserIdFlags>,
+    mark: Option<Option<char>>,
+    service: Option<u64>,
+}
+
+impl UserIdDeclarations {
+    fn any(&self) -> bool {
+        self.mode.is_some()
+            || self.name.is_some()
+            || self.domain.is_some()
+            || self.path.is_some()
+            || self.expires.is_some()
+            || self.p3p.is_some()
+            || self.flags.is_some()
+            || self.mark.is_some()
+            || self.service.is_some()
+    }
+
+    fn resolve_over(&self, parent: &UserIdConfig) -> UserIdConfig {
+        UserIdConfig {
+            mode: self.mode.unwrap_or(parent.mode),
+            name: self.name.clone().unwrap_or_else(|| parent.name.clone()),
+            domain: match &self.domain {
+                Some(domain) => domain.clone(),
+                None => parent.domain.clone(),
+            },
+            path: self.path.clone().unwrap_or_else(|| parent.path.clone()),
+            expires: match self.expires {
+                Some(expires) => expires,
+                None => parent.expires,
+            },
+            p3p: match &self.p3p {
+                Some(p3p) => p3p.clone(),
+                None => parent.p3p.clone(),
+            },
+            flags: self.flags.unwrap_or(parent.flags),
+            mark: match self.mark {
+                Some(mark) => mark,
+                None => parent.mark,
+            },
+            service: self.service.or(parent.service),
+        }
+    }
+}
+
+/// Per-context `modern_browser` / `ancient_browser` declarations. The modern
+/// rule list and `unlisted` are one merge family, as are the ancient list and
+/// `netscape4`; the two `*_browser_value` strings merge independently.
+#[derive(Debug, Clone, Default)]
+struct BrowserDeclarations {
+    modern: Option<Vec<ModernBrowserRule>>,
+    modern_unlisted: Option<bool>,
+    ancient: Option<Vec<String>>,
+    netscape4: Option<bool>,
+    modern_value: Option<String>,
+    ancient_value: Option<String>,
+}
+
+impl BrowserDeclarations {
+    /// Whether this level declares the modern rule family (a list or
+    /// `unlisted`), which is the condition nginx uses to stop inheriting and
+    /// to fill the masks.
+    fn modern_declared(&self) -> bool {
+        self.modern.is_some() || self.modern_unlisted == Some(true)
+    }
+
+    fn any(&self) -> bool {
+        self.modern.is_some()
+            || self.modern_unlisted.is_some()
+            || self.ancient.is_some()
+            || self.netscape4.is_some()
+            || self.modern_value.is_some()
+            || self.ancient_value.is_some()
+    }
+
+    fn resolve_over(&self, parent: &BrowserConfig) -> BrowserConfig {
+        let modern_declared = self.modern.is_some() || self.modern_unlisted == Some(true);
+        let (modern, modern_unlisted) = if modern_declared {
+            (
+                self.modern.clone().unwrap_or_default(),
+                self.modern_unlisted.unwrap_or(false),
+            )
+        } else {
+            (parent.modern.clone(), parent.modern_unlisted)
+        };
+        let ancient_declared = self.ancient.is_some() || self.netscape4 == Some(true);
+        let (ancient, netscape4) = if ancient_declared {
+            (
+                self.ancient.clone().unwrap_or_default(),
+                self.netscape4.unwrap_or(false),
+            )
+        } else {
+            (parent.ancient.clone(), parent.netscape4)
+        };
+        BrowserConfig {
+            modern,
+            modern_masks_filled: if modern_declared {
+                true
+            } else {
+                parent.modern_masks_filled
+            },
+            modern_unlisted,
+            ancient,
+            netscape4,
+            modern_value: self
+                .modern_value
+                .clone()
+                .unwrap_or_else(|| parent.modern_value.clone()),
+            ancient_value: self
+                .ancient_value
+                .clone()
+                .unwrap_or_else(|| parent.ancient_value.clone()),
+        }
+    }
+}
+
+/// Parse one `userid*` directive into the current context's declarations.
+fn apply_userid_directive(
+    declarations: &mut UserIdDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let one = || -> Result<&String, NginxConfigError> {
+        if directive.args.len() != 1 {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("{} takes exactly one argument", directive.name),
+            ));
+        }
+        Ok(&directive.args[0])
+    };
+    match directive.name.as_str() {
+        "userid" => {
+            if declarations.mode.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid is duplicate",
+                ));
+            }
+            declarations.mode = Some(match one()?.as_str() {
+                "off" => UserIdMode::Off,
+                "log" => UserIdMode::Log,
+                "v1" => UserIdMode::V1,
+                "on" => UserIdMode::On,
+                other => {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("userid accepts off|log|v1|on, found `{other}`"),
+                    ))
+                }
+            });
+        }
+        "userid_service" => {
+            if declarations.service.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_service is duplicate",
+                ));
+            }
+            let value = one()?;
+            let service = value.parse::<u64>().map_err(|_| {
+                NginxConfigError::unsupported(
+                    directive,
+                    format!("userid_service requires a non-negative integer, found `{value}`"),
+                )
+            })?;
+            if service > u64::from(u32::MAX) {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_service exceeds the 32-bit service field",
+                ));
+            }
+            declarations.service = Some(service);
+        }
+        "userid_name" => {
+            if declarations.name.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_name is duplicate",
+                ));
+            }
+            let value = one()?;
+            if value.is_empty() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_name must not be empty",
+                ));
+            }
+            declarations.name = Some(value.clone());
+        }
+        "userid_domain" => {
+            if declarations.domain.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_domain is duplicate",
+                ));
+            }
+            let value = one()?;
+            declarations.domain = Some(if value == "none" || value.is_empty() {
+                None
+            } else {
+                Some(value.clone())
+            });
+        }
+        "userid_path" => {
+            if declarations.path.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_path is duplicate",
+                ));
+            }
+            declarations.path = Some(one()?.clone());
+        }
+        "userid_expires" => {
+            if declarations.expires.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_expires is duplicate",
+                ));
+            }
+            let value = one()?;
+            let expires = match value.as_str() {
+                "max" => Some(UserIdExpires::Max),
+                "off" => None,
+                other => match crate::config::cache_policy::parse_nginx_time(other) {
+                    Some(seconds) if seconds > 0 => Some(UserIdExpires::Seconds {
+                        seconds: seconds as u64,
+                    }),
+                    Some(_) => None,
+                    None => {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!("invalid userid_expires value `{other}`"),
+                        ))
+                    }
+                },
+            };
+            declarations.expires = Some(expires);
+        }
+        "userid_p3p" => {
+            if declarations.p3p.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_p3p is duplicate",
+                ));
+            }
+            let value = one()?;
+            declarations.p3p = Some(if value == "none" || value.is_empty() {
+                None
+            } else {
+                Some(value.clone())
+            });
+        }
+        "userid_flags" => {
+            if directive.args.is_empty() || directive.args.len() > 3 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_flags takes one to three flags",
+                ));
+            }
+            let flags = declarations.flags.get_or_insert_with(UserIdFlags::default);
+            for argument in &directive.args {
+                match argument.to_ascii_lowercase().as_str() {
+                    // nginx's `off` bit suppresses inheritance but has no
+                    // attribute effect; the other flags in the same directive
+                    // still apply.
+                    "off" => {}
+                    "secure" => flags.secure = true,
+                    "httponly" => flags.httponly = true,
+                    "samesite=strict" => flags.samesite = Some(UserIdSameSite::Strict),
+                    "samesite=lax" => flags.samesite = Some(UserIdSameSite::Lax),
+                    "samesite=none" => flags.samesite = Some(UserIdSameSite::None),
+                    other => {
+                        return Err(NginxConfigError::unsupported(
+                            directive,
+                            format!(
+                                "invalid userid_flags value `{other}`; supported values are off, secure, httponly, samesite=strict|lax|none"
+                            ),
+                        ))
+                    }
+                }
+            }
+        }
+        "userid_mark" => {
+            if declarations.mark.is_some() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "userid_mark is duplicate",
+                ));
+            }
+            let value = one()?;
+            if value == "off" {
+                declarations.mark = Some(None);
+            } else {
+                let mut characters = value.chars();
+                let mark = characters.next();
+                let valid = characters.next().is_none()
+                    && mark.is_some_and(|mark| mark.is_ascii_alphanumeric() || mark == '=');
+                if !valid {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "userid_mark value must be \"off\" or a single letter, digit or \"=\"",
+                    ));
+                }
+                declarations.mark = Some(mark);
+            }
+        }
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("unsupported directive `{other}`"),
+            ))
+        }
+    }
+    Ok(())
+}
+
+/// Parse one browser-module directive into the current context's declarations.
+fn apply_browser_directive(
+    declarations: &mut BrowserDeclarations,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    match directive.name.as_str() {
+        "modern_browser" => {
+            if directive.args.len() == 1 && directive.args[0] == "unlisted" {
+                declarations.modern_unlisted = Some(true);
+                return Ok(());
+            }
+            if directive.args.len() != 2 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "modern_browser requires `<browser> <version>` or `unlisted`",
+                ));
+            }
+            let name = &directive.args[0];
+            let Some(browser) = ModernBrowserName::parse(name) else {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!(
+                        "unknown browser name `{name}`; supported names are opera, msie, gecko, safari, konqueror"
+                    ),
+                ));
+            };
+            let version = crate::config::parse_browser_version(&directive.args[1])
+                .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+            declarations
+                .modern
+                .get_or_insert_with(Vec::new)
+                .push(ModernBrowserRule { browser, version });
+        }
+        "ancient_browser" => {
+            if directive.args.is_empty() {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "ancient_browser requires at least one matcher",
+                ));
+            }
+            if directive.args.len() > 64 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    "ancient_browser supports at most 64 matchers",
+                ));
+            }
+            let ancient = declarations.ancient.get_or_insert_with(Vec::new);
+            for argument in &directive.args {
+                if argument == "netscape4" {
+                    declarations.netscape4 = Some(true);
+                    continue;
+                }
+                if argument.len() > 512 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "ancient_browser matcher exceeds 512 bytes",
+                    ));
+                }
+                ancient.push(argument.clone());
+            }
+        }
+        "modern_browser_value" | "ancient_browser_value" => {
+            if directive.args.len() != 1 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("{} takes exactly one value", directive.name),
+                ));
+            }
+            if directive.args[0].len() > 512 {
+                return Err(NginxConfigError::unsupported(
+                    directive,
+                    format!("{} value exceeds 512 bytes", directive.name),
+                ));
+            }
+            if directive.name == "modern_browser_value" {
+                declarations.modern_value = Some(directive.args[0].clone());
+            } else {
+                declarations.ancient_value = Some(directive.args[0].clone());
+            }
+        }
+        other => {
+            return Err(NginxConfigError::unsupported(
+                directive,
+                format!("unsupported directive `{other}`"),
+            ))
+        }
+    }
+    Ok(())
+}
+
 /// Shared `on|off` parser for simple switch directives.
 /// Parse nginx `valid_referers` (server/location context; a declared
 /// directive replaces the inherited list).
@@ -11254,6 +12865,35 @@ fn parse_http2_max_concurrent_streams(directive: &NginxDirective) -> Result<u32,
         ));
     }
     Ok(streams)
+}
+
+/// Parse `http2_chunk_size <size>` (nginx http/server/location context).
+///
+/// nginx's `ngx_http_v2_chunk_size` post-handler rejects a zero size and clamps
+/// any value above `NGX_HTTP_V2_MAX_FRAME_SIZE` (`2^24 - 1`) instead of
+/// rejecting it; the materializer reproduces both rules.
+fn parse_http2_chunk_size(directive: &NginxDirective) -> Result<usize, NginxConfigError> {
+    if directive.args.len() != 1 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "http2_chunk_size takes exactly one size",
+        ));
+    }
+    let value = &directive.args[0];
+    let Some(size) = parse_size_bytes(value) else {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            format!("invalid http2_chunk_size `{value}`; expected a byte size such as 8k"),
+        ));
+    };
+    if size == 0 {
+        return Err(NginxConfigError::unsupported(
+            directive,
+            "the http2 chunk size cannot be zero",
+        ));
+    }
+    let size = usize::try_from(size).unwrap_or(HTTP2_MAX_FRAME_SIZE);
+    Ok(size.min(HTTP2_MAX_FRAME_SIZE))
 }
 
 /// Parse `proxy_method <method>` (an RFC 9110 method token).
@@ -11496,6 +13136,8 @@ struct CgiSettings {
     limit_rate_bytes_per_second: Option<Option<u64>>,
     force_ranges: Option<bool>,
     ignore_headers: Option<Vec<String>>,
+    temp: TempSettings,
+    ignore_client_abort: Option<bool>,
 }
 
 impl CgiSettings {
@@ -11545,6 +13187,8 @@ impl CgiSettings {
                 .ignore_headers
                 .clone()
                 .or_else(|| self.ignore_headers.clone()),
+            temp: self.temp.overlay(&inner.temp),
+            ignore_client_abort: inner.ignore_client_abort.or(self.ignore_client_abort),
         }
     }
 
@@ -11665,22 +13309,10 @@ impl CgiSettings {
                 self.buffering_policy.apply(suffix, directive)?;
             }
             "max_temp_file_size" | "temp_path" | "temp_file_write_size" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "`{}` requires nginx's temp-file spool: oversized upstream responses are written to the configured temp path. The bounded runtime has no temp-spool subsystem (every response is buffered in bounded memory or streamed), so the directive fails closed instead of silently disabling the spill",
-                        directive.name
-                    ),
-                ))
+                self.temp.apply(suffix, directive)?;
             }
             "ignore_client_abort" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "`{}` needs a client-disconnect signal delivered while the upstream exchange is in flight; the bounded adapter buffers the upstream response before replying, so it cannot observe a mid-exchange abort and fails closed instead of silently applying the wrong lifetime",
-                        directive.name
-                    ),
-                ))
+                self.ignore_client_abort = Some(parse_on_off(directive, &directive.name)?);
             }
             "modifier1" | "modifier2" if kind == CgiKind::Uwsgi => {
                 let Some(value) = directive.args.first() else {
@@ -12196,10 +13828,227 @@ fn validate_cgi_cache_condition_variable(
     Ok(())
 }
 
+/// One nginx size-valued directive together with the file:line that declared
+/// it, so a merge-time (nginx validates these after the whole block is parsed)
+/// relationship error is still reported at the authored location.
+#[derive(Clone)]
+struct SizeDirective {
+    value: u64,
+    source: std::path::PathBuf,
+    line: usize,
+}
+
+impl SizeDirective {
+    fn from(directive: &NginxDirective, value: u64) -> Self {
+        Self {
+            value,
+            source: directive.source.clone(),
+            line: directive.line,
+        }
+    }
+
+    fn unsupported(&self, message: impl std::fmt::Display) -> NginxConfigError {
+        NginxConfigError::Unsupported {
+            path: self.source.clone(),
+            line: self.line,
+            message: message.to_string(),
+        }
+    }
+}
+
+/// nginx `*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`
+/// accumulated over the http → server → location inheritance chain.
+///
+/// The three values describe nginx's temp-file spool tier: an upstream response
+/// that no longer fits in the configured response buffers is written to a temp
+/// file under `temp_path`, at most `max_temp_file_size` bytes (0 disables the
+/// tier) and in writes of at most `temp_file_write_size` bytes. The runtime
+/// executes the same tier through its bounded per-generation spool
+/// (`config::UpstreamTempPolicyConfig`); see the crate documentation for the
+/// one bounded difference (exceeding the per-file limit degrades to the
+/// in-memory path instead of a true unbuffered pass-through).
+#[derive(Clone, Default)]
+struct TempSettings {
+    path: Option<String>,
+    max_file_bytes: Option<SizeDirective>,
+    write_chunk_bytes: Option<SizeDirective>,
+}
+
+impl TempSettings {
+    fn overlay(&self, inner: &Self) -> Self {
+        Self {
+            path: inner.path.clone().or_else(|| self.path.clone()),
+            max_file_bytes: inner
+                .max_file_bytes
+                .clone()
+                .or_else(|| self.max_file_bytes.clone()),
+            write_chunk_bytes: inner
+                .write_chunk_bytes
+                .clone()
+                .or_else(|| self.write_chunk_bytes.clone()),
+        }
+    }
+
+    /// Apply one of the three temp-spool directives; returns `false` when the
+    /// suffix is not part of this group.
+    fn apply(
+        &mut self,
+        suffix: &str,
+        directive: &NginxDirective,
+    ) -> Result<bool, NginxConfigError> {
+        match suffix {
+            "temp_path" => {
+                let [value] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{}` is executable only in the single-path form `{} /absolute/dir`; nginx's optional `level1 [level2 [level3]]` hashing arguments change the on-disk layout, which the bounded spool does not emulate",
+                            directive.name, directive.name
+                        ),
+                    ));
+                };
+                if value.contains('$') {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{}` cannot contain variables: the confined spool root is resolved once per generation, so a per-request temp directory is not executable",
+                            directive.name
+                        ),
+                    ));
+                }
+                if !value.starts_with('/')
+                    || value
+                        .bytes()
+                        .any(|byte| byte == 0 || byte == b'\r' || byte == b'\n')
+                    || value.split('/').any(|component| component == "..")
+                {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!(
+                            "`{}` requires an absolute path under the spool root without `..` segments or line breaks, got `{value}`",
+                            directive.name
+                        ),
+                    ));
+                }
+                self.path = Some(value.trim_end_matches('/').to_owned());
+            }
+            "max_temp_file_size" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a size", directive.name),
+                    ));
+                };
+                if directive.args.len() != 1 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} takes exactly one size", directive.name),
+                    ));
+                }
+                let Some(bytes) = parse_size_bytes(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} size `{value}`", directive.name),
+                    ));
+                };
+                self.max_file_bytes = Some(SizeDirective::from(directive, bytes));
+            }
+            "temp_file_write_size" => {
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} requires a size", directive.name),
+                    ));
+                };
+                if directive.args.len() != 1 {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("{} takes exactly one size", directive.name),
+                    ));
+                }
+                let Some(bytes) = parse_size_bytes(value) else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid {} size `{value}`", directive.name),
+                    ));
+                };
+                self.write_chunk_bytes = Some(SizeDirective::from(directive, bytes));
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    /// Resolve the inherited values into the runtime policy, applying nginx's
+    /// merge-time relationships (`max_temp_file_size` is 0 or at least the
+    /// largest response buffer; `temp_file_write_size` is at least that size).
+    ///
+    /// nginx defaults: `max_temp_file_size` 1 GiB, `temp_file_write_size`
+    /// `2 * size` where `size` is the larger of `*_buffer_size` and one
+    /// `*_buffers` entry.
+    fn resolve(
+        &self,
+        buffer_max: u64,
+        location: &NginxDirective,
+    ) -> Result<Option<crate::config::UpstreamTempPolicyConfig>, NginxConfigError> {
+        let max_file_bytes = self
+            .max_file_bytes
+            .as_ref()
+            .map(|directive| directive.value)
+            .unwrap_or(1024 * 1024 * 1024);
+        if max_file_bytes != 0 && max_file_bytes < buffer_max {
+            let message = format!(
+                "`{}_max_temp_file_size` must be zero (disable the spool tier) or at least the largest response buffer ({buffer_max} bytes, the maximum of `{}_buffer_size` and one `{}_buffers` entry)",
+                protocol_prefix(location),
+                protocol_prefix(location),
+                protocol_prefix(location),
+            );
+            return match &self.max_file_bytes {
+                Some(directive) => Err(directive.unsupported(message)),
+                None => Err(NginxConfigError::unsupported(location, message)),
+            };
+        }
+        let write_chunk_bytes = self
+            .write_chunk_bytes
+            .as_ref()
+            .map(|directive| directive.value)
+            .unwrap_or(buffer_max.saturating_mul(2));
+        if write_chunk_bytes < buffer_max {
+            let message = format!(
+                "`{}_temp_file_write_size` must be at least the largest response buffer ({buffer_max} bytes, the maximum of `{}_buffer_size` and one `{}_buffers` entry)",
+                protocol_prefix(location),
+                protocol_prefix(location),
+                protocol_prefix(location),
+            );
+            return match &self.write_chunk_bytes {
+                Some(directive) => Err(directive.unsupported(message)),
+                None => Err(NginxConfigError::unsupported(location, message)),
+            };
+        }
+        Ok(Some(crate::config::UpstreamTempPolicyConfig {
+            path: self.path.clone(),
+            max_file_bytes,
+            write_chunk_bytes,
+        }))
+    }
+}
+
+/// `fastcgi` / `uwsgi` / `scgi` prefix of a CGI-family directive, used to name
+/// the sibling directives in a merge-time diagnostic.
+fn protocol_prefix(directive: &NginxDirective) -> &str {
+    let name = directive.name.as_str();
+    for prefix in ["fastcgi", "uwsgi", "scgi", "memcached"] {
+        if name.starts_with(prefix) {
+            return prefix;
+        }
+    }
+    "fastcgi"
+}
+
 /// nginx `*_buffer_size` / `*_buffers` / `*_busy_buffers_size` accumulated over
 /// the inheritance chain. The runtime maps these onto the adapter's bounded
 /// in-memory response buffering (header block bound + read chunk sizing); the
-/// temp-file spool family is a separate, fail-closed group.
+/// temp-file spool tier is layered on top once that bound is exceeded.
 #[derive(Clone, Default)]
 struct BufferingSettings {
     header_bytes: Option<u64>,
@@ -12254,6 +14103,14 @@ impl BufferingSettings {
             _ => return Ok(false),
         }
         Ok(true)
+    }
+
+    /// nginx's merge-time `size` for this resource: the larger of
+    /// `*_buffer_size` and one `*_buffers` entry (defaults 4 KiB / 4 KiB).
+    fn buffer_max(&self) -> u64 {
+        let header = self.header_bytes.unwrap_or(4096);
+        let chunk = self.buffers.map(|(_, size)| size).unwrap_or(4096);
+        header.max(chunk)
     }
 
     fn resolve(&self) -> Option<crate::config::UpstreamBufferingConfig> {
@@ -12588,6 +14445,9 @@ struct FastCgiSettings {
     limit_rate_bytes_per_second: Option<Option<u64>>,
     force_ranges: Option<bool>,
     ignore_headers: Option<Vec<String>>,
+    temp: TempSettings,
+    ignore_client_abort: Option<bool>,
+    catch_stderr: Option<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -12645,6 +14505,14 @@ impl FastCgiSettings {
                 .ignore_headers
                 .clone()
                 .or_else(|| self.ignore_headers.clone()),
+            temp: self.temp.overlay(&inner.temp),
+            ignore_client_abort: inner.ignore_client_abort.or(self.ignore_client_abort),
+            // nginx merges `catch_stderr` with `ngx_conf_merge_ptr_value`, so a
+            // level that declares any pattern replaces the inherited list.
+            catch_stderr: inner
+                .catch_stderr
+                .clone()
+                .or_else(|| self.catch_stderr.clone()),
         }
     }
 
@@ -12826,31 +14694,45 @@ impl FastCgiSettings {
             "fastcgi_max_temp_file_size"
             | "fastcgi_temp_path"
             | "fastcgi_temp_file_write_size" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    format!(
-                        "`{}` requires nginx's temp-file spool: oversized upstream responses are written to the configured temp path. The bounded runtime has no temp-spool subsystem (every response is buffered in bounded memory or streamed), so the directive fails closed instead of silently disabling the spill",
-                        directive.name
-                    ),
-                ))
+                let suffix = directive
+                    .name
+                    .strip_prefix("fastcgi_")
+                    .unwrap_or_default();
+                self.temp.apply(suffix, directive)?;
             }
             "fastcgi_ignore_client_abort" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`fastcgi_ignore_client_abort` needs a client-disconnect signal delivered while the upstream exchange is in flight; the bounded adapter buffers the upstream response before replying, so it cannot observe a mid-exchange abort and fails closed instead of silently applying the wrong lifetime",
-                ))
+                self.ignore_client_abort =
+                    Some(parse_on_off(directive, "fastcgi_ignore_client_abort")?)
             }
             "fastcgi_catch_stderr" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`fastcgi_catch_stderr` scans the FastCGI stderr stream for error signatures; the bounded adapter parses `FCGI_STDERR` but has no error-log channel to evaluate the string against",
-                ))
+                let [pattern] = directive.args.as_slice() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "`fastcgi_catch_stderr` takes exactly one string; declare the directive repeatedly to match several patterns",
+                    ));
+                };
+                self.catch_stderr
+                    .get_or_insert_with(Vec::new)
+                    .push(pattern.clone());
             }
+            // Accepted-unenforced, exactly like nginx 1.29.6 on Linux: the
+            // reference build has no `SO_SNDLOWAT` support, so nginx logs
+            // "'fastcgi_send_lowat' is not supported, ignored" and zeroes the
+            // value. The runtime emits the same diagnostic and never fakes a
+            // kernel low-water mark (the pinned socket seam cannot set it).
             "fastcgi_send_lowat" => {
-                return Err(NginxConfigError::unsupported(
-                    directive,
-                    "`fastcgi_send_lowat` tunes the socket send low-water mark, which is not settable through the runtime's socket seam (and is ignored by Linux); the directive fails closed",
-                ))
+                let Some(value) = directive.args.first() else {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        "`fastcgi_send_lowat` requires a size",
+                    ));
+                };
+                if directive.args.len() != 1 || parse_size_bytes(value).is_none() {
+                    return Err(NginxConfigError::unsupported(
+                        directive,
+                        format!("invalid `fastcgi_send_lowat` size `{value}`"),
+                    ));
+                }
             }
             other => {
                 return Err(NginxConfigError::unsupported(
@@ -17274,19 +19156,129 @@ http {
             message("open_file_cache").contains("descriptor/metadata cache"),
             "open_file_cache must state its precise runtime rationale"
         );
-        // `http2_chunk_size` is active in nginx but not exposed by hyper/h2:
-        // fail closed with a precise diagnostic instead of faking it.
-        let error = materialize(
+        // `http2_chunk_size` is active in nginx but the pinned hyper/h2 ingress
+        // exposes no server-side DATA-frame chunker; the runtime therefore
+        // materializes the value and re-chunks the response body itself (see
+        // the gateway `http2_chunk` adapter and its h2 frame-capture test).
+        let config = materialize(
             r#"
 http2_chunk_size 4k;
-server { listen 80; server_name h2.example.test; location / { return 200 "ok"; } }
+server {
+    listen 80;
+    server_name h2.example.test;
+    location /inherit/ { return 200 "ok"; }
+    location /override/ { http2_chunk_size 1k; return 200 "ok"; }
+}
+server {
+    listen 80;
+    server_name h2-server.example.test;
+    http2_chunk_size 8k;
+    location / { return 200 "ok"; }
+}
 "#,
         )
-        .expect_err("http2_chunk_size must fail closed");
-        assert!(
-            error.to_string().contains("hyper/h2 ingress"),
-            "http2_chunk_size diagnostic must name the runtime blocker: {error}"
+        .expect("materialize");
+        let host_chunk = |id: &str| {
+            config
+                .virtual_hosts
+                .iter()
+                .find(|host| host.server_names.first().is_some_and(|name| name == id))
+                .unwrap_or_else(|| panic!("missing virtual host {id}"))
+                .http2_chunk_size
+        };
+        assert_eq!(
+            host_chunk("h2.example.test"),
+            Some(4 * 1024),
+            "http-level http2_chunk_size is inherited by every server"
         );
+        assert_eq!(
+            host_chunk("h2-server.example.test"),
+            Some(8 * 1024),
+            "server-level http2_chunk_size overrides the http-level value"
+        );
+        let route_chunk = |host_id: &str, path: &str| {
+            config
+                .virtual_hosts
+                .iter()
+                .find(|host| {
+                    host.server_names
+                        .first()
+                        .is_some_and(|name| name == host_id)
+                })
+                .and_then(|host| {
+                    host.routes
+                        .iter()
+                        .find(|route| route.route_match.path == path)
+                })
+                .unwrap_or_else(|| panic!("missing route {path}"))
+                .http2_chunk_size
+        };
+        assert_eq!(
+            route_chunk("h2.example.test", "/inherit/"),
+            None,
+            "a location that declares no http2_chunk_size inherits the host value"
+        );
+        assert_eq!(
+            route_chunk("h2.example.test", "/override/"),
+            Some(1024),
+            "location-level http2_chunk_size overrides the host value"
+        );
+        // nginx clamps above NGX_HTTP_V2_MAX_FRAME_SIZE and rejects zero.
+        let clamped = materialize(
+            "http2_chunk_size 32m;\nserver { listen 80; server_name h2.example.test; location / { return 200 \"ok\"; } }",
+        )
+        .expect("clamp oversized value");
+        assert_eq!(
+            clamped.virtual_hosts[0].http2_chunk_size,
+            Some(HTTP2_MAX_FRAME_SIZE)
+        );
+        for value in ["0", "many"] {
+            let error = materialize(&format!(
+                "http2_chunk_size {value};\nserver {{ listen 80; server_name h2.example.test; location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .expect_err("invalid http2_chunk_size must fail closed");
+            assert!(
+                error.to_string().contains("http2_chunk_size")
+                    || error.to_string().contains("chunk size"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn materializes_random_index_location_flag() {
+        let config = materialize(
+            r#"
+server {
+    listen 80;
+    server_name random.example.test;
+    location /pick/ { random_index on; root /srv/www; }
+    location /off/ { random_index off; root /srv/www; }
+    location /plain/ { root /srv/www; }
+}
+"#,
+        )
+        .expect("materialize");
+        let random_index = |path: &str| {
+            config.virtual_hosts[0]
+                .routes
+                .iter()
+                .find(|route| route.route_match.path == path)
+                .unwrap_or_else(|| panic!("missing route {path}"))
+                .random_index
+        };
+        assert_eq!(random_index("/pick/"), Some(true));
+        assert_eq!(random_index("/off/"), Some(false));
+        assert_eq!(random_index("/plain/"), None);
+        // nginx allows `random_index` only in a location block; the
+        // materializer must reject the server/http contexts too.
+        for source in [
+            "random_index on;\nserver { listen 80; server_name random.example.test; location / { return 200 \"ok\"; } }",
+            "server { listen 80; server_name random.example.test; random_index on; location / { return 200 \"ok\"; } }",
+        ] {
+            let error = materialize(source).expect_err("random_index outside location must fail");
+            assert!(error.to_string().contains("random_index"), "{error}");
+        }
     }
 
     #[test]
@@ -17393,9 +19385,9 @@ stream {
                 "cannot combine `return` with `proxy_pass`",
             ),
             (
-                "neither target nor return",
+                "no content handler",
                 "listen 127.0.0.1:9106;",
-                "requires proxy_pass or return",
+                "requires `proxy_pass`, `return`, or `pass`",
             ),
             (
                 "invalid access network",
@@ -17477,6 +19469,301 @@ server {
         ] {
             let error = materialize(&format!(
                 "server {{ listen 80; server_name referer.example.test; {body} location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_userid_policy_with_nginx_field_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    userid_path /http;
+    userid_expires 1h;
+    server {
+        listen 80;
+        server_name userid.example.test;
+        userid_name SVCUID;
+        userid_path /srv;
+        userid_expires max;
+        userid_flags httponly;
+        userid_p3p "CP=\"SERVER\"";
+        location = /inherit { userid on; return 200 "ok"; }
+        location = /own {
+            userid v1;
+            userid_name uid;
+            userid_path /;
+            userid_expires off;
+            userid_flags off;
+            userid_p3p none;
+            return 200 "ok";
+        }
+        location = /mark { userid on; userid_mark a; return 200 "ok"; }
+        location = /service { userid on; userid_service 12345; return 200 "ok"; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_userid = host.userid.as_ref().expect("host userid config");
+        assert_eq!(host_userid.mode, UserIdMode::Off);
+        assert_eq!(host_userid.name, "SVCUID");
+        assert_eq!(host_userid.path, "/srv");
+        assert_eq!(host_userid.expires, Some(UserIdExpires::Max));
+        assert!(host_userid.flags.httponly);
+        assert_eq!(host_userid.p3p.as_deref(), Some("CP=\"SERVER\""));
+
+        // A location that declares only `userid on` inherits every other
+        // field from the server block.
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit")
+            .expect("inherit route");
+        let inherit_userid = inherit.userid.as_ref().expect("inherit userid");
+        assert_eq!(inherit_userid.mode, UserIdMode::On);
+        assert_eq!(inherit_userid.name, "SVCUID");
+        assert_eq!(inherit_userid.path, "/srv");
+        assert_eq!(inherit_userid.expires, Some(UserIdExpires::Max));
+        assert!(inherit_userid.flags.httponly);
+
+        // A location declaration replaces each field it names.
+        let own = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/own")
+            .expect("own route");
+        let own_userid = own.userid.as_ref().expect("own userid");
+        assert_eq!(own_userid.mode, UserIdMode::V1);
+        assert_eq!(own_userid.name, "uid");
+        assert_eq!(own_userid.path, "/");
+        assert_eq!(own_userid.expires, None);
+        assert!(own_userid.flags.is_empty());
+        assert_eq!(own_userid.p3p, None);
+
+        let mark = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/mark")
+            .expect("mark route")
+            .userid
+            .as_ref()
+            .expect("mark userid");
+        assert_eq!(mark.mark, Some('a'));
+
+        let service = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/service")
+            .expect("service route")
+            .userid
+            .as_ref()
+            .expect("service userid");
+        assert_eq!(service.service, Some(12_345));
+    }
+
+    #[test]
+    fn materializes_userid_http_level_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    userid_path /http;
+    userid_expires 1h;
+    server {
+        listen 80;
+        server_name userid-http.example.test;
+        location = /inherit { userid on; return 200 "ok"; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        // With no server declaration the host carries the http-level values.
+        let host_userid = host.userid.as_ref().expect("inherited host userid");
+        assert_eq!(host_userid.path, "/http");
+        assert_eq!(
+            host_userid.expires,
+            Some(UserIdExpires::Seconds { seconds: 3600 })
+        );
+        let route = &host.routes[0];
+        let route_userid = route.userid.as_ref().expect("route userid");
+        assert_eq!(route_userid.mode, UserIdMode::On);
+        assert_eq!(route_userid.path, "/http");
+        assert_eq!(
+            route_userid.expires,
+            Some(UserIdExpires::Seconds { seconds: 3600 })
+        );
+    }
+
+    #[test]
+    fn userid_invalid_forms_fail_closed() {
+        for (label, body, needle) in [
+            (
+                "unknown mode",
+                "userid maybe;",
+                "userid accepts off|log|v1|on",
+            ),
+            (
+                "duplicate mode",
+                "userid on; userid on;",
+                "userid is duplicate",
+            ),
+            (
+                "invalid mark",
+                "userid on; userid_mark ab;",
+                "single letter, digit",
+            ),
+            (
+                "invalid expiry",
+                "userid_expires nope;",
+                "invalid userid_expires value",
+            ),
+            (
+                "invalid flag",
+                "userid_flags samesite=maybe;",
+                "invalid userid_flags value",
+            ),
+            (
+                "duplicate name",
+                "userid_name a; userid_name b;",
+                "userid_name is duplicate",
+            ),
+            (
+                "service overflow",
+                "userid_service 4294967296;",
+                "32-bit service field",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name userid.example.test; {body} location / {{ return 200 \"ok\"; }} }}"
+            ))
+            .err()
+            .unwrap_or_else(|| panic!("`{label}` must fail closed"));
+            assert!(error.to_string().contains(needle), "`{label}`: {error}");
+        }
+    }
+
+    #[test]
+    fn materializes_browser_policy_with_nginx_family_inheritance() {
+        let config = materialize(
+            r#"
+http {
+    modern_browser msie 6.0;
+    modern_browser_value "http-modern";
+    server {
+        listen 80;
+        server_name browser.example.test;
+        modern_browser opera 8.0;
+        ancient_browser "MSIE 5" netscape4;
+        ancient_browser_value "srv-ancient";
+        location = /inherit { return 200 "ok"; }
+        location = /override {
+            modern_browser gecko 1.9;
+            modern_browser safari 400;
+            modern_browser konqueror 3.5;
+            return 200 "ok";
+        }
+        location = /unlisted { modern_browser unlisted; return 200 "ok"; }
+        location = /values { modern_browser_value "v-modern"; return 200 "ok"; }
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let host_browser = host.browser.as_ref().expect("host browser config");
+        // The server's modern list replaces the http one (it names Opera),
+        // the values inherit independently.
+        assert_eq!(host_browser.modern.len(), 1);
+        assert_eq!(host_browser.modern[0].browser, ModernBrowserName::Opera);
+        assert_eq!(host_browser.modern_value, "http-modern");
+        assert_eq!(host_browser.ancient_value, "srv-ancient");
+        assert!(host_browser.netscape4);
+        assert_eq!(host_browser.ancient, vec!["MSIE 5".to_owned()]);
+
+        let inherit = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherit")
+            .expect("inherit route");
+        assert_eq!(inherit.browser.as_ref(), Some(host_browser));
+
+        let override_route = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/override")
+            .expect("override route");
+        let override_browser = override_route.browser.as_ref().expect("override browser");
+        assert_eq!(override_browser.modern.len(), 3);
+        // The ancient family and the values still inherit from the server.
+        assert_eq!(override_browser.ancient, vec!["MSIE 5".to_owned()]);
+        assert!(override_browser.netscape4);
+        assert_eq!(override_browser.modern_value, "http-modern");
+
+        let unlisted = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/unlisted")
+            .expect("unlisted route")
+            .browser
+            .as_ref()
+            .expect("unlisted browser");
+        // `unlisted` replaces the modern family entirely; the ancient family
+        // still inherits.
+        assert!(unlisted.modern.is_empty());
+        assert!(unlisted.modern_unlisted);
+        assert!(unlisted.netscape4);
+
+        let values = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/values")
+            .expect("values route")
+            .browser
+            .as_ref()
+            .expect("values browser");
+        // Value-only declarations inherit both rule families.
+        assert_eq!(values.modern, host_browser.modern);
+        assert_eq!(values.modern_value, "v-modern");
+        assert_eq!(values.ancient_value, "srv-ancient");
+    }
+
+    #[test]
+    fn browser_invalid_forms_fail_closed() {
+        for (label, body, needle) in [
+            (
+                "unknown browser name",
+                "modern_browser firefox 3.0;",
+                "unknown browser name",
+            ),
+            (
+                "invalid version",
+                "modern_browser msie 6.x;",
+                "invalid browser version",
+            ),
+            (
+                "too many version components",
+                "modern_browser msie 1.2.3.4.5;",
+                "invalid browser version",
+            ),
+            (
+                "missing browser version",
+                "modern_browser msie;",
+                "requires `<browser> <version>`",
+            ),
+            (
+                "empty ancient matcher list",
+                "ancient_browser;",
+                "requires at least one matcher",
+            ),
+        ] {
+            let error = materialize(&format!(
+                "server {{ listen 80; server_name browser.example.test; {body} location / {{ return 200 \"ok\"; }} }}"
             ))
             .err()
             .unwrap_or_else(|| panic!("`{label}` must fail closed"));
@@ -18020,6 +20307,7 @@ server { listen 80; server_name stapling.example.test; location / { return 200 "
             ("proxy_max_temp_file_size", "1g"),
             ("proxy_temp_file_write_size", "8k"),
             ("proxy_send_lowat", "0"),
+            ("fastcgi_send_lowat", "12000"),
             ("ssl_conf_command", "Options PrioritizeChaCha"),
             ("proxy_pass_header", "X-Bar"),
             ("accept_mutex_delay", "500ms"),
@@ -18655,8 +20943,6 @@ http {
         }
     }
 
-    #[test]
-    #[test]
     #[test]
     fn materializes_subrequest_filters_with_inheritance() {
         let config = materialize(
@@ -19698,30 +21984,299 @@ stream {
     }
 
     #[test]
-    fn stream_split_clients_and_pass_fail_closed_with_exact_blockers() {
-        let split = materialize(
+    fn stream_split_clients_materializes_and_feeds_set_and_return() {
+        let config = materialize(
             r#"
 stream {
-    split_clients "$remote_addr" $backend {
-        50% a;
-        * b;
+    split_clients "$remote_addr:$ssl_preread_server_name" $backend {
+        50% "alpha";
+        * "beta";
+    }
+    server {
+        listen 5205;
+        set $chosen $backend;
+        return $chosen;
     }
 }
 "#,
         )
-        .expect_err("stream split_clients must fail closed");
-        assert!(split.to_string().contains("split_clients"), "{split}");
-        let pass = materialize(
+        .expect("stream split_clients must materialize");
+        assert_eq!(config.stream_split_clients.len(), 1);
+        let split = &config.stream_split_clients[0];
+        assert_eq!(split.source, "$remote_addr:$ssl_preread_server_name");
+        assert_eq!(split.result, "$backend");
+        assert_eq!(
+            split
+                .parts
+                .iter()
+                .map(|part| (part.percent, part.value.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(Some(5000), "alpha"), (None, "beta")]
+        );
+        assert_eq!(config.streams.len(), 1);
+        assert_eq!(config.streams[0].set_variables.len(), 1);
+        assert_eq!(config.streams[0].set_variables[0].value, "$backend");
+        assert_eq!(config.streams[0].return_value.as_deref(), Some("$chosen"));
+    }
+
+    #[test]
+    fn stream_split_clients_rejects_http_only_sources_and_bad_buckets() {
+        let source = materialize(
+            r#"
+stream {
+    split_clients "$http_host" $backend { * "x"; }
+}
+"#,
+        )
+        .expect_err("HTTP-only split_clients sources must fail closed");
+        assert!(source.to_string().contains("accept/preread"), "{source}");
+        let percent = materialize(
+            r#"
+stream {
+    split_clients "$remote_addr" $backend { 60% "a"; 60% "b"; }
+}
+"#,
+        )
+        .expect_err("over-100% buckets must fail closed");
+        assert!(percent.to_string().contains("more than 100%"), "{percent}");
+        let duplicate = materialize(
+            r#"
+stream {
+    map $remote_addr $zone { default "a"; }
+    split_clients "$remote_addr" $zone { * "b"; }
+}
+"#,
+        )
+        .expect_err("a split_clients result cannot redefine a map result");
+        assert!(duplicate.to_string().contains("duplicate"), "{duplicate}");
+    }
+
+    #[test]
+    fn stream_pass_resolves_the_target_listener_default_server() {
+        let config = materialize(
             r#"
 stream {
     server {
         listen 5206;
-        pass 127.0.0.1:15230;
+        pass 127.0.0.1:5207;
+    }
+    server {
+        listen 127.0.0.1:5207;
+        return "via-pass";
     }
 }
 "#,
         )
-        .expect_err("stream pass must fail closed");
-        assert!(pass.to_string().contains("`pass`"), "{pass}");
+        .expect("stream pass must materialize");
+        assert_eq!(config.streams.len(), 2);
+        let passing = config
+            .streams
+            .iter()
+            .find(|stream| stream.port == 5206)
+            .expect("passing server");
+        assert_eq!(passing.pass_address.as_deref(), Some("127.0.0.1:5207"));
+        let target = config
+            .streams
+            .iter()
+            .find(|stream| stream.port == 5207)
+            .expect("target server");
+        assert_eq!(target.return_value.as_deref(), Some("via-pass"));
+    }
+
+    #[test]
+    fn stream_pass_fails_closed_for_unknown_targets_cycles_and_preread() {
+        let unknown = materialize(
+            r#"
+stream {
+    server {
+        listen 5206;
+        pass 127.0.0.1:5299;
+    }
+}
+"#,
+        )
+        .expect_err("an unconfigured pass target must fail closed");
+        assert!(
+            unknown
+                .to_string()
+                .contains("does not name a configured stream listener"),
+            "{unknown}"
+        );
+        let cycle = materialize(
+            r#"
+stream {
+    server { listen 5206; pass 127.0.0.1:5207; }
+    server { listen 5207; pass 127.0.0.1:5206; }
+}
+"#,
+        )
+        .expect_err("a pass cycle must fail closed");
+        assert!(cycle.to_string().contains("pass cycle"), "{cycle}");
+        let variable = materialize(
+            r#"
+stream {
+    server { listen 5206; pass $ssl_preread_server_name; }
+    server { listen 5207; return "x"; }
+}
+"#,
+        )
+        .expect_err("a variable pass address must fail closed");
+        assert!(
+            variable.to_string().contains("variable address"),
+            "{variable}"
+        );
+        let preread = materialize(
+            r#"
+stream {
+    server { listen 5206; ssl_preread on; pass 127.0.0.1:5207; }
+    server { listen 5207; return "x"; }
+}
+"#,
+        )
+        .expect_err("pass after ssl_preread must fail closed");
+        assert!(preread.to_string().contains("preread"), "{preread}");
+    }
+
+    #[test]
+    fn mail_capabilities_resolver_and_realip_materialize() {
+        let config = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    resolver 127.0.0.1:5353 valid=30s;
+    resolver_timeout 5s;
+    set_real_ip_from 10.0.0.0/8;
+    smtp_capabilities "SIZE 10485760" ENHANCEDSTATUSCODES;
+    imap_capabilities IMAP4rev2;
+    pop3_capabilities TOP USER;
+    server {
+        listen 2525;
+        protocol smtp;
+    }
+    server {
+        listen 2143;
+        protocol imap;
+        set_real_ip_from 192.0.2.0/24;
+    }
+}
+"#,
+        )
+        .expect("mail capabilities/resolver/realip must materialize");
+        assert_eq!(config.mail.servers.len(), 2);
+        let smtp = config
+            .mail
+            .servers
+            .iter()
+            .find(|server| server.port == 2525)
+            .expect("smtp listener");
+        assert_eq!(
+            smtp.capabilities.as_deref(),
+            Some(
+                ["SIZE 10485760", "ENHANCEDSTATUSCODES"]
+                    .map(str::to_owned)
+                    .as_slice()
+            )
+        );
+        assert_eq!(smtp.real_ip_trusted_cidrs, vec!["10.0.0.0/8".to_owned()]);
+        let imap = config
+            .mail
+            .servers
+            .iter()
+            .find(|server| server.port == 2143)
+            .expect("imap listener");
+        assert_eq!(
+            imap.capabilities.as_deref(),
+            Some(["IMAP4rev2".to_owned()].as_slice())
+        );
+        // A server-level `set_real_ip_from` replaces the inherited list.
+        assert_eq!(imap.real_ip_trusted_cidrs, vec!["192.0.2.0/24".to_owned()]);
+    }
+
+    #[test]
+    fn mail_capabilities_and_resolver_reject_invalid_tokens() {
+        let empty = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    server { listen 2525; protocol smtp; smtp_capabilities ""; }
+}
+"#,
+        )
+        .expect_err("an empty capability must fail closed");
+        assert!(empty.to_string().contains("capability"), "{empty}");
+        let control = materialize(
+            "mail {\n auth_http 127.0.0.1:9000/auth;\n server { listen 2525; protocol smtp; smtp_capabilities \"bad\ttoken\"; }\n}\n",
+        )
+        .expect_err("a control character in a capability must fail closed");
+        assert!(
+            control.to_string().contains("control character"),
+            "{control}"
+        );
+        let resolver = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    resolver nameserver.invalid;
+    server { listen 2525; protocol smtp; }
+}
+"#,
+        )
+        .expect_err("a non-IP resolver address must fail closed");
+        assert!(resolver.to_string().contains("IP literal"), "{resolver}");
+        let timeout = materialize(
+            r#"
+mail {
+    auth_http 127.0.0.1:9000/auth;
+    resolver_timeout soon;
+    server { listen 2525; protocol smtp; }
+}
+"#,
+        )
+        .expect_err("an invalid resolver_timeout must fail closed");
+        assert!(
+            timeout.to_string().contains("resolver_timeout"),
+            "{timeout}"
+        );
+    }
+
+    #[test]
+    fn grpc_bind_and_socket_keepalive_materialize_with_inheritance() {
+        let config = materialize(
+            r#"
+grpc_bind 127.0.0.2;
+grpc_socket_keepalive on;
+server {
+    listen 8080;
+    server_name grpc.example.test;
+    location /grpc/ {
+        grpc_pass grpc://127.0.0.1:9000;
+    }
+    location /grpc-unbound/ {
+        grpc_bind off;
+        grpc_socket_keepalive off;
+        grpc_pass grpc://127.0.0.1:9000;
+    }
+}
+"#,
+        )
+        .expect("grpc_bind/grpc_socket_keepalive must materialize");
+        let mut seen = Vec::new();
+        for resource in &config.resources {
+            if let crate::config::ResourceConfig::Grpc {
+                bind_address,
+                socket_keepalive,
+                ..
+            } = resource
+            {
+                seen.push((*bind_address, *socket_keepalive));
+            }
+        }
+        assert_eq!(
+            seen,
+            vec![
+                (Some("127.0.0.2".parse().expect("ip")), Some(true)),
+                (None, Some(false)),
+            ]
+        );
     }
 }

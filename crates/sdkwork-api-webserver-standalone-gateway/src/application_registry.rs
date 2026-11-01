@@ -699,7 +699,10 @@ mod tests {
             ignore_invalid_headers: true,
             charset: None,
             autoindex: None,
+            http2_chunk_size: None,
             referer: None,
+            userid: None,
+            browser: None,
         }
     }
 
@@ -715,6 +718,8 @@ mod tests {
             nginx: Default::default(),
             maps: Vec::new(),
             geo: Vec::new(),
+            geoip: None,
+            stream_geoip: None,
             split_clients: Vec::new(),
             mime_types: None,
             default_type: None,
@@ -724,6 +729,7 @@ mod tests {
             stream_limit_conn_zones: Vec::new(),
             cache_zone_names: Vec::new(),
             stream_maps: Vec::new(),
+            stream_split_clients: Vec::new(),
             resolution_cache: None,
             limits: Default::default(),
             listeners: Vec::new(),

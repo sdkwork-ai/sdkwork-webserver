@@ -9,20 +9,22 @@ use axum::{
     http::{
         header::{
             ACCEPT_ENCODING, ACCEPT_RANGES, AUTHORIZATION, CONNECTION, CONTENT_LENGTH,
-            CONTENT_TYPE, EXPECT, HOST, LAST_MODIFIED, LOCATION, RETRY_AFTER, TE,
-            TRANSFER_ENCODING, USER_AGENT, WWW_AUTHENTICATE,
+            CONTENT_TYPE, COOKIE, EXPECT, HOST, LAST_MODIFIED, LOCATION, RETRY_AFTER, SET_COOKIE,
+            TE, TRANSFER_ENCODING, USER_AGENT, WWW_AUTHENTICATE,
         },
         HeaderMap, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Version,
     },
 };
 use futures_util::StreamExt;
 use sdkwork_webserver_core::{
-    apply_rewrites_with, evaluate_access, evaluate_auth_basic, normalize_authority_host,
-    prefer_h5_surface, verify_secure_link,
+    apply_rewrites_with, browser_variable_values, evaluate_access, evaluate_auth_basic,
+    evaluate_userid, normalize_authority_host, prefer_h5_surface, verify_secure_link,
     website_runtime::{ProviderResourceReference, WebsiteProviderType},
-    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, RedirectPolicyConfig,
-    ResourceConfig, RewriteOutcome, RoutePathType, SecureLinkFailure, SecurityHeadersConfig,
-    SelectedRoute, XFrameOptions, DEFAULT_MAX_RANGES, MAX_REWRITE_INTERNAL_REDIRECTS,
+    AccessDecision, AuthBasicDecision, CustomHeaderConfig, ErrorPageConfig, GeoIpRequestState,
+    RedirectPolicyConfig, ResourceConfig, RewriteOutcome, RoutePathType, SecureLinkFailure,
+    SecurityHeadersConfig, SelectedRoute, UserIdRequestState, XFrameOptions,
+    DEFAULT_HTTP2_CHUNK_SIZE, DEFAULT_MAX_RANGES, HTTP2_MAX_FRAME_SIZE,
+    MAX_REWRITE_INTERNAL_REDIRECTS,
 };
 use sdkwork_webserver_delivery_runtime::{
     AppConfigProviderPolicy, AppConfigResourceHandler, AppConfigResourceRoute,
@@ -199,6 +201,7 @@ fn subrequest_env<'a>(
     method: &'a Method,
     headers: &'a HeaderMap,
     map_results: &'a super::map_variables::MapResults,
+    geoip: &'a GeoIpRequestState,
 ) -> super::subrequest::SubrequestEnv<'a> {
     let cap = generation
         .app
@@ -217,6 +220,7 @@ fn subrequest_env<'a>(
         method,
         headers,
         map_results,
+        geoip,
         max_body_bytes: cap,
     }
 }
@@ -334,6 +338,23 @@ async fn route_admitted_request(
             return invalid_forwarded_scheme_response(request.version());
         }
     };
+    // nginx GeoIP: resolve `$geoip_*` once per request from the client address
+    // after real_ip handling. The MMDB readers live on the configuration
+    // generation, so this never reopens a database file. The X-Forwarded-For
+    // trust walk (`geoip_proxy` / `geoip_proxy_recursive`) is applied inside
+    // the lookup.
+    let x_forwarded_for: Vec<&str> = request
+        .headers()
+        .get_all("x-forwarded-for")
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    let geoip_state = generation
+        .geoip
+        .as_ref()
+        .map_or_else(GeoIpRequestState::default, |geoip| {
+            geoip.lookup(client_ip, &x_forwarded_for)
+        });
     if content_length_exceeds(
         request.headers(),
         generation.app.config().limits.max_request_body_bytes,
@@ -391,6 +412,7 @@ async fn route_admitted_request(
             method: &method,
             server_name: &host_server_name,
             headers: request.headers(),
+            geoip: Some(&geoip_state),
         };
         super::map_variables::MapResults::evaluate(generation.app.config(), &facts)
     };
@@ -676,6 +698,7 @@ async fn route_admitted_request(
         &phase_server_name,
         server_protocol,
     );
+    request_variables.seed_geoip(geoip_state.clone());
     // Declared `map` results are variables too: seed them so `set`/`if`/
     // dynamic targets can reference them through the same lookup.
     for (name, value) in map_results.pairs() {
@@ -759,24 +782,33 @@ async fn route_admitted_request(
                     .map(|security_headers| security_headers.custom_headers.as_slice())
                     .filter(|headers| !headers.is_empty());
                 if policy.is_some() {
+                    let userid_state =
+                        userid_state_for(host_config, None, &request_headers, transport_peer.ip());
+                    let (modern_browser, ancient_browser) =
+                        browser_values_for(host_config, None, &request_headers);
                     let variables = ResponseHeaderVariables {
                         scheme: scheme.as_str(),
                         authority: &authority,
                         client_ip,
+                        geoip: Some(&geoip_state),
                         server_port: listener_port,
                         method: &method,
                         request_uri: &raw_request_uri,
                         server_name: host_config.server_names.first().map_or("", String::as_str),
                         maps: Some(&map_results),
                         invalid_referer: referer_invalid_for(host_config, None, &request_headers),
+                        userid: userid_state.as_ref(),
+                        modern_browser,
+                        ancient_browser,
                     };
-                    return apply_nginx_response_headers(
+                    let response = apply_nginx_response_headers(
                         text_response(StatusCode::NOT_FOUND, "route was not found\n"),
                         policy,
                         &variables,
                         &path,
                         request_query.as_deref(),
                     );
+                    return append_userid_headers(response, variables.userid);
                 }
             }
             return text_response(StatusCode::NOT_FOUND, "route was not found\n");
@@ -820,10 +852,22 @@ async fn route_admitted_request(
                 &map_results,
             )
             .await;
+            let userid_state = userid_state_for(
+                candidate.virtual_host,
+                Some(candidate.route),
+                &request_headers,
+                transport_peer.ip(),
+            );
+            let (modern_browser, ancient_browser) = browser_values_for(
+                candidate.virtual_host,
+                Some(candidate.route),
+                &request_headers,
+            );
             let variables = ResponseHeaderVariables {
                 scheme: scheme.as_str(),
                 authority: &authority,
                 client_ip,
+                geoip: Some(&geoip_state),
                 server_port: listener_port,
                 method: &method,
                 request_uri: &raw_request_uri,
@@ -838,6 +882,9 @@ async fn route_admitted_request(
                     Some(candidate.route),
                     &request_headers,
                 ),
+                userid: userid_state.as_ref(),
+                modern_browser,
+                ancient_browser,
             };
             return finalize_response_headers(
                 response,
@@ -996,10 +1043,22 @@ async fn route_admitted_request(
                     &map_results,
                 )
                 .await;
+                let userid_state = userid_state_for(
+                    candidate.virtual_host,
+                    Some(candidate.route),
+                    &request_headers,
+                    transport_peer.ip(),
+                );
+                let (modern_browser, ancient_browser) = browser_values_for(
+                    candidate.virtual_host,
+                    Some(candidate.route),
+                    &request_headers,
+                );
                 let variables = ResponseHeaderVariables {
                     scheme: scheme.as_str(),
                     authority: &authority,
                     client_ip,
+                    geoip: Some(&geoip_state),
                     server_port: listener_port,
                     method: &method,
                     request_uri: &raw_request_uri,
@@ -1014,6 +1073,9 @@ async fn route_admitted_request(
                         Some(candidate.route),
                         &request_headers,
                     ),
+                    userid: userid_state.as_ref(),
+                    modern_browser,
+                    ancient_browser,
                 };
                 let response = apply_security_headers(
                     response,
@@ -1044,10 +1106,22 @@ async fn route_admitted_request(
     // therefore `$server_name`) is fixed by host selection above, so this one
     // binding serves the gate rejections, the named-location gates, and the
     // final response choke point.
-    let response_variables = ResponseHeaderVariables {
+    let userid_state = userid_state_for(
+        selected.virtual_host,
+        Some(selected.route),
+        &request_headers,
+        transport_peer.ip(),
+    );
+    let (modern_browser, ancient_browser) = browser_values_for(
+        selected.virtual_host,
+        Some(selected.route),
+        &request_headers,
+    );
+    let mut response_variables = ResponseHeaderVariables {
         scheme: scheme.as_str(),
         authority: &authority,
         client_ip,
+        geoip: Some(&geoip_state),
         server_port: listener_port,
         method: &method,
         request_uri: &raw_request_uri,
@@ -1062,6 +1136,9 @@ async fn route_admitted_request(
             Some(selected.route),
             &request_headers,
         ),
+        userid: userid_state.as_ref(),
+        modern_browser,
+        ancient_browser,
     };
     // nginx location-scoped gates run in the access/preaccess phases, before
     // the content handler and before `try_files` can redirect internally.
@@ -1148,13 +1225,27 @@ async fn route_admitted_request(
             {
                 Ok(outcome) => outcome,
                 Err(response) => {
+                    let named_userid_state = userid_state_for(
+                        named.virtual_host,
+                        Some(named.route),
+                        &request_headers,
+                        transport_peer.ip(),
+                    );
+                    let (named_modern, named_ancient) =
+                        browser_values_for(named.virtual_host, Some(named.route), &request_headers);
+                    let named_variables = ResponseHeaderVariables {
+                        userid: named_userid_state.as_ref(),
+                        modern_browser: named_modern,
+                        ancient_browser: named_ancient,
+                        ..response_variables
+                    };
                     return finalize_response_headers(
                         response,
                         &named,
-                        &response_variables,
+                        &named_variables,
                         &path,
                         request_query.as_deref(),
-                    )
+                    );
                 }
             };
             path = named_outcome.path;
@@ -1168,6 +1259,26 @@ async fn route_admitted_request(
         // following path re-selection cannot happen (redirect depth is one).
         selected = named;
     }
+    // Re-evaluate both request-scoped module states for the final location: an
+    // internal redirect selects another location's configuration, and nginx
+    // resolves both modules' `loc_conf` after the redirect.
+    let userid_state = userid_state_for(
+        selected.virtual_host,
+        Some(selected.route),
+        &request_headers,
+        transport_peer.ip(),
+    );
+    let (modern_browser, ancient_browser) = browser_values_for(
+        selected.virtual_host,
+        Some(selected.route),
+        &request_headers,
+    );
+    response_variables = ResponseHeaderVariables {
+        userid: userid_state.as_ref(),
+        modern_browser,
+        ancient_browser,
+        ..response_variables
+    };
     let operations_reserved = is_operations_candidate(&request)
         && selected.route.route_match.path_type == RoutePathType::Exact
         && is_operations_path(&selected.route.route_match.path)
@@ -1194,6 +1305,7 @@ async fn route_admitted_request(
             request.method(),
             &request_headers,
             &map_results,
+            &geoip_state,
         );
         if let super::subrequest::AuthOutcome::Reject(response) =
             super::subrequest::authorize(&subrequest, &auth_request).await
@@ -1246,7 +1358,8 @@ async fn route_admitted_request(
             // A `return <status> "<body>"` body is a script in nginx; the
             // runtime expands the response-header variable vocabulary plus the
             // declared map results.
-            let expanded_body = response_variables.expand(body, &path, request_query.as_deref());
+            let expanded_body =
+                response_variables.expand(body, &path, request_query.as_deref(), None);
             // nginx derives a `return` body's content type from the request URI
             // extension through the resolved `types` table; the typed plane
             // keeps declaring its content type explicitly.
@@ -1529,8 +1642,20 @@ async fn route_admitted_request(
                     metrics: &state.runtime.metrics,
                     cache: generation.proxy_cache.clone(),
                     map_results: &map_results,
+                    geoip: Some(&geoip_state),
+                    uid_got: response_variables
+                        .userid
+                        .map_or("", |state| state.got_value()),
+                    uid_set: response_variables
+                        .userid
+                        .map_or("", |state| state.set_value()),
+                    modern_browser: response_variables.modern_browser,
+                    ancient_browser: response_variables.ancient_browser,
                     response_policy: proxy_response_policy.as_ref(),
                     proxy_method: proxy_method.as_deref(),
+                    // The ordinary proxy path has no slice context; the slice
+                    // pipeline builds its own per-slice contexts.
+                    slice_range: None,
                 },
                 request,
             )
@@ -1588,17 +1713,26 @@ async fn route_admitted_request(
             store,
             limit_rate_bytes_per_second,
             force_ranges,
+            temp_policy,
+            ignore_client_abort,
+            catch_stderr,
             ..
         } => {
-            let fastcgi_policy = super::cgi_upstream::CgiResponsePolicy::new(
-                buffer_policy.as_ref(),
-                *pass_request_body,
-                store.as_ref(),
-                generation.app.config().nginx.store_root.as_deref(),
-                *limit_rate_bytes_per_second,
-                *force_ranges,
-                None,
-            );
+            let fastcgi_policy =
+                super::cgi_upstream::CgiResponsePolicy::new(super::cgi_upstream::CgiPolicyInputs {
+                    buffering: buffer_policy.as_ref(),
+                    pass_request_body: *pass_request_body,
+                    store: store.as_ref(),
+                    store_root: generation.app.config().nginx.store_root.as_deref(),
+                    limit_rate_bytes_per_second: *limit_rate_bytes_per_second,
+                    force_ranges: *force_ranges,
+                    gzip_flag: None,
+                    temp: temp_policy.as_ref(),
+                    temp_root: generation.app.config().nginx.temp_root.as_deref(),
+                    spool: &generation.temp_spool,
+                    ignore_client_abort: *ignore_client_abort,
+                    catch_stderr,
+                });
             let fastcgi_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -1764,17 +1898,25 @@ async fn route_admitted_request(
             store,
             limit_rate_bytes_per_second,
             force_ranges,
+            temp_policy,
+            ignore_client_abort,
             ..
         } => {
-            let cgi_policy = super::cgi_upstream::CgiResponsePolicy::new(
-                buffer_policy.as_ref(),
-                *pass_request_body,
-                store.as_ref(),
-                generation.app.config().nginx.store_root.as_deref(),
-                *limit_rate_bytes_per_second,
-                *force_ranges,
-                None,
-            );
+            let cgi_policy =
+                super::cgi_upstream::CgiResponsePolicy::new(super::cgi_upstream::CgiPolicyInputs {
+                    buffering: buffer_policy.as_ref(),
+                    pass_request_body: *pass_request_body,
+                    store: store.as_ref(),
+                    store_root: generation.app.config().nginx.store_root.as_deref(),
+                    limit_rate_bytes_per_second: *limit_rate_bytes_per_second,
+                    force_ranges: *force_ranges,
+                    gzip_flag: None,
+                    temp: temp_policy.as_ref(),
+                    temp_root: generation.app.config().nginx.temp_root.as_deref(),
+                    spool: &generation.temp_spool,
+                    ignore_client_abort: *ignore_client_abort,
+                    catch_stderr: &[],
+                });
             let cgi_arm = match collect_bounded_request_body(
                 request,
                 generation.app.config().limits.max_request_body_bytes,
@@ -1923,6 +2065,8 @@ async fn route_admitted_request(
             send_timeout_ms,
             read_timeout_ms,
             buffer_size,
+            bind_address,
+            socket_keepalive,
             response_policy,
             intercept_errors,
             retry,
@@ -1944,6 +2088,8 @@ async fn route_admitted_request(
                         *send_timeout_ms,
                         *read_timeout_ms,
                         *buffer_size,
+                        *bind_address,
+                        *socket_keepalive,
                         response_policy.as_ref(),
                         retry.as_ref(),
                         request.method(),
@@ -1962,6 +2108,15 @@ async fn route_admitted_request(
                                 .map(|listener| listener.port)
                                 .unwrap_or(0),
                             maps: &map_results,
+                            geoip: Some(&geoip_state),
+                            uid_got: response_variables
+                                .userid
+                                .map_or("", |state| state.got_value()),
+                            uid_set: response_variables
+                                .userid
+                                .map_or("", |state| state.set_value()),
+                            modern_browser: response_variables.modern_browser,
+                            ancient_browser: response_variables.ancient_browser,
                         },
                         request.headers(),
                         &request_body,
@@ -2018,9 +2173,21 @@ async fn route_admitted_request(
         } => {
             // The upstream exchange is GET/HEAD only; the bounded adapter
             // answers other methods with 405 before touching the network.
-            let mut memcached_policy = super::cgi_upstream::CgiResponsePolicy::new(
-                None, true, None, None, None, false, *gzip_flag,
-            );
+            let mut memcached_policy =
+                super::cgi_upstream::CgiResponsePolicy::new(super::cgi_upstream::CgiPolicyInputs {
+                    buffering: None,
+                    pass_request_body: true,
+                    store: None,
+                    store_root: None,
+                    limit_rate_bytes_per_second: None,
+                    force_ranges: false,
+                    gzip_flag: *gzip_flag,
+                    temp: None,
+                    temp_root: None,
+                    spool: &generation.temp_spool,
+                    ignore_client_abort: false,
+                    catch_stderr: &[],
+                });
             if let Some(bytes) = buffer_bytes {
                 if let Ok(bytes) = usize::try_from(*bytes) {
                     memcached_policy.limits.max_header_block_bytes = bytes;
@@ -2275,6 +2442,7 @@ async fn route_admitted_request(
             &Method::GET,
             &request_headers,
             &map_results,
+            &geoip_state,
         );
         response = super::subrequest::apply_addition(response, &subrequest, &addition).await;
     }
@@ -2340,6 +2508,7 @@ async fn route_admitted_request(
             &Method::GET,
             &request_headers,
             &map_results,
+            &geoip_state,
         );
         super::subrequest::fire_mirror(&subrequest, &mirror);
     }
@@ -2353,6 +2522,21 @@ async fn route_admitted_request(
         response =
             response.map(|body| Body::new(super::limit_conn::LeaseBody { inner: body, lease }));
     }
+    // nginx `http2_chunk_size`: the effective value is resolved here (location
+    // overrides the host's http/server-resolved value; absent keeps nginx's
+    // 8 KiB default) and the outermost data-plane layer re-chunks the body
+    // only for HTTP/2 requests. The value is carried on the response because
+    // that layer runs after the handler (and after compression) with no route
+    // selection context.
+    let http2_chunk_size = selected
+        .route
+        .http2_chunk_size
+        .or(selected.virtual_host.http2_chunk_size)
+        .unwrap_or(DEFAULT_HTTP2_CHUNK_SIZE)
+        .clamp(1, HTTP2_MAX_FRAME_SIZE);
+    response
+        .extensions_mut()
+        .insert(super::http2_chunk::Http2ChunkSize(http2_chunk_size));
     response
 }
 
@@ -2384,6 +2568,7 @@ fn static_delivery_policy<'a>(
             ResourceConfig::Static { index_files, .. } => index_files,
             _ => &[],
         },
+        random_index: selected.route.random_index.unwrap_or(false),
     }
 }
 
@@ -2606,7 +2791,8 @@ async fn named_fallback_selection<'a>(
             path.ends_with('/'),
             None,
             false,
-            None
+            None,
+            false
         )
         .await,
         Err(super::static_path::StaticPathError::NotFound)
@@ -2945,6 +3131,7 @@ struct ResponseHeaderPolicyOverride(Option<Vec<CustomHeaderConfig>>);
 /// an internal rewrite (`secure_link`), while `$request_uri` keeps the original
 /// request target. Only the variables validated by
 /// [`CustomHeaderConfig::validate_declaration`] are expanded.
+#[derive(Clone, Copy)]
 pub(crate) struct ResponseHeaderVariables<'a> {
     pub(crate) scheme: &'a str,
     pub(crate) authority: &'a str,
@@ -2958,10 +3145,34 @@ pub(crate) struct ResponseHeaderVariables<'a> {
     pub(crate) maps: Option<&'a super::map_variables::MapResults>,
     /// nginx `$invalid_referer` for this request (`valid_referers` policy).
     pub(crate) invalid_referer: bool,
+    /// nginx userid state for this main request; `None` means the module is
+    /// off at every level or this is an internal subrequest.
+    pub(crate) userid: Option<&'a UserIdRequestState>,
+    /// nginx `$modern_browser` expansion (empty when the request is not in
+    /// that class).
+    pub(crate) modern_browser: &'a str,
+    /// nginx `$ancient_browser` expansion.
+    pub(crate) ancient_browser: &'a str,
+    /// Resolved nginx GeoIP variables for this request.
+    pub(crate) geoip: Option<&'a GeoIpRequestState>,
 }
 
 impl ResponseHeaderVariables<'_> {
-    fn expand(&self, template: &str, uri: &str, query: Option<&str>) -> String {
+    /// Expand an `add_header` / `return` body template.
+    ///
+    /// `slice_range` is the `ngx_http_slice_filter_module` value for this
+    /// response: the proxy slice pipeline attaches it through
+    /// [`super::slice::SliceRangeHeaderValue`] when the upstream answered with
+    /// the expected 206 slice, and `None` everywhere else (nginx leaves the
+    /// variable not-found — the empty string — when no slice context exists or
+    /// the slice filter dropped it after a non-206 response).
+    fn expand(
+        &self,
+        template: &str,
+        uri: &str,
+        query: Option<&str>,
+        slice_range: Option<&str>,
+    ) -> String {
         let mut output = String::with_capacity(template.len() + 16);
         let mut remainder = template;
         while let Some(index) = remainder.find('$') {
@@ -3024,7 +3235,26 @@ impl ResponseHeaderVariables<'_> {
                 "invalid_referer" => {
                     output.push_str(if self.invalid_referer { "1" } else { "" });
                 }
-                _ => {}
+                "uid_got" => output.push_str(
+                    self.userid
+                        .map_or("", sdkwork_webserver_core::UserIdRequestState::got_value),
+                ),
+                "uid_set" => output.push_str(
+                    self.userid
+                        .map_or("", sdkwork_webserver_core::UserIdRequestState::set_value),
+                ),
+                "modern_browser" => output.push_str(self.modern_browser),
+                "ancient_browser" => output.push_str(self.ancient_browser),
+                "slice_range" => {
+                    if let Some(value) = slice_range {
+                        output.push_str(value);
+                    }
+                }
+                _ => {
+                    if let Some(value) = self.geoip.and_then(|geoip| geoip.value(variable)) {
+                        output.push_str(value);
+                    }
+                }
             }
             remainder = &rest[variable.len()..];
         }
@@ -3047,6 +3277,74 @@ fn referer_invalid_for(
         .get(axum::http::header::REFERER)
         .and_then(|value| value.to_str().ok());
     sdkwork_webserver_core::invalid_referer(policy, &virtual_host.server_names, referer)
+}
+
+/// Evaluate the nginx userid module for one main request.
+///
+/// A location declaration replaces the host configuration (the nginx
+/// materializer resolves the per-field merge) and `userid off` at both levels
+/// leaves the module state empty. Only a main request owns a userid context;
+/// subrequest responses pass `None` and never emit the cookie.
+fn userid_state_for(
+    virtual_host: &sdkwork_webserver_core::VirtualHostConfig,
+    route: Option<&sdkwork_webserver_core::RouteConfig>,
+    headers: &HeaderMap,
+    local_ip: IpAddr,
+) -> Option<UserIdRequestState> {
+    let config = route
+        .and_then(|route| route.userid.as_ref())
+        .or(virtual_host.userid.as_ref())?;
+    let cookie_values: Vec<&str> = headers
+        .get_all(COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    Some(evaluate_userid(
+        config,
+        &cookie_values,
+        local_ip,
+        std::time::SystemTime::now(),
+    ))
+}
+
+/// `$modern_browser` / `$ancient_browser` for one main request.
+fn browser_values_for<'a>(
+    virtual_host: &'a sdkwork_webserver_core::VirtualHostConfig,
+    route: Option<&'a sdkwork_webserver_core::RouteConfig>,
+    headers: &HeaderMap,
+) -> (&'a str, &'a str) {
+    let config = route
+        .and_then(|route| route.browser.as_ref())
+        .or(virtual_host.browser.as_ref());
+    let user_agent = headers
+        .get(USER_AGENT)
+        .and_then(|value| value.to_str().ok());
+    browser_variable_values(config, user_agent)
+}
+
+/// Append the nginx userid response fields (`Set-Cookie`, then `P3P`) at the
+/// header-filter choke point, after the configured `add_header` policy has been
+/// applied — nginx's module order puts `add_header` fields first.
+fn append_userid_headers(
+    mut response: Response<Body>,
+    state: Option<&UserIdRequestState>,
+) -> Response<Body> {
+    let Some(state) = state else {
+        return response;
+    };
+    if let Some(cookie) = &state.set_cookie {
+        if let Ok(value) = HeaderValue::from_str(cookie) {
+            response.headers_mut().append(SET_COOKIE, value);
+        }
+    }
+    if let Some(p3p) = &state.p3p {
+        if let Ok(value) = HeaderValue::from_str(p3p) {
+            response
+                .headers_mut()
+                .append(HeaderName::from_static("p3p"), value);
+        }
+    }
+    response
 }
 
 /// The effective nginx `add_header` policy for a selected route: a location
@@ -3089,6 +3387,15 @@ fn apply_nginx_response_headers(
     };
     let status = response.status().as_u16();
     let default_status = CustomHeaderConfig::NGINX_DEFAULT_STATUSES.contains(&status);
+    // nginx `$slice_range` is a response-scoped value: the proxy slice pipeline
+    // stamps the initial slice range on the assembled response, and a
+    // non-sliced response carries no stamp (nginx renders the variable as the
+    // empty string when it has no slice context). Cloning keeps the later
+    // `headers_mut()` borrow disjoint.
+    let slice_range = response
+        .extensions()
+        .get::<super::slice::SliceRangeHeaderValue>()
+        .map(|value| value.0.clone());
     for header in policy {
         if !header.always && !default_status {
             continue;
@@ -3099,7 +3406,7 @@ fn apply_nginx_response_headers(
         let Ok(name) = HeaderName::from_bytes(header.name.as_bytes()) else {
             continue;
         };
-        let value = variables.expand(&header.value, uri, query);
+        let value = variables.expand(&header.value, uri, query, slice_range.as_deref());
         // nginx omits a field whose expanded value is empty, whether the
         // emptiness is declared (`add_header X "";`) or produced by a variable
         // or map result that resolves to the empty string.
@@ -3142,7 +3449,8 @@ pub(crate) fn finalize_response_headers(
         Some(charset) => super::charset_policy::apply_charset_policy(response, charset),
         None => response,
     };
-    apply_nginx_response_headers(response, policy, variables, uri, query)
+    let response = apply_nginx_response_headers(response, policy, variables, uri, query);
+    append_userid_headers(response, variables.userid)
 }
 
 /// Effective nginx charset policy for one selected route: a location-level
@@ -4016,6 +4324,10 @@ mod tests {
             server_name: "headers.example.com",
             maps: None,
             invalid_referer: false,
+            userid: None,
+            modern_browser: "",
+            ancient_browser: "",
+            geoip: None,
         }
     }
 
@@ -4049,6 +4361,10 @@ mod tests {
             server_name,
             maps: None,
             invalid_referer: false,
+            userid: None,
+            modern_browser: "",
+            ancient_browser: "",
+            geoip: None,
         }
     }
 
@@ -4162,7 +4478,10 @@ mod tests {
             ignore_invalid_headers: true,
             charset: None,
             autoindex: None,
+            http2_chunk_size: None,
             referer: None,
+            userid: None,
+            browser: None,
         };
         let mut route = sdkwork_webserver_core::RouteConfig {
             id: "r".to_owned(),
@@ -4191,10 +4510,16 @@ mod tests {
             limit_req_status: None,
             limit_conn_status: Some(503),
             max_ranges: None,
+            slice_size: None,
+            proxy_cache: None,
             internal: false,
             charset: None,
             autoindex: None,
+            random_index: None,
+            http2_chunk_size: None,
             referer: None,
+            userid: None,
+            browser: None,
             addition: None,
             auth_request: None,
             mirror: None,
@@ -4283,6 +4608,38 @@ mod tests {
     }
 
     #[test]
+    fn geoip_variables_expand_in_add_header_and_return_bodies() {
+        let geoip = GeoIpRequestState {
+            country_code: "US".to_owned(),
+            country_code3: "USA".to_owned(),
+            country_name: "United States".to_owned(),
+            city: "Testville".to_owned(),
+            region: "CA".to_owned(),
+            ..GeoIpRequestState::default()
+        };
+        let variables = ResponseHeaderVariables {
+            geoip: Some(&geoip),
+            ..response_header_variables()
+        };
+        assert_eq!(
+            variables.expand(
+                "$geoip_country_code|$geoip_country_code3|$geoip_city|$geoip_region|$geoip_org",
+                "/",
+                None,
+                None,
+            ),
+            "US|USA|Testville|CA|"
+        );
+        // An unconfigured GeoIP module renders the nginx not_found empty
+        // string, never a literal `$geoip_…`.
+        let empty = ResponseHeaderVariables {
+            geoip: None,
+            ..response_header_variables()
+        };
+        assert_eq!(empty.expand("$geoip_country_code", "/", None, None), "");
+    }
+
+    #[test]
     fn add_header_expands_the_supported_variables() {
         let template = "$host|$request_uri|$scheme|$server_port|$remote_addr|$uri|$args|$is_args|$request_method|$server_name|$$literal";
         let policy = vec![response_header("X-Vars", template, false)];
@@ -4312,6 +4669,84 @@ mod tests {
             None,
         );
         assert_eq!(response.headers()["x-args"], "headers.example.com||");
+    }
+
+    #[test]
+    fn userid_state_appends_set_cookie_after_add_header_and_p3p_after_cookie() {
+        let state = UserIdRequestState {
+            got: Some("uid=0100007FDDFBE56AFA3B5B4902060303".to_owned()),
+            set: Some("uid=0100007FDDFBE56AFA3B5B4902060303".to_owned()),
+            set_cookie: Some(
+                "uid=fwAAAWrl+91JWzv6AwMGAg==; expires=Thu, 31-Dec-37 23:55:55 GMT; path=/; secure"
+                    .to_owned(),
+            ),
+            p3p: Some("CP=\"CAO PSA OUR\"".to_owned()),
+        };
+        let variables = ResponseHeaderVariables {
+            userid: Some(&state),
+            ..response_header_variables()
+        };
+        let response = apply_nginx_response_headers(
+            response_with_status(200),
+            Some(&[response_header("X-Added", "1", true)]),
+            &variables,
+            "/",
+            None,
+        );
+        let response = append_userid_headers(response, variables.userid);
+        let names: Vec<&str> = response.headers().keys().map(HeaderName::as_str).collect();
+        let added = names
+            .iter()
+            .position(|name| *name == "x-added")
+            .expect("add_header");
+        let cookie = names
+            .iter()
+            .position(|name| *name == "set-cookie")
+            .expect("Set-Cookie");
+        let p3p = names.iter().position(|name| *name == "p3p").expect("P3P");
+        assert!(
+            added < cookie,
+            "nginx emits add_header fields before Set-Cookie"
+        );
+        assert!(cookie < p3p, "nginx emits P3P after Set-Cookie");
+        assert_eq!(
+            response.headers()[SET_COOKIE],
+            HeaderValue::from_static(
+                "uid=fwAAAWrl+91JWzv6AwMGAg==; expires=Thu, 31-Dec-37 23:55:55 GMT; path=/; secure"
+            )
+        );
+        assert_eq!(response.headers()["p3p"], "CP=\"CAO PSA OUR\"");
+    }
+
+    #[test]
+    fn userid_and_browser_variables_expand_in_add_header() {
+        let state = UserIdRequestState {
+            got: Some("uid=0100007FDDFBE56AFA3B5B4902060303".to_owned()),
+            set: None,
+            set_cookie: None,
+            p3p: None,
+        };
+        let variables = ResponseHeaderVariables {
+            userid: Some(&state),
+            modern_browser: "modern!",
+            ancient_browser: "",
+            ..response_header_variables()
+        };
+        let response = apply_nginx_response_headers(
+            response_with_status(200),
+            Some(&[response_header(
+                "X-Uid",
+                "$uid_got|$uid_set|$modern_browser|$ancient_browser",
+                true,
+            )]),
+            &variables,
+            "/",
+            None,
+        );
+        assert_eq!(
+            response.headers()["x-uid"],
+            "uid=0100007FDDFBE56AFA3B5B4902060303||modern!|"
+        );
     }
 
     #[test]

@@ -1513,10 +1513,33 @@
         "http-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.ancient (nginx UA tables + netscape4/literal/regex semantics)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:ancient_browser_value",
@@ -1529,10 +1552,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.ancientValue (default \"1\")",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:auth_basic",
@@ -3993,10 +4039,27 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "`fastcgi_catch_stderr` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "runtimeField": "resources[].catchStderrPatterns (nginx trimmed-message substring match -> 502, no retry)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-catch-stderr"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-catch-nomatch"
+        }
+      ],
+      "knownDifferences": [
+        "stderr messages are logged through tracing; a match makes the response invalid -> 502 like nginx; *_next_upstream invalid_header remains fail-closed (retry enum lacks it)"
+      ]
     },
     {
       "id": "http:fastcgi_connect_timeout",
@@ -4173,10 +4236,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_ignore_client_abort` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].ignoreClientAbort (fastcgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-ignore-client-abort"
+        }
+      ],
+      "knownDifferences": [
+        "on detaches each upstream attempt on a bounded task; the upstream admission permit stays owned by the request handler, so a client abort releases the permit while the detached exchange still runs (one in-flight exchange under-counted)"
+      ]
     },
     {
       "id": "http:fastcgi_ignore_headers",
@@ -4432,10 +4508,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_max_temp_file_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (fastcgi_max_temp_file_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:fastcgi_next_upstream",
@@ -5115,10 +5225,19 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "`fastcgi_send_lowat` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "diagnostics": "accepted for compatibility but not enforced: SO_SNDLOWAT is not settable through the runtime socket seam (Linux ignores it, nginx documents it as BSD-only)",
+      "migrationImpact": "SO_SNDLOWAT is BSD-only and ignored by Linux (nginx logs \"not supported, ignored\"); the runtime accepts the value without faking a low-water mark",
+      "knownDifferences": [
+        "no effect on Linux, matching nginx which zeroes the value at config time"
+      ],
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `http:fastcgi_send_lowat` (specs/nginx-gap.catalog.json)."
     },
     {
       "id": "http:fastcgi_send_timeout",
@@ -5342,10 +5461,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_temp_file_write_size` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (fastcgi_temp_file_write_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:fastcgi_temp_path",
@@ -5358,10 +5511,44 @@
         "http-server"
       ],
       "grammar": "1|2|3|4",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`fastcgi_temp_path` belongs to the nginx fastcgi module; this form is not implemented by the SDKWork fastcgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (fastcgi_temp_path; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:flv",
@@ -5424,10 +5611,36 @@
         "http"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "hosts[].geoip.cityDatabase",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "us-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "de-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "empty-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "recursive-trusted-hop"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "http:geoip_country",
@@ -5438,10 +5651,36 @@
         "http"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "hosts[].geoip.countryDatabase (absolute MMDB path, optional utf8)",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "us-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "de-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "empty-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "recursive-trusted-hop"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "http:geoip_org",
@@ -5452,10 +5691,36 @@
         "http"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "hosts[].geoip.orgDatabase",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "us-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "de-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "empty-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "recursive-trusted-hop"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "http:geoip_proxy",
@@ -5466,10 +5731,36 @@
         "http"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "hosts[].geoip.proxies (trusted X-Forwarded-For CIDRs, max 256)",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "us-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "de-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "empty-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "recursive-trusted-hop"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "http:geoip_proxy_recursive",
@@ -5480,10 +5771,36 @@
         "http"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "http"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "hosts[].geoip.proxyRecursive (walk XFF right-to-left until an untrusted hop)",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "us-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "de-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "empty-record"
+        },
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "recursive-trusted-hop"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "http:grpc_bind",
@@ -5496,10 +5813,27 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "resources[].type=\"grpc\" bindAddress (IP literal source address for the h2 connector)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_bind_connects_from_the_configured_source_address"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_without_bind_connects_from_the_default_loopback_address"
+        }
+      ],
+      "knownDifferences": [
+        "applied in the h2 client connector (source bind / SO_KEEPALIVE); the pinned oracle lacks --with-http_v2_module so no grpc_pass differential is possible — covered by real-socket integration tests instead"
+      ]
     },
     {
       "id": "http:grpc_buffer_size",
@@ -6488,10 +6822,27 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "resources[].type=\"grpc\" socketKeepalive (SO_KEEPALIVE on the h2 TCP socket)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_bind_connects_from_the_configured_source_address"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/grpc_upstream.rs",
+          "case": "grpc_without_bind_connects_from_the_default_loopback_address"
+        }
+      ],
+      "knownDifferences": [
+        "applied in the h2 client connector (source bind / SO_KEEPALIVE); the pinned oracle lacks --with-http_v2_module so no grpc_pass differential is possible — covered by real-socket integration tests instead"
+      ]
     },
     {
       "id": "http:grpc_ssl_certificate",
@@ -7743,10 +8094,28 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "virtualHosts[].http2ChunkSize / routes[].http2ChunkSize (HTTP/2 response-body re-chunker; default 8 KiB, nginx clamp 16 MiB)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/http2_tuning.rs",
+          "test": "http2_data_frames_respect_the_configured_chunk_size"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "test": "http2_tuning_diagnostics_are_truthful"
+        }
+      ],
+      "knownDifferences": [
+        "the pinned hyper 1 / h2 0.4 server API exposes no DATA-frame chunk-size knob (h2::SendStream::send_data writes each body chunk as one frame and never merges them); the runtime therefore splits the response body into at most `http2_chunk_size` bytes before hyper sees it. The reassembled body is byte-identical and every DATA frame is <= the configured size. nginx 1.29.6 clamps values above NGX_HTTP_V2_MAX_FRAME_SIZE to 2^24-1 and rejects zero; the runtime reproduces both.",
+        "the HTTP/1 differential harness cannot observe an HTTP/2 DATA-frame boundary, so no differential case fakes one: the wire evidence is the h2 frame-capture test, and a real v2-enabled nginx config-acceptance probe (tools/check-nginx-http2-chunk-acceptance.mjs) checks http/server/location acceptance plus the zero-size rejection."
+      ]
     },
     {
       "id": "http:http2_idle_timeout",
@@ -9762,10 +10131,33 @@
         "http-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.modern (nginx UA tables + config order; first matching slot decides)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:modern_browser_value",
@@ -9778,10 +10170,33 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].browser.modernValue (default \"1\")",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.inherit.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.unlisted.no-ua"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "browser.http.no-ua"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:mp4",
@@ -11801,10 +12216,38 @@
         "http-location"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http-location"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "virtualHosts[].routes[].randomIndex (default off; bounded candidate scan + seeded selection)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "random-index.candidates"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "random-index.empty"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "random-index.off"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/static_path.rs",
+          "test": "random_index_selects_only_visible_regular_files"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "test": "materializes_random_index_location_flag"
+        }
+      ],
+      "knownDifferences": [
+        "nginx chooses with ngx_random() over the directory read order; the runtime scans a bounded (4096-entry) sorted candidate set and selects with a deterministic SplitMix64 seeded by the directory path and a per-process counter. The observable contract is preserved: the served file is always a non-hidden regular file and the candidate set over many requests matches nginx exactly (the differential compares that set, not individual draws).",
+        "the runtime skips symlinked files even when they resolve to a regular file because every other static delivery path refuses symlinks; nginx would follow the link. A directory with no candidate falls through to nginx's 403 (autoindex off) or listing (autoindex on)."
+      ]
     },
     {
       "id": "http:read_ahead",
@@ -13733,10 +14176,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_ignore_client_abort` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].ignoreClientAbort (scgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-ignore-client-abort"
+        }
+      ],
+      "knownDifferences": [
+        "on detaches each upstream attempt on a bounded task; the upstream admission permit stays owned by the request handler, so a client abort releases the permit while the detached exchange still runs (one in-flight exchange under-counted)"
+      ]
     },
     {
       "id": "http:scgi_ignore_headers",
@@ -13850,10 +14306,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_max_temp_file_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (scgi_max_temp_file_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:scgi_next_upstream",
@@ -14483,10 +14973,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_temp_file_write_size` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (scgi_temp_file_write_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:scgi_temp_path",
@@ -14499,10 +15023,44 @@
         "http-server"
       ],
       "grammar": "1|2|3|4",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`scgi_temp_path` belongs to the nginx scgi module; this form is not implemented by the SDKWork scgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (scgi_temp_path; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:secure_link",
@@ -14924,10 +15482,79 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "routes[].sliceSize (per-slice proxied Range subrequests, $slice_range variable, structural per-slice cache-key variant, bounded streaming 200/206/416/HEAD assembly)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.full"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.full.repeat"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.inside-warm"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.span-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.open-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.suffix-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.multi-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.range.invalid-cold"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.if-range.match"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.if-range.mismatch"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.head"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.hits"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.zero.plain"
+        },
+        {
+          "file": "tests/nginx/differential-http/nginx-oracle.json",
+          "case": "slice.absent.plain"
+        }
+      ],
+      "knownDifferences": [
+        "conditional requests over assembled slices forward If-None-Match/If-Modified-Since upstream and return the assembled 200 (nginx not_modified filter would answer 304); the whole-object cache path still answers 304",
+        "HEAD slices are not cached (repeat HEAD re-fetches one slice; bytes identical)",
+        "non-GET/HEAD requests with slice keep the one-exchange path (body replay impossible; nginx still sends the initial Range)",
+        "a malformed first slice answers 502 where nginx aborts the connection; slice sizes > 64 MiB fail closed (bounded slice buffer; nginx accepts any size)",
+        "route-scoped proxy_cache inheritance was added so a proxy_cache_path zone alone no longer enables caching for unrelated locations (nginx-faithful)"
+      ]
     },
     {
       "id": "http:source_charset",
@@ -16165,10 +16792,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.mode (on|v1|log|off)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_domain",
@@ -16181,10 +16843,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.domain (cookie Domain; none clears inheritance)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_expires",
@@ -16197,10 +16894,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.expires (cookie Expires; max renders the fixed 2037 date; off = session cookie)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_flags",
@@ -16213,10 +16945,45 @@
         "http-server"
       ],
       "grammar": "1|2|3",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.flags (cookie attribute serialization order: expires/domain/path/secure/httponly/samesite)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_mark",
@@ -16229,10 +16996,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.mark (mark suffix placement, no reissue for marked cookies, re-mark for unmarked)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_name",
@@ -16245,10 +17047,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.name (cookie name, default uid)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_p3p",
@@ -16261,10 +17098,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.p3p (P3P header emitted after Set-Cookie when a cookie is issued)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_path",
@@ -16277,10 +17149,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.path (cookie Path, default /)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:userid_service",
@@ -16293,10 +17200,45 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "hosts[].userid.service (service word in the identifier; on = network order, v1 = host order)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.second.attrs"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.flags"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.mark"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.service-v1"
+        },
+        {
+          "file": "tests/nginx/differential-http/battery.py",
+          "case": "userid.first.log"
+        }
+      ],
+      "knownDifferences": [
+        "userid identifier tail is CSPRNG-derived (nginx uses time/pid/sequencer); the observable 16-byte shape, service/address word, time position, mark placement and echo semantics match and are differentially canonicalised",
+        "browser tables transcribed from nginx 1.29.6 (opera/msie/gecko/safari/konqueror; Firefox matches rv:, Chrome matches Safari/); the http-level inherited modern list reproduces nginx's unfilled-mask quirk",
+        "$uid_* expands empty inside subrequest responses and error_page internal redirects keep the original location config (not byte-observable)"
+      ]
     },
     {
       "id": "http:uwsgi_bind",
@@ -17868,10 +18810,23 @@
         "http-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_ignore_client_abort` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].ignoreClientAbort (uwsgi_ignore_client_abort; on = detached bounded exchange, off = abort on client disconnect)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-ignore-client-abort"
+        }
+      ],
+      "knownDifferences": [
+        "on detaches each upstream attempt on a bounded task; the upstream admission permit stays owned by the request handler, so a client abort releases the permit while the detached exchange still runs (one in-flight exchange under-counted)"
+      ]
     },
     {
       "id": "http:uwsgi_ignore_headers",
@@ -17985,10 +18940,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_max_temp_file_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (uwsgi_max_temp_file_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:uwsgi_modifier1",
@@ -19126,10 +20115,44 @@
         "http-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_temp_file_write_size` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (uwsgi_temp_file_write_size; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:uwsgi_temp_path",
@@ -19142,10 +20165,44 @@
         "http-server"
       ],
       "grammar": "1|2|3|4",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "`uwsgi_temp_path` belongs to the nginx uwsgi module; this form is not implemented by the SDKWork uwsgi adapter and fails closed. Implemented forms are listed in the support matrix and covered by tests/nginx/differential-protocols."
+      "supportedContexts": [
+        "http",
+        "http-location",
+        "http-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "resources[].tempPolicy (uwsgi_temp_path; bounded per-generation spool, in-memory tier = response buffer bank)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-default"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-head"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-max-size"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-range"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-path"
+        },
+        {
+          "file": "tests/nginx/differential-protocols/nginx-oracle.json",
+          "case": "d14a-spool-disabled"
+        }
+      ],
+      "knownDifferences": [
+        "responses exceeding *_max_temp_file_size complete in memory instead of nginx's unbuffered passthrough (byte-identical 200, bounded by max_response_body_bytes)",
+        "only the single absolute *_temp_path form is supported; multi-arg level forms and variable paths fail closed"
+      ]
     },
     {
       "id": "http:valid_referers",
@@ -19462,10 +20519,30 @@
         "mail-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate forwarding to auth_http is not implemented (no mail client-cert model)"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.passClientCertificateToAuth (Auth-SSL-Cert header only when on; Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always when verification enabled)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.trusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.pass-cert-off"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:auth_http_timeout",
@@ -19614,10 +20691,34 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "custom IMAP capability lists are not implemented"
+      "runtimeField": "mailServers[].capabilities.imap (custom IMAP CAPABILITY list)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "imap.capability-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "pop3.capa-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-default"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:imap_client_buffer",
@@ -19920,10 +21021,34 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "custom POP3 capability lists are not implemented"
+      "runtimeField": "mailServers[].capabilities.pop3 (custom POP3 CAPA list)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "imap.capability-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "pop3.capa-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-default"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:protocol",
@@ -20346,10 +21471,15 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "mail listeners resolve auth_http/backend names with the bounded runtime resolver; a custom mail resolver is not implemented"
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `mail:resolver` (specs/nginx-gap.catalog.json).",
+      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied",
+      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution"
     },
     {
       "id": "mail:resolver_timeout",
@@ -20361,10 +21491,15 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "accepted-unenforced",
       "risk": "low",
-      "diagnostics": "mail listeners use the bounded runtime resolver; a custom mail resolver timeout is not implemented"
+      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `mail:resolver_timeout` (specs/nginx-gap.catalog.json).",
+      "migrationImpact": "the mail plane resolves auth_http/Auth-Server names through the runtime bounded system resolver; the nginx resolver block value is validated and accepted but not applied",
+      "diagnostics": "accepted for compatibility but not enforced: the runtime resolver owns mail name resolution"
     },
     {
       "id": "mail:server",
@@ -20492,10 +21627,26 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "real-IP trust for mail listeners is not implemented (HTTP/stream real_ip only)"
+      "runtimeField": "mailServers[].realIpTrustedCidrs (trusted inbound PROXY peers rewrite the client address)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "mail.realip-trusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "mail.realip-untrusted"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:smtp_auth",
@@ -20566,10 +21717,34 @@
         "mail-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "custom SMTP capability lists are not implemented"
+      "runtimeField": "mailServers[].capabilities.smtp (custom SMTP EHLO capability list, nginx 250-/250 line rendering)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "imap.capability-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "pop3.capa-custom"
+        },
+        {
+          "file": "tests/nginx/differential-mail/capabilities/nginx-oracle.json",
+          "case": "smtp.ehlo-default"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "mail:smtp_client_buffer",
@@ -20847,10 +22022,30 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate verification is not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.clientCertificateFile (verification store + CertificateRequest CA hints)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-trusted-bundle"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.trusted"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:ssl_conf_command",
@@ -21071,10 +22266,26 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "trusted client-certificate chains are not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.trustedCertificateFile (verification store only, no CA hints)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-trusted-intermediate.leaf-only"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:ssl_verify_client",
@@ -21086,10 +22297,46 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate verification is not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.verifyClient (off|on|optional|optional_no_ca; nginx post-handshake deferred verification)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.trusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-on.missing"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-optional.missing"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-no-ca.untrusted"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-off.client-cert-loaded"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:ssl_verify_depth",
@@ -21101,10 +22348,38 @@
         "mail-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "client-certificate verification is not implemented for mail listeners"
+      "supportedContexts": [
+        "mail",
+        "mail-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "mailServers[].tls.verifyDepth (default 1; 0 = directly root-issued leaf)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth0.direct"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth0.intermediate"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth1.intermediate"
+        },
+        {
+          "file": "tests/nginx/differential-mail/client-cert/nginx-oracle.json",
+          "case": "verify-depth2.intermediate"
+        }
+      ],
+      "knownDifferences": [
+        "failed verification is application-level after the TLS handshake (POP3 -ERR / IMAP * BYE / SMTP 421) exactly like nginx; never a silent bypass",
+        "depth counts presented intermediates (nginx/OpenSSL counts its built path; normal clients send their exact chain)",
+        "rustls enforces the clientAuth EKU when present where nginx generic OpenSSL verification does not",
+        "optional_no_ca without a bundle enforces only the validity window and always records an optional failure, never SUCCESS",
+        "auth_http receives exact nginx headers (Auth-SSL, Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint, Auth-SSL-Cert only with the flag); nginx 1.29.6 has no 8 KiB client-cert refusal (probed: a 13.5 KiB cert was forwarded in a 14.4 KiB request)"
+      ]
     },
     {
       "id": "mail:starttls",
@@ -21400,10 +22675,24 @@
         "stream"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "stream"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "streamServers[].geoip.cityDatabase",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "body"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "stream:geoip_country",
@@ -21414,10 +22703,24 @@
         "stream"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "stream"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "streamServers[].geoip.countryDatabase (accept-time peer address lookup)",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "body"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "stream:geoip_org",
@@ -21428,10 +22731,24 @@
         "stream"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "excluded",
+      "supportedContexts": [
+        "stream"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "excluded from the http-core-v1 product profile (PRD-nginx-compatibility section 4); rejected in an active Rust context"
+      "runtimeField": "streamServers[].geoip.orgDatabase",
+      "evidence": [
+        {
+          "file": "tests/nginx/geoip-differential/nginx-oracle.json",
+          "case": "body"
+        }
+      ],
+      "knownDifferences": [
+        "GeoIP databases are operator-provisioned absolute MMDB paths (typed plane confines them to [http] geoipDatabaseRoot); missing/unreadable/corrupt/oversized/wrong-edition files fail closed at config load",
+        "the runtime ships no GeoLite/GeoIP2 data and does not download it; database refresh requires a reload (readers are cached per runtime generation)",
+        "legacy libGeoIP .dat editions are rejected; $geoip_area_code is always empty (MMDB has no legacy area-code field) and $geoip_country_code3 derives from ISO 3166-1 alpha-2",
+        "XFF trust walk is bounded (64 hops / 8 KiB); stream GeoIP has no proxy-trust directives like nginx; the real nginx oracle is not built with the GeoIP modules, so the differential compares nginx set-fixed values against the MMDB lookups (variable plumbing) and is labelled as such"
+      ]
     },
     {
       "id": "stream:hash",
@@ -21706,10 +23023,29 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamServers[].passAddress (IP-literal address:port re-dispatch to the target listen socket default server, chain up to 10 with cycle rejection)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "pass.proxy"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "pass.return"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "pass.target-return"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "stream:preread_buffer_size",
@@ -21769,10 +23105,21 @@
         "stream-server"
       ],
       "grammar": "1|2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyBind (IP literal source address)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "proxy_bind_uses_the_configured_source_address"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_buffer_size",
@@ -21824,10 +23171,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyDownloadRate (token-bucket downstream pacing)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_downstream_buffer",
@@ -21854,10 +23212,21 @@
         "stream-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyHalfClose (per-direction shutdown ordering)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "half_close_keeps_the_reverse_direction_alive"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_next_upstream",
@@ -21873,11 +23242,22 @@
         "stream",
         "stream-server"
       ],
-      "classification": "accepted-unenforced",
-      "risk": "high",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the upstream retry condition list is not applied; the runtime uses its own retry policy",
-      "migrationAction": "No enforced equivalent is catalogued for this directive; remove it or track capability `stream:proxy_next_upstream` (specs/nginx-gap.catalog.json)."
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].nextUpstream conditions",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "next_upstream_retries_the_dead_target"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_next_upstream_timeout",
@@ -21889,10 +23269,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].nextUpstreamTimeoutMs",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_next_upstream_tries",
@@ -21904,10 +23295,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].nextUpstreamTries",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_pass",
@@ -21965,10 +23367,22 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyProtocolTimeoutMs (inbound PROXY header deadline)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_listen_proxy_protocol_and_timeout_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_requests",
@@ -21980,10 +23394,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyRequests (per-connection request counter)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_responses",
@@ -21995,10 +23420,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyResponses (per-connection response counter)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_socket_keepalive",
@@ -22029,10 +23465,26 @@
         "stream-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls (upstream TLS policy: verify/trusted CA/client identity/server_name/name/protocols; always verified unless verify off)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_ssl_certificate",
@@ -22044,10 +23496,26 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls.clientCertificateFile",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed"
+      ]
     },
     {
       "id": "stream:proxy_ssl_certificate_cache",
@@ -22074,10 +23542,26 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls.clientPrivateKeyFile",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed"
+      ]
     },
     {
       "id": "stream:proxy_ssl_ciphers",
@@ -22139,10 +23623,26 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls.serverName (SNI/verification override)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed"
+      ]
     },
     {
       "id": "stream:proxy_ssl_password_file",
@@ -22189,10 +23689,26 @@
         "stream-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls.serverName enable (SNI on)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed"
+      ]
     },
     {
       "id": "stream:proxy_ssl_session_reuse",
@@ -22224,10 +23740,26 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls.trustedCertificateFiles",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed"
+      ]
     },
     {
       "id": "stream:proxy_ssl_verify",
@@ -22239,10 +23771,26 @@
         "stream-server"
       ],
       "grammar": "flag",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyTls.verify (on|off; off is an explicit dangerous verifier)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_proxy_ssl_materializes_the_shared_upstream_tls_policy"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "stream_upstream_tls_with_trusted_ca_and_server_name_override"
+        }
+      ],
+      "knownDifferences": [
+        "these legacy per-knob rows feed the same shared stream upstream TLS policy that stream:proxy_ssl executes; chains are always verified unless verify is explicitly off; rustls-unsupported knobs remain fail-closed"
+      ]
     },
     {
       "id": "stream:proxy_ssl_verify_depth",
@@ -22298,10 +23846,21 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].proxyUploadRate (token-bucket upstream pacing)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "stream_relay_and_retry_knobs_materialize"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:proxy_upstream_buffer",
@@ -22443,10 +24002,21 @@
         "stream-server"
       ],
       "grammar": "1+",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "streamServers[].serverNames (SNI virtual-server selection)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "server_name_sni_virtual_servers_select_the_target"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:server_names_hash_bucket_size",
@@ -22516,10 +24086,22 @@
         "stream-server"
       ],
       "grammar": "1",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
-      "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "supportedContexts": [
+        "stream",
+        "stream-server"
+      ],
+      "classification": "executable",
+      "risk": "medium",
+      "runtimeField": "inbound PROXY protocol trust peers (client address rewritten from the header)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/tests/stream_tls_proxy.rs",
+          "case": "inbound_proxy_protocol_v1_and_v2_rewrite_the_client_address"
+        }
+      ],
+      "knownDifferences": [
+        "stream plane is bounded: rustls-unsupported TLS knobs (ciphers/crl/session_reuse/conf_command/password_file/certificate_cache) fail closed; stream split_clients and pass remain fail-closed with exact diagnostics"
+      ]
     },
     {
       "id": "stream:split_clients",
@@ -22530,10 +24112,41 @@
         "stream"
       ],
       "grammar": "2",
-      "supportedContexts": [],
-      "classification": "unsupported-fail-closed",
+      "supportedContexts": [
+        "stream"
+      ],
+      "classification": "executable",
       "risk": "low",
-      "diagnostics": "unsupported nginx directive in an active Rust context; the Rust engine fails closed with a source-mapped diagnostic"
+      "runtimeField": "streamSplitClients[] (MurmurHash2 cumulative buckets over accept/preread sources: $remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name + stream GeoIP vars; result seeded into the per-connection variable table)",
+      "evidence": [
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.1"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.2"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.3"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.4"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.5"
+        },
+        {
+          "file": "tests/nginx/differential-stream/extra/nginx-oracle.json",
+          "case": "split.server-addr.6"
+        }
+      ],
+      "knownDifferences": [
+        "bounded implementation; forms outside the documented subset fail closed with located diagnostics"
+      ]
     },
     {
       "id": "stream:ssl_alpn",

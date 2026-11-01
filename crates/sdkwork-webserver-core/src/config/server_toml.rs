@@ -22,6 +22,7 @@ use super::{
     model::MapEntryConfig,
     model::TlsVersion,
     model::WebServerAppConfig,
+    model::HTTP2_MAX_FRAME_SIZE,
     network::hostname_upstream_allowed_cidrs,
     proxy_headers::merge_proxy_set_headers,
     validate_webserver_config,
@@ -842,6 +843,10 @@ fn materialize_mail_tls(value: &Value, path: &str) -> Result<Value, WebServerCon
             "protocols",
             "starttls",
             "implicit",
+            "verifyClient",
+            "verifyDepth",
+            "clientCertificateFile",
+            "trustedCertificateFile",
         ],
     )?;
     let certificate_file = table
@@ -906,6 +911,48 @@ fn materialize_mail_tls(value: &Value, path: &str) -> Result<Value, WebServerCon
             ));
         }
         out["starttls"] = Value::String(mode.to_owned());
+    }
+    if let Some(implicit) = table.get("implicit") {
+        let implicit = implicit
+            .as_bool()
+            .ok_or_else(|| materialize_error(&format!("{path}.implicit"), "must be a boolean"))?;
+        out["implicit"] = Value::Bool(implicit);
+    }
+    if let Some(verify_client) = table.get("verifyClient") {
+        let mode = verify_client.as_str().ok_or_else(|| {
+            materialize_error(&format!("{path}.verifyClient"), "must be a string")
+        })?;
+        if !matches!(mode, "off" | "on" | "optional" | "optional-no-ca") {
+            return Err(materialize_error(
+                &format!("{path}.verifyClient"),
+                "`verifyClient` accepts off|on|optional|optional-no-ca",
+            ));
+        }
+        out["verifyClient"] = Value::String(mode.to_owned());
+    }
+    if let Some(verify_depth) = table.get("verifyDepth") {
+        let depth = verify_depth.as_u64().ok_or_else(|| {
+            materialize_error(&format!("{path}.verifyDepth"), "must be an integer")
+        })?;
+        if depth > 1024 {
+            return Err(materialize_error(
+                &format!("{path}.verifyDepth"),
+                "`verifyDepth` must be between 0 and 1024",
+            ));
+        }
+        out["verifyDepth"] = Value::from(depth);
+    }
+    for key in ["clientCertificateFile", "trustedCertificateFile"] {
+        if let Some(file) = table.get(key) {
+            let file = file
+                .as_str()
+                .map(str::trim)
+                .filter(|file| !file.is_empty())
+                .ok_or_else(|| {
+                    materialize_error(&format!("{path}.{key}"), "must be a non-empty file path")
+                })?;
+            out[key] = Value::String(file.to_owned());
+        }
     }
     Ok(out)
 }
@@ -1076,6 +1123,62 @@ fn materialize_size_bytes(value: &str) -> u64 {
         .parse::<u64>()
         .unwrap_or(0)
         .saturating_mul(multiplier)
+}
+
+/// Typed `http2ChunkSize`: a byte count (number or nginx-style size string).
+///
+/// Mirrors nginx's `http2_chunk_size` post-handler: zero is rejected and a
+/// value above `NGX_HTTP_V2_MAX_FRAME_SIZE` is clamped rather than refused.
+fn materialize_http2_chunk_size(value: &Value, path: &str) -> Result<usize, WebServerConfigError> {
+    let bytes = match value {
+        Value::Number(number) => number.as_u64(),
+        Value::String(text) => Some(materialize_size_bytes(text)),
+        _ => None,
+    };
+    let Some(bytes) = bytes else {
+        return Err(materialize_error(
+            path,
+            "http2ChunkSize must be an integer byte count or a size string such as \"8k\"",
+        ));
+    };
+    if bytes == 0 {
+        return Err(materialize_error(
+            path,
+            "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
+        ));
+    }
+    Ok(usize::try_from(bytes)
+        .unwrap_or(HTTP2_MAX_FRAME_SIZE)
+        .min(HTTP2_MAX_FRAME_SIZE))
+}
+
+/// Typed equivalent of nginx `slice <size>` (`ngx_http_slice_filter_module`):
+/// an integer byte count or a size string (`"4k"`, `"1m"`). `0` is a valid
+/// declaration that disables slicing. The runtime's bounded slice buffer caps
+/// the accepted value; a larger declaration fails closed here with the location
+/// path.
+fn materialize_slice_size(value: &Value, path: &str) -> Result<u64, WebServerConfigError> {
+    let bytes = match value {
+        Value::Number(number) => number.as_u64(),
+        Value::String(text) => Some(materialize_size_bytes(text)),
+        _ => None,
+    };
+    let Some(bytes) = bytes else {
+        return Err(materialize_error(
+            path,
+            "slice must be a non-negative integer byte count or a size string such as \"1m\"",
+        ));
+    };
+    if bytes > crate::config::RouteConfig::MAXIMUM_SLICE_BYTES {
+        return Err(materialize_error(
+            path,
+            format!(
+                "slice size {bytes} exceeds the runtime's bounded slice buffer of {} bytes; choose a smaller slice size",
+                crate::config::RouteConfig::MAXIMUM_SLICE_BYTES
+            ),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn parse_location_match<'a>(
@@ -1661,6 +1764,10 @@ struct Materializer<'a> {
     /// `map` model (`WebServerAppConfig.maps`). The legacy string-array `map`
     /// key stays accepted-but-unenforced with its diagnostic.
     maps: Vec<Value>,
+    /// `[http.geoip]` materialized into `WebServerAppConfig.geoip`.
+    geoip: Option<Value>,
+    /// `[stream.geoip]` materialized into `WebServerAppConfig.stream_geoip`.
+    stream_geoip: Option<Value>,
 }
 
 impl<'a> Materializer<'a> {
@@ -1684,6 +1791,8 @@ impl<'a> Materializer<'a> {
             limit_conn_zones: Vec::new(),
             limit_conn_zone_names: Vec::new(),
             maps: Vec::new(),
+            geoip: None,
+            stream_geoip: None,
         }
     }
 
@@ -2261,6 +2370,11 @@ impl<'a> Materializer<'a> {
                 "secureLinkExpires",
                 "expires",
                 "etag",
+                "userid",
+                "browser",
+                "randomIndex",
+                "http2ChunkSize",
+                "slice",
             ],
         )?;
         let match_value = as_str(location, &path, "match")?;
@@ -2617,6 +2731,10 @@ impl<'a> Materializer<'a> {
                 "proxySetHeader",
                 "addHeader",
                 "location",
+                "userid",
+                "browser",
+                "http2ChunkSize",
+                "slice",
             ],
         )?;
         // Server-level `proxySetHeader` entries are inherited by every proxy
@@ -2639,6 +2757,13 @@ impl<'a> Materializer<'a> {
         for entry in &server_proxy_set_headers {
             validate_proxy_set_header_entry(&path, entry)?;
         }
+        // Server-level `slice` is the typed equivalent of nginx's server
+        // context: every location that does not declare its own inherits it
+        // (nginx scalar merge, `slice 0` included).
+        let server_slice = match server.get("slice") {
+            Some(value) => Some(materialize_slice_size(value, &format!("{path}.slice"))?),
+            None => None,
+        };
         let listen = as_array(server, &path, "listen")?;
         let server_names = as_array(server, &path, "serverName")?;
         let primary_name = server_names
@@ -2803,6 +2928,24 @@ impl<'a> Materializer<'a> {
                 virtual_host["securityHeaders"] = json!({ "customHeaders": custom_headers });
             }
         }
+        // The userid and browser tables carry nginx-parallel module settings;
+        // copying them verbatim lets the typed model deserializer validate
+        // their shape (`deny_unknown_fields`) instead of silently dropping a
+        // misspelled field here.
+        if let Some(userid) = server.get("userid") {
+            virtual_host["userid"] = userid.clone();
+        }
+        if let Some(browser) = server.get("browser") {
+            virtual_host["browser"] = browser.clone();
+        }
+        // Typed server-level `http2ChunkSize` (nginx server context); locations
+        // that declare no value inherit it.
+        if let Some(value) = server.get("http2ChunkSize") {
+            virtual_host["http2ChunkSize"] = json!(materialize_http2_chunk_size(
+                value,
+                &format!("{path}.http2ChunkSize")
+            )?);
+        }
         // Build routes with their match metadata (the materialize_location
         // helper already pushed resources; attach route objects here).
         let mut route_entries = Vec::new();
@@ -2848,6 +2991,39 @@ impl<'a> Materializer<'a> {
             }
             if let Some(cache_policy) = materialize_cache_policy(location, &path)? {
                 route["cachePolicy"] = cache_policy_json(&cache_policy);
+            }
+            if let Some(userid) = location.get("userid") {
+                route["userid"] = userid.clone();
+            }
+            if let Some(browser) = location.get("browser") {
+                route["browser"] = browser.clone();
+            }
+            if let Some(value) = location.get("http2ChunkSize") {
+                route["http2ChunkSize"] = json!(materialize_http2_chunk_size(
+                    value,
+                    &format!("{path}.http2ChunkSize")
+                )?);
+            }
+            if let Some(random_index) = location.get("randomIndex") {
+                let Some(enabled) = random_index.as_bool() else {
+                    return Err(materialize_error(
+                        &path,
+                        "randomIndex must be a boolean (`random_index on|off`)",
+                    ));
+                };
+                route["randomIndex"] = Value::Bool(enabled);
+            }
+            // nginx `slice` inheritance: a location declaration replaces the
+            // server value; an undeclared location keeps the server value.
+            let effective_slice = match location.get("slice") {
+                Some(value) => Some(materialize_slice_size(
+                    value,
+                    &format!("{path}.location[{location_index}].slice"),
+                )?),
+                None => server_slice,
+            };
+            if let Some(slice_size) = effective_slice {
+                route["sliceSize"] = json!(slice_size);
             }
             route_entries.push(route);
         }
@@ -3022,6 +3198,7 @@ impl<'a> Materializer<'a> {
         let Some(stream) = root.get("stream").and_then(Value::as_object) else {
             return Ok(());
         };
+        self.materialize_stream_geoip(stream)?;
         let Some(servers) = stream.get("server").and_then(Value::as_array) else {
             return Ok(());
         };
@@ -3423,6 +3600,7 @@ impl<'a> Materializer<'a> {
                 target,
                 access,
                 return_value,
+                pass_address: None,
                 limit_conn: Vec::new(),
                 limit_conn_dry_run: false,
                 set_variables: Vec::new(),
@@ -4583,7 +4761,7 @@ impl<'a> Materializer<'a> {
         mime_types: Option<Value>,
         default_type: Option<Value>,
     ) -> Result<WebServerAppConfig, WebServerConfigError> {
-        let instance = json!({
+        let mut instance = json!({
             "schemaVersion": 1,
             "kind": "sdkwork.webserver.app",
             "appKey": self.app_key,
@@ -4607,6 +4785,12 @@ impl<'a> Materializer<'a> {
             "tunnel": tunnel,
             "metadata": { "source": "deployments/webserver/server.toml" },
         });
+        if let Some(geoip) = self.geoip {
+            instance["geoip"] = geoip;
+        }
+        if let Some(geoip) = self.stream_geoip {
+            instance["streamGeoip"] = geoip;
+        }
         let config: WebServerAppConfig = serde_json::from_value(instance).map_err(|source| {
             WebServerConfigError::Materialize(format!(
                 "runtime model deserialization failed: {source}"
@@ -4614,6 +4798,94 @@ impl<'a> Materializer<'a> {
         })?;
         validate_webserver_config(&config)?;
         Ok(config)
+    }
+
+    /// Materialize the `[http.geoip]` table into the executable GeoIP model.
+    ///
+    /// The table mirrors the nginx http-context directives:
+    /// `country`, `city`, `org`, `proxies` (repeatable `geoip_proxy`) and
+    /// `proxyRecursive` (`geoip_proxy_recursive`). Path confinement and MMDB
+    /// edition checks run in semantic validation, so this function only checks
+    /// the typed shape.
+    fn materialize_geoip(&mut self, http: &Map<String, Value>) -> Result<(), WebServerConfigError> {
+        let Some(geoip) = http.get("geoip") else {
+            return Ok(());
+        };
+        let path = "server.toml.http.geoip";
+        let geoip = geoip
+            .as_object()
+            .ok_or_else(|| materialize_error(path, "`geoip` must be a table"))?;
+        check_supported_keys(
+            geoip,
+            path,
+            &["country", "city", "org", "proxies", "proxyRecursive"],
+        )?;
+        for field in ["country", "city", "org"] {
+            if let Some(value) = geoip.get(field) {
+                if value.as_str().is_none() {
+                    return Err(materialize_error(
+                        &format!("{path}.{field}"),
+                        format!("`{field}` must be an absolute database path string"),
+                    ));
+                }
+            }
+        }
+        if let Some(proxies) = geoip.get("proxies") {
+            let Some(proxies) = proxies.as_array() else {
+                return Err(materialize_error(
+                    &format!("{path}.proxies"),
+                    "`proxies` must be an array of IP addresses or CIDRs",
+                ));
+            };
+            for (index, proxy) in proxies.iter().enumerate() {
+                if proxy.as_str().is_none() {
+                    return Err(materialize_error(
+                        &format!("{path}.proxies[{index}]"),
+                        "each proxy entry must be a string",
+                    ));
+                }
+            }
+        }
+        if let Some(recursive) = geoip.get("proxyRecursive") {
+            if !recursive.is_boolean() {
+                return Err(materialize_error(
+                    &format!("{path}.proxyRecursive"),
+                    "`proxyRecursive` must be a boolean",
+                ));
+            }
+        }
+        self.geoip = Some(Value::Object(geoip.clone()));
+        Ok(())
+    }
+
+    /// Materialize the `[stream.geoip]` table into the stream GeoIP model.
+    ///
+    /// The stream module has only the three database directives; proxy trust
+    /// is an HTTP GeoIP feature and fails closed here.
+    fn materialize_stream_geoip(
+        &mut self,
+        stream: &Map<String, Value>,
+    ) -> Result<(), WebServerConfigError> {
+        let Some(geoip) = stream.get("geoip") else {
+            return Ok(());
+        };
+        let path = "server.toml.stream.geoip";
+        let geoip = geoip
+            .as_object()
+            .ok_or_else(|| materialize_error(path, "`geoip` must be a table"))?;
+        check_supported_keys(geoip, path, &["country", "city", "org"])?;
+        for field in ["country", "city", "org"] {
+            if let Some(value) = geoip.get(field) {
+                if value.as_str().is_none() {
+                    return Err(materialize_error(
+                        &format!("{path}.{field}"),
+                        format!("`{field}` must be an absolute database path string"),
+                    ));
+                }
+            }
+        }
+        self.stream_geoip = Some(Value::Object(geoip.clone()));
+        Ok(())
     }
 
     fn materialize_limit_conn_zones(
@@ -5361,7 +5633,7 @@ pub fn materialize_app(
         }
     }
     if let Some(stream) = root.get("stream").and_then(Value::as_object) {
-        check_supported_keys(stream, "server.toml.stream", &["server"])?;
+        check_supported_keys(stream, "server.toml.stream", &["server", "geoip"])?;
     }
     if let Some(cache) = root.get("proxyCache").and_then(Value::as_object) {
         check_supported_keys(
@@ -5410,9 +5682,14 @@ pub fn materialize_app(
             "limitConnZone",
             "limitReqZone",
             "maps",
+            "geoip",
+            "geoipDatabaseRoot",
             "server",
             "unixSocketRoot",
             "storeRoot",
+            "tempRoot",
+            "tempSpoolBudgetBytes",
+            "tempSpoolMaxFiles",
             "upstream",
         ],
     )?;
@@ -5425,10 +5702,49 @@ pub fn materialize_app(
     if let Some(store_root) = http.get("storeRoot").and_then(Value::as_str) {
         nginx["storeRoot"] = Value::String(store_root.to_owned());
     }
+    // Wave 14A: `[http] tempRoot` confines the CGI-family temp-spool tier
+    // (`*_temp_path` and the per-generation spool directory). The typed plane
+    // requires an absolute directory; the nginx plane uses the declared
+    // absolute path exactly like stock nginx.
+    if let Some(temp_root) = http.get("tempRoot").and_then(Value::as_str) {
+        nginx["tempRoot"] = Value::String(temp_root.to_owned());
+    }
+    // Overall spool budget knobs: total in-flight bytes and open files.
+    if let Some(budget) = http.get("tempSpoolBudgetBytes") {
+        let budget = budget.as_u64().ok_or_else(|| {
+            materialize_error(
+                "server.toml.http.tempSpoolBudgetBytes",
+                "tempSpoolBudgetBytes must be a non-negative integer",
+            )
+        })?;
+        nginx["tempSpoolBudgetBytes"] = json!(budget);
+    }
+    if let Some(max_files) = http.get("tempSpoolMaxFiles") {
+        let max_files = max_files.as_u64().ok_or_else(|| {
+            materialize_error(
+                "server.toml.http.tempSpoolMaxFiles",
+                "tempSpoolMaxFiles must be a non-negative integer",
+            )
+        })?;
+        nginx["tempSpoolMaxFiles"] = json!(max_files);
+    }
+    // `[http] geoipDatabaseRoot` confines GeoIP MMDB database paths in the
+    // typed plane (the nginx plane uses the declared absolute path exactly
+    // like stock nginx).
+    if let Some(geoip_root) = http.get("geoipDatabaseRoot") {
+        let geoip_root = geoip_root.as_str().ok_or_else(|| {
+            materialize_error(
+                "server.toml.http.geoipDatabaseRoot",
+                "geoipDatabaseRoot must be a string path",
+            )
+        })?;
+        nginx["geoipDatabaseRoot"] = Value::String(geoip_root.to_owned());
+    }
     let defaults_tls = materialize_http_defaults(http)?;
     materializer.materialize_limit_req_zones(http)?;
     materializer.materialize_limit_conn_zones(http)?;
     materializer.materialize_maps(http)?;
+    materializer.materialize_geoip(http)?;
     materializer.materialize_certificates(http)?;
     materializer.materialize_upstreams(http)?;
     if let Some(servers) = http.get("server").and_then(Value::as_array) {
@@ -5466,7 +5782,10 @@ pub fn materialize_app(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ExpiresMode, IfModifiedSinceMode};
+    use crate::config::{
+        ExpiresMode, IfModifiedSinceMode, ModernBrowserName, UserIdExpires, UserIdMode,
+        UserIdSameSite,
+    };
     use std::path::PathBuf;
 
     fn examples_dir() -> PathBuf {
@@ -6587,6 +6906,152 @@ tcpmux_port = 8444
     }
 
     #[test]
+    fn typed_userid_and_browser_tables_materialize() {
+        let toml_text = r#"
+[http]
+[[http.server]]
+listen = ["8080"]
+serverName = ["typed.example.test"]
+
+[http.server.userid]
+mode = "on"
+name = "TYPEDUID"
+expires = { seconds = 60 }
+flags = { secure = true, samesite = "lax" }
+p3p = "CP=\"TYPED\""
+
+[http.server.browser]
+modern = [{ browser = "msie", version = 6000000 }]
+ancient = ["MSIE 5"]
+netscape4 = true
+modernValue = "typed-modern"
+ancientValue = "typed-ancient"
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+
+[http.server.location.userid]
+mode = "log"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        let host = &config.virtual_hosts[0];
+        let userid = host.userid.as_ref().expect("host userid");
+        assert_eq!(userid.mode, UserIdMode::On);
+        assert_eq!(userid.name, "TYPEDUID");
+        assert_eq!(userid.expires, Some(UserIdExpires::Seconds { seconds: 60 }));
+        assert!(userid.flags.secure);
+        assert_eq!(userid.flags.samesite, Some(UserIdSameSite::Lax));
+        assert_eq!(userid.p3p.as_deref(), Some("CP=\"TYPED\""));
+        let browser = host.browser.as_ref().expect("host browser");
+        assert_eq!(browser.modern.len(), 1);
+        assert_eq!(browser.modern[0].browser, ModernBrowserName::Msie);
+        assert_eq!(browser.modern[0].version, 6_000_000);
+        assert_eq!(browser.ancient, vec!["MSIE 5".to_owned()]);
+        assert!(browser.netscape4);
+        assert_eq!(browser.modern_value, "typed-modern");
+        assert_eq!(browser.ancient_value, "typed-ancient");
+        // The location overrides only `mode`; the remaining fields are its own
+        // table (the typed plane is a resolved model, not a partial overlay).
+        let route = &host.routes[0];
+        let route_userid = route.userid.as_ref().expect("route userid");
+        assert_eq!(route_userid.mode, UserIdMode::Log);
+        assert_eq!(route_userid.name, "uid");
+    }
+
+    #[test]
+    fn typed_http2_chunk_size_and_random_index_materialize() {
+        let toml_text = r#"
+[http]
+[[http.server]]
+listen = ["8080"]
+serverName = ["typed.example.test"]
+http2ChunkSize = "8k"
+
+[[http.server.location]]
+match = "/chunked/"
+root = "/srv/www"
+http2ChunkSize = 1024
+
+[[http.server.location]]
+match = "/random/"
+root = "/srv/www"
+randomIndex = true
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        let host = &config.virtual_hosts[0];
+        assert_eq!(
+            host.http2_chunk_size,
+            Some(8 * 1024),
+            "server-level http2ChunkSize is materialized"
+        );
+        let chunked = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/chunked/")
+            .expect("chunked route");
+        assert_eq!(chunked.http2_chunk_size, Some(1024));
+        assert_eq!(chunked.random_index, None);
+        let random = host
+            .routes
+            .iter()
+            .find(|route| route.route_match.path == "/random/")
+            .expect("random route");
+        assert_eq!(random.random_index, Some(true));
+        assert_eq!(random.http2_chunk_size, None);
+
+        // nginx clamps above NGX_HTTP_V2_MAX_FRAME_SIZE and rejects zero; the
+        // typed materializer mirrors both rules.
+        let clamped_text = toml_text.replace("http2ChunkSize = \"8k\"", "http2ChunkSize = \"32m\"");
+        let clamped_value: toml::Value = toml::from_str(&clamped_text).expect("toml parses");
+        let clamped = materialize_app(
+            &serde_json::to_value(&clamped_value).expect("converts"),
+            "test",
+        )
+        .expect("materialize clamped");
+        assert_eq!(
+            clamped.virtual_hosts[0].http2_chunk_size,
+            Some(HTTP2_MAX_FRAME_SIZE)
+        );
+        let zero_text = toml_text.replace("http2ChunkSize = \"8k\"", "http2ChunkSize = 0");
+        let zero_value: toml::Value = toml::from_str(&zero_text).expect("toml parses");
+        let error = materialize_app(
+            &serde_json::to_value(&zero_value).expect("converts"),
+            "test",
+        )
+        .expect_err("zero chunk size must fail closed");
+        assert!(format!("{error}").contains("http2ChunkSize"), "{error}");
+    }
+
+    #[test]
+    fn typed_userid_unknown_fields_fail_closed() {
+        let toml_text = r#"
+[http]
+[[http.server]]
+listen = ["8080"]
+serverName = ["typed.example.test"]
+
+[http.server.userid]
+mode = "on"
+unknownKnob = 1
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("unknown field fails");
+        assert!(format!("{error}").contains("unknownKnob"), "got: {error}");
+    }
+
+    #[test]
     fn typed_http_unix_socket_root_materializes_and_validates() {
         let toml_text = r#"
 [http]
@@ -6637,6 +7102,95 @@ returnBody = "ok"
             diagnostics
                 .iter()
                 .any(|message| message.contains("unixSocketRoot")),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn typed_http_temp_spool_root_and_budget_materialize_and_validate() {
+        let toml_text = r#"
+[http]
+tempRoot = "/var/cache/sdkwork/temp"
+tempSpoolBudgetBytes = 67108864
+tempSpoolMaxFiles = 8
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["temp.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(toml_text).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let config = materialize_app(&effective, "test").expect("materialize");
+        assert_eq!(
+            config.nginx.temp_root.as_deref(),
+            Some("/var/cache/sdkwork/temp"),
+            "`[http] tempRoot` must reach the runtime model"
+        );
+        assert_eq!(config.nginx.temp_spool_budget_bytes, 64 * 1024 * 1024);
+        assert_eq!(config.nginx.temp_spool_max_files, 8);
+
+        // A relative root is not a confinement root: the shared semantic
+        // validation rejects it with a located diagnostic.
+        let invalid = r#"
+[http]
+tempRoot = "relative/temp"
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["temp.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(invalid).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("relative root fails");
+        let diagnostics: Vec<String> = error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| format!("{}: {}", diagnostic.path, diagnostic.message))
+            .collect();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.contains("tempRoot")),
+            "{diagnostics:?}"
+        );
+
+        // A zero budget disables the whole spool tier silently, which is a
+        // configuration mistake: the typed plane requires a positive budget.
+        let zero_budget = r#"
+[http]
+tempSpoolBudgetBytes = 0
+
+[[http.server]]
+listen = ["8080"]
+serverName = ["temp.example.test"]
+
+[[http.server.location]]
+match = "/"
+returnStatus = 200
+returnBody = "ok"
+"#;
+        let value: toml::Value = toml::from_str(zero_budget).expect("toml parses");
+        let effective = serde_json::to_value(&value).expect("converts");
+        let error = materialize_app(&effective, "test").expect_err("zero budget fails");
+        let diagnostics: Vec<String> = error
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| format!("{}: {}", diagnostic.path, diagnostic.message))
+            .collect();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|message| message.contains("tempSpoolBudgetBytes")),
             "{diagnostics:?}"
         );
     }

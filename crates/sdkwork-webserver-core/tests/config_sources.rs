@@ -438,9 +438,13 @@ fn nginx_and_toml_corpora_are_semantically_equivalent() {
 fn unsupported_nginx_directives_fail_closed_with_file_and_line() {
     let directory = tempfile::tempdir().expect("temp dir");
     let file = directory.path().join("bad.conf");
+    // `slice_size` is NOT an nginx 1.29.6 directive: `ngx_http_slice_filter_module`
+    // spells it `slice <size>`. The runtime executes `slice`, so a configuration
+    // that reaches for the non-existent name must still fail closed with the
+    // directive's file:line instead of being silently ignored.
     fs::write(
         &file,
-        "server {\n    listen 80;\n    server_name userid.local;\n    location / {\n        userid on;\n    }\n}\n",
+        "server {\n    listen 80;\n    server_name userid.local;\n    location / {\n        slice_size 1k;\n    }\n}\n",
     )
     .expect("write");
     let error = loader()
@@ -449,7 +453,7 @@ fn unsupported_nginx_directives_fail_closed_with_file_and_line() {
     let message = error.to_string();
     let diagnostics = error.diagnostics();
     assert!(
-        message.contains("userid"),
+        message.contains("slice_size"),
         "diagnostic must name the directive: {message}"
     );
     if let Some(diagnostic) = diagnostics.first() {
@@ -459,6 +463,65 @@ fn unsupported_nginx_directives_fail_closed_with_file_and_line() {
             diagnostic.path
         );
     }
+}
+
+#[test]
+fn slice_size_is_executable_and_not_a_1_29_6_directive() {
+    // `slice <size>` materializes into the route's effective `sliceSize`
+    // (http/server/location inheritance); the section below pins the nginx
+    // scalar merge and the typed TOML equivalent.
+    let directory = tempfile::tempdir().expect("temp dir");
+    let file = directory.path().join("slice.conf");
+    fs::write(
+        &file,
+        "http {\n    slice 4;\n    server {\n        listen 80;\n        server_name slice.local;\n        slice 8;\n        location /inherits {\n            proxy_pass http://127.0.0.1:8080;\n        }\n        location /replaces {\n            slice 16;\n            proxy_pass http://127.0.0.1:8080;\n        }\n        location /disables {\n            slice 0;\n            proxy_pass http://127.0.0.1:8080;\n        }\n    }\n}\n",
+    )
+    .expect("write");
+    let app = loader()
+        .load(&file, &ConfigLoadOptions::default())
+        .expect("slice is executable")
+        .app;
+    let routes = &app.virtual_hosts[0].routes;
+    let slice_of = |path: &str| {
+        routes
+            .iter()
+            .find(|route| route.route_match.path == path)
+            .unwrap_or_else(|| panic!("route {path}"))
+            .slice_size
+    };
+    assert_eq!(slice_of("/inherits"), Some(8), "server replaces http");
+    assert_eq!(slice_of("/replaces"), Some(16), "location replaces server");
+    assert_eq!(slice_of("/disables"), Some(0), "slice 0 is a declaration");
+}
+
+#[test]
+fn typed_toml_slice_materializes_with_nginx_inheritance() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let file = directory.path().join("server.toml");
+    fs::write(
+        &file,
+        "[[http.server]]\nlisten = [\"80\"]\nserverName = [\"slice.local\"]\nslice = 8\n\n[[http.server.location]]\nmatch = \"/inherits\"\nproxyPass = \"http://127.0.0.1:8080\"\n\n[[http.server.location]]\nmatch = \"/replaces\"\nslice = \"1k\"\nproxyPass = \"http://127.0.0.1:8080\"\n\n[[http.server.location]]\nmatch = \"/disables\"\nslice = 0\nproxyPass = \"http://127.0.0.1:8080\"\n",
+    )
+    .expect("write");
+    let app = loader()
+        .load(&file, &ConfigLoadOptions::default())
+        .expect("typed slice")
+        .app;
+    let routes = &app.virtual_hosts[0].routes;
+    let slice_of = |path: &str| {
+        routes
+            .iter()
+            .find(|route| route.route_match.path == path)
+            .unwrap_or_else(|| panic!("route {path}"))
+            .slice_size
+    };
+    assert_eq!(slice_of("/inherits"), Some(8), "server value is inherited");
+    assert_eq!(
+        slice_of("/replaces"),
+        Some(1024),
+        "location size string wins"
+    );
+    assert_eq!(slice_of("/disables"), Some(0), "slice = 0 is a declaration");
 }
 
 #[test]
@@ -598,4 +661,145 @@ fn nginx_sites_with_include_glob_expand_in_order() {
     assert_eq!(loaded.app.virtual_hosts.len(), 2);
     assert_eq!(loaded.app.listeners.len(), 2);
     let _ = Path::new("");
+}
+
+/// Typed-TOML parity for the Wave 14B mail client-certificate TLS fields.
+#[test]
+fn typed_toml_mail_tls_client_certificate_fields_materialize() {
+    let directory = tempfile::TempDir::new().expect("temp dir");
+    let path = directory.path().join("server.toml");
+    fs::write(
+        &path,
+        r#"
+[[mail.server]]
+listen = ["127.0.0.1:2993 ssl"]
+protocol = "smtp"
+
+[mail.server.tls]
+certificateFile = "server.pem"
+privateKeyFile = "server.key"
+verifyClient = "optional-no-ca"
+verifyDepth = 2
+clientCertificateFile = "ca.pem"
+trustedCertificateFile = "chain.pem"
+
+[mail.server.authHttp]
+uri = "127.0.0.1:9000/auth"
+passClientCert = true
+"#,
+    )
+    .expect("write toml config");
+    let config = loader()
+        .load(&path, &ConfigLoadOptions::default())
+        .expect("typed mail TLS client-cert config materializes");
+    let server = &config.app.mail.servers[0];
+    let tls = server.tls.as_ref().expect("mail tls");
+    assert!(tls.implicit);
+    assert_eq!(
+        tls.verify_client,
+        sdkwork_webserver_core::MailClientVerifyMode::OptionalNoCa
+    );
+    assert_eq!(tls.verify_depth, 2);
+    assert!(tls
+        .client_certificate_file
+        .as_deref()
+        .is_some_and(|value| value.ends_with("ca.pem")));
+    assert!(tls
+        .trusted_certificate_file
+        .as_deref()
+        .is_some_and(|value| value.ends_with("chain.pem")));
+    assert!(server.auth_http.as_ref().expect("auth").pass_client_cert);
+}
+
+#[test]
+fn nginx_proxy_cache_is_route_scoped_with_http_server_location_inheritance() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let file = directory.path().join("cache.conf");
+    fs::write(
+        &file,
+        "http {\n    proxy_cache_path /tmp/cache levels=1:2 keys_zone=zone:10m inactive=1m;\n    proxy_cache zone;\n    server {\n        listen 80;\n        server_name inherited.local;\n        location /inherits {\n            proxy_pass http://127.0.0.1:8080;\n        }\n        location /off {\n            proxy_cache off;\n            proxy_pass http://127.0.0.1:8080;\n        }\n    }\n    server {\n        listen 80;\n        server_name scoped.local;\n        proxy_cache off;\n        location /on {\n            proxy_cache zone;\n            proxy_pass http://127.0.0.1:8080;\n        }\n        location /inherits-off {\n            proxy_pass http://127.0.0.1:8080;\n        }\n    }\n}\n",
+    )
+    .expect("write");
+    let app = loader()
+        .load(&file, &ConfigLoadOptions::default())
+        .expect("proxy_cache inheritance")
+        .app;
+    let cache_of = |host: &str, path: &str| {
+        app.virtual_hosts
+            .iter()
+            .find(|host_config| host_config.server_names.iter().any(|name| name == host))
+            .and_then(|host_config| {
+                host_config
+                    .routes
+                    .iter()
+                    .find(|route| route.route_match.path == path)
+            })
+            .unwrap_or_else(|| panic!("route {host}{path}"))
+            .proxy_cache
+    };
+    assert_eq!(cache_of("inherited.local", "/inherits"), Some(true));
+    assert_eq!(cache_of("inherited.local", "/off"), Some(false));
+    assert_eq!(cache_of("scoped.local", "/on"), Some(true));
+    assert_eq!(cache_of("scoped.local", "/inherits-off"), Some(false));
+}
+
+#[test]
+fn slice_invalid_forms_and_contexts_fail_closed_with_file_and_line() {
+    let cases: [(&str, &str); 4] = [
+        ("slice 4 5;", "exactly one size argument"),
+        ("slice on;", "not a byte size"),
+        ("slice -1;", "not a byte size"),
+        ("slice 100m;", "exceeds the runtime's bounded slice buffer"),
+    ];
+    for (directive, needle) in cases {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let file = directory.path().join("bad-slice.conf");
+        fs::write(
+            &file,
+            format!(
+                "server {{\n    listen 80;\n    server_name slice.local;\n    location / {{\n        {directive}\n    }}\n}}\n"
+            ),
+        )
+        .expect("write");
+        let error = loader()
+            .load(&file, &ConfigLoadOptions::default())
+            .expect_err("invalid slice form must fail closed");
+        let message = error.to_string();
+        assert!(
+            message.contains(needle),
+            "diagnostic for `{directive}` must contain `{needle}`: {message}"
+        );
+        if let Some(diagnostic) = error.diagnostics().first() {
+            assert!(
+                diagnostic.path.contains("bad-slice.conf:5"),
+                "diagnostic must carry file:line for `{directive}`, got {}",
+                diagnostic.path
+            );
+        }
+    }
+
+    // `slice` is an http-module directive: the stream and mail planes neither
+    // own nor silently ignore it.
+    let directory = tempfile::tempdir().expect("temp dir");
+    let file = directory.path().join("stream-slice.conf");
+    fs::write(
+        &file,
+        "stream {\n    server {\n        listen 127.0.0.1:19000;\n        slice 4;\n    }\n}\n",
+    )
+    .expect("write");
+    let error = loader()
+        .load(&file, &ConfigLoadOptions::default())
+        .expect_err("stream slice must fail closed");
+    assert!(
+        error.to_string().contains("slice"),
+        "stream diagnostic must name the directive: {}",
+        error
+    );
+    if let Some(diagnostic) = error.diagnostics().first() {
+        assert!(
+            diagnostic.path.contains("stream-slice.conf:4"),
+            "stream diagnostic must carry file:line, got {}",
+            diagnostic.path
+        );
+    }
 }

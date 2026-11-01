@@ -25,6 +25,12 @@
     "nginx": {
       "$ref": "#/$defs/nginx"
     },
+    "geoip": {
+      "$ref": "#/$defs/geoIp"
+    },
+    "streamGeoip": {
+      "$ref": "#/$defs/streamGeoIp"
+    },
     "maps": {
       "description": "nginx map variables declared at http context.",
       "type": "array",
@@ -262,6 +268,13 @@
         "$ref": "#/$defs/map"
       }
     },
+    "streamSplitClients": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/splitClients"
+      }
+    },
     "cacheZoneNames": {
       "type": "array",
       "maxItems": 256,
@@ -474,6 +487,95 @@
         "storeRoot": {
           "type": "string",
           "minLength": 1
+        },
+        "geoipDatabaseRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Operator-configured absolute directory that GeoIP MMDB database paths in the typed plane must be strict descendants of. The nginx plane accepts any absolute database path exactly like stock nginx."
+        },
+        "tempRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Operator-configured absolute directory for the CGI-family temp-spool tier. A configured `*_temp_path` must be a strict descendant of this root; when unset, spool files live in a per-process, per-generation directory under the system temp directory."
+        },
+        "tempSpoolBudgetBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1099511627776,
+          "default": 134217728,
+          "description": "Overall disk budget for in-flight spool files. A response that would exceed it completes in memory (nginx's unbuffered pass-through degradation), bounded by the runtime response-body ceiling."
+        },
+        "tempSpoolMaxFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536,
+          "default": 32,
+          "description": "Maximum number of simultaneously open spool files per runtime generation."
+        }
+      }
+    },
+    "geoIp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_http_geoip_module configuration (http context only): MaxMind DB databases plus the geoip_proxy trust list.",
+      "properties": {
+        "country": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "geoip_country: absolute path to a Country-edition MMDB."
+        },
+        "city": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "geoip_city: absolute path to a City-edition MMDB."
+        },
+        "org": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "geoip_org: absolute path to an ASN/ISP/Organization/Domain/Enterprise-edition MMDB."
+        },
+        "proxies": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "default": [],
+          "description": "geoip_proxy: trusted proxy IP addresses or CIDRs whose X-Forwarded-For hops are walked, right to left."
+        },
+        "proxyRecursive": {
+          "type": "boolean",
+          "default": false,
+          "description": "geoip_proxy_recursive: keep walking X-Forwarded-For through trusted hops until an untrusted address is reached."
+        }
+      }
+    },
+    "streamGeoIp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_stream_geoip_module configuration (stream context only): MaxMind DB databases resolved from the accepted connection address. The stream module has no geoip_proxy directives.",
+      "properties": {
+        "country": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
+        },
+        "city": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
+        },
+        "org": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096
         }
       }
     },
@@ -1722,6 +1824,24 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "tempPolicy": {
+          "$ref": "#/$defs/upstreamTempPolicy"
+        },
+        "ignoreClientAbort": {
+          "type": "boolean",
+          "default": false,
+          "description": "fastcgi_ignore_client_abort on: keep the in-flight upstream exchange alive when the client connection aborts."
+        },
+        "catchStderr": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "description": "fastcgi_catch_stderr patterns; a match in an FCGI_STDERR record makes the response invalid (502, no default retry)."
         }
       }
     },
@@ -1852,6 +1972,14 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "tempPolicy": {
+          "$ref": "#/$defs/upstreamTempPolicy"
+        },
+        "ignoreClientAbort": {
+          "type": "boolean",
+          "default": false,
+          "description": "uwsgi_/scgi_ignore_client_abort on: keep the in-flight upstream exchange alive when the client connection aborts."
         }
       }
     },
@@ -1925,6 +2053,16 @@
             "type": "string"
           },
           "uniqueItems": true
+        },
+        "bindAddress": {
+          "description": "nginx grpc_bind: bind the upstream connection source address (an IP literal; `off` clears an inherited bind).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "socketKeepalive": {
+          "description": "nginx grpc_socket_keepalive: enable SO_KEEPALIVE on the upstream socket.",
+          "type": "boolean"
         }
       }
     },
@@ -2729,8 +2867,20 @@
         "autoindex": {
           "$ref": "#/$defs/autoindex"
         },
+        "http2ChunkSize": {
+          "description": "Server-level nginx http2_chunk_size (http -> server resolved); maximum response-body bytes written into one HTTP/2 DATA frame.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777215
+        },
         "referer": {
           "$ref": "#/$defs/referer"
+        },
+        "userid": {
+          "$ref": "#/$defs/userid"
+        },
+        "browser": {
+          "$ref": "#/$defs/browser"
         }
       }
     },
@@ -2831,6 +2981,16 @@
           "description": "Effective nginx client_max_body_size for this route; absent means the app-level limit.",
           "type": "integer",
           "minimum": 1
+        },
+        "sliceSize": {
+          "description": "Effective nginx `slice <size>` for this route (http/server/location inheritance resolved at materialization). 0 disables slicing, exactly like nginx. A non-zero value enables the per-slice Range subrequest pipeline when the route's proxy resource wires `proxy_set_header Range $slice_range`. The maximum is the runtime's bounded slice buffer.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 67108864
+        },
+        "proxyCache": {
+          "description": "Effective nginx `proxy_cache` for this route: true when the route declares a cache zone, false for `proxy_cache off` or an nginx configuration that never declares the directive (one location's `proxy_cache_path` only creates the zone). Absent keeps the typed-config application-level `proxyCache.enabled` toggle.",
+          "type": "boolean"
         },
         "id": {
           "$ref": "#/$defs/id"
@@ -2952,8 +3112,24 @@
           "description": "Location-level nginx autoindex policy resolved over the host value.",
           "$ref": "#/$defs/autoindex"
         },
+        "randomIndex": {
+          "description": "Location-level nginx random_index: select a random non-hidden regular file for a directory request before index/autoindex handling.",
+          "type": "boolean"
+        },
+        "http2ChunkSize": {
+          "description": "Location-level nginx http2_chunk_size; overrides the host value.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777215
+        },
         "referer": {
           "$ref": "#/$defs/referer"
+        },
+        "userid": {
+          "$ref": "#/$defs/userid"
+        },
+        "browser": {
+          "$ref": "#/$defs/browser"
         },
         "addition": {
           "$ref": "#/$defs/additionConfig"
@@ -3517,6 +3693,26 @@
           "minimum": 0,
           "maximum": 60000,
           "default": 0
+        },
+        "capabilities": {
+          "description": "nginx smtp_capabilities/imap_capabilities/pop3_capabilities: the custom capability list advertised by this listener, in authored order.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "realIpTrustedCidrs": {
+          "description": "nginx mail set_real_ip_from: trusted PROXY protocol peers whose header source replaces the connection address.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
         }
       }
     },
@@ -3602,6 +3798,35 @@
         "implicit": {
           "type": "boolean",
           "default": false
+        },
+        "verifyClient": {
+          "description": "nginx mail ssl_verify_client: off requests no client certificate; on requires a verified certificate; optional requests and verifies when present; optional-no-ca tolerates nginx's optional verification failures (unknown issuer/self-signed/untrusted) while still rejecting expired, bad-signature and over-depth paths.",
+          "enum": [
+            "off",
+            "on",
+            "optional",
+            "optional-no-ca"
+          ],
+          "default": "off"
+        },
+        "verifyDepth": {
+          "description": "nginx mail ssl_verify_depth: maximum number of intermediate CA certificates in the client certificate path (0 = directly issued by a trust anchor).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024,
+          "default": 1
+        },
+        "clientCertificateFile": {
+          "description": "nginx mail ssl_client_certificate: PEM CA bundle used as the client-certificate trust store and advertised as CertificateRequest CA hints.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "trustedCertificateFile": {
+          "description": "nginx mail ssl_trusted_certificate: PEM certificates added to the client-certificate verification store for chain building, without CA hints.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
         }
       }
     },
@@ -3804,7 +4029,10 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["error", "timeout"]
+            "enum": [
+              "error",
+              "timeout"
+            ]
           }
         },
         "nextUpstreamTries": {
@@ -3831,12 +4059,12 @@
           }
         },
         "defaultServer": {
-          "description": "nginx stream `listen … default_server`: selected when no `server_name` matches.",
+          "description": "nginx stream `listen \u2026 default_server`: selected when no `server_name` matches.",
           "type": "boolean",
           "default": false
         },
         "acceptProxyProtocol": {
-          "description": "nginx stream `listen … proxy_protocol`: accept an inbound PROXY protocol v1/v2 header before proxying.",
+          "description": "nginx stream `listen \u2026 proxy_protocol`: accept an inbound PROXY protocol v1/v2 header before proxying.",
           "type": "boolean",
           "default": false
         },
@@ -3964,6 +4192,12 @@
           "minimum": 512,
           "maximum": 1048576,
           "description": "Stream preread_buffer_size: ClientHello peek buffer bound."
+        },
+        "passAddress": {
+          "description": "nginx stream `pass <address>`: re-dispatch the connection to the stream server bound at this literal IP:port.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
         }
       }
     },
@@ -4603,6 +4837,180 @@
         }
       }
     },
+    "useridFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "userid_flags attribute set. `userid_flags off` is modelled by the empty object.",
+      "properties": {
+        "secure": {
+          "type": "boolean",
+          "default": false
+        },
+        "httponly": {
+          "type": "boolean",
+          "default": false
+        },
+        "samesite": {
+          "enum": [
+            "strict",
+            "lax",
+            "none"
+          ]
+        }
+      }
+    },
+    "userid": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_http_userid_filter_module configuration resolved for a host or route.",
+      "properties": {
+        "mode": {
+          "description": "userid off|log|v1|on (default off).",
+          "enum": [
+            "off",
+            "log",
+            "v1",
+            "on"
+          ],
+          "default": "off"
+        },
+        "name": {
+          "description": "userid_name cookie name (default uid).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+          "default": "uid"
+        },
+        "domain": {
+          "description": "userid_domain; absent means nginx none (no Domain attribute).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "path": {
+          "description": "userid_path (default /).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "default": "/"
+        },
+        "expires": {
+          "description": "userid_expires; \"max\" is nginx's fixed 2037 date, {\"seconds\": N} is now + N.",
+          "oneOf": [
+            {
+              "const": "max"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seconds"
+              ],
+              "properties": {
+                "seconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              }
+            }
+          ]
+        },
+        "p3p": {
+          "description": "userid_p3p header value; absent means nginx none.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "flags": {
+          "$ref": "#/$defs/useridFlags"
+        },
+        "mark": {
+          "description": "userid_mark: one letter, digit or =.",
+          "type": "string",
+          "pattern": "^[0-9A-Za-z=]$"
+        },
+        "service": {
+          "description": "userid_service word; absent uses the listener's local address.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "modernBrowserRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browser",
+        "version"
+      ],
+      "properties": {
+        "browser": {
+          "enum": [
+            "opera",
+            "msie",
+            "gecko",
+            "safari",
+            "konqueror"
+          ]
+        },
+        "version": {
+          "description": "Encoded version (X*1000000 + X*10000 + X*100 + X), at most 4000.99.99.99.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4000999999
+        }
+      }
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "nginx ngx_http_browser_module configuration resolved for a host or route.",
+      "properties": {
+        "modern": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/modernBrowserRule"
+          },
+          "default": []
+        },
+        "modernUnlisted": {
+          "description": "modern_browser unlisted.",
+          "type": "boolean",
+          "default": false
+        },
+        "ancient": {
+          "description": "ancient_browser literal case-sensitive User-Agent substrings (netscape4 is separate).",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "default": []
+        },
+        "netscape4": {
+          "description": "ancient_browser netscape4.",
+          "type": "boolean",
+          "default": false
+        },
+        "modernValue": {
+          "description": "modern_browser_value (default 1).",
+          "type": "string",
+          "maxLength": 512,
+          "default": "1"
+        },
+        "ancientValue": {
+          "description": "ancient_browser_value (default 1).",
+          "type": "string",
+          "maxLength": 512,
+          "default": "1"
+        }
+      }
+    },
     "geoEntry": {
       "type": "object",
       "additionalProperties": false,
@@ -4851,6 +5259,35 @@
         "maxRangeOffset": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "upstreamTempPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Executed nginx CGI-family temp-spool tier: `*_temp_path` / `*_max_temp_file_size` / `*_temp_file_write_size`. An upstream body larger than the in-memory response buffers is written to a 0600 uniquely named file under the spool directory and served from there, then deleted.",
+      "required": [
+        "maxFileBytes",
+        "writeChunkBytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "maxLength": 4096,
+          "description": "Absolute spool directory (`*_temp_path`, single-path form)."
+        },
+        "maxFileBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1099511627776,
+          "description": "`*_max_temp_file_size`: per-file spool cap; 0 disables the spool tier (nginx semantics)."
+        },
+        "writeChunkBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 16777216,
+          "description": "`*_temp_file_write_size`: upper bound of one spool write call."
         }
       }
     },

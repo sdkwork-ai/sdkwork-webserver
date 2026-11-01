@@ -133,12 +133,10 @@ fn parse_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
     values
         .iter()
         .filter_map(|value| {
-            value.parse::<ipnet::IpNet>().ok().or_else(|| {
-                value
-                    .parse::<IpAddr>()
-                    .ok()
-                    .map(|address| ipnet::IpNet::from(address))
-            })
+            value
+                .parse::<ipnet::IpNet>()
+                .ok()
+                .or_else(|| value.parse::<IpAddr>().ok().map(ipnet::IpNet::from))
         })
         .collect()
 }
@@ -520,7 +518,7 @@ async fn serve_stream_connection(
     _inbound_header: Option<InboundProxyHeader>,
 ) -> Result<(), ()> {
     let generation = runtime.current();
-    let stream_config = match selected {
+    let mut stream_config = match selected {
         Some(selected) => Some(selected),
         None => generation
             .app
@@ -529,6 +527,66 @@ async fn serve_stream_connection(
             .find(|stream| stream.id == stream_id)
             .cloned(),
     };
+    // nginx stream `pass <address>` (ngx_stream_pass_module): the content
+    // handler re-dispatches the connection to the default virtual server of
+    // another listening socket, which then runs that server's content handler.
+    // The target was validated at configuration time (including pass cycles);
+    // a stale target after a reload still fails closed here.
+    if stream_config
+        .as_ref()
+        .is_some_and(|config| config.pass_address.is_some())
+    {
+        // nginx refuses to pass a connection with buffered preread data.
+        if preface.is_some() {
+            tracing::warn!(
+                stream_id,
+                peer = %peer,
+                "stream pass refused: the connection has buffered preread data (nginx: \"cannot pass connection with preread data\")"
+            );
+            return Err(());
+        }
+        let address = stream_config
+            .as_ref()
+            .and_then(|config| config.pass_address.clone())
+            .unwrap_or_default();
+        match sdkwork_webserver_core::resolve_stream_pass_target(generation.app.streams(), &address)
+        {
+            Ok(target) => {
+                tracing::debug!(
+                    stream_id,
+                    peer = %peer,
+                    target = %target.id,
+                    address = %address,
+                    "stream pass re-dispatch"
+                );
+                let target = target.clone();
+                // nginx re-runs the target listener's phases; the bounded
+                // plane applies the target's access phase (bounded difference:
+                // the target's realip/limit_conn phases are not re-run).
+                if evaluate_access_first_match_allow(peer.ip(), &target.access)
+                    == AccessDecision::Deny
+                {
+                    tracing::debug!(
+                        stream_id = %target.id,
+                        peer = %peer,
+                        "stream pass target denied by allow/deny rules"
+                    );
+                    return Ok(());
+                }
+                stream_config = Some(target);
+            }
+            Err(error) => {
+                tracing::warn!(
+                    stream_id,
+                    peer = %peer,
+                    address = %address,
+                    error = ?error,
+                    "stream pass target could not be resolved"
+                );
+                return Err(());
+            }
+        }
+    }
     let Some(stream_config) = stream_config.as_ref() else {
         tracing::warn!(stream_id, peer = %peer, "stream target is no longer configured");
         return Err(());
@@ -549,6 +607,7 @@ async fn serve_stream_connection(
                 peer,
                 local,
                 sni,
+                generation.stream_geoip.as_deref(),
             );
             super::stream_variables::expand_stream_value(&variables, template)
         })
@@ -1046,7 +1105,7 @@ fn select_sni_server<'a>(
                 let suffix = suffix.to_ascii_lowercase();
                 if sni.len() > suffix.len()
                     && sni.ends_with(&format!(".{suffix}"))
-                    && best.map_or(true, |(_, length)| suffix.len() > length)
+                    && best.is_none_or(|(_, length)| suffix.len() > length)
                 {
                     best = Some((server, suffix.len()));
                 }

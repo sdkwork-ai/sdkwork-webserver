@@ -8,6 +8,15 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "nginx slice module (Wave 14C, 2026-11-01): `slice` now executes end-to-end with per-slice caching and bounded assembly; differential-http 367 -> 384. Catalog: 397 executable / 173 accepted-unenforced / 169 fail-closed / 5 excluded. Remaining behavior gaps = 34, ALL blocked by pinned dependencies (32: hyper HTTP/1 close-delimited framing, rustls static-only OCSP, rustls/OpenSSL TLS knobs for gRPC/uWSGI/mail) or nginx Plus (degradation/degrade); out-of-profile 5 = Perl 4 + load_module 1 (embedded interpreter / nginx C ABI). No implementable directive remains.",
+    "Mail client certificates (Wave 14B, 2026-11-01): 5 directives executable with 19 new real-nginx differential cases (client-cert fixture: verify modes, depth 0/1/2, trusted vs client bundle (CA hints), STARTTLS, POP3/IMAP/SMTP rejection lines, pass-cert gating). probe corrections: failures are application-level post-handshake lines; nginx 1.29.6 has no 8 KiB client-cert refusal. Slice remains fail-closed (multi-subrequest Range/$slice_range assembly needed). Catalog: 396 executable / 173 accepted-unenforced / 170 fail-closed / 5 excluded. Remaining behavior gaps: 32 pinned-dependency + slice + nginx Plus 2.",
+    "Wave 14A (2026-10-31): temp-spool subsystem (9 directives) and connection control (5: ignore_client_abort x3, catch_stderr, send_lowat accepted-unenforced) execute; differential-protocols 77->89. Probe correction: nginx does NOT 502 when a body exceeds *_max_temp_file_size (ngx_event_pipe stops spooling and passes the remainder); implemented the probed semantics with byte-identical 200. Catalog: 391 executable / 173 accepted-unenforced / 175 fail-closed / 5 excluded. Remaining implementable rows: mail client-cert flows 5 + slice 1; all other behavior gaps are pinned-dependency/Plus blocked.",
+    "Wave 13 residual closure (2026-10-31): stream split_clients/pass and mail capabilities/real_ip execute with new real-nginx extra fixtures (stream 14+9, mail 9+8); gRPC bind/keepalive execute with real-socket integration tests (no grpc differential possible: oracle lacks http_v2). Still blocked with exact diagnostics: OCSP dynamic (rustls), rustls/OpenSSL TLS knobs (grpc/uwsgi/mail), mail client-cert flows, temp-spool family (no bounded spool), hyper HTTP/1 close-delimited framing, nginx Plus degradation/degrade, and deferred slice/ignore_client_abort/catch_stderr/send_lowat. Catalog: 378 executable / 172 accepted-unenforced / 189 fail-closed / 5 excluded; out-of-profile 5 (Perl 4 + load_module 1).",
+    "GeoIP module (Wave 12, 2026-10-31): all 8 ngx_http/stream_geoip directives execute with 16 variables and a bounded MMDB runtime; PRD section 3/4 amended (GeoIP in profile for operator-provisioned MMDB editions, no data redistribution). Out-of-profile is now 5 (Perl 4, load_module 1). Catalog: 370 executable / 170 accepted-unenforced / 199 fail-closed / 5 excluded. New geoip-differential slice (5 cases) is the 7th aggregate slice.",
+    "Wave 11B (2026-10-31): http2_chunk_size and random_index execute; differential-http 364->367 (random-index candidate set/empty/off); h2 frame-capture test proves DATA frames <= configured chunk with byte-identical reassembly; nginx config-acceptance probe for http2_chunk_size. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Slice remains fail-closed (shared store whole-representation contract); next: GeoIP + residual closure.",
+    "Wave 11B (2026-10-31): `http2_chunk_size` executes at http/server/location through an outermost response-body re-chunker (nginx 8 KiB default, 16 MiB clamp, zero rejected; hyper/h2 exposes no server-side DATA-frame knob), proven by a raw h2 frame-capture test plus a real v2-enabled nginx config-acceptance probe; `random_index` executes at location with a bounded sorted candidate scan, hidden/symlink exclusion and a deterministic seeded SplitMix64 selection, proven by a real-nginx candidate-set differential (192 draws), empty-directory and off cases. differential-http grew 364->367. Catalog: 362 executable / 170 accepted-unenforced / 199 fail-closed / 13 excluded. Remaining module-sized gaps: slice, degradation/degrade (nginx Plus).",
+    "userid + browser modules (Wave 11A, 2026-10-31): 13 directives executable with 90 new real-nginx differential-http cases (274->364). Catalog: 360 executable / 170 accepted-unenforced / 201 fail-closed / 13 excluded. Remaining module-sized gaps: random_index, slice, degradation/degrade (nginx Plus). Wave 11B (http2_chunk_size/random_index/slice) is next.",
+    "Stream plane wave (Wave 7E, 2026-10-30): upstream TLS client, inbound PROXY v1/v2 + proxy_protocol_timeout, SNI server_name routing, half-close, proxy_bind, request/response counters, download/upload rates and the next_upstream retry budget execute; differential-stream grew 9->14 (proxy_ssl verified/untrusted, proxy_protocol inbound/missing, half-close) and stream_tls_proxy integration tests cover SNI/bind/retry/PROXY. Still fail-closed with exact blockers: stream split_clients, pass, rustls-unsupported proxy_ssl knobs. Catalog: 341 executable / 170 accepted-unenforced / 220 fail-closed / 13 excluded.",
     "Subrequest engine (Wave 8, 2026-10-30): addition/auth_request/auth_request_set/mirror execute with 9 real-nginx differential-http cases (274/274). Reported blockers (not faked): chunked_transfer_encoding off needs close-delimited framing hyper cannot emit; http2_chunk_size needs a body re-chunker + h2 frame-capture harness; userid/browser/random_index/degradation/slice need their own bounded waves (UA tables, RNG evidence strategy, partial-object cache indexing). Catalog: 328 executable / 171 accepted-unenforced / 232 fail-closed / 13 excluded.",
     "Protocol response policy (Wave 7D, 2026-10-30): CGI buffering/store/limit_rate/force_ranges/ignore_headers/pass_request_body plus memcached buffer/gzip-flag and grpc ignore_headers execute; differential-protocols 65->77 with 12 cases vs nginx 1.29.6 (store path+content+mode, rate window, range modes, oversized header block 502, X-Accel-Redirect ignore, body suppression, memcached gzip flag). Fail-closed residuals recorded: temp-spool family (no bounded spool), *_ignore_client_abort, fastcgi_catch_stderr, fastcgi_send_lowat, *_store on, uWSGI TLS leftovers, grpc bind/keepalive/TLS leftovers. Catalog: 321 executable / 171 accepted-unenforced / 239 fail-closed / 13 excluded.",
     "CGI cache family (Wave 7C, 2026-10-30): fastcgi/uwsgi/scgi *_cache* directives execute on the shared HTTP cache store with a CGI key/policy layer; differential-protocols grew 49->65 with 16 cache cases against nginx 1.29.6 (hit, no-default-caching, bypass, no_cache, valid-by-status, custom key, min_uses, lock coalescing, use_stale, conditional revalidate, convert_head, range/max_range_offset, uWSGI/SCGI hits). Bounded differences recorded: cache_lock_age cannot preempt an in-flight fill; background_update serves stale instead of a detached task; X-Accel-Expires not consulted; one process store backs all zones. Catalog: 291 executable / 171 accepted-unenforced / 269 fail-closed / 13 excluded.",
@@ -245,7 +254,7 @@
       "id": "nginx.behavioral-corpus",
       "group": "operations",
       "status": "implemented",
-      "summary": "Indexed real-nginx differential slices under tests/nginx/: conditional-cache (50 cases, tools/run-nginx-differential.mjs, captured nginx 1.29.6 oracle), broad HTTP surface (75 cases, tools/run-nginx-differential-http.mjs), virtual-host selection + named locations (39 cases, tools/run-nginx-differential-host.mjs), plus the in-process full-surface behavioural corpus (76 cases, tools/run-nginx-behavioral-corpus.mjs). tools/run-nginx-compat-gate.mjs executes them all as the release gate. Oracles are committed and pinned; a real nginx binary is needed only to refresh them. Full OSS parity remains out of profile"
+      "summary": "Indexed real-nginx differential slices under tests/nginx/: conditional-cache (50 cases, tools/run-nginx-differential.mjs, captured nginx 1.29.6 oracle), broad HTTP surface (367 cases, tools/run-nginx-differential-http.mjs, including the wave 11B random_index candidate-set matrix), virtual-host selection + named locations (39 cases, tools/run-nginx-differential-host.mjs), plus the in-process full-surface behavioural corpus (76 cases, tools/run-nginx-behavioral-corpus.mjs). tools/run-nginx-compat-gate.mjs executes them all as the release gate. Oracles are committed and pinned; a real nginx binary is needed only to refresh them. Full OSS parity remains out of profile"
     },
     {
       "id": "config.source-unified-loader",
@@ -461,7 +470,7 @@
       "id": "http.http2-tuning",
       "group": "operations",
       "status": "implemented",
-      "summary": "http2_max_concurrent_streams is executable at http/server and materialized into the ingress h2 stream ceiling, proven over a real TLS/ALPN connection by parsing the server SETTINGS frame; the directives nginx 1.29.6 made obsolete (http2_max_field_size/http2_max_header_size/http2_max_requests/http2_idle_timeout/http2_recv_timeout/http2_max_concurrent_pushes/http2_push/http2_push_preload) are accepted no-ops with truthful diagnostics; buffer/table sizing keys (recv_buffer_size/body_preread_size/pool_size/streams_index_size) stay runtime-owned; http2_chunk_size fails closed because the pinned hyper/h2 ingress does not expose DATA-frame chunking. Runtime advertises its own MAX_HEADER_LIST_SIZE (documented difference) (REQ-2026-0073 wave 3b)"
+      "summary": "http2_max_concurrent_streams is executable at http/server and materialized into the ingress h2 stream ceiling, proven over a real TLS/ALPN connection by parsing the server SETTINGS frame; the directives nginx 1.29.6 made obsolete (http2_max_field_size/http2_max_header_size/http2_max_requests/http2_idle_timeout/http2_recv_timeout/http2_max_concurrent_pushes/http2_push/http2_push_preload) are accepted no-ops with truthful diagnostics; buffer/table sizing keys (recv_buffer_size/body_preread_size/pool_size/streams_index_size) stay runtime-owned; http2_chunk_size executes at http/server/location through a bounded response-body re-chunker because the pinned hyper/h2 ingress exposes no server-side DATA-frame chunk knob; nginx default 8 KiB, 16 MiB clamp and zero rejection are reproduced, the reassembled body is byte-identical, and an h2 frame-capture test proves every DATA frame stays within the configured chunk (wave 11B). Runtime advertises its own MAX_HEADER_LIST_SIZE (documented difference) (REQ-2026-0073 wave 3b)"
     },
     {
       "id": "http.proxy-method",
@@ -545,7 +554,7 @@
       "id": "stream.limit-conn",
       "group": "stream",
       "status": "implemented",
-      "summary": "stream limit_conn_zone/limit_conn/limit_conn_dry_run: separate stream zone table, accept-time checks in nginx phase order, silent-close deny and dry-run counting; new real-nginx differential-stream slice (9/9) (REQ-2026-0073 wave 4b)"
+      "summary": "stream plane (Waves 4b/7E): allow/deny, literal/variable return, limit_conn/zones/dry_run, bounded map/set variable engine, preread_timeout/buffer_size, upstream TLS client (proxy_ssl + verify/trusted CA/client identity/server_name/name/protocols, always verified unless verify off), inbound PROXY protocol v1/v2 with proxy_protocol_timeout and set_real_ip_from rewriting, SNI server_name virtual-server routing, proxy_half_close, proxy_bind, per-connection request/response counters, download/upload rate token buckets and the nginx next_upstream retry budget; differential-stream 9->14 cases vs nginx 1.29.6 plus stream_tls_proxy integration tests (REQ-2026-0073 wave 7E)"
     },
     {
       "id": "stream.variables",
@@ -618,6 +627,72 @@
       "group": "core",
       "status": "implemented",
       "summary": "bounded re-entrant subrequest engine (Wave 8): internal dispatch re-enters routing on the same listener/generation, one level deep, 4 MiB body cap, no admission/metering consumption, targets limited to return/empty_gif/proxy_pass; drives addition (add_before_body/add_after_body/addition_types MIME-gated splice with nginx chunked framing), auth_request + auth_request_set (access-phase status matrix incl. nginx's no-WWW-Authenticate behavior; $upstream_status/$upstream_http_* published to downstream header layers) and mirror (detached timeout-bounded fire-and-forget, max 8; mirror_request_body default-on rejected truthfully); differential-http 265->274 (9 cases) (REQ-2026-0073 wave 8)"
+    },
+    {
+      "id": "http.userid",
+      "group": "core",
+      "status": "implemented",
+      "summary": "nginx userid module (Wave 11A): userid on|v1|log|off, userid_name/domain/path/expires/p3p/flags/mark/service at http/server/location with nginx merge semantics; CSPRNG ids with nginx's observable 16-byte shape/service word/mark placement/echo contract, fixed cookie attribute order, P3P after Set-Cookie, $uid_got/$uid_set exposed to header/return expansion; differential-http 90 new cases (issue/echo/on/v1/log/off/attrs/flags/mark/service/inheritance) (REQ-2026-0073 wave 11A)"
+    },
+    {
+      "id": "http.browser",
+      "group": "core",
+      "status": "implemented",
+      "summary": "nginx browser module (Wave 11A): modern_browser/ancient_browser (+value) with nginx 1.29.6 UA tables (opera/msie/gecko/safari/konqueror, version comparison, first-matching-slot, regex form) at http/server/location, $modern_browser/$ancient_browser variables, nginx's http-level inherited-modern-list quirk reproduced; differential-http UA matrix (REQ-2026-0073 wave 11A)"
+    },
+    {
+      "id": "http.http2-chunk-size",
+      "group": "core",
+      "status": "implemented",
+      "summary": "http2_chunk_size (Wave 11B): executable at http/server/location + typed plane; nginx semantics (8 KiB default verified from source, 16 MiB clamp, zero rejected); hyper/h2 has no server-side DATA-frame knob, so an outermost post-compression body layer splits finalized bodies into <=chunk-size DATA frames for HTTP/2 only (reassembled body byte-identical), verified by an h2 frame-capturing gateway test and an nginx config-acceptance probe (REQ-2026-0073 wave 11B)"
+    },
+    {
+      "id": "http.random-index",
+      "group": "core",
+      "status": "implemented",
+      "summary": "random_index (Wave 11B): location-context directive + typed routes[].randomIndex; bounded 4096 sorted visible-regular-file scan, deterministic seeded SplitMix64 selection (path-derived seed), empty-set fall-through to index/autoindex, symlinks intentionally skipped, 403 above cap; differential-http candidate-set cases (192 draws exact set comparison), empty and off cases (REQ-2026-0073 wave 11B)"
+    },
+    {
+      "id": "geoip.mmdb",
+      "group": "core",
+      "status": "implemented",
+      "summary": "nginx GeoIP module (Wave 12): geoip_country/geoip_city/geoip_org at http and stream context, geoip_proxy/geoip_proxy_recursive at http; all 16 $geoip_* variables (incl. nginx's deprecated geoip_dma_code; geoip_area_code always empty), MMDB readers cached per runtime generation, post-real_ip client address with a bounded nginx-shaped right-to-left XFF trust walk (64 hops/8 KiB); operator-provisioned absolute MMDB paths confined by [http] geoipDatabaseRoot; no GeoLite data shipped; synthetic deterministic fixture at tests/nginx/geoip; new geoip-differential slice (4 HTTP + 1 stream case, labelled variable-plumbing proxy differential because the oracle lacks the GeoIP modules); out-of-profile 13 -> 5 (Perl 4 + load_module 1) (REQ-2026-0073 wave 12)"
+    },
+    {
+      "id": "stream.split-clients-pass",
+      "group": "stream",
+      "status": "implemented",
+      "summary": "stream split_clients and pass (Wave 13): split_clients reuses the HTTP MurmurHash2 cumulative-bucket engine over accept/preread sources ($remote_addr/$remote_port/$server_addr/$server_port/$ssl_preread_server_name + stream GeoIP variables) with '* 'catch-all and duplicate-result rejection, result seeded into the per-connection variable table; pass re-dispatches an IP-literal address:port to the target listen socket's default stream virtual server (nginx NGX_STREAM_PASS_MAX_PASSES=10, cycle rejection, target access/content phases), with variable/name/preread forms fail-closed; new differential-stream extra fixture (9 cases: 6 split.server-addr + 3 pass) vs real nginx (REQ-2026-0073 wave 13)"
+    },
+    {
+      "id": "mail.capabilities-realip",
+      "group": "mail",
+      "status": "implemented",
+      "summary": "mail residuals (Wave 13): smtp/imap/pop3 custom capability lists rendered with nginx's exact line protocol, set_real_ip_from trusted PROXY peers rewrite the client address, resolver/resolver_timeout validated and accepted-unenforced (runtime resolver owns mail name resolution); new differential-mail capabilities fixture (8 cases) vs real nginx (REQ-2026-0073 wave 13)"
+    },
+    {
+      "id": "upstream.grpc-bind-keepalive",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "gRPC grpc_bind/grpc_socket_keepalive (Wave 13): per-Grpc-resource bindAddress/socketKeepalive with http/server/location inheritance, applied in the h2 connector (TcpSocket source bind, socket2 SO_KEEPALIVE); variable/transparent bind forms fail closed; covered by real-socket integration tests because the pinned oracle lacks --with-http_v2_module (REQ-2026-0073 wave 13)"
+    },
+    {
+      "id": "upstream.temp-spool",
+      "group": "upstreams",
+      "status": "implemented",
+      "summary": "bounded temp-spool subsystem + connection control (Wave 14A): per-generation spool dir ([http] tempRoot or system temp, 0700, symlink-refusing), 0600 unique files with Drop-unlink, global byte/file budget, in-memory tier = response buffer bank, per-file cap and write-chunk bound honoring fastcgi/uwsgi/scgi *_max_temp_file_size/_temp_file_write_size/_temp_path (single absolute confined path); oversized upstream bodies served byte-identically, ranges read from the spool slice, *_store stream-copies, *_limit_rate paces from disk, cache stays functional; *_ignore_client_abort on detaches the bounded exchange, off aborts; fastcgi_catch_stderr trimmed-message substring match -> 502 (nginx-probed); fastcgi_send_lowat accepted-unenforced (BSD-only SO_SNDLOWAT, Linux ignores). differential-protocols 77->89 (12 cases) (REQ-2026-0073 wave 14A)"
+    },
+    {
+      "id": "mail.client-cert",
+      "group": "mail",
+      "status": "implemented",
+      "summary": "mail client-certificate flows (Wave 14B): ssl_verify_client off|on|optional|optional_no_ca (nginx-style post-handshake deferred verification with application-level rejection lines), ssl_verify_depth, ssl_client_certificate (verification store + CertificateRequest CA hints), ssl_trusted_certificate (store only), auth_http_pass_client_cert (Auth-SSL-Verify/Subject/Issuer/Serial/Fingerprint always; Auth-SSL-Cert only with the flag; nginx exact escaping); new differential-mail client-cert fixture 19/19 cases vs real nginx 1.29.6 (REQ-2026-0073 wave 14B)"
+    },
+    {
+      "id": "cache.slice",
+      "group": "cache",
+      "status": "implemented",
+      "summary": "nginx slice module (Wave 14C): `slice <size>` at http/server/location with scalar inheritance, $slice_range in proxy_set_header/add_header with ngx_http_slice_get_start semantics (multi-range/If-Range start 0, suffix jump, boundary alignment), structural per-slice cache-key variant (nginx proxy_cache_key $slice_range equivalent) incl. first slice with Vary/freshness reuse, bounded streaming assembly of validated 206 slices into nginx's single-range filter output (assembled 200, 206+Content-Range, 416 bytes */complete, HEAD one slice), ETag/complete-length anchoring with mid-stream abort, missing-slice-cache route-scoped proxy_cache inheritance fix; differential-http 367 -> 384 (17 slice cases incl. an upstream Range hit log proving the repeat is a cache hit) (REQ-2026-0073 wave 14C)"
     }
   ]
 }

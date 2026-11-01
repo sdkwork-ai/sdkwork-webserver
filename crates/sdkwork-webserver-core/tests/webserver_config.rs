@@ -2944,6 +2944,67 @@ fn grpc_resource_materializes_from_typed_config() {
 }
 
 #[test]
+fn geoip_configuration_compiles_through_the_json_schema_and_validator() {
+    let directory = TempDir::new().expect("temp dir");
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("tests")
+        .join("nginx")
+        .join("geoip");
+    let country = fixture
+        .join("GeoIP2-Country-Test.mmdb")
+        .canonicalize()
+        .expect("country fixture");
+    let city = fixture
+        .join("GeoIP2-City-Test.mmdb")
+        .canonicalize()
+        .expect("city fixture");
+    let org = fixture
+        .join("GeoIP2-ASN-Test.mmdb")
+        .canonicalize()
+        .expect("org fixture");
+    let mut config = base_config();
+    config["geoip"] = json!({
+        "country": country.to_string_lossy(),
+        "city": city.to_string_lossy(),
+        "org": org.to_string_lossy(),
+        "proxies": ["127.0.0.1", "10.0.0.0/8"],
+        "proxyRecursive": true
+    });
+    let path = write_config(directory.path(), &config);
+    let compiled = load_and_compile_webserver_config(path).expect("geoip config compiles");
+    let geoip = compiled.config().geoip.as_ref().expect("geoip model");
+    assert_eq!(geoip.proxies, vec!["127.0.0.1", "10.0.0.0/8"]);
+    assert!(geoip.proxy_recursive);
+
+    // Relative paths fail the JSON Schema before materialization.
+    config["geoip"]["country"] = json!("relative/GeoIP2-Country.mmdb");
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("relative path must fail");
+    assert!(
+        error.diagnostics().iter().any(|diagnostic| diagnostic
+            .message
+            .contains("does not match pattern")
+            || diagnostic.path.contains("/geoip/country")),
+        "expected a located geoip path diagnostic: {error:?}"
+    );
+
+    // A City database is not a valid geoip_country edition.
+    config["geoip"]["country"] = json!(city.to_string_lossy());
+    let path = write_config(directory.path(), &config);
+    let error = load_and_compile_webserver_config(path).expect_err("wrong edition must fail");
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("database_type")
+                || diagnostic.path.contains("/geoip/country")),
+        "expected a located GeoIP edition diagnostic: {error:?}"
+    );
+}
+
+#[test]
 fn mail_only_application_compiles_through_the_json_schema_and_validator() {
     let directory = TempDir::new().expect("temp dir");
     let config = json!({

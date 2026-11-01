@@ -30,12 +30,17 @@ import { staleness, stalenessMessage } from './gateway-binary-freshness.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const differentialDir = path.join(root, 'tests', 'nginx', 'differential-stream');
 const BASELINE = path.join(differentialDir, 'nginx-oracle.json');
+const EXTRA_DIR = path.join(differentialDir, 'extra');
+const EXTRA_BASELINE = path.join(EXTRA_DIR, 'nginx-oracle.json');
 const GATEWAY_CONF_DIR = path.join(root, 'tmp', 'nginx-differential-stream');
 const GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'nginx.conf');
+const EXTRA_GATEWAY_CONF = path.join(GATEWAY_CONF_DIR, 'extra-nginx.conf');
 const OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-stream-ours.json');
+const EXTRA_OUR_CAPTURE = path.join(root, 'tmp', 'nginx-differential-stream-extra-ours.json');
 const BINARY_STEM = 'sdkwork-api-webserver-standalone-gateway';
 const REFERENCE_NGINX = 'nginx/1.29.6';
 const CASE_FLOOR = 14;
+const EXTRA_CASE_FLOOR = 9;
 const PORT_SEARCH_START = 23100;
 const PORT_SEARCH_END = 23900;
 const ORACLE_UNAVAILABLE_EXITS = new Set([3, 4, 5]);
@@ -280,6 +285,80 @@ function runCompare(python) {
   return result.status === 0;
 }
 
+function runCompareFiles(python, expected, actual) {
+  const result = spawnSync(
+    python,
+    [path.join(differentialDir, 'compare.py'), '--expected', expected, '--actual', actual],
+    { cwd: root, stdio: 'inherit' },
+  );
+  return result.status === 0;
+}
+
+/** Render the stream residual fixture (split_clients + pass). */
+function renderExtraConf(basePort) {
+  let template;
+  try {
+    template = fs.readFileSync(path.join(EXTRA_DIR, 'nginx.conf'), 'utf8');
+  } catch (error) {
+    throw new Error(`missing stream extra fixture nginx.conf: ${error.message}`);
+  }
+  return template
+    .replaceAll('@SPLIT@', String(basePort))
+    .replaceAll('@PASS_TARGET@', String(basePort + 1))
+    .replaceAll('@PASS@', String(basePort + 2))
+    .replaceAll('@PASS_PROXY_TARGET@', String(basePort + 3))
+    .replaceAll('@PASS_PROXY@', String(basePort + 4))
+    .replaceAll('@UPSTREAM@', String(basePort + 10));
+}
+
+function captureExtraOracle(basePort) {
+  const result = spawnSync('bash', [path.join(EXTRA_DIR, 'run-nginx.sh')], {
+    cwd: root,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NGINX_DIFF_STREAM_EXTRA_PORT: String(basePort),
+      NGINX_DIFF_STREAM_EXTRA_WORK: path.join(root, 'tmp', 'nginx-differential-stream-extra-oracle'),
+      NGINX_DIFF_STREAM_EXTRA_ORACLE_OUT: EXTRA_BASELINE,
+    },
+  });
+  if (result.error) return { status: 'unavailable', reason: result.error.message };
+  if (ORACLE_UNAVAILABLE_EXITS.has(result.status)) {
+    return { status: 'unavailable', reason: (result.stderr ?? '').trim().split('\n').at(-1) };
+  }
+  if (result.status !== 0) return { status: 'failed', code: result.status };
+  return { status: 'captured' };
+}
+
+function runExtraBattery(python, basePort, outPath) {
+  const result = spawnSync(
+    python,
+    [
+      path.join(EXTRA_DIR, 'battery.py'),
+      '--split-port',
+      String(basePort),
+      '--pass-target-port',
+      String(basePort + 1),
+      '--pass-port',
+      String(basePort + 2),
+      '--pass-proxy-target-port',
+      String(basePort + 3),
+      '--pass-proxy-port',
+      String(basePort + 4),
+      '--upstream-port',
+      String(basePort + 10),
+      '--out',
+      outPath,
+    ],
+    { cwd: root, encoding: 'utf8' },
+  );
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  process.stderr.write(output);
+  if (result.status !== 0) return { ok: false, cases: 0 };
+  const match = output.match(/\((\d+) stream cases\)/);
+  return { ok: true, cases: match ? Number(match[1]) : 0 };
+}
+
 async function main() {
   const refreshOracle = process.argv.includes('--refresh-oracle');
   const requireOracle = process.argv.includes('--require-oracle');
@@ -414,7 +493,104 @@ async function main() {
         ? `PASS: ${battery.cases} differential stream cases match real nginx (${REFERENCE_NGINX})`
         : 'FAIL: unexpected differential differences (see above)',
     );
-    exitCode = matched ? 0 : 1;
+
+    // Stream residual slice: `split_clients` bucket assignment and `pass`
+    // re-dispatch. The main fixture cannot be re-captured on an oracle without
+    // the optional ssl_preread module, so this fixture is self-contained and
+    // runs its own gateway on its own ports.
+    const extraBasePort = await pickFreePort(gatewayPort + 60);
+    const extraPortOffsets = [0, 1, 2, 3, 4, 10];
+    let extraPortsFree = true;
+    for (const offset of extraPortOffsets) {
+      if (!(await portFree(extraBasePort + offset))) {
+        log(`FAIL: 127.0.0.1:${extraBasePort + offset} (split/pass fixture) is already listening`);
+        extraPortsFree = false;
+        break;
+      }
+    }
+    let extraMatched = false;
+    if (!extraPortsFree) {
+      exitCode = 1;
+    } else {
+      let extraBaseline = fs.existsSync(EXTRA_BASELINE);
+      if (refreshOracle || !extraBaseline) {
+        log(
+          refreshOracle
+            ? 'refreshing the nginx oracle baseline for the split_clients/pass fixture…'
+            : 'no committed split_clients/pass baseline; capturing one…',
+        );
+        const oracle = captureExtraOracle(extraBasePort);
+        if (oracle.status === 'captured') {
+          extraBaseline = true;
+          log(`oracle baseline written to ${path.relative(root, EXTRA_BASELINE)}`);
+        } else {
+          log(`oracle ${oracle.status}: ${oracle.reason ?? 'no real nginx available here'}`);
+          if (!extraBaseline) {
+            if (requireOracle) {
+              log('FAIL: --require-oracle was requested but no split_clients/pass baseline was produced');
+              exitCode = 1;
+            } else {
+              log('SKIP: no split_clients/pass baseline to compare against; that slice did NOT run');
+            }
+          } else {
+            log('falling back to the committed split_clients/pass baseline');
+          }
+        }
+      }
+      if (extraBaseline) {
+        try {
+          fs.writeFileSync(EXTRA_GATEWAY_CONF, renderExtraConf(extraBasePort), 'utf8');
+        } catch (error) {
+          log(`FAIL: ${error.message}`);
+          extraBaseline = false;
+        }
+      }
+      if (extraBaseline) {
+        const extraLogPath = path.join(root, 'tmp', 'nginx-differential-stream-extra-gateway.log');
+        const extraLog = fs.openSync(extraLogPath, 'w');
+        log(
+          `gateway split_clients/pass listeners ${extraBasePort}..${extraBasePort + 4}, echo upstream ${extraBasePort + 10}`,
+        );
+        const extraGateway = spawn(binary.path, ['serve-nginx', EXTRA_GATEWAY_CONF], {
+          cwd: root,
+          stdio: ['ignore', extraLog, extraLog],
+          env: { ...process.env, TZ: 'UTC' },
+        });
+        try {
+          if (!(await waitForPort(extraBasePort, 20_000))) {
+            log(`FAIL: the gateway never listened on ${extraBasePort}; see ${path.relative(root, extraLogPath)}`);
+          } else if (extraGateway.exitCode !== null) {
+            log(`FAIL: the gateway exited with ${extraGateway.exitCode} instead of serving`);
+          } else {
+            const extraBattery = runExtraBattery(python, extraBasePort, EXTRA_OUR_CAPTURE);
+            if (!extraBattery.ok) {
+              log('FAIL: the split_clients/pass battery could not capture the gateway');
+            } else if (extraBattery.cases < EXTRA_CASE_FLOOR) {
+              log(
+                `FAIL: the split_clients/pass battery reported ${extraBattery.cases} cases, below the floor of ${EXTRA_CASE_FLOOR}`,
+              );
+            } else {
+              extraMatched = runCompareFiles(python, EXTRA_BASELINE, EXTRA_OUR_CAPTURE);
+              log(
+                extraMatched
+                  ? `PASS: ${extraBattery.cases} split_clients/pass cases match real nginx (${REFERENCE_NGINX})`
+                  : 'FAIL: unexpected split_clients/pass differences (see above)',
+              );
+            }
+          }
+        } finally {
+          if (extraGateway.exitCode === null) {
+            extraGateway.kill();
+            await Promise.race([
+              new Promise((resolve) => extraGateway.once('exit', resolve)),
+              delay(10_000).then(() => extraGateway.kill('SIGKILL')),
+            ]);
+          }
+          fs.closeSync(extraLog);
+        }
+      }
+      exitCode = matched && extraMatched ? 0 : 1;
+    }
   } finally {
     if (gateway.exitCode === null) {
       gateway.kill();

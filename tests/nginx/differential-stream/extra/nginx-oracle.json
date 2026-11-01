@@ -1,0 +1,50 @@
+{
+  "cases": {
+    "pass.proxy": [
+      {
+        "received": "pass-through-echo\n",
+        "sent": "pass-through-echo\n"
+      }
+    ],
+    "pass.return": [
+      {
+        "received": "via-pass"
+      }
+    ],
+    "pass.target-return": [
+      {
+        "received": "via-pass"
+      }
+    ],
+    "split.server-addr.1": [
+      {
+        "received": "b4/p3/right"
+      }
+    ],
+    "split.server-addr.2": [
+      {
+        "received": "b2/p5/right"
+      }
+    ],
+    "split.server-addr.3": [
+      {
+        "received": "b1/p4/right"
+      }
+    ],
+    "split.server-addr.4": [
+      {
+        "received": "b2/p5/right"
+      }
+    ],
+    "split.server-addr.5": [
+      {
+        "received": "b1/p1/right"
+      }
+    ],
+    "split.server-addr.6": [
+      {
+        "received": "b2/p2/right"
+      }
+    ]
+  }
+}
