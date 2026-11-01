@@ -41,8 +41,7 @@
     },
     "standard": {
       "common": [
-        "common/001_bootstrap.sql",
-        "001_bootstrap.sql"
+        "common/001_bootstrap.sql"
       ],
       "locales": {
         "zh-CN": [],
