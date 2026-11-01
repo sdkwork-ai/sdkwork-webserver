@@ -38,8 +38,8 @@ const VITE_CACHE_SURFACE_ID = path.basename(path.resolve(APP_ROOT));
  *
  * Sources, in precedence order:
  * 1. an explicitly provisioned `SDKWORK_ACCESS_TOKEN` (process env, then the
- *    private app env files `.env`, `.env.local`, `.env.<mode>`,
- *    `.env.<environment>`, and their `.local` variants — all uncommitted);
+ *    user credential bundle at
+ *    `~/.sdkwork/<application-code>/credentials/<profile-id>.json`);
  * 2. the canonical repository bootstrap resolution shared with the dev
  *    lifecycle, which may generate a disposable local bootstrap JWT from the
  *    surface manifest identity.

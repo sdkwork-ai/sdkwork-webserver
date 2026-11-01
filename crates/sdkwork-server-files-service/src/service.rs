@@ -397,7 +397,9 @@ mod sensitive_name_tests {
     fn credential_shaped_names_are_refused() {
         for name in [
             ".env",
+            // env-naming:allow — the security test asserts these names are refused
             ".env.local",
+            // env-naming:allow — the security test asserts these names are refused
             ".env.production",
             "server.pem",
             "private.key",
