@@ -36,13 +36,7 @@ Thumbs.db
 *.local
 
 # SDKWork local environment and runtime config overrides
-.env.local
-.env.development.local
-.env.test.local
-.env.staging.local
-.env.production.local
 config/host/postgres.env
-.env.release.local
 config/*.local.toml
 apps/*/config/*/*.local.toml
 
