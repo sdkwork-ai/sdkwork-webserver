@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "module": "sdkwork-webserver",
+  "default": "tenant-global",
+  "reason": "Website resources partition rows by tenant. organization_id records the owning organization, while WebAppRequestContext.resource_scope selects Owner (actor-scoped) or Tenant (tenant-wide) visibility. require_application_access applies that gate to application reads and mutations; a bare organization_id predicate would break tenant administration.",
+  "organizationScopedTables": []
+}
