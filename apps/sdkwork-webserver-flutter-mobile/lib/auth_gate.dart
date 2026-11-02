@@ -12,7 +12,6 @@ import 'package:sdkwork_webserver_flutter_mobile_commons/sdkwork_webserver_flutt
 import 'package:sdkwork_webserver_flutter_mobile_shell/sdkwork_webserver_flutter_mobile_shell.dart';
 
 import 'app.dart';
-import 'bootstrap/runtime.dart';
 import 'bootstrap/sdk_clients.dart';
 
 class WebserverFlutterAuthGate extends StatefulWidget {
