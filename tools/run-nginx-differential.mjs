@@ -220,12 +220,12 @@ function runCompare(python, expected, actual) {
 
 async function main() {
   const refreshOracle = process.argv.includes('--refresh-oracle');
-  const requireOracle = process.argv.includes('--require-oracle');
+  const requireOracle = process.argv.includes('--require-oracle') || REQUIRE_EVIDENCE;
 
   const python = resolvePython();
   if (!python) {
-    log('SKIP: no python3/python on PATH; the battery cannot run');
-    return requireOracle || REQUIRE_EVIDENCE ? 1 : 0;
+    log(`${requireOracle ? 'FAIL' : 'SKIP'}: no python3/python on PATH; the battery cannot run`);
+    return requireOracle ? 1 : 0;
   }
   if (!fs.existsSync(FIXTURE)) {
     log(`FAIL: missing fixture ${FIXTURE}`);
@@ -248,7 +248,7 @@ async function main() {
       log(`oracle ${oracle.status}: ${oracle.reason ?? 'no real nginx available here'}`);
       if (!baseline) {
         if (requireOracle) {
-          log('FAIL: --require-oracle was requested but no oracle produced a baseline');
+          log('FAIL: release evidence is required (--require-oracle or SDKWORK_REQUIRE_NGINX_EVIDENCE=1) but no oracle produced a baseline');
           return 1;
         }
         log('SKIP: no baseline to compare against; the differential slice did NOT run');
@@ -299,8 +299,8 @@ async function main() {
 
   const binary = findBinary();
   if (!binary) {
-    log('SKIP: no gateway binary found (build it, or set SDKWORK_WEBSERVER_GATEWAY_BIN)');
-    return requireOracle || REQUIRE_EVIDENCE ? 1 : 0;
+    log(`${requireOracle ? 'FAIL' : 'SKIP'}: no gateway binary found (build it, or set SDKWORK_WEBSERVER_GATEWAY_BIN)`);
+    return requireOracle ? 1 : 0;
   }
   if (staleness(binary, root).stale) {
     log(`FAIL: ${stalenessMessage(binary, root, 'node tools/run-nginx-differential.mjs')}`);

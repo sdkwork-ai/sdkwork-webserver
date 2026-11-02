@@ -399,6 +399,29 @@ function runBattery(python, port, unixPort, storeDir) {
   return result.status === 0;
 }
 
+/**
+ * The CGI responders echo `DOCUMENT_ROOT` and `SCRIPT_FILENAME` into their JSON
+ * bodies, so the committed oracle embeds the absolute fixture path of the
+ * checkout that captured it (`/opt/source/...` in the original CI). A checkout
+ * at any other path then differs by the prefix length in every echo case even
+ * though the parameter mapping is identical. Normalize the fixture root to a
+ * placeholder before comparing, and recompute the echoed `Content-Length` for
+ * the normalized body so the byte-count assertion still checks the mapping.
+ */
+const PUBLIC_ROOT_RE = /(?:[A-Za-z]:[\\/]|\/)[^\s"\\]*?tests[\\/]nginx[\\/]differential-protocols[\\/]public/g;
+
+function normalizeFixturePath(body) {
+  return typeof body === 'string' ? body.replace(PUBLIC_ROOT_RE, '@PUBLIC@') : body;
+}
+
+function headersForBody(record, body) {
+  const headers = { ...(record.headers ?? {}) };
+  if (body !== record.body && headers['content-length']) {
+    headers['content-length'] = [String(Buffer.byteLength(body))];
+  }
+  return headers;
+}
+
 function compare(expected, actual, statusOnlyCases = new Set()) {
   const differences = [];
   const expectedCases = expected.cases ?? {};
@@ -419,12 +442,14 @@ function compare(expected, actual, statusOnlyCases = new Set()) {
       differences.push(`${name}: status ${want.status} != ${got.status}`);
     }
     if (statusOnlyCases.has(name)) continue;
-    const wantHeaders = JSON.stringify(want.headers ?? {});
-    const gotHeaders = JSON.stringify(got.headers ?? {});
+    const wantBody = normalizeFixturePath(want.body);
+    const gotBody = normalizeFixturePath(got.body);
+    const wantHeaders = JSON.stringify(headersForBody(want, wantBody));
+    const gotHeaders = JSON.stringify(headersForBody(got, gotBody));
     if (wantHeaders !== gotHeaders) {
       differences.push(`${name}: headers ${wantHeaders} != ${gotHeaders}`);
     }
-    if (want.body !== got.body) {
+    if (wantBody !== gotBody) {
       differences.push(`${name}: body differs`);
     }
     const wantTrailers = JSON.stringify(want.trailers ?? {});
@@ -438,10 +463,13 @@ function compare(expected, actual, statusOnlyCases = new Set()) {
 
 async function main() {
   const refreshOracle = process.argv.includes('--refresh-oracle');
-  const requireOracle = process.argv.includes('--require-oracle');
+  // The aggregate release gate exports SDKWORK_REQUIRE_NGINX_EVIDENCE=1
+  // instead of forwarding --require-oracle; both forms must fail closed.
+  const requireOracle = process.argv.includes('--require-oracle')
+    || process.env.SDKWORK_REQUIRE_NGINX_EVIDENCE === '1';
   const python = resolvePython();
   if (!python) {
-    log('SKIP: no python3/python on PATH; the battery cannot run');
+    log(`${requireOracle ? 'FAIL' : 'SKIP'}: no python3/python on PATH; the battery cannot run`);
     return requireOracle ? 1 : 0;
   }
 
@@ -456,7 +484,7 @@ async function main() {
       log(`oracle ${oracle.status}: ${oracle.reason ?? ''}`);
       if (!baseline) {
         if (requireOracle) {
-          log('FAIL: --require-oracle was requested but no oracle produced a baseline');
+          log('FAIL: release evidence is required (--require-oracle or SDKWORK_REQUIRE_NGINX_EVIDENCE=1) but no oracle produced a baseline');
           return 1;
         }
         log('SKIP: no baseline to compare against; the differential slice did NOT run');
@@ -504,7 +532,7 @@ async function main() {
   }
   const binary = findBinary();
   if (!binary) {
-    log('SKIP: no gateway binary found (build it, or set SDKWORK_WEBSERVER_GATEWAY_BIN)');
+    log(`${requireOracle ? 'FAIL' : 'SKIP'}: no gateway binary found (build it, or set SDKWORK_WEBSERVER_GATEWAY_BIN)`);
     return requireOracle ? 1 : 0;
   }
   if (staleness(binary.path, root).stale) {

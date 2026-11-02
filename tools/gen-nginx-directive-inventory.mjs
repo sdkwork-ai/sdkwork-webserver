@@ -770,7 +770,12 @@ function validateCommitted(inventoryText) {
   }
   if (inventory.digest !== inventoryDigest(inventory)) problems.push('digest mismatch');
   const canonical = serializeInventory(inventory);
-  if (canonical !== inventoryText) problems.push('file is not in canonical serialized form');
+  // A Windows `core.autocrlf=true` checkout rewrites the committed LF blob to
+  // CRLF in the working tree. Compare canonical content, not the checkout's
+  // EOL conversion, so the inventory gate is reproducible on every platform.
+  if (canonical !== inventoryText.replace(/\r\n/g, '\n')) {
+    problems.push('file is not in canonical serialized form');
+  }
   return { inventory, problems };
 }
 
@@ -806,7 +811,7 @@ function main() {
       );
       return;
     }
-    const committed = fs.readFileSync(INVENTORY_PATH, 'utf8');
+    const committed = fs.readFileSync(INVENTORY_PATH, 'utf8').replace(/\r\n/g, '\n');
     if (committed !== derivedText) {
       const a = committed.split('\n');
       const b = derivedText.split('\n');
@@ -825,7 +830,7 @@ function main() {
     );
     return;
   }
-  const committed = fs.readFileSync(INVENTORY_PATH, 'utf8');
+  const committed = fs.readFileSync(INVENTORY_PATH, 'utf8').replace(/\r\n/g, '\n');
   const { inventory, problems } = validateCommitted(committed);
   if (problems.length > 0) throw new Error(problems.join('\n'));
   process.stdout.write(

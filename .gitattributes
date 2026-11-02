@@ -6,6 +6,16 @@
 *.bash text eol=lf
 *.ps1 text eol=crlf
 
+# Generated nginx compatibility contracts are canonical LF. The offline drift
+# gates compare the committed bytes with their own `\n` serialization; a Windows
+# `core.autocrlf=true` checkout would otherwise turn the working copy into CRLF
+# and make `check:nginx-matrix` fail on a clean tree.
+specs/nginx-directive-inventory.json text eol=lf
+specs/nginx-directive-support.catalog.json text eol=lf
+specs/nginx-gap.catalog.json text eol=lf
+specs/nginx-behavioral-corpus.manifest.json text eol=lf
+docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md text eol=lf
+
 # Differential-oracle fixtures are byte-pinned: nginx `ETag` is
 # `<mtime>-<size>`, so a checkout that converts LF to CRLF changes the expected
 # representation length and every conditional/range assertion in
@@ -15,3 +25,6 @@
 tests/nginx/differential/public/** -text
 tests/nginx/differential-http/public/** -text
 tests/nginx/differential-host/public/** -text
+tests/nginx/differential-protocols/public/** -text
+# GeoIP test databases are binary artifacts; pin the committed bytes.
+tests/nginx/geoip/** -text

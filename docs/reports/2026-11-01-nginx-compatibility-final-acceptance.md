@@ -1,5 +1,15 @@
 # nginx 1.29.6 OSS compatibility — final acceptance state
 
+> **Re-audit note (2026-11-02):** The "384/384" and "89/89" clean-checkout claims
+> below were not reproducible from the committed tree. The HTTP oracle had been
+> captured from a fixture tree that contained an uncommitted `autoindex/sub/`
+> directory and an ignored `autoindex/z.log`; the protocol oracle embeds the
+> absolute `/opt/source/...` checkout path and capture-time mtimes. The HTTP
+> oracle was recaptured and now passes 384/384; the protocol slice remains
+> environment-dependent. See
+> [2026-11-02-nginx-compatibility-reaudit.md](2026-11-02-nginx-compatibility-reaudit.md)
+> for the corrected evidence and the remaining gaps.
+
 Snapshot: `main` at `cab02622` (2026-11-01). Reference oracle: nginx.org
 **nginx/1.29.6**; directive inventory generated from the 1.29.6 source
 (`specs/nginx-directive-inventory.json`, 744 directives).

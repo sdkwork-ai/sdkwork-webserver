@@ -39,6 +39,18 @@ import { fileURLToPath } from 'node:url';
 import { inventoryDigest, serializeInventory } from './gen-nginx-directive-inventory.mjs';
 import * as migrationCli from './import-nginx-conf.mjs';
 
+/**
+ * Read a canonical-LF contract file without depending on the checkout's EOL
+ * conversion. Git's `core.autocrlf=true` on Windows rewrites LF to CRLF in the
+ * working tree even though the committed blob is LF; comparing that byte-level
+ * copy against our own `\n` serialization would report a false "stale" drift.
+ * The `.gitattributes` entries pin the preferred checkout form, and this helper
+ * keeps the gate reproducible on a tree that was checked out before them.
+ */
+function readCanonicalText(file) {
+  return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(__dirname, '..');
 export const INVENTORY_PATH = path.join(REPO_ROOT, 'specs', 'nginx-directive-inventory.json');
@@ -1373,7 +1385,7 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------------------
 
 test('inventory is canonical, digest-valid, and derived from nginx 1.29.6', () => {
-  const text = fs.readFileSync(INVENTORY_PATH, 'utf8');
+  const text = readCanonicalText(INVENTORY_PATH);
   const inventory = JSON.parse(text);
   assert.equal(inventory.schemaVersion, 1);
   assert.equal(inventory.kind, 'sdkwork.webserver.nginx-directive-inventory');
@@ -1397,7 +1409,7 @@ test('support catalog covers the inventory exactly (checks a and b)', () => {
   assert.equal(catalog.profile, 'http-core-v1');
   assert.equal(catalog.inventory.digest, inventory.digest, 'catalog must pin the current inventory digest');
   assert.ok(catalog.evidenceRevision, 'catalog must declare an evidence revision');
-  assert.equal(fs.readFileSync(CATALOG_PATH, 'utf8'), serializeCatalog(catalog),
+  assert.equal(readCanonicalText(CATALOG_PATH), serializeCatalog(catalog),
     'catalog must be canonical JSON (run --sync --write)');
   for (const entry of catalog.directives) {
     assert.ok(!entry.reviewRequired,
@@ -1729,7 +1741,7 @@ test('generated operator matrix is current (check f)', () => {
   const catalog = loadCatalog();
   const inventory = loadInventory();
   const expected = renderMatrix(catalog, inventory);
-  const actual = fs.readFileSync(MATRIX_PATH, 'utf8');
+  const actual = readCanonicalText(MATRIX_PATH);
   assert.equal(actual, expected,
     'docs/guides/operator/NGINX-COMPATIBILITY-MATRIX.md is stale; run '
       + '`node tools/check-nginx-directive-matrix.mjs --write`');

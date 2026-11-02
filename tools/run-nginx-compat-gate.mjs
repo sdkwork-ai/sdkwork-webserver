@@ -81,6 +81,15 @@ const staticGates = [
     'tools/gen-nginx-directive-audit.mjs',
     ['tools/gen-nginx-directive-audit.mjs', '--check', '--verify-evidence'],
   ],
+  // The migration CLI is the operator's first contact with compatibility: a
+  // regression that renders an accepted-but-unenforced directive as an enforced
+  // TOML key would silently change production behaviour. It is a release gate,
+  // not an optional developer test.
+  [
+    'migration CLI',
+    'tools/import-nginx-conf.test.mjs',
+    ['--test', 'tools/import-nginx-conf.test.mjs'],
+  ],
 ];
 for (const [label, script, args] of staticGates) {
   if (!requireFile(script, label)) {
@@ -124,7 +133,12 @@ for (const orchestrator of orchestrators) {
     failures.push(orchestrator);
     continue;
   }
-  if (!run(orchestrator, 'node', [orchestrator])) failures.push(orchestrator);
+  // Pass the explicit flag as well as the environment variable. Both forms are
+  // honoured by every orchestrator; carrying both means a future runner that
+  // only parses argv still fails closed under this gate.
+  if (!run(orchestrator, 'node', [orchestrator, '--require-oracle'])) {
+    failures.push(orchestrator);
+  }
 }
 
 if (failures.length > 0) {

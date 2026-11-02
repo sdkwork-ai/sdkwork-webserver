@@ -80,6 +80,25 @@ test('nginx behavioral corpus manifest matches fixtures', () => {
     }
   }
 
+  const orchestrators = [
+    ...new Set(manifest.slices.map((slice) => slice.orchestrator).filter(Boolean)),
+  ];
+  assert.ok(orchestrators.length > 0, 'the corpus must index at least one differential orchestrator');
+  for (const orchestrator of orchestrators) {
+    assert.ok(fs.existsSync(path.join(root, orchestrator)), `missing orchestrator ${orchestrator}`);
+    const source = fs.readFileSync(path.join(root, orchestrator), 'utf8');
+    // The aggregate gate exports SDKWORK_REQUIRE_NGINX_EVIDENCE=1 and does not
+    // forward --require-oracle. An orchestrator that only honours the CLI flag
+    // would print SKIP and exit 0 when python/nginx/binary is missing, letting a
+    // release pass without the real-nginx comparison it claims to enforce.
+    assert.match(
+      source,
+      /SDKWORK_REQUIRE_NGINX_EVIDENCE/,
+      `${orchestrator}: must fail closed when SDKWORK_REQUIRE_NGINX_EVIDENCE=1; `
+        + 'a skipped differential slice cannot pass release verification',
+    );
+  }
+
   const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
   const corpus = catalog.capabilities.find((c) => c.id === 'nginx.behavioral-corpus');
   assert.ok(corpus, 'catalog must list nginx.behavioral-corpus');
