@@ -178,6 +178,36 @@
           "iam.audit_events.read"
         ]
       }
+    },
+    {
+      "id": "sdkwork-webserver-flutter-mobile",
+      "root": "apps/sdkwork-webserver-flutter-mobile",
+      "format": "flutter",
+      "runtimeTarget": "flutter-android",
+      "bindings": {},
+      "accessToken": {
+        "appId": "sdkwork-webserver-flutter-mobile",
+        "tenantId": "100001",
+        "organizationId": "0",
+        "permissionScope": [
+          "iam:self"
+        ]
+      }
+    },
+    {
+      "id": "sdkwork-webserver-mini-program",
+      "root": "apps/sdkwork-webserver-mini-program",
+      "format": "mini-program",
+      "runtimeTarget": "mini-program",
+      "bindings": {},
+      "accessToken": {
+        "appId": "sdkwork-webserver-mini-program",
+        "tenantId": "100001",
+        "organizationId": "0",
+        "permissionScope": [
+          "iam:self"
+        ]
+      }
     }
   ]
 }
