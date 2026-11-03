@@ -10,7 +10,7 @@ Canonical lifecycle assets for the `sdkwork-webserver` PostgreSQL control-plane 
 - required extensions: none
 - tablePrefix: `webserver_`
 
-## Initialization State
+## Initialization state
 
 - `baselineStrategy`: committed primary baseline
 - baseline: `database/ddl/baseline/postgres/0001_webserver_baseline.sql` (full PostgreSQL DDL snapshot)
