@@ -323,9 +323,18 @@ impl Dns01Presenter for ChalltestsrvDns01Presenter {
     }
 }
 
+/// Both lifecycle tests bind the same fixed local ports (pebble 14000/15000,
+/// challtestsrv 8053/8055, the HTTP-01 challenge port 5002). The default test
+/// harness runs them in parallel threads, so an unserialized pair boot would
+/// race for those ports and one test would fail with a connect error that
+/// says nothing about the cause. The guard serializes the boots; the lock is
+/// process-local, so two cargo invocations still need separate port sets.
+static PORT_EXCLUSIVE_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tokio::test]
 #[ignore = "requires pebble and pebble-challtestsrv binaries"]
 async fn full_issuance_lifecycle_against_pebble() {
+    let _ports = PORT_EXCLUSIVE_GUARD.lock().await;
     let ca = ControlledCa::boot().await;
     let webroot = ca.temp.path().join("webroot");
     std::fs::create_dir_all(webroot.join(".well-known").join("acme-challenge"))
@@ -419,6 +428,7 @@ async fn full_issuance_lifecycle_against_pebble() {
 #[tokio::test]
 #[ignore = "requires pebble and pebble-challtestsrv binaries"]
 async fn wildcard_issuance_over_dns01_against_pebble() {
+    let _ports = PORT_EXCLUSIVE_GUARD.lock().await;
     let ca = ControlledCa::boot().await;
     let account_root = ca.temp.path().join("accounts");
     let issuer = ca.issuer(None, &account_root);

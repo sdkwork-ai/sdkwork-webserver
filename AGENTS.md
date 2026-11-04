@@ -260,13 +260,17 @@ node ../sdkwork-specs/tools/check-workspace-member-protocol.mjs --root .
 node ../sdkwork-specs/tools/check-dependency-list-completeness.mjs --root .
 ```
 <!-- /SDKWORK-PNPM-WORKSPACE-STANDARD: v1 -->
+
 <!-- SDKWORK-SDK-GENERATION-STANDARD: v1 -->
 ## Generated SDK Output Is Generator-Owned
+
 Authority: `../sdkwork-specs/SDK_SPEC.md` and `../sdkwork-specs/SDK_WORKSPACE_GENERATION_SPEC.md`.
+
 Everything generated under `sdks/` — `generated/server-openapi/` trees, generated language
 workspaces, `dist/` build output, generated `sdkwork-sdk.json`, generated
 `.sdkwork/sdkwork-generator-*` reports, and standardizer-synced OpenAPI snapshots — is produced by
 the canonical SDK generator `../sdkwork-sdk-generator/bin/sdkgen.js` (`@sdkwork/sdk-generator`).
+
 - Do not hand-edit generated SDK files, including type definitions, dist bundles, and generated
   package metadata. Manual edits are overwritten by the next generation run and break
   reproducibility and contract audits.
@@ -278,11 +282,14 @@ the canonical SDK generator `../sdkwork-sdk-generator/bin/sdkgen.js` (`@sdkwork/
   disappeared routes and models; do not hand-prune generated trees.
 - The only approved handwritten surfaces are `custom/` roots inside generated workspaces and
   authored `composed/` facades outside `generated/server-openapi`.
+
 Verification:
+
 ```bash
 node ../sdkwork-specs/tools/sync-agent-sdk-generation-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-SDK-GENERATION-STANDARD: v1 -->
+
 ## Deployment Standard (bin/)
 Per `../sdkwork-specs/MODULE_BIN_SPEC.md`, this Rust module ships the
 standardized `bin/` entrypoint family; all build/package/deploy work `MUST`

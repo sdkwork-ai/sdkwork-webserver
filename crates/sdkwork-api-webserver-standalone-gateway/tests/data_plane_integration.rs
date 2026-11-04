@@ -1289,6 +1289,7 @@ async fn serves_fixed_and_static_routes_and_drains() {
     assert_eq!(default_host.status(), reqwest::StatusCode::OK);
 
     let no_redirect_client = reqwest::Client::builder()
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("build no-redirect client");
@@ -2420,6 +2421,7 @@ async fn serves_https_with_rustls() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build TLS test client");
@@ -2482,6 +2484,7 @@ async fn enforces_a_tls13_only_policy_at_the_handshake() {
 
     // Prove the listener is live before asserting a refusal.
     let client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build TLS test client");
@@ -2524,6 +2527,7 @@ async fn guards_chunked_framing_after_tls_decryption() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTPS readiness client");
@@ -2576,6 +2580,7 @@ async fn preserves_expect_continue_semantics_over_tls() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTPS readiness client");
@@ -2718,6 +2723,7 @@ async fn selects_exact_and_wildcard_sni_certificates_and_fails_closed() {
     let (shutdown, task) = spawn_data_plane(&path);
     let address = ([127, 0, 0, 1], port).into();
     let client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .tls_info(true)
         .resolve("alpha.localhost", address)
@@ -2867,6 +2873,7 @@ async fn advertises_http2_stream_budget_and_rejects_oversized_header_lists() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build readiness client");
@@ -3015,6 +3022,7 @@ async fn sheds_excess_http2_stream_until_streaming_response_body_completes() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build admission readiness client");
@@ -3102,6 +3110,7 @@ async fn releases_http2_admission_after_client_stream_reset() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build cancellation readiness client");
@@ -3334,6 +3343,7 @@ async fn times_out_idle_http2_response_stream_and_keeps_connection_healthy() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build idle H2 readiness client");
@@ -3511,6 +3521,7 @@ async fn closes_http2_reset_churn_and_recovers_on_a_new_connection() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTP/2 readiness client");
@@ -3546,6 +3557,7 @@ async fn closes_http2_reset_churn_and_recovers_on_a_new_connection() {
     );
 
     let fresh_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build fresh HTTP/2 client");
@@ -3576,6 +3588,7 @@ async fn closes_http2_new_stream_churn_and_recovers_on_a_new_connection() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTP/2 readiness client");
@@ -3613,6 +3626,7 @@ async fn closes_http2_new_stream_churn_and_recovers_on_a_new_connection() {
     );
 
     let fresh_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build fresh HTTP/2 client");
@@ -3643,6 +3657,7 @@ async fn closes_http2_frame_flood_and_recovers_on_a_new_connection() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTP/2 readiness client");
@@ -3669,6 +3684,7 @@ async fn closes_http2_frame_flood_and_recovers_on_a_new_connection() {
         .expect("frame-flood connection closes at the configured limit");
 
     let fresh_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build fresh HTTP/2 client");
@@ -3697,6 +3713,7 @@ async fn sends_enhance_your_calm_after_excessive_http2_local_error_resets() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTP/2 readiness client");
@@ -3738,6 +3755,7 @@ async fn sends_enhance_your_calm_after_excessive_http2_local_error_resets() {
     );
 
     let fresh_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build fresh HTTP/2 client");
@@ -3767,6 +3785,7 @@ async fn closes_oversized_http2_encoded_header_blocks_and_recovers() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTP/2 readiness client");
@@ -3799,6 +3818,7 @@ async fn closes_oversized_http2_encoded_header_blocks_and_recovers() {
     );
 
     let fresh_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build fresh HTTP/2 client");
@@ -3827,6 +3847,7 @@ async fn drains_inflight_http2_stream_after_goaway_and_rejects_new_streams() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build HTTP/2 readiness client");
@@ -3974,6 +3995,7 @@ async fn maximum_connection_age_sends_h2_goaway_and_drains_an_inflight_stream() 
         .expect("aged H2 connection drains cleanly");
 
     let client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build fresh client after connection retirement");
@@ -3999,6 +4021,7 @@ async fn maximum_connection_age_cancels_a_stream_after_the_finite_drain_deadline
     let (shutdown, task) = spawn_data_plane(&path);
 
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build finite-drain readiness client");
@@ -4036,6 +4059,7 @@ async fn maximum_connection_age_cancels_a_stream_after_the_finite_drain_deadline
     );
 
     let client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build recovery client after forced age drain");
@@ -4097,6 +4121,7 @@ async fn forwards_and_bounds_http2_request_and_response_trailers() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build readiness client");
@@ -5177,6 +5202,7 @@ async fn closes_tls_http1_after_an_upstream_early_response() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build early-response TLS readiness client");
@@ -5226,6 +5252,7 @@ async fn cancels_an_early_response_http2_upload_and_reuses_the_connection() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let readiness_client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .build()
         .expect("build early-response H2 readiness client");
@@ -5307,6 +5334,7 @@ async fn preserves_an_early_response_body_for_a_hyper_http2_client() {
     let path = write_config(directory.path(), &config);
     let (shutdown, task) = spawn_data_plane(&path);
     let client = reqwest::Client::builder()
+        .no_proxy()
         .danger_accept_invalid_certs(true)
         .http2_prior_knowledge()
         .build()

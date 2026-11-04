@@ -43,6 +43,24 @@ pub fn acme_directory_profile(directory_url: &str) -> Option<&'static AcmeDirect
         .find_map(|(directory, profile)| (*directory == normalized).then_some(profile))
 }
 
+/// The wire-vocabulary `caProfile` value an issue request carries for a
+/// directory, for the two Let's Encrypt directories.
+///
+/// The answer names where orders are actually sent, so a deployment whose
+/// `SDKWORK_WEBSERVER_ACME_PROFILE` label disagrees with its
+/// `SDKWORK_WEBSERVER_ACME_DIRECTORY_URL` — a staging environment rehearsing
+/// against the production directory — still reports the CA the certificate
+/// will really come from. `None` for every other directory: the caller falls
+/// back to its own configured flag, which is the best available answer for a
+/// custom ACME endpoint.
+pub fn acme_directory_ca_profile(directory_url: &str) -> Option<&'static str> {
+    match normalize_directory_url(directory_url)?.as_str() {
+        LETS_ENCRYPT_PRODUCTION_DIRECTORY => Some(CA_PROFILE_LETS_ENCRYPT_PRODUCTION),
+        LETS_ENCRYPT_STAGING_DIRECTORY => Some(CA_PROFILE_LETS_ENCRYPT_STAGING),
+        _ => None,
+    }
+}
+
 /// Longest directory URL considered, matching `AcmeConfig`'s own ceiling.
 const MAX_DIRECTORY_URL_BYTES: usize = 2_048;
 
@@ -73,6 +91,19 @@ fn normalize_directory_url(raw: &str) -> Option<String> {
     Some(normalized)
 }
 
+/// The two Let's Encrypt directory URLs, in the normalized form
+/// `normalize_directory_url` produces, so the profile table and the wire
+/// `caProfile` mapping below cannot drift apart.
+const LETS_ENCRYPT_PRODUCTION_DIRECTORY: &str = "https://acme-v02.api.letsencrypt.org/directory";
+const LETS_ENCRYPT_STAGING_DIRECTORY: &str =
+    "https://acme-staging-v02.api.letsencrypt.org/directory";
+
+/// Wire-vocabulary `caProfile` values for the two Let's Encrypt directories,
+/// as an issue request carries them. Mirrored here because this engine crate
+/// sits below the wire-contract crate and must not depend on it.
+pub(crate) const CA_PROFILE_LETS_ENCRYPT_PRODUCTION: &str = "LETS_ENCRYPT_PRODUCTION";
+pub(crate) const CA_PROFILE_LETS_ENCRYPT_STAGING: &str = "LETS_ENCRYPT_STAGING";
+
 /// `(directory URL, profile)` pairs for the directories this engine can be
 /// pointed at.
 ///
@@ -84,7 +115,7 @@ const ACME_DIRECTORY_PROFILES: &[(&str, AcmeDirectoryProfile)] = &[
     // https://letsencrypt.org/docs/certificate-compatibility/ and the
     // `caaIdentities` field of both directories' metadata.
     (
-        "https://acme-v02.api.letsencrypt.org/directory",
+        LETS_ENCRYPT_PRODUCTION_DIRECTORY,
         AcmeDirectoryProfile {
             issuer_domains: &["letsencrypt.org"],
             supports_wildcard: true,
@@ -92,7 +123,7 @@ const ACME_DIRECTORY_PROFILES: &[(&str, AcmeDirectoryProfile)] = &[
         },
     ),
     (
-        "https://acme-staging-v02.api.letsencrypt.org/directory",
+        LETS_ENCRYPT_STAGING_DIRECTORY,
         AcmeDirectoryProfile {
             issuer_domains: &["letsencrypt.org"],
             supports_wildcard: true,
@@ -173,7 +204,11 @@ const ACME_DIRECTORY_PROFILES: &[(&str, AcmeDirectoryProfile)] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::acme_directory_profile;
+    use super::{
+        acme_directory_ca_profile, acme_directory_profile, CA_PROFILE_LETS_ENCRYPT_PRODUCTION,
+        CA_PROFILE_LETS_ENCRYPT_STAGING, LETS_ENCRYPT_PRODUCTION_DIRECTORY,
+        LETS_ENCRYPT_STAGING_DIRECTORY,
+    };
 
     #[test]
     fn resolves_the_ca_identity_from_the_directory_url() {
@@ -266,6 +301,52 @@ mod tests {
             "https://letsencrypt.org",
         ] {
             assert!(acme_directory_profile(unknown).is_none(), "{unknown}");
+        }
+    }
+
+    #[test]
+    fn lets_encrypt_directories_name_their_wire_ca_profile() {
+        assert_eq!(
+            acme_directory_ca_profile(LETS_ENCRYPT_PRODUCTION_DIRECTORY),
+            Some(CA_PROFILE_LETS_ENCRYPT_PRODUCTION)
+        );
+        assert_eq!(
+            acme_directory_ca_profile(LETS_ENCRYPT_STAGING_DIRECTORY),
+            Some(CA_PROFILE_LETS_ENCRYPT_STAGING)
+        );
+        // Operator spellings of one URL must not change the answer.
+        assert_eq!(
+            acme_directory_ca_profile("HTTPS://ACME-V02.API.LETSENCRYPT.ORG/directory/"),
+            Some(CA_PROFILE_LETS_ENCRYPT_PRODUCTION)
+        );
+    }
+
+    #[test]
+    fn a_directory_without_a_wire_ca_profile_is_left_to_the_caller() {
+        // Custom and third-party ACME endpoints are not Let's Encrypt and must
+        // not be labelled with a Let's Encrypt profile.
+        for not_lets_encrypt in [
+            "https://acme.example.test/directory",
+            "https://acme.zerossl.com/v2/DV90",
+            "not-a-url",
+        ] {
+            assert!(
+                acme_directory_ca_profile(not_lets_encrypt).is_none(),
+                "{not_lets_encrypt}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_ca_profile_urls_stay_in_the_directory_table() {
+        // The mapping and the capability table answer two questions about the
+        // same two URLs; if one of them leaves the table the other still
+        // claims knowledge it no longer has.
+        for url in [
+            LETS_ENCRYPT_PRODUCTION_DIRECTORY,
+            LETS_ENCRYPT_STAGING_DIRECTORY,
+        ] {
+            assert!(acme_directory_profile(url).is_some(), "{url}");
         }
     }
 }

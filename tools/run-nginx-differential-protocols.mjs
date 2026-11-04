@@ -20,6 +20,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { staleness, stalenessMessage } from './gateway-binary-freshness.mjs';
@@ -69,9 +70,19 @@ const GATEWAY_PORT = 21093;
 /** Second listener pair for the typed-plane unix-socket transport cases. */
 const ORACLE_UNIX_PORT = ORACLE_PORT + 30;
 const GATEWAY_UNIX_PORT = GATEWAY_PORT + 30;
-const GATEWAY_UNIX_ROOT = path.join(GATEWAY_CONF_DIR, 'unix');
+/**
+ * AF_UNIX sockets and POSIX file modes need a native filesystem. A WSL2
+ * checkout under /mnt/* (drvfs) answers bind(2) with Errno 95 and reports
+ * every created file as 0777, so the unix-socket root and the `*_store` root
+ * live on the OS temp filesystem unless NGINX_DIFF_PROTOCOLS_UNIX_ROOT points
+ * somewhere else.
+ */
+const NATIVE_WORK_ROOT = process.env.NGINX_DIFF_PROTOCOLS_UNIX_ROOT
+  ?? path.join(os.tmpdir(), 'sdkwork-nginx-diff-protocols');
+const GATEWAY_UNIX_ROOT = path.join(NATIVE_WORK_ROOT, 'unix');
 const GATEWAY_FCGI_SOCKET = path.join(GATEWAY_UNIX_ROOT, 'fcgi.sock');
 const GATEWAY_UWSGI_SOCKET = path.join(GATEWAY_UNIX_ROOT, 'uwsgi.sock');
+fs.mkdirSync(NATIVE_WORK_ROOT, { recursive: true });
 const ORACLE_FCGI_PORT = ORACLE_PORT + 2;
 const ORACLE_UWSGI_PORT = ORACLE_PORT + 10;
 const ORACLE_SCGI_PORT = ORACLE_PORT + 11;
@@ -92,7 +103,7 @@ const GATEWAY_GRPC_TLS_OK_PORT = GATEWAY_PORT + 21;
 const GATEWAY_GRPC_TLS_UNTRUSTED_PORT = GATEWAY_PORT + 22;
 /** Fresh per-run `*_store` roots so a rerun never reads a stale file. */
 const ORACLE_STORE_DIR = fs.mkdtempSync(path.join(root, 'tmp', 'protocols-store-oracle-'));
-const GATEWAY_STORE_DIR = fs.mkdtempSync(path.join(root, 'tmp', 'protocols-store-gateway-'));
+const GATEWAY_STORE_DIR = fs.mkdtempSync(path.join(NATIVE_WORK_ROOT, 'protocols-store-gateway-'));
 const GRPC_MOCK_BINARY = 'sdkwork-webserver-grpc-mock';
 const ORACLE_DEAD_PORT = ORACLE_PORT + 5;
 const GATEWAY_DEAD_PORT = GATEWAY_PORT + 5;
@@ -409,15 +420,42 @@ function runBattery(python, port, unixPort, storeDir) {
  * the normalized body so the byte-count assertion still checks the mapping.
  */
 const PUBLIC_ROOT_RE = /(?:[A-Za-z]:[\\/]|\/)[^\s"\\]*?tests[\\/]nginx[\\/]differential-protocols[\\/]public/g;
+/**
+ * The same fixture public root, hex-encoded, as it appears inside uWSGI/FastCGI
+ * packet hex dumps (`extra_hex`). Any absolute prefix before the suffix is
+ * machine-pinned exactly like the plain-text path, so collapse the whole
+ * prefix run into one token on both sides. This also swallows the packet's
+ * length-prefix bytes for that one field; every other echoed parameter stays
+ * byte-compared through the plain-text `params` JSON.
+ */
+const PUBLIC_ROOT_HEX_SUFFIX = Buffer.from('/tests/nginx/differential-protocols/public', 'utf8').toString('hex');
+const PUBLIC_ROOT_HEX_RE = new RegExp(`(?:[0-9a-f]{2})+${PUBLIC_ROOT_HEX_SUFFIX}`, 'g');
+/** Static-file ETags are nginx's "<mtime-hex>-<size-hex>"; the mtime half is
+ * the capturing checkout's file mtime, not a behavior contract. Keep the size. */
+const STATIC_ETAG_RE = /^"([0-9a-f]+)-([0-9a-f]+)"$/;
 
 function normalizeFixturePath(body) {
-  return typeof body === 'string' ? body.replace(PUBLIC_ROOT_RE, '@PUBLIC@') : body;
+  if (typeof body !== 'string') return body;
+  return body.replace(PUBLIC_ROOT_RE, '@PUBLIC@').replace(PUBLIC_ROOT_HEX_RE, '@PUBLIC_HEX@');
 }
 
 function headersForBody(record, body) {
   const headers = { ...(record.headers ?? {}) };
   if (body !== record.body && headers['content-length']) {
     headers['content-length'] = [String(Buffer.byteLength(body))];
+  }
+  if (headers['content-length'] && String(Buffer.byteLength(body)) !== headers['content-length'][0]) {
+    // HEAD-style and summarized responses carry a would-be body length that
+    // embeds the capturing checkout's absolute path lengths. The header's
+    // presence and the normalized body remain the contract; the machine-pinned
+    // byte count does not.
+    headers['content-length'] = ['@BODY_LENGTH@'];
+  }
+  if (headers.etag) {
+    headers.etag = headers.etag.map((value) => {
+      const match = STATIC_ETAG_RE.exec(value);
+      return match ? `"@MTIME@-${match[2]}"` : value;
+    });
   }
   return headers;
 }

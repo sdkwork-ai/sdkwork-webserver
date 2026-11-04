@@ -151,12 +151,21 @@ impl CertificateIssuer {
     /// refused with a message that names the one this edge is configured for —
     /// the alternative is accepting the value and ordering from somewhere else,
     /// which is a silent lie about where the certificate came from.
+    ///
+    /// The answer comes from the configured directory URL, the thing orders
+    /// are actually sent to, not from the `SDKWORK_WEBSERVER_ACME_PROFILE`
+    /// flag: a staging environment that rehearses against the production
+    /// directory must report `LETS_ENCRYPT_PRODUCTION`, because that is where
+    /// its certificates come from. Directories outside the known table (a
+    /// custom ACME endpoint) fall back to the flag, the previous behaviour.
     pub fn acme_profile(&self) -> &'static str {
-        if self.config.use_production {
-            "LETS_ENCRYPT_PRODUCTION"
-        } else {
-            "LETS_ENCRYPT_STAGING"
-        }
+        crate::caa::acme_directory_ca_profile(&self.config.directory_url).unwrap_or(
+            if self.config.use_production {
+                crate::caa::CA_PROFILE_LETS_ENCRYPT_PRODUCTION
+            } else {
+                crate::caa::CA_PROFILE_LETS_ENCRYPT_STAGING
+            },
+        )
     }
 
     /// Attaches the cloud-account registry. Renewals and new issuance then
@@ -942,6 +951,45 @@ mod tests {
             error.to_string().contains("wildcard identifiers require"),
             "{error}"
         );
+    }
+
+    fn issuer_for_directory(directory_url: &str, use_production: bool) -> CertificateIssuer {
+        let config = AcmeConfig::new(
+            directory_url.to_string(),
+            "admin@example.com".to_string(),
+            30,
+            None,
+            use_production,
+        )
+        .expect("config");
+        CertificateIssuer::new(config, "/tmp/certs/live").expect("issuer")
+    }
+
+    #[test]
+    fn the_reported_ca_profile_follows_the_directory_not_the_profile_flag() {
+        // The staging environment points the directory URL at the production
+        // directory while `SDKWORK_WEBSERVER_ACME_PROFILE` still says staging:
+        // the report must name production, because that is where orders go.
+        // The reverse disagreement is equally a label, not an order.
+        let issuer = issuer_for_directory("https://acme-v02.api.letsencrypt.org/directory", false);
+        assert_eq!(issuer.acme_profile(), "LETS_ENCRYPT_PRODUCTION");
+
+        let issuer = issuer_for_directory(
+            "https://acme-staging-v02.api.letsencrypt.org/directory",
+            true,
+        );
+        assert_eq!(issuer.acme_profile(), "LETS_ENCRYPT_STAGING");
+    }
+
+    #[test]
+    fn an_untabled_directory_falls_back_to_the_profile_flag() {
+        // A custom ACME endpoint (a local HTTPS pebble-style CA) has no known
+        // wire profile; the configured flag remains the only answer.
+        let issuer = issuer_for_directory("https://localhost:14000/dir", true);
+        assert_eq!(issuer.acme_profile(), "LETS_ENCRYPT_PRODUCTION");
+
+        let issuer = issuer_for_directory("https://localhost:14000/dir", false);
+        assert_eq!(issuer.acme_profile(), "LETS_ENCRYPT_STAGING");
     }
 
     #[tokio::test]
