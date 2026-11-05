@@ -12,6 +12,17 @@ pub const DEFAULT_ACME_OPERATION_TIMEOUT_MS: u64 = 180_000;
 pub const MIN_ACME_OPERATION_TIMEOUT_MS: u64 = 10_000;
 pub const MAX_ACME_OPERATION_TIMEOUT_MS: u64 = 600_000;
 
+/// Default DNS-01 propagation wait before the CA is told a challenge is ready.
+///
+/// A DNS-01 record published through a cloud provider API is not necessarily
+/// served by the provider's authoritative nameservers the instant the API
+/// answers, and a CA that validates too early records a failed validation
+/// (Let's Encrypt: 5 failed validations per account per hostname per hour).
+/// Certbot waits by default before handing DNS-01 challenges to the CA; this
+/// default matches its plugin default (10 seconds).
+pub const DEFAULT_ACME_DNS_PROPAGATION_DELAY_MS: u64 = 10_000;
+const MAX_ACME_DNS_PROPAGATION_DELAY_MS: u64 = 300_000;
+
 /// Validated runtime ACME configuration.
 #[derive(Clone, Debug)]
 pub struct AcmeConfig {
@@ -20,6 +31,9 @@ pub struct AcmeConfig {
     pub renew_before_days: u32,
     pub webroot: Option<String>,
     pub use_production: bool,
+    /// How long DNS-01 issuance sleeps after publishing every challenge record
+    /// and before telling the CA the challenges are ready.
+    pub dns_propagation_delay_ms: u64,
 }
 
 impl AcmeConfig {
@@ -46,6 +60,7 @@ impl AcmeConfig {
             renew_before_days,
             webroot,
             use_production,
+            dns_propagation_delay_ms: DEFAULT_ACME_DNS_PROPAGATION_DELAY_MS,
         })
     }
 
@@ -59,6 +74,11 @@ impl AcmeConfig {
         }
         if let Some(path) = self.webroot.as_deref() {
             validate_webroot(path)?;
+        }
+        if self.dns_propagation_delay_ms > MAX_ACME_DNS_PROPAGATION_DELAY_MS {
+            return Err(AcmeServiceError::config(format!(
+                "ACME DNS-01 propagation delay must be between 0 and {MAX_ACME_DNS_PROPAGATION_DELAY_MS} ms"
+            )));
         }
         Ok(())
     }
@@ -146,7 +166,7 @@ mod tests {
         assert!(AcmeConfig::new(
             "http://acme.invalid/directory".to_string(),
             "admin@example.com".to_string(),
-            30,
+            0,
             None,
             false,
         )
@@ -159,5 +179,21 @@ mod tests {
             false,
         )
         .is_err());
+    }
+
+    #[test]
+    fn dns_propagation_delay_defaults_to_the_certbot_plugin_default_and_validates() {
+        let mut config = config().expect("config");
+        assert_eq!(
+            config.dns_propagation_delay_ms,
+            DEFAULT_ACME_DNS_PROPAGATION_DELAY_MS
+        );
+        config.validate().expect("default delay validates");
+        config.dns_propagation_delay_ms = 0;
+        config
+            .validate()
+            .expect("zero delay is an explicit opt-out");
+        config.dns_propagation_delay_ms = 300_001;
+        assert!(config.validate().is_err());
     }
 }

@@ -1026,7 +1026,7 @@ mod record_inventory_tests {
     use axum::response::{IntoResponse, Response};
     use axum::routing::get;
     use axum::{Json, Router};
-    use serde_json::{json, Value};
+    use serde_json::json;
 
     /// Two pages, driven by `result_info.total_pages` rather than the row
     /// count, so the walk must read the page metadata it claims to follow.

@@ -104,7 +104,8 @@ pub async fn route_request(
             .response_body_idle_timeout_ms,
     );
     let response =
-        route_admitted_request(peer, transport_peer, state, request, &mut admitted).await;
+        route_admitted_request(peer, transport_peer, connection.tls, state, request, &mut admitted)
+            .await;
     // App-config listeners (no website delivery executor) meter every served
     // response here; website listeners meter inside the delivery layer where
     // route identity and exact bytes are known. App-domain fallback responses
@@ -228,6 +229,7 @@ fn subrequest_env<'a>(
 async fn route_admitted_request(
     peer: SocketAddr,
     transport_peer: SocketAddr,
+    tls: bool,
     state: ListenerState,
     mut request: Request<Body>,
     admitted: &mut super::request_gate::RequestAdmissionPermit,
@@ -328,7 +330,7 @@ async fn route_admitted_request(
         transport_peer.ip(),
         request.headers(),
         listener.trusted_proxy.as_ref(),
-        state.is_tls,
+        tls,
     ) {
         Ok(scheme) => scheme,
         Err(_) => {

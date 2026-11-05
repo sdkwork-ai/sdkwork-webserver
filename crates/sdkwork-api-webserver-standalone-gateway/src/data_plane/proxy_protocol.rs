@@ -25,11 +25,25 @@ pub(super) struct DownstreamConnectionInfo {
     pub transport_peer: SocketAddr,
     pub client_peer: SocketAddr,
     pub proxy_protocol: Option<ProxyProtocolVersion>,
+    /// Whether this connection terminated TLS. Resolved per connection from
+    /// the published generation (a handoff can change a kept socket's TLS
+    /// policy), so request scheme resolution matches the served connection.
+    pub tls: bool,
 }
 
 impl Connected<Self> for DownstreamConnectionInfo {
     fn connect_info(info: Self) -> Self {
         info
+    }
+}
+
+impl DownstreamConnectionInfo {
+    /// Sets whether this connection terminated TLS. Resolved per connection
+    /// from the published generation (a handoff can change a kept socket's
+    /// TLS policy), so request scheme resolution matches the served connection.
+    pub(super) fn with_tls(mut self, tls: bool) -> Self {
+        self.tls = tls;
+        self
     }
 }
 
@@ -52,6 +66,8 @@ pub(super) async fn resolve_connection_info(
             transport_peer,
             client_peer: transport_peer,
             proxy_protocol: None,
+            // The caller overrides this after TLS resolution.
+            tls: false,
         });
     };
     if !is_trusted(transport_peer.ip(), &policy.trusted_source_cidrs) {
@@ -291,6 +307,8 @@ fn info(
         transport_peer,
         client_peer,
         proxy_protocol: Some(version),
+        // The caller overrides this after TLS resolution.
+        tls: false,
     }
 }
 

@@ -86,6 +86,7 @@ pub use server::{
 pub use tls_runtime::{FileTlsRuntimeConfig, FileTlsRuntimeController, FileTlsRuntimeError};
 pub use watch::{
     run_data_plane_from_config_until, run_data_plane_from_config_with_operations_until,
+    run_data_plane_from_source_with_operations_until,
 };
 
 use std::sync::Arc;
@@ -100,5 +101,4 @@ struct ListenerState {
     deploy_fallback: Option<Arc<crate::deploy_fallback::DeployFallbackResolver>>,
     usage_meter: Option<Arc<crate::usage_metering::UsageMeteringAggregator>>,
     listener_id: String,
-    is_tls: bool,
 }

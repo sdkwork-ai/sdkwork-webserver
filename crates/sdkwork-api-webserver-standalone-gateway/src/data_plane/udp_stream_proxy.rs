@@ -29,10 +29,11 @@ const UDP_TARGET_RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) struct PreparedUdpStreamListener {
     pub(crate) id: String,
     socket: Arc<UdpSocket>,
-    proxy_timeout: Duration,
     round_robin: Arc<AtomicUsize>,
 }
 
+/// Bind one UDP stream socket. Session policy (`proxy_timeout`, targets)
+/// resolves per datagram from the published generation.
 pub(crate) async fn prepare_udp_stream_listener(
     config: &StreamServerConfig,
 ) -> Result<PreparedUdpStreamListener, DataPlaneError> {
@@ -52,7 +53,6 @@ pub(crate) async fn prepare_udp_stream_listener(
     Ok(PreparedUdpStreamListener {
         id: config.id.clone(),
         socket: Arc::new(socket),
-        proxy_timeout: Duration::from_millis(config.proxy_timeout_ms),
         round_robin: Arc::new(AtomicUsize::new(0)),
     })
 }
@@ -128,7 +128,6 @@ pub(crate) async fn serve_udp_stream_listener(
     let PreparedUdpStreamListener {
         id,
         socket,
-        proxy_timeout,
         round_robin,
     } = listener;
     let shared = Arc::new(Mutex::new(UdpSessions::default()));
@@ -149,6 +148,9 @@ pub(crate) async fn serve_udp_stream_listener(
                 else {
                     continue;
                 };
+                // nginx stream `proxy_timeout` resolves per datagram from the
+                // published generation (a reload applies to new idle windows).
+                let proxy_timeout = Duration::from_millis(stream_config.proxy_timeout_ms);
                 let now = Instant::now();
                 let session = {
                     let mut state = shared

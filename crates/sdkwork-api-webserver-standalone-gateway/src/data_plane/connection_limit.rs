@@ -22,12 +22,12 @@ pub struct ConnectionLimiter {
 impl ConnectionLimiter {
     pub fn new(
         global_permits: Arc<Semaphore>,
-        maximum_listener_connections: usize,
+        listener_permits: Arc<Semaphore>,
         metrics: Arc<DataPlaneMetrics>,
     ) -> Self {
         Self {
             global_permits,
-            listener_permits: Arc::new(Semaphore::new(maximum_listener_connections)),
+            listener_permits,
             metrics,
         }
     }

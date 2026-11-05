@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "Listener handoff (Wave 15, 2026-11-05): nginx SIGHUP equivalence — a socket-plane supervisor binds added sockets before a generation publishes and drains removed sockets after it, while every connection-plane knob (TLS material, protocol limits, admission capacity, proxy-protocol policy, request timeouts) hot-applies through per-connection generation resolution. Watch reload now covers TOML/nginx sources via a bounded source-tree fingerprint plus SIGHUP. Mail session profiles resolve per generation. The restart-required gate shrank to the socket set plus process-built subsystems (tunnel gateway, usage-metering channel, resource-pressure flag). Differential evidence unaffected (626 real-nginx cases stay green); behavioral evidence: 4 new integration tests + the rewritten flagship reload test.",
     "nginx slice module (Wave 14C, 2026-11-01): `slice` now executes end-to-end with per-slice caching and bounded assembly; differential-http 367 -> 384. Catalog: 397 executable / 173 accepted-unenforced / 169 fail-closed / 5 excluded. Remaining behavior gaps = 34, ALL blocked by pinned dependencies (32: hyper HTTP/1 close-delimited framing, rustls static-only OCSP, rustls/OpenSSL TLS knobs for gRPC/uWSGI/mail) or nginx Plus (degradation/degrade); out-of-profile 5 = Perl 4 + load_module 1 (embedded interpreter / nginx C ABI). No implementable directive remains.",
     "Mail client certificates (Wave 14B, 2026-11-01): 5 directives executable with 19 new real-nginx differential cases (client-cert fixture: verify modes, depth 0/1/2, trusted vs client bundle (CA hints), STARTTLS, POP3/IMAP/SMTP rejection lines, pass-cert gating). probe corrections: failures are application-level post-handshake lines; nginx 1.29.6 has no 8 KiB client-cert refusal. Slice remains fail-closed (multi-subrequest Range/$slice_range assembly needed). Catalog: 396 executable / 173 accepted-unenforced / 170 fail-closed / 5 excluded. Remaining behavior gaps: 32 pinned-dependency + slice + nginx Plus 2.",
     "Wave 14A (2026-10-31): temp-spool subsystem (9 directives) and connection control (5: ignore_client_abort x3, catch_stderr, send_lowat accepted-unenforced) execute; differential-protocols 77->89. Probe correction: nginx does NOT 502 when a body exceeds *_max_temp_file_size (ngx_event_pipe stops spooling and passes the remainder); implemented the probed semantics with byte-identical 200. Catalog: 391 executable / 173 accepted-unenforced / 175 fail-closed / 5 excluded. Remaining implementable rows: mail client-cert flows 5 + slice 1; all other behavior gaps are pinned-dependency/Plus blocked.",
@@ -58,6 +59,12 @@
     "Cataloged context gap (2026-09): the nginx-compat `root`/`alias` validator requires a POSIX absolute path (`starts_with('/')` fails closed), so a Windows drive path such as `root D:/srv/www;` is rejected even though nginx on Windows accepts it. Every fixture renders drive paths into their drive-relative form (`posix_root`) to work around this. Aligning the validator with platform-native absolute paths has not been done."
   ],
   "capabilities": [
+    {
+      "id": "ops.reload.listener-handoff",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Zero-downtime listener bind handoff (nginx SIGHUP equivalence, Wave 15): a socket-plane supervisor diffs each published generation's listening-socket set — added sockets bind BEFORE publication (a bind failure retains the old generation), removed sockets stop accepting AFTER it and drain their in-flight connections detached under the drain deadline, and kept sockets keep their file descriptors. Connection-plane configuration (TLS policy and certificate file contents, HTTP protocol parameters, request/connection admission capacity, proxy-protocol policy, request timeouts) left the restart-required gate and hot-applies through per-connection generation resolution; TLS acceptor material is built once per generation for HTTP and stream planes. Watch reload extends to TOML/nginx sources through a bounded source-tree fingerprint plus SIGHUP (SDKWORK_WEBSERVER_CONFIG_RELOAD_MODE=watch for the TOML/nginx dialects, which have no [deployment] table). Mail profiles resolve per connection from the published generation, closing the pre-existing divergence where a mail config change published a generation that running mail listeners ignored. Evidence: tests/data_plane_integration.rs listener_handoff_* / tls_material_change_* / toml_source_watch_* (4 new tests) and the rewritten atomically_reloads_valid_config_hot_applies_limits_and_hands_off_sockets (62+2 assertions). Executable-upgrade descriptor inheritance is tracked as ops.executable-upgrade.fd-inheritance."
+    },
     {
       "id": "nginx.toggle",
       "group": "operations",
@@ -242,13 +249,7 @@
       "id": "ops.reload.same-topology",
       "group": "operations",
       "status": "implemented",
-      "summary": "Watch reload for same listener topology"
-    },
-    {
-      "id": "ops.reload.listener-handoff",
-      "group": "operations",
-      "status": "missing",
-      "summary": "Zero-downtime listener bind handoff / executable upgrade"
+      "summary": "Watch reload for same listener topology (Wave 15 widened it: connection-plane configuration — limits, protocol parameters, TLS material — hot-applies per connection; the restart-required gate now covers only the socket set and process-built subsystems)"
     },
     {
       "id": "nginx.behavioral-corpus",

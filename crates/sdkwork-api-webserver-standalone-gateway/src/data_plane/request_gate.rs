@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -7,6 +10,8 @@ use super::resource_pressure::ResourcePressureController;
 pub(super) struct RequestAdmissionGate {
     total: Arc<Semaphore>,
     business: Arc<Semaphore>,
+    total_capacity: AtomicUsize,
+    business_capacity: AtomicUsize,
     resource_pressure: Arc<ResourcePressureController>,
 }
 
@@ -33,7 +38,43 @@ impl RequestAdmissionGate {
             business: Arc::new(Semaphore::new(
                 maximum_requests.saturating_sub(operations_reserve),
             )),
+            total_capacity: AtomicUsize::new(maximum_requests),
+            business_capacity: AtomicUsize::new(maximum_requests.saturating_sub(operations_reserve)),
             resource_pressure,
+        }
+    }
+
+    /// Reconciles both capacities to a published generation's limits (a
+    /// `maxConcurrentRequests` change hot-applies). A shrinking capacity only
+    /// drops currently-available permits; the remainder converges as in-flight
+    /// requests release theirs.
+    pub(super) fn resize(&self, maximum_requests: usize, operations_reserve: usize) {
+        let total_target = maximum_requests;
+        let business_target = maximum_requests.saturating_sub(operations_reserve);
+        let total_current = self.total_capacity.swap(total_target, Ordering::AcqRel);
+        match total_target.cmp(&total_current) {
+            std::cmp::Ordering::Greater => self.total.add_permits(total_target - total_current),
+            std::cmp::Ordering::Less => {
+                let drop = (total_current - total_target).min(self.total.available_permits());
+                if drop > 0 {
+                    self.total.forget_permits(drop);
+                }
+            }
+            std::cmp::Ordering::Equal => {}
+        }
+        let business_current = self.business_capacity.swap(business_target, Ordering::AcqRel);
+        match business_target.cmp(&business_current) {
+            std::cmp::Ordering::Greater => {
+                self.business.add_permits(business_target - business_current)
+            }
+            std::cmp::Ordering::Less => {
+                let drop = (business_current - business_target)
+                    .min(self.business.available_permits());
+                if drop > 0 {
+                    self.business.forget_permits(drop);
+                }
+            }
+            std::cmp::Ordering::Equal => {}
         }
     }
 

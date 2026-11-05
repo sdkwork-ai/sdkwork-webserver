@@ -471,14 +471,24 @@ fn certificate_issuer_failure_code(error: &AcmeServiceError) -> &'static str {
 /// anything. Without this, a refused DNS credential and a revoked API token were
 /// the same string to everyone outside the server log.
 ///
+/// `Validation` yields its text because every validation on the execution path
+/// is written as a fix instruction for the requester or the operator ("wildcard
+/// identifiers require the DNS-01 validation method", "the configured ACME
+/// directory does not issue wildcard certificates"). These fire on the worker,
+/// after the request was accepted, so the console is their only channel.
+///
 /// `Internal` deliberately yields nothing: those messages are written for
 /// whoever maintains the issuer ("dns01 store lock poisoned") and reading them
-/// out of context misleads more than it helps. `Provider` is the opposite case —
-/// the text is the vendor's own sentence about the operator's own account.
+/// out of context misleads more than it helps. `Config` likewise names
+/// deployment settings only the operator's runbook can change safely.
+/// `Provider` is the opposite case — the text is the vendor's own sentence
+/// about the operator's own account.
 fn certificate_issuer_failure_detail(error: &AcmeServiceError) -> Option<String> {
     match error {
-        AcmeServiceError::Provider(message) => Some(message.clone()),
-        _ => None,
+        AcmeServiceError::Provider(message) | AcmeServiceError::Validation(message) => {
+            Some(message.clone())
+        }
+        AcmeServiceError::Config(_) | AcmeServiceError::Internal(_) => None,
     }
 }
 
@@ -538,11 +548,19 @@ mod tests {
 
     /// A message written for whoever maintains the issuer reads as noise to an
     /// operator, and an unclassified failure has no classification to explain.
+    /// Validation is the exception: execution-path validations are fix
+    /// instructions, and the console is their only channel.
     #[test]
-    fn only_provider_failures_produce_an_operator_facing_detail() {
+    fn provider_and_validation_failures_carry_their_text_while_config_and_internal_stay_quiet() {
+        assert_eq!(
+            certificate_issuer_failure_detail(&AcmeServiceError::Validation(
+                "the configured ACME directory does not issue wildcard certificates".to_string()
+            ))
+            .as_deref(),
+            Some("the configured ACME directory does not issue wildcard certificates")
+        );
         for error in [
             AcmeServiceError::Config("config detail".to_string()),
-            AcmeServiceError::Validation("validation detail".to_string()),
             AcmeServiceError::Internal("dns01 store lock poisoned".to_string()),
         ] {
             assert!(

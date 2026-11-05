@@ -18,8 +18,8 @@ use std::{
 };
 
 use sdkwork_webserver_core::{
-    evaluate_access_first_match_allow, AccessDecision, AccessRuleConfig, StreamServerConfig,
-    StreamTargetConfig, StreamTlsMode, TlsVersion,
+    evaluate_access_first_match_allow, AccessDecision, StreamServerConfig, StreamTargetConfig,
+    StreamTlsMode, TlsVersion,
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -39,38 +39,22 @@ use super::{
 const STREAM_COPY_BUFFER_BYTES: usize = 16 * 1024;
 const STREAM_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// One prepared stream listener: the bound socket only. Every session resolves
+/// its configuration (TLS acceptor, access rules, preread/proxy timeouts,
+/// proxy-protocol policy) from the current configuration generation, so a
+/// stream config change applies to new connections without rebinding.
 pub(crate) struct PreparedStreamListener {
     pub(crate) id: String,
-    socket: TcpListener,
-    proxy_timeout: Duration,
-    proxy_protocol: bool,
-    round_robin: Arc<AtomicUsize>,
-    /// Built once at listener preparation. Rebuilding the SNI resolver and
-    /// re-reading the certificate files for every accepted connection put
-    /// filesystem I/O on the connection path and scaled with connection rate.
-    tls_acceptor: Option<TlsAcceptor>,
-    /// Ordered nginx stream `allow`/`deny` rules (first match wins; an
-    /// unmatched peer is allowed).
-    access: Vec<AccessRuleConfig>,
-    /// nginx stream `preread_timeout` (ClientHello read deadline).
-    preread_timeout: Duration,
-    /// nginx stream `preread_buffer_size` (ClientHello peek buffer bound).
-    preread_buffer_bytes: usize,
-    /// SNI virtual-server group: every stream config sharing this socket, in
-    /// authored order. `None` for an ordinary single-server listener.
-    group: Option<Vec<StreamServerConfig>>,
-    /// nginx stream `listen … proxy_protocol`: accept one inbound PROXY header.
-    accept_proxy_protocol: bool,
-    /// nginx stream `proxy_protocol_timeout`.
-    proxy_protocol_timeout: Duration,
-    /// nginx stream `set_real_ip_from`: trusted peers whose PROXY header source
-    /// replaces the connection address.
-    real_ip_trusted: Vec<ipnet::IpNet>,
+    pub(crate) socket: TcpListener,
+    pub(crate) round_robin: Arc<AtomicUsize>,
+    /// SNI virtual-server group identity: every stream config sharing this
+    /// `socket_key` serves from this socket. `None` for an ordinary
+    /// single-server listener.
+    pub(crate) socket_key: Option<String>,
 }
 
 pub(crate) async fn prepare_stream_listener(
     config: &StreamServerConfig,
-    generation: &Arc<super::runtime::RuntimeGeneration>,
 ) -> Result<PreparedStreamListener, DataPlaneError> {
     let address = format!("{}:{}", config.bind, config.port);
     let socket = TcpListener::bind(&address)
@@ -85,26 +69,6 @@ pub(crate) async fn prepare_stream_listener(
             listener_id: config.id.clone(),
             source,
         })?;
-    // Stream listeners are fixed for the process lifetime (reloads take effect
-    // per connection for targets, not for the listener socket/TLS material), so
-    // a bad certificate is a startup error rather than a per-connection log.
-    let tls_acceptor = match config.tls.as_ref() {
-        Some(StreamTlsMode::Terminate {
-            certificate_ref,
-            client_auth,
-        }) => {
-            let resolved = resolve_stream_client_auth(generation, &config.id, client_auth.as_ref());
-            Some(
-                build_stream_tls_acceptor(generation, certificate_ref, resolved.as_ref()).map_err(
-                    |detail| DataPlaneError::StreamTlsMaterial {
-                        stream_id: config.id.clone(),
-                        detail,
-                    },
-                )?,
-            )
-        }
-        _ => None,
-    };
     tracing::info!(
         stream_id = %config.id,
         address = %local,
@@ -114,17 +78,8 @@ pub(crate) async fn prepare_stream_listener(
     Ok(PreparedStreamListener {
         id: config.id.clone(),
         socket,
-        proxy_timeout: Duration::from_millis(config.proxy_timeout_ms),
-        proxy_protocol: config.proxy_protocol,
         round_robin: Arc::new(AtomicUsize::new(0)),
-        tls_acceptor,
-        access: config.access.clone(),
-        preread_timeout: Duration::from_millis(config.preread_timeout_ms),
-        preread_buffer_bytes: config.preread_buffer_bytes,
-        group: None,
-        accept_proxy_protocol: config.accept_proxy_protocol,
-        proxy_protocol_timeout: Duration::from_millis(config.proxy_protocol_timeout_ms),
-        real_ip_trusted: parse_trusted_cidrs(&config.real_ip_trusted_cidrs),
+        socket_key: None,
     })
 }
 
@@ -144,10 +99,10 @@ fn parse_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
 /// Group stream configs sharing one listening socket (`server_name` SNI virtual
 /// servers) and bind the socket once. Every member must be an `ssl_preread`
 /// server with at least one `server_name`; the first member is the socket's
-/// default server unless one member sets `default_server`.
+/// default server unless one member sets `default_server`. Group membership is
+/// resolved per connection from the published generation.
 pub(crate) async fn prepare_stream_listener_group(
     configs: &[StreamServerConfig],
-    _generation: &Arc<super::runtime::RuntimeGeneration>,
 ) -> Result<PreparedStreamListener, DataPlaneError> {
     let first = &configs[0];
     let address = format!("{}:{}", first.bind, first.port);
@@ -172,32 +127,19 @@ pub(crate) async fn prepare_stream_listener_group(
     Ok(PreparedStreamListener {
         id: default_config.id.clone(),
         socket,
-        proxy_timeout: Duration::from_millis(default_config.proxy_timeout_ms),
-        proxy_protocol: default_config.proxy_protocol,
         round_robin: Arc::new(AtomicUsize::new(0)),
-        tls_acceptor: None,
-        access: Vec::new(),
-        preread_timeout: Duration::from_millis(default_config.preread_timeout_ms),
-        preread_buffer_bytes: default_config.preread_buffer_bytes,
-        group: Some(configs.to_vec()),
-        accept_proxy_protocol: configs.iter().all(|config| config.accept_proxy_protocol),
-        proxy_protocol_timeout: Duration::from_millis(default_config.proxy_protocol_timeout_ms),
-        real_ip_trusted: configs
-            .iter()
-            .flat_map(|config| parse_trusted_cidrs(&config.real_ip_trusted_cidrs))
-            .collect(),
+        socket_key: Some(first.socket_key()),
     })
 }
 
-/// Resolve the stream listener's client-auth CA paths from the generation.
-fn resolve_stream_client_auth(
-    generation: &super::runtime::RuntimeGeneration,
+/// Resolve the stream listener's client-auth CA paths from the compiled app.
+pub(crate) fn resolve_stream_client_auth(
+    app: &sdkwork_webserver_core::CompiledWebServerApp,
     stream_id: &str,
     client_auth: Option<&sdkwork_webserver_core::ClientAuthConfig>,
 ) -> Option<sdkwork_webserver_core::ClientAuthConfig> {
     client_auth.map(|auth| {
-        let resolved = generation
-            .app
+        let resolved = app
             .stream_client_auth_ca_paths(stream_id)
             .map(|paths| {
                 paths
@@ -220,16 +162,15 @@ fn stream_tls_label(mode: &StreamTlsMode) -> &'static str {
     }
 }
 
-/// Accept loop for one stream listener. Connections resolve their target from
-/// the current configuration generation (reloads take effect per connection);
-/// the listener itself is fixed for the process lifetime.
+/// Accept loop for one stream listener. Every accepted connection resolves its
+/// full session configuration (target, TLS acceptor, access rules, timeouts,
+/// proxy-protocol policy) from the current configuration generation, so
+/// reloads and listener handoffs apply per connection.
 pub(crate) async fn serve_stream_listener(
     runtime: Arc<DataPlaneRuntime>,
     listener: PreparedStreamListener,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), DataPlaneError> {
-    let maximum_age =
-        Duration::from_millis(runtime.current().app.config().limits.max_connection_age_ms);
     let mut tasks = tokio::task::JoinSet::new();
     let mut accept_policy = super::accept::AcceptRetryPolicy::new();
     loop {
@@ -270,15 +211,50 @@ pub(crate) async fn serve_stream_listener(
                     }
                 };
                 let mut downstream = downstream;
+                // Resolve this connection's session configuration from the
+                // published generation. An empty resolution means the socket is
+                // retiring after a handoff and this accept raced its shutdown.
+                let generation = runtime.current();
+                let maximum_age =
+                    Duration::from_millis(generation.app.config().limits.max_connection_age_ms);
+                let group_members: Vec<StreamServerConfig> = match &listener.socket_key {
+                    Some(socket_key) => generation
+                        .app
+                        .streams()
+                        .iter()
+                        .filter(|stream| {
+                            stream.protocol == sdkwork_webserver_core::StreamProtocol::Tcp
+                                && stream.socket_key() == *socket_key
+                        })
+                        .cloned()
+                        .collect(),
+                    None => generation
+                        .app
+                        .streams()
+                        .iter()
+                        .find(|stream| stream.id == listener.id)
+                        .cloned()
+                        .into_iter()
+                        .collect(),
+                };
+                let Some(session_config) = group_members.first().cloned() else {
+                    tracing::debug!(
+                        stream_id = %listener.id,
+                        peer = %peer,
+                        "stream listener removed from the active generation; closing connection"
+                    );
+                    drop(downstream);
+                    continue;
+                };
                 // nginx stream `listen … proxy_protocol`: the header arrives
                 // before the access/preread/content phases. Its source replaces
                 // the peer only when `set_real_ip_from` trusts the connecting
                 // peer (the bounded stream realip form).
                 let inbound_header: Option<InboundProxyHeader> =
-                    if listener.accept_proxy_protocol {
+                    if session_config.accept_proxy_protocol {
                         match read_inbound_proxy_header(
                             &mut downstream,
-                            listener.proxy_protocol_timeout,
+                            Duration::from_millis(session_config.proxy_protocol_timeout_ms),
                         )
                         .await
                         {
@@ -296,16 +272,24 @@ pub(crate) async fn serve_stream_listener(
                     } else {
                         None
                     };
-                let client_peer = effective_client_peer(
-                    peer,
-                    inbound_header,
-                    &listener.real_ip_trusted,
-                );
+                // The pre-SNI realip trust list is the union of the socket's
+                // member servers (nginx evaluates the access/realip phase
+                // before virtual-server selection).
+                let real_ip_trusted: Vec<ipnet::IpNet> = if listener.socket_key.is_some() {
+                    group_members
+                        .iter()
+                        .flat_map(|config| parse_trusted_cidrs(&config.real_ip_trusted_cidrs))
+                        .collect()
+                } else {
+                    parse_trusted_cidrs(&session_config.real_ip_trusted_cidrs)
+                };
+                let client_peer =
+                    effective_client_peer(peer, inbound_header, &real_ip_trusted);
                 // SNI virtual-server group: select the server by the
                 // ClientHello SNI inside the connection task, then run the
                 // bounded `ssl_preread` content path with the buffered
                 // preface.
-                if listener.group.is_some() {
+                if listener.socket_key.is_some() {
                     let permit = match Arc::clone(&runtime.connection_permits)
                         .try_acquire_owned()
                     {
@@ -321,16 +305,22 @@ pub(crate) async fn serve_stream_listener(
                         }
                     };
                     let runtime = Arc::clone(&runtime);
-                    let group_listener = listener.group.clone().unwrap_or_default();
-                    let default_timeout = listener.preread_timeout;
-                    let default_buffer = listener.preread_buffer_bytes;
-                    let proxy_timeout = listener.proxy_timeout;
+                    let default = group_members
+                        .iter()
+                        .position(|config| config.default_server)
+                        .unwrap_or(0);
+                    let default_config = &group_members[default];
+                    let default_timeout =
+                        Duration::from_millis(default_config.preread_timeout_ms);
+                    let default_buffer = default_config.preread_buffer_bytes;
+                    let proxy_timeout =
+                        Duration::from_millis(default_config.proxy_timeout_ms);
                     tasks.spawn(async move {
                         let result = serve_sni_group_connection(
                             runtime,
                             downstream,
                             peer,
-                            group_listener,
+                            group_members,
                             default_timeout,
                             default_buffer,
                             proxy_timeout,
@@ -345,7 +335,7 @@ pub(crate) async fn serve_stream_listener(
                 }
                 // nginx stream access phase and `return` handler run before
                 // any upstream connection is considered.
-                if evaluate_access_first_match_allow(client_peer.ip(), &listener.access)
+                if evaluate_access_first_match_allow(client_peer.ip(), &session_config.access)
                     == AccessDecision::Deny
                 {
                     tracing::debug!(
@@ -419,11 +409,18 @@ pub(crate) async fn serve_stream_listener(
                 let runtime = Arc::clone(&runtime);
                 let limit_lease = limit_lease;
                 let round_robin = Arc::clone(&listener.round_robin);
-                let proxy_timeout = listener.proxy_timeout;
-                let preread_timeout = listener.preread_timeout;
-                let preread_buffer_bytes = listener.preread_buffer_bytes;
-                let proxy_protocol = listener.proxy_protocol;
-                let tls_acceptor = listener.tls_acceptor.clone();
+                let proxy_timeout = Duration::from_millis(session_config.proxy_timeout_ms);
+                let preread_timeout = Duration::from_millis(session_config.preread_timeout_ms);
+                let preread_buffer_bytes = session_config.preread_buffer_bytes;
+                let proxy_protocol = session_config.proxy_protocol;
+                // Stream TLS terminate material is built once per generation
+                // (never re-read per connection); a kept socket serves new
+                // connections with the new certificates after a handoff.
+                let tls_acceptor = generation
+                    .stream_tls_acceptors
+                    .get(&session_config.id)
+                    .cloned()
+                    .flatten();
                 tasks.spawn(async move {
                     // Held for the whole connection: dropping it releases the
                     // zone counters.
@@ -1259,29 +1256,25 @@ fn resolve_target(
     }
 }
 
-fn build_stream_tls_acceptor(
-    generation: &Arc<super::runtime::RuntimeGeneration>,
+pub(crate) fn build_stream_tls_acceptor(
+    app: &sdkwork_webserver_core::CompiledWebServerApp,
     certificate_ref: &str,
     client_auth: Option<&sdkwork_webserver_core::ClientAuthConfig>,
 ) -> Result<TlsAcceptor, String> {
     install_crypto_provider().map_err(|error| error.to_string())?;
     let provider = rustls::crypto::CryptoProvider::get_default()
         .ok_or_else(|| "rustls crypto provider is not installed".to_owned())?;
-    let certificate = generation
-        .app
+    let certificate = app
         .certificate(certificate_ref)
         .ok_or_else(|| format!("missing stream certificate {certificate_ref}"))?;
-    let (certificate_file, private_key_file) = generation
-        .app
+    let (certificate_file, private_key_file) = app
         .certificate_paths(&certificate.id)
         .ok_or_else(|| format!("missing stream certificate files for {certificate_ref}"))?;
     let loaded = load_certified_key(
         certificate_file,
         private_key_file,
-        generation.app.certificate_chain_file(&certificate.id),
-        generation
-            .app
-            .certificate_ocsp_stapling_file(&certificate.id),
+        app.certificate_chain_file(&certificate.id),
+        app.certificate_ocsp_stapling_file(&certificate.id),
         &certificate.server_names,
         provider,
     )

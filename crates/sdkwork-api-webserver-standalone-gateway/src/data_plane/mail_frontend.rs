@@ -19,7 +19,12 @@
 //! materialization (see `sdkwork_webserver_core::nginx::mapping`), never by
 //! silently ignoring an operator declaration.
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -69,15 +74,40 @@ const MAX_BACKEND_LINE_BYTES: usize = 1024 * 1024;
 /// How long a frontend STARTTLS/TLS handshake may take.
 const MAIL_TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// One prepared mail listener.
+/// One prepared mail listener: the bound socket only. The session profile is
+/// resolved per configuration generation (`RuntimeGeneration.mail_profiles`),
+/// so a mail configuration change applies to new sessions without a rebind.
 pub(crate) struct PreparedMailListener {
     pub(crate) id: String,
-    socket: TcpListener,
-    profile: Arc<MailConnectionProfile>,
+    pub(crate) socket: TcpListener,
+}
+
+/// Per-generation cache of resolved mail session profiles. A generation
+/// resolves a profile on first use (bounded `auth_http` DNS plus TLS material
+/// load); every session of that generation then shares the resolved profile.
+#[derive(Default)]
+pub(crate) struct MailProfileCache(
+    tokio::sync::Mutex<HashMap<String, Arc<MailConnectionProfile>>>,
+);
+
+impl MailProfileCache {
+    pub(crate) async fn resolve(
+        &self,
+        config: &MailServerConfig,
+    ) -> Result<Arc<MailConnectionProfile>, DataPlaneError> {
+        if let Some(profile) = self.0.lock().await.get(&config.id) {
+            return Ok(Arc::clone(profile));
+        }
+        let profile = Arc::new(resolve_mail_connection_profile(config).await?);
+        let mut profiles = self.0.lock().await;
+        Ok(Arc::clone(
+            profiles.entry(config.id.clone()).or_insert(profile),
+        ))
+    }
 }
 
 /// Resolved per-connection configuration shared by all accepted sessions.
-struct MailConnectionProfile {
+pub(crate) struct MailConnectionProfile {
     id: String,
     protocol: MailProtocol,
     greeting_name: String,
@@ -194,8 +224,9 @@ impl MailProxyProfile {
 }
 
 impl PreparedMailListener {
-    /// Bind the listener socket and resolve the bounded session profile.
-    pub(crate) async fn prepare(config: &MailServerConfig) -> Result<Self, DataPlaneError> {
+    /// Bind the listener socket. The session profile is resolved lazily from
+    /// the published generation (`MailProfileCache`).
+    pub(crate) async fn bind(config: &MailServerConfig) -> Result<Self, DataPlaneError> {
         // The mail plane may be the only plane in the process (a mail-only
         // configuration), so it installs the rustls crypto provider itself
         // before any TLS material is built.
@@ -213,7 +244,27 @@ impl PreparedMailListener {
                 listener_id: config.id.clone(),
                 source,
             })?;
-        let protocol = match config.protocol {
+        tracing::info!(
+            mail_server_id = %config.id,
+            protocol = config.protocol.as_str(),
+            address = %address,
+            proxy_protocol = config.proxy_protocol,
+            "mail listener prepared"
+        );
+        Ok(Self {
+            id: config.id.clone(),
+            socket,
+        })
+    }
+}
+
+/// Resolve one mail server's bounded session profile (async: `auth_http`
+/// resolves its host through bounded DNS).
+async fn resolve_mail_connection_profile(
+    config: &MailServerConfig,
+) -> Result<MailConnectionProfile, DataPlaneError> {
+    super::tls_material::install_crypto_provider()?;
+    let protocol = match config.protocol {
             MailServerProtocol::Pop3 => MailProtocol::Pop3,
             MailServerProtocol::Imap => MailProtocol::Imap,
             MailServerProtocol::Smtp => MailProtocol::Smtp,
@@ -256,19 +307,13 @@ impl PreparedMailListener {
         tracing::info!(
             mail_server_id = %config.id,
             protocol = config.protocol.as_str(),
-            address = %address,
             proxy_protocol = config.proxy_protocol,
             auth_http = profile.auth_http.is_some(),
             tls = profile.tls.is_some(),
-            "mail listener prepared"
+            "mail session profile resolved"
         );
-        Ok(Self {
-            id: config.id.clone(),
-            socket,
-            profile: Arc::new(profile),
-        })
+        Ok(profile)
     }
-}
 
 /// Parse the mail `set_real_ip_from` trusted networks.
 fn parse_mail_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
@@ -551,7 +596,9 @@ impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
     }
 }
 
-/// Accept loop for one mail listener.
+/// Accept loop for one mail listener. Sessions resolve their profile from the
+/// current configuration generation, so a mail config change applies to new
+/// sessions without rebinding the listener.
 pub(crate) async fn serve_mail_listener(
     runtime: Arc<DataPlaneRuntime>,
     listener: PreparedMailListener,
@@ -559,7 +606,6 @@ pub(crate) async fn serve_mail_listener(
 ) -> Result<(), DataPlaneError> {
     let mut tasks = tokio::task::JoinSet::new();
     let mut accept_policy = accept::AcceptRetryPolicy::new();
-    let profile = Arc::clone(&listener.profile);
     loop {
         tokio::select! {
             changed = shutdown.changed() => {
@@ -602,8 +648,43 @@ pub(crate) async fn serve_mail_listener(
                         continue;
                     }
                 };
-                let profile = Arc::clone(&profile);
+                let runtime = Arc::clone(&runtime);
+                let listener_id = listener.id.clone();
                 tasks.spawn(async move {
+                    // Sessions pin the generation they were admitted under:
+                    // the profile (auth_http endpoints, TLS material, relay
+                    // policy) resolves from that generation's cache.
+                    let generation = runtime.current();
+                    let profile = match generation
+                        .app
+                        .mail_servers()
+                        .iter()
+                        .find(|server| server.id == listener_id)
+                        .cloned()
+                    {
+                        Some(config) => match generation.mail_profiles.resolve(&config).await {
+                            Ok(profile) => profile,
+                            Err(error) => {
+                                tracing::warn!(
+                                    mail_server_id = %listener_id,
+                                    error = %error,
+                                    "mail session profile resolution failed; closing connection"
+                                );
+                                drop(permit);
+                                return Ok(());
+                            }
+                        },
+                        None => {
+                            // The socket is being retired after a handoff and
+                            // this connection raced its shutdown; close it.
+                            tracing::debug!(
+                                mail_server_id = %listener_id,
+                                "mail listener removed from the active generation; closing connection"
+                            );
+                            drop(permit);
+                            return Ok(());
+                        }
+                    };
                     let result = serve_mail_connection(&profile, downstream, peer).await;
                     drop(permit);
                     result

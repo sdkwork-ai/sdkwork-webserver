@@ -52,7 +52,13 @@ const UPSTREAM_RETRY_REASONS: [&str; 5] = [
     "http_503",
     "http_504",
 ];
-const RELOAD_RESULTS: [&str; 4] = ["published", "unchanged", "restart_required", "failed"];
+const RELOAD_RESULTS: [&str; 5] = [
+    "published",
+    "unchanged",
+    "restart_required",
+    "failed",
+    "handoff_published",
+];
 const TARGET_HEALTH_STATES: [&str; 4] = [
     "healthy",
     "passive_ejected",
@@ -186,6 +192,9 @@ pub(super) enum ReloadResult {
     Unchanged = 1,
     RestartRequired = 2,
     Failed = 3,
+    /// The generation published AND the listening-socket set changed: added
+    /// sockets bound before publication, removed sockets drain after it.
+    HandoffPublished = 4,
 }
 
 #[derive(Clone, Copy)]

@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use axum_server::tls_rustls::RustlsConfig;
-use sdkwork_webserver_core::{ClientAuthConfig, ListenerConfig, TlsVersion};
+use sdkwork_webserver_core::{ClientAuthConfig, CompiledWebServerApp, ListenerConfig, TlsVersion};
 
 use super::{
-    runtime::RuntimeGeneration,
     tls_material::{
         build_layered_server_config, build_source_index, install_crypto_provider,
         load_certified_key,
@@ -28,10 +27,10 @@ pub(crate) struct CompiledPolicyTlsMaterial {
 }
 
 pub(crate) fn build_tls_config(
-    generation: &Arc<RuntimeGeneration>,
+    app: &CompiledWebServerApp,
     listener: &ListenerConfig,
 ) -> Result<Option<RustlsConfig>, DataPlaneError> {
-    let Some(material) = compile_policy_tls_material(generation, listener, false)? else {
+    let Some(material) = compile_policy_tls_material(app, listener, false)? else {
         return Ok(None);
     };
     let policy_id = listener.tls_policy_ref.clone().unwrap_or_default();
@@ -63,35 +62,32 @@ pub(crate) fn build_tls_config(
 /// with no lower layer a dropped file would leave the listener serving nothing
 /// — a silent outage rather than a fallback.
 pub(crate) fn compile_policy_tls_material(
-    generation: &Arc<RuntimeGeneration>,
+    app: &CompiledWebServerApp,
     listener: &ListenerConfig,
     tolerate_unavailable_material: bool,
 ) -> Result<Option<CompiledPolicyTlsMaterial>, DataPlaneError> {
     let Some(policy_id) = &listener.tls_policy_ref else {
         return Ok(None);
     };
-    let policy =
-        generation
-            .app
-            .tls_policy(policy_id)
-            .ok_or_else(|| DataPlaneError::MissingTlsPolicy {
-                listener_id: listener.id.clone(),
-                policy_id: policy_id.clone(),
-            })?;
+    let policy = app
+        .tls_policy(policy_id)
+        .ok_or_else(|| DataPlaneError::MissingTlsPolicy {
+            listener_id: listener.id.clone(),
+            policy_id: policy_id.clone(),
+        })?;
 
     install_crypto_provider()?;
     let provider = rustls::crypto::CryptoProvider::get_default()
         .expect("the Rustls crypto provider was installed before certificate parsing");
     let mut certificates = Vec::new();
     for certificate_ref in policy.certificate_refs() {
-        let certificate = generation.app.certificate(certificate_ref).ok_or_else(|| {
+        let certificate = app.certificate(certificate_ref).ok_or_else(|| {
             DataPlaneError::MissingCertificate {
                 policy_id: policy.id.clone(),
                 certificate_id: certificate_ref.to_owned(),
             }
         })?;
-        let (certificate_file, private_key_file) = generation
-            .app
+        let (certificate_file, private_key_file) = app
             .certificate_paths(&certificate.id)
             .ok_or_else(|| DataPlaneError::MissingCertificateFiles {
                 certificate_id: certificate.id.clone(),
@@ -99,10 +95,8 @@ pub(crate) fn compile_policy_tls_material(
         let loaded = match load_certified_key(
             certificate_file,
             private_key_file,
-            generation.app.certificate_chain_file(&certificate.id),
-            generation
-                .app
-                .certificate_ocsp_stapling_file(&certificate.id),
+            app.certificate_chain_file(&certificate.id),
+            app.certificate_ocsp_stapling_file(&certificate.id),
             &certificate.server_names,
             provider,
         ) {
@@ -126,8 +120,7 @@ pub(crate) fn compile_policy_tls_material(
     // Relative `clientAuth.caCertificateFiles` are chrooted to the config
     // directory by the compiler; substitute the resolved paths.
     let client_auth = policy.client_auth.as_ref().map(|auth| {
-        let resolved = generation
-            .app
+        let resolved = app
             .client_auth_ca_paths(&policy.id)
             .map(|paths| {
                 paths

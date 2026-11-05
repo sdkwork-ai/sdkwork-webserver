@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use instant_acme::{
-    Account, AuthorizationStatus, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus,
-    RetryPolicy,
+    Account, AuthorizationStatus, ChallengeType, Identifier, NewAccount, NewOrder, Order,
+    OrderStatus, RetryPolicy,
 };
 use rcgen::{CertificateParams, DistinguishedName};
 
@@ -27,6 +27,13 @@ use crate::{AcmeConfig, AcmeServiceError, AcmeServiceResult};
 /// A wildcard order spends one authorization per identifier, so a wildcard plus
 /// its apex costs two.
 const MAX_AUTHORIZATIONS_PER_ORDER: usize = crate::MAX_CERTIFICATE_IDENTIFIERS;
+
+/// Ceiling on the per-identifier failure diagnostics joined into one order
+/// failure message: four identifiers cover the engine's own 8-identifier ceiling
+/// with room for the CA's sentence each, and the total stays inside the control
+/// plane's 512-character failure-detail budget after its own truncation.
+const MAX_FAILURE_DIAGNOSTICS: usize = 4;
+const MAX_FAILURE_DIAGNOSTIC_CHARS: usize = 384;
 
 /// Process-lifetime fallback (directory URL → serialized credentials) for CA
 /// accounts whose durable save failed. The durable store stays the source of
@@ -187,6 +194,16 @@ async fn issue_lets_encrypt_inner(
         AcmeChallengeMode::Dns01 { .. } => None,
     };
 
+    // RFC 8659 CAA alignment, engine-side pre-order gate: the profile table
+    // (`crate::caa`) records what each known directory can actually issue. An
+    // order a directory can never fulfill still consumes the CA's order and
+    // failed-validation rate-limit budget before it fails, so refuse it here,
+    // where the refusal costs nothing. An unknown directory stays "not
+    // evaluable" (the request proceeds), matching the table's own contract.
+    if let Some(error) = directory_capability_error(&config.directory_url, hostnames) {
+        return Err(error);
+    }
+
     let contact = format!("mailto:{}", config.contact_email);
     // Restore the durable CA account when one exists; otherwise create one
     // account and persist it. Reusing one account avoids the CA account
@@ -256,81 +273,120 @@ async fn issue_lets_encrypt_inner(
             .await
             .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
 
-        // HTTP-01 leases clean their webroot file when dropped, so they must
-        // outlive the CA's validation attempt and no longer.
+        // Pass 1: present every challenge response before telling the CA
+        // anything. A wildcard order publishes `_acme-challenge.<base>` twice
+        // (wildcard and apex authorizations) with distinct TXT values, and the
+        // CA may validate authorizations in any order — all records must be in
+        // place before the first `set_ready`, or a fast CA validates a missing
+        // record and burns a failed validation (Let's Encrypt: 5 failed
+        // validations per account per hostname per hour).
         let mut challenge_leases = Vec::with_capacity(hostnames.len());
         let mut authorization_count = 0_usize;
-        let mut authorizations = order.authorizations();
-        while let Some(result) = authorizations.next().await {
-            authorization_count += 1;
-            if authorization_count > MAX_AUTHORIZATIONS_PER_ORDER {
-                return Err(AcmeServiceError::provider(format!(
-                    "ACME order exceeds {MAX_AUTHORIZATIONS_PER_ORDER} authorizations"
-                )));
-            }
-            let mut authz =
-                result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
-            if authz.status == AuthorizationStatus::Valid {
-                // Already authorized: reuse it and present nothing. This is the
-                // normal path for a renewal inside the CA's authorization cache
-                // window, and it keeps a wildcard order from re-publishing a
-                // record the CA still considers valid.
-                continue;
-            }
-
-            let challenge_type = match mode {
-                AcmeChallengeMode::Http01 => ChallengeType::Http01,
-                AcmeChallengeMode::Dns01 { .. } => ChallengeType::Dns01,
-            };
-            // Derive the label from `mode` rather than from `challenge_type`:
-            // the latter is moved into `authz.challenge(...)` before the error
-            // closure could borrow it.
-            let challenge_label = challenge_type_label(&mode);
-            let mut challenge = authz.challenge(challenge_type).ok_or_else(|| {
-                AcmeServiceError::provider(format!(
-                    "the CA offers no {challenge_label} challenge for this authorization"
-                ))
-            })?;
-
-            match &mode {
-                AcmeChallengeMode::Http01 => {
-                    let token = challenge.token.clone();
-                    let key_auth = challenge.key_authorization().as_str().to_string();
-                    let lease = challenge_store
-                        .register_scoped(webroot, &token, &key_auth)
-                        .await?;
-                    challenge_leases.push(lease);
+        {
+            let mut authorizations = order.authorizations();
+            while let Some(result) = authorizations.next().await {
+                authorization_count += 1;
+                if authorization_count > MAX_AUTHORIZATIONS_PER_ORDER {
+                    return Err(AcmeServiceError::provider(format!(
+                        "ACME order exceeds {MAX_AUTHORIZATIONS_PER_ORDER} authorizations"
+                    )));
                 }
-                AcmeChallengeMode::Dns01 { presenter, zones } => {
-                    // The identifier is rendered with its wildcard marker, so a
-                    // `*.example.com` authorization and its apex authorization
-                    // both reduce to `_acme-challenge.example.com` while keeping
-                    // distinct TXT values. Both must be published together; the
-                    // CA may validate them in either order. The zone resolver
-                    // picks the hosted zone per identifier, so certificates
-                    // spanning multiple zones/accounts renew unattended.
-                    let identifier = challenge.identifier().to_string();
-                    let zone_apex = zones.zone_for(&identifier).ok_or_else(|| {
-                        AcmeServiceError::validation(format!(
-                            "no cloud account is associated with identifier {identifier}; \
-                             associate its zone with a DNS provider account to renew"
-                        ))
-                    })?;
-                    let record_name = dns01_record_name(&identifier)?;
-                    let digest = challenge.key_authorization().digest();
-                    let record_value = dns01_txt_value(digest.as_ref());
-                    let request = Dns01RecordRequest::new(zone_apex, record_name, record_value)?;
-                    let handle = presenter.publish(&request).await?;
-                    if let Some(guard) = dns01_guard.as_mut() {
-                        guard.push(handle);
+                let mut authz =
+                    result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+                if authz.status == AuthorizationStatus::Valid {
+                    // Already authorized: reuse it and present nothing. This is
+                    // the normal path for a renewal inside the CA's
+                    // authorization cache window, and it keeps a wildcard order
+                    // from re-publishing a record the CA still considers valid.
+                    continue;
+                }
+
+                let challenge_type = match mode {
+                    AcmeChallengeMode::Http01 => ChallengeType::Http01,
+                    AcmeChallengeMode::Dns01 { .. } => ChallengeType::Dns01,
+                };
+                // Derive the label from `mode` rather than from `challenge_type`:
+                // the latter is moved into `authz.challenge(...)` before the error
+                // closure could borrow it.
+                let challenge_label = challenge_type_label(&mode);
+                let challenge = authz.challenge(challenge_type).ok_or_else(|| {
+                    AcmeServiceError::provider(format!(
+                        "the CA offers no {challenge_label} challenge for this authorization"
+                    ))
+                })?;
+
+                match &mode {
+                    AcmeChallengeMode::Http01 => {
+                        let token = challenge.token.clone();
+                        let key_auth = challenge.key_authorization().as_str().to_string();
+                        let lease = challenge_store
+                            .register_scoped(webroot, &token, &key_auth)
+                            .await?;
+                        challenge_leases.push(lease);
+                    }
+                    AcmeChallengeMode::Dns01 { presenter, zones } => {
+                        // The identifier is rendered with its wildcard marker, so
+                        // a `*.example.com` authorization and its apex
+                        // authorization both reduce to
+                        // `_acme-challenge.example.com` while keeping distinct
+                        // TXT values. Both must be published together; the CA may
+                        // validate them in either order. The zone resolver picks
+                        // the hosted zone per identifier, so certificates
+                        // spanning multiple zones/accounts renew unattended.
+                        let identifier = challenge.identifier().to_string();
+                        let zone_apex = zones.zone_for(&identifier).ok_or_else(|| {
+                            AcmeServiceError::validation(format!(
+                                "no cloud account is associated with identifier {identifier}; \
+                                 associate its zone with a DNS provider account to renew"
+                            ))
+                        })?;
+                        let record_name = dns01_record_name(&identifier)?;
+                        let digest = challenge.key_authorization().digest();
+                        let record_value = dns01_txt_value(digest.as_ref());
+                        let request =
+                            Dns01RecordRequest::new(zone_apex, record_name, record_value)?;
+                        let handle = presenter.publish(&request).await?;
+                        if let Some(guard) = dns01_guard.as_mut() {
+                            guard.push(handle);
+                        }
                     }
                 }
             }
+        }
 
-            challenge
-                .set_ready()
-                .await
-                .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+        // DNS-01: give the provider's DNS network time to serve the records it
+        // just accepted before the CA validates. HTTP-01 needs no wait — the
+        // webroot file is local and visible the moment the lease registers.
+        if matches!(mode, AcmeChallengeMode::Dns01 { .. }) && config.dns_propagation_delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(config.dns_propagation_delay_ms)).await;
+        }
+
+        // Pass 2: tell the CA each challenge is ready. The authorization states
+        // were cached on the order in pass 1, so this walk issues no new
+        // fetches — only the per-challenge readiness POSTs.
+        {
+            let mut authorizations = order.authorizations();
+            while let Some(result) = authorizations.next().await {
+                let mut authz =
+                    result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+                if authz.status == AuthorizationStatus::Valid {
+                    continue;
+                }
+                let challenge_type = match mode {
+                    AcmeChallengeMode::Http01 => ChallengeType::Http01,
+                    AcmeChallengeMode::Dns01 { .. } => ChallengeType::Dns01,
+                };
+                let mut challenge = authz.challenge(challenge_type).ok_or_else(|| {
+                    AcmeServiceError::provider(format!(
+                        "the CA offers no {} challenge for this authorization",
+                        challenge_type_label(&mode)
+                    ))
+                })?;
+                challenge
+                    .set_ready()
+                    .await
+                    .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+            }
         }
 
         let retry_timeout = operation_timeout.min(Duration::from_secs(120));
@@ -340,8 +396,12 @@ async fn issue_lets_encrypt_inner(
             .await
             .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
         if status != OrderStatus::Ready {
+            // RFC 8555 §8: the CA records why a validation failed on the
+            // challenge object. "not ready: Invalid" alone is not actionable;
+            // the CA's own per-identifier explanation is.
+            let diagnostics = authorization_failure_diagnostics(&mut order).await;
             return Err(AcmeServiceError::provider(format!(
-                "ACME order not ready: {status:?}"
+                "ACME order not ready: {status:?}{diagnostics}"
             )));
         }
 
@@ -425,6 +485,138 @@ async fn issue_lets_encrypt_inner(
         guard.withdraw().await;
     }
     outcome
+}
+
+/// The pre-order directory-capability refusal for `hostnames`, or `None` when
+/// the directory can issue them — or is unknown and therefore "not evaluable"
+/// (`crate::caa`'s own fail-open contract).
+///
+/// Extracted from [`issue_lets_encrypt_inner`] so the gate is testable without
+/// network access; the refusal must happen before `newOrder` because an order a
+/// directory can never fulfill still burns the CA's rate-limit budget.
+fn directory_capability_error(
+    directory_url: &str,
+    hostnames: &[String],
+) -> Option<AcmeServiceError> {
+    let profile = crate::caa::acme_directory_profile(directory_url)?;
+    let wildcard = hostnames
+        .iter()
+        .any(|hostname| is_wildcard_identifier(hostname));
+    if wildcard && !profile.supports_wildcard {
+        return Some(AcmeServiceError::validation(format!(
+            "the configured ACME directory ({directory_url}) does not issue wildcard \
+             certificates; request the apex names without `*` or point the directory URL \
+             at a wildcard-capable CA"
+        )));
+    }
+    let unique_identifiers = hostnames
+        .iter()
+        .map(|hostname| hostname.to_ascii_lowercase())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    if unique_identifiers > 1 && !profile.supports_multi_domain {
+        return Some(AcmeServiceError::validation(format!(
+            "the configured ACME directory ({directory_url}) issues single-domain \
+             certificates only; request one certificate per identifier"
+        )));
+    }
+    None
+}
+
+/// RFC 8555 §8: the CA records why a validation failed as an RFC 7807 problem
+/// document on the challenge object, and the authorization carries the
+/// per-identifier state. "ACME order not ready: Invalid" alone tells an
+/// operator nothing about which identifier failed or why — a missing DNS record
+/// and a refused HTTP token are both just "Invalid" — so the surfaced failure
+/// carries the CA's own explanation for every non-valid authorization.
+///
+/// Best effort and read-only: only non-valid authorizations are inspected, a
+/// walk error shortens the report rather than replacing it, and the total stays
+/// inside the control plane's failure-detail budget.
+async fn authorization_failure_diagnostics(order: &mut Order) -> String {
+    let mut failures: Vec<String> = Vec::new();
+    let mut authorizations = order.authorizations();
+    while let Some(result) = authorizations.next().await {
+        let Ok(authz) = result else {
+            break;
+        };
+        if authz.status == AuthorizationStatus::Valid {
+            continue;
+        }
+        let identifier = authz.identifier().to_string();
+        let mut reasons: Vec<String> = authz
+            .challenges
+            .iter()
+            .filter_map(|challenge| challenge.error.as_ref())
+            .map(format_acme_problem)
+            .collect();
+        if reasons.is_empty() {
+            reasons.push("the CA reported no challenge error (still pending)".to_owned());
+        }
+        failures.push(format!("{identifier}: {}", reasons.join("; ")));
+        if failures.len() >= MAX_FAILURE_DIAGNOSTICS {
+            break;
+        }
+    }
+    if failures.is_empty() {
+        return String::new();
+    }
+    let joined = failures.join("; ");
+    let mut text = bound_text(&joined, MAX_FAILURE_DIAGNOSTIC_CHARS);
+    if text.chars().count() < joined.chars().count() {
+        text.push('…');
+    }
+    format!("; authorization failures: {text}")
+}
+
+/// Renders an RFC 7807 problem document as `detail (type)`, skipping absent
+/// halves and appending subproblems. `instant-acme`'s own `Display` prefixes
+/// every document with "API error", which is noise next to the identifier it
+/// explains.
+fn format_acme_problem(problem: &instant_acme::Problem) -> String {
+    let mut text = problem.detail.clone().unwrap_or_default();
+    if let Some(problem_type) = &problem.r#type {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        text.push('(');
+        text.push_str(problem_type);
+        text.push(')');
+    }
+    for subproblem in &problem.subproblems {
+        if !text.is_empty() {
+            text.push_str("; ");
+        }
+        if let Some(identifier) = &subproblem.identifier {
+            text.push_str(&identifier.authorized(false).to_string());
+            text.push_str(": ");
+        }
+        if let Some(detail) = &subproblem.detail {
+            text.push_str(detail);
+        }
+        if let Some(problem_type) = &subproblem.r#type {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push('(');
+            text.push_str(problem_type);
+            text.push(')');
+        }
+    }
+    if text.is_empty() {
+        text.push_str("unspecified problem");
+    }
+    text
+}
+
+/// Character-boundary-safe truncation for diagnostic text that may carry
+/// non-ASCII vendor messages.
+fn bound_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        text.to_owned()
+    } else {
+        text.chars().take(max_chars).collect()
+    }
 }
 
 /// Owns the DNS-01 records published for one order until they are withdrawn.
@@ -571,5 +763,122 @@ mod tests {
                 "wildcard predicate disagreed for `{hostname}`"
             );
         }
+    }
+
+    #[test]
+    fn a_wildcard_order_to_a_wildcardless_directory_is_refused_before_any_order() {
+        // Buypass's profile records `supports_wildcard: false`; the gate must
+        // cost nothing (no account, no order, no rate-limit budget) and name the
+        // fix in its message.
+        let error = directory_capability_error(
+            "https://api.buypass.com/acme/directory",
+            &["*.example.com".to_owned()],
+        )
+        .expect("wildcard to Buypass must be refused");
+        let message = error.to_string();
+        assert!(message.contains("wildcard"), "{message}");
+        assert!(message.contains("api.buypass.com"), "{message}");
+    }
+
+    #[test]
+    fn a_multi_domain_order_to_a_single_domain_directory_is_refused() {
+        let error = directory_capability_error(
+            "https://acme.ssl.com/sslcom-dv-ecc",
+            &["example.com".to_owned(), "example.org".to_owned()],
+        )
+        .expect("two identifiers to SSL.com must be refused");
+        assert!(error.to_string().contains("single-domain"));
+    }
+
+    #[test]
+    fn let_s_encrypt_directories_accept_wildcard_and_multi_domain_orders() {
+        for directory in [
+            "https://acme-v02.api.letsencrypt.org/directory",
+            "https://acme-staging-v02.api.letsencrypt.org/directory",
+        ] {
+            for hostnames in [
+                vec!["*.example.com".to_owned()],
+                vec!["*.example.com".to_owned(), "example.com".to_owned()],
+                vec!["a.example.com".to_owned(), "b.example.com".to_owned()],
+            ] {
+                assert!(
+                    directory_capability_error(directory, &hostnames).is_none(),
+                    "{directory} must accept {hostnames:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn case_folded_identifiers_count_as_one_multi_domain_entry() {
+        // `EXAMPLE.com` and `example.com` are one identifier to the CA; a
+        // case-duplicated request must not be refused as multi-domain.
+        assert!(directory_capability_error(
+            "https://acme.ssl.com/sslcom-dv-ecc",
+            &["EXAMPLE.com".to_owned(), "example.com".to_owned()],
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn an_unknown_directory_is_not_evaluable_and_is_not_gated() {
+        // The profile table's own contract: unknown means "not evaluable", so
+        // the request proceeds and the CA decides.
+        assert!(directory_capability_error(
+            "https://acme.example.test/directory",
+            &["*.example.com".to_owned(), "extra.example.com".to_owned()],
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn problem_formatting_names_detail_and_type_without_the_api_error_prefix() {
+        use instant_acme::{Problem, Subproblem};
+        let problem = Problem {
+            r#type: Some("urn:ietf:params:acme:error:dns".to_owned()),
+            detail: Some("DNS problem: NXDOMAIN looking up TXT".to_owned()),
+            status: Some(400),
+            subproblems: vec![],
+        };
+        assert_eq!(
+            format_acme_problem(&problem),
+            "DNS problem: NXDOMAIN looking up TXT (urn:ietf:params:acme:error:dns)"
+        );
+
+        let bare = Problem {
+            r#type: None,
+            detail: None,
+            status: None,
+            subproblems: vec![Subproblem {
+                identifier: None,
+                r#type: Some("urn:ietf:params:acme:error:caa".to_owned()),
+                detail: Some("CAA record forbids issuance".to_owned()),
+            }],
+        };
+        // A subproblem carries the explanation, so the document needs no
+        // placeholder of its own.
+        assert_eq!(
+            format_acme_problem(&bare),
+            "CAA record forbids issuance (urn:ietf:params:acme:error:caa)"
+        );
+
+        let empty = Problem {
+            r#type: None,
+            detail: None,
+            status: None,
+            subproblems: vec![],
+        };
+        assert_eq!(format_acme_problem(&empty), "unspecified problem");
+    }
+
+    #[test]
+    fn diagnostic_bounding_is_character_safe_and_marks_the_cut() {
+        let multibyte = "域名问题".repeat(200);
+        let bounded = bound_text(&multibyte, 10);
+        assert_eq!(bounded.chars().count(), 10);
+        // A cut must not panic on a multi-byte boundary and stays valid UTF-8.
+        assert!(std::str::from_utf8(bounded.as_bytes()).is_ok());
+        let short = bound_text("ok", 10);
+        assert_eq!(short, "ok");
     }
 }

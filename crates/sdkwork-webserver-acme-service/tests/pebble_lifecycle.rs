@@ -57,9 +57,99 @@ impl Drop for Subprocess {
 }
 
 fn resolve_binary(env_name: &str, default: &str) -> PathBuf {
-    std::env::var(env_name)
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(default))
+    resolve_binary_with(env_name, default, std::env::var_os("PATH").as_deref())
+}
+
+/// The suite's documented contract is "binaries in `$PATH` (or the
+/// `PEBBLE` / `CHALLTESTSRV` environment variables)". The explicit environment
+/// variables win; otherwise the relative default only works from the crate
+/// directory, so PATH is searched — with and without the platform executable
+/// suffix — before the binaries are declared missing.
+fn resolve_binary_with(
+    env_name: &str,
+    default: &str,
+    search_path: Option<&std::ffi::OsStr>,
+) -> PathBuf {
+    if let Ok(value) = std::env::var(env_name) {
+        return PathBuf::from(value);
+    }
+    let default = PathBuf::from(default);
+    if default.exists() {
+        return default;
+    }
+    let Some(file_name) = default.file_name() else {
+        return default;
+    };
+    let mut names = vec![file_name.to_owned()];
+    let exe_suffix = std::env::consts::EXE_SUFFIX;
+    if !exe_suffix.is_empty() {
+        names.push(std::ffi::OsString::from(format!(
+            "{}{exe_suffix}",
+            file_name.to_string_lossy()
+        )));
+    }
+    if let Some(search_path) = search_path {
+        for directory in std::env::split_paths(search_path) {
+            for name in &names {
+                let candidate = directory.join(name);
+                if candidate.is_file() {
+                    return candidate;
+                }
+            }
+        }
+    }
+    default
+}
+
+#[cfg(test)]
+mod harness_tests {
+    use super::resolve_binary_with;
+    use std::ffi::OsStr;
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_binary_on_the_search_path_resolves_without_an_explicit_env_var() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let directory = temp.path().join("tools");
+        std::fs::create_dir_all(&directory).expect("create tools dir");
+        let binary = directory.join("probe-acme-tool");
+        std::fs::write(&binary, b"").expect("write probe binary");
+
+        let search_path =
+            std::env::join_paths([std::path::Path::new("/irrelevant"), directory.as_path()])
+                .expect("join search path");
+        let resolved =
+            resolve_binary_with("PROBE_ACME_TOOL", "./probe-acme-tool", Some(&search_path));
+        assert_eq!(resolved, binary);
+    }
+
+    #[test]
+    fn a_platform_suffixed_binary_resolves_from_the_search_path() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let suffix = std::env::consts::EXE_SUFFIX;
+        let directory = temp.path().join("tools");
+        std::fs::create_dir_all(&directory).expect("create tools dir");
+        let binary = directory.join(format!("probe-acme-tool{suffix}"));
+        std::fs::write(&binary, b"").expect("write probe binary");
+
+        let search_path = std::env::join_paths([directory.as_path()]).expect("join search path");
+        let resolved =
+            resolve_binary_with("PROBE_ACME_TOOL", "./probe-acme-tool", Some(&search_path));
+        assert_eq!(resolved, binary);
+    }
+
+    #[test]
+    fn an_absent_binary_falls_back_to_the_documented_default() {
+        let resolved = resolve_binary_with(
+            "PROBE_ACME_TOOL",
+            "./definitely-missing-pebble-binary",
+            Some(OsStr::new("/nonexistent-search-path")),
+        );
+        assert_eq!(
+            resolved,
+            PathBuf::from("./definitely-missing-pebble-binary")
+        );
+    }
 }
 
 fn write_pebble_identity(directory: &Path) -> (String, String) {
