@@ -6463,6 +6463,7 @@ fn add_remove_listeners_config(port_a: u16, port_c: u16, body: &str) -> Value {
     // host (the default reference must point at a host that lists it).
     let mut config = two_listener_config(port_a, port_c, body);
     config["listeners"][1]["id"] = json!("third");
+    config["listeners"][1]["defaultVirtualHostRef"] = json!("third-host");
     config["virtualHosts"][1] = json!({
         "id": "third-host",
         "listenerRefs": ["third"],

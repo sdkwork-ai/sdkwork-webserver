@@ -654,7 +654,7 @@ async fn reload_json_once(
         Ok(Err(error)) => {
             log_reload_error_once(
                 last_error,
-                format!("candidate-{} {error:?}", config_error_class(&error)),
+                format!("candidate-{}", config_error_class(&error)),
                 config_path,
             );
             return false;
