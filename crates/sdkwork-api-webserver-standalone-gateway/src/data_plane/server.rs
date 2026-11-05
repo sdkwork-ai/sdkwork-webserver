@@ -86,10 +86,12 @@ pub(crate) struct ListenerSupervisor {
     deploy_fallback: Option<Arc<DeployFallbackResolver>>,
     usage_meter: Option<Arc<UsageMeteringAggregator>>,
     tls_runtime: Option<Arc<FileTlsRuntimeController>>,
+    /// Socket-activation descriptors (systemd `LISTEN_FDS`): consumed during
+    /// bootstrap only, then dropped so handoff prepares bind normally.
+    inherited: tokio::sync::Mutex<Option<super::socket_activation::InheritedSockets>>,
     inner: tokio::sync::Mutex<SupervisorInner>,
     events_tx: tokio::sync::mpsc::UnboundedSender<SupervisorEvent>,
-    events_rx:
-        tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<SupervisorEvent>>,
+    events_rx: tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<SupervisorEvent>>,
 }
 
 struct SupervisorInner {
@@ -130,6 +132,7 @@ impl ListenerSupervisor {
         deploy_fallback: Option<Arc<DeployFallbackResolver>>,
         usage_meter: Option<Arc<UsageMeteringAggregator>>,
         tls_runtime: Option<Arc<FileTlsRuntimeController>>,
+        inherited: super::socket_activation::InheritedSockets,
     ) -> Self {
         let (events_tx, events_rx) = tokio::sync::mpsc::unbounded_channel();
         Self {
@@ -139,6 +142,7 @@ impl ListenerSupervisor {
             deploy_fallback,
             usage_meter,
             tls_runtime,
+            inherited: tokio::sync::Mutex::new(Some(inherited)),
             inner: tokio::sync::Mutex::new(SupervisorInner {
                 live: HashMap::new(),
                 pending: Vec::new(),
@@ -149,13 +153,75 @@ impl ListenerSupervisor {
     }
 
     /// Binds every socket of the initial generation and starts serving it.
+    /// Inherited socket-activation descriptors are consumed here; after
+    /// bootstrap they are dropped so handoff prepares bind normally.
     pub(crate) async fn bootstrap(
         &self,
         initial: &Arc<RuntimeGeneration>,
     ) -> Result<(), DataPlaneError> {
         self.prepare_sockets(initial).await?;
         self.commit_sockets(initial).await;
+        let mut inherited = self.inherited.lock().await;
+        if let Some(set) = inherited.as_ref() {
+            if set.is_active() {
+                set.verify_all_claimed()
+                    .map_err(|source| DataPlaneError::Listener {
+                        listener_id: "socket-activation".to_owned(),
+                        source,
+                    })?;
+            }
+        }
+        *inherited = None;
         Ok(())
+    }
+
+    /// Claims the inherited TCP listener bound to `address`. While socket
+    /// activation is active, a declared socket with no matching descriptor is
+    /// a fail-closed error (the orchestrator passed an incompatible set).
+    async fn claim_inherited_tcp(
+        &self,
+        address: SocketAddr,
+        listener_id: &str,
+    ) -> Result<Option<std::net::TcpListener>, DataPlaneError> {
+        let mut guard = self.inherited.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Ok(None);
+        };
+        if !set.is_active() {
+            return Ok(None);
+        }
+        set.take_tcp(address)
+            .map(Some)
+            .ok_or_else(|| DataPlaneError::Listener {
+                listener_id: listener_id.to_owned(),
+                source: io::Error::other(format!(
+                    "socket activation is active but no inherited descriptor is bound to {address}"
+                )),
+            })
+    }
+
+    /// Claims the inherited UDP socket bound to `address` (see
+    /// [`ListenerSupervisor::claim_inherited_tcp`]).
+    async fn claim_inherited_udp(
+        &self,
+        address: SocketAddr,
+        listener_id: &str,
+    ) -> Result<Option<std::net::UdpSocket>, DataPlaneError> {
+        let mut guard = self.inherited.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Ok(None);
+        };
+        if !set.is_active() {
+            return Ok(None);
+        }
+        set.take_udp(address)
+            .map(Some)
+            .ok_or_else(|| DataPlaneError::Listener {
+                listener_id: listener_id.to_owned(),
+                source: io::Error::other(format!(
+                    "socket activation is active but no inherited descriptor is bound to {address}"
+                )),
+            })
     }
 
     /// Binds the sockets the candidate generation adds. A bind failure closes
@@ -210,8 +276,10 @@ impl ListenerSupervisor {
         match socket.kind {
             SocketKind::Http => {
                 let listener =
-                    candidate.app.listener(&socket.id).ok_or_else(|| {
-                        DataPlaneError::Listener {
+                    candidate
+                        .app
+                        .listener(&socket.id)
+                        .ok_or_else(|| DataPlaneError::Listener {
                             listener_id: socket.id.clone(),
                             source: io::Error::new(
                                 io::ErrorKind::NotFound,
@@ -220,10 +288,12 @@ impl ListenerSupervisor {
                                     socket.id
                                 ),
                             ),
-                        }
-                    })?;
+                        })?;
+                let requested = listener_address(&listener.bind, listener.port, &listener.id)?;
+                let inherited = self.claim_inherited_tcp(requested, &listener.id).await?;
                 Ok(PendingSocket::Http(
-                    prepare_listener(candidate, listener, self.tls_runtime.as_deref()).await?,
+                    prepare_listener(candidate, listener, self.tls_runtime.as_deref(), inherited)
+                        .await?,
                 ))
             }
             SocketKind::StreamTcp => {
@@ -247,10 +317,12 @@ impl ListenerSupervisor {
                         ),
                     });
                 }
+                let requested = listener_address(&members[0].bind, members[0].port, &socket.id)?;
+                let inherited = self.claim_inherited_tcp(requested, &socket.id).await?;
                 let prepared = if members.len() == 1 {
-                    super::stream_proxy::prepare_stream_listener(&members[0]).await?
+                    super::stream_proxy::prepare_stream_listener(&members[0], inherited).await?
                 } else {
-                    super::stream_proxy::prepare_stream_listener_group(&members).await?
+                    super::stream_proxy::prepare_stream_listener_group(&members, inherited).await?
                 };
                 Ok(PendingSocket::StreamTcp(prepared))
             }
@@ -267,8 +339,10 @@ impl ListenerSupervisor {
                             "udp stream listener vanished from the candidate generation",
                         ),
                     })?;
+                let requested = listener_address(&stream.bind, stream.port, &socket.id)?;
+                let inherited = self.claim_inherited_udp(requested, &socket.id).await?;
                 Ok(PendingSocket::StreamUdp(
-                    super::udp_stream_proxy::prepare_udp_stream_listener(stream).await?,
+                    super::udp_stream_proxy::prepare_udp_stream_listener(stream, inherited).await?,
                 ))
             }
             SocketKind::Mail => {
@@ -284,8 +358,10 @@ impl ListenerSupervisor {
                             "mail listener vanished from the candidate generation",
                         ),
                     })?;
+                let requested = listener_address(&mail_server.bind, mail_server.port, &socket.id)?;
+                let inherited = self.claim_inherited_tcp(requested, &socket.id).await?;
                 Ok(PendingSocket::Mail(
-                    PreparedMailListener::bind(mail_server).await?,
+                    PreparedMailListener::bind(mail_server, inherited).await?,
                 ))
             }
         }
@@ -435,7 +511,9 @@ impl ListenerSupervisor {
                 let socket_key = socket.clone();
                 tokio::spawn(async move {
                     let result = super::udp_stream_proxy::serve_udp_stream_listener(
-                        runtime, prepared, shutdown_rx,
+                        runtime,
+                        prepared,
+                        shutdown_rx,
                     )
                     .await;
                     let _ = events_tx.send(SupervisorEvent::TaskFinished {
@@ -450,8 +528,7 @@ impl ListenerSupervisor {
                 let listener_id = prepared.id.clone();
                 let socket_key = socket.clone();
                 tokio::spawn(async move {
-                    let result =
-                        serve_mail_listener(runtime, prepared, shutdown_rx).await;
+                    let result = serve_mail_listener(runtime, prepared, shutdown_rx).await;
                     let _ = events_tx.send(SupervisorEvent::TaskFinished {
                         socket: socket_key,
                         listener_id,
@@ -540,6 +617,20 @@ impl ListenerSupervisor {
 /// Bind a listener socket, setting `IPV6_V6ONLY` on IPv6 wildcard binds so a
 /// `[::]:port` listener can coexist with `0.0.0.0:port` (nginx `listen`
 /// semantics; Linux would otherwise reject the second bind via IPv4-mapped).
+/// Resolves a configured `bind`/`port` pair to the socket address a listener
+/// claims (also the socket-activation matching key).
+fn listener_address(
+    bind: &str,
+    port: u16,
+    _listener_id: &str,
+) -> Result<SocketAddr, DataPlaneError> {
+    let ip = bind.parse().map_err(|source| DataPlaneError::InvalidBind {
+        bind: bind.to_owned(),
+        source,
+    })?;
+    Ok(SocketAddr::new(ip, port))
+}
+
 pub(crate) async fn bind_listener(address: SocketAddr) -> std::io::Result<TcpListener> {
     if address.is_ipv6() {
         let domain = socket2::Domain::IPV6;
@@ -730,6 +821,16 @@ where
     // for the process lifetime and applies each published generation's
     // socket-set diff. The operations/management listeners stay process-fixed
     // (management plane, not operator routing config).
+    // Adopt socket-activation descriptors (systemd LISTEN_FDS) before any
+    // bind: when present, the declared data-plane sockets inherit them
+    // instead of binding, which is the zero-downtime executable-upgrade
+    // baseline (PRD-production-operations §8).
+    let inherited = super::socket_activation::InheritedSockets::adopt().map_err(|source| {
+        DataPlaneError::Listener {
+            listener_id: "socket-activation".to_owned(),
+            source,
+        }
+    })?;
     let supervisor = Arc::new(ListenerSupervisor::new(
         runtime.clone(),
         website_delivery.clone(),
@@ -737,6 +838,7 @@ where
         deploy_fallback.clone(),
         usage_meter.clone(),
         tls_runtime.clone(),
+        inherited,
     ));
     runtime.install_listener_supervisor(supervisor.clone())?;
     supervisor.bootstrap(&initial).await?;
@@ -776,8 +878,9 @@ where
     // Process-fixed operations listener (loopback health/metrics/tunnel
     // control). Its death is fatal; it is not part of the handoff surface.
     let mut operations_shutdown: Option<watch::Sender<bool>> = None;
-    let mut operations_handle: Option<tokio::task::JoinHandle<(String, Result<(), DataPlaneError>)>> =
-        None;
+    let mut operations_handle: Option<
+        tokio::task::JoinHandle<(String, Result<(), DataPlaneError>)>,
+    > = None;
     if let Some(operations_config) = operations.as_ref() {
         let prepared_operations = prepare_operations_listener(operations_config).await?;
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -919,22 +1022,32 @@ async fn prepare_listener(
     generation: &Arc<RuntimeGeneration>,
     listener: &ListenerConfig,
     tls_runtime: Option<&FileTlsRuntimeController>,
+    inherited: Option<std::net::TcpListener>,
 ) -> Result<PreparedListener, DataPlaneError> {
-    let ip = listener
-        .bind
-        .parse()
-        .map_err(|source| DataPlaneError::InvalidBind {
-            bind: listener.bind.clone(),
-            source,
-        })?;
-    let requested_address = SocketAddr::new(ip, listener.port);
+    let requested_address = listener_address(&listener.bind, listener.port, &listener.id)?;
     let socket =
-        bind_listener(requested_address)
-            .await
-            .map_err(|source| DataPlaneError::Listener {
-                listener_id: listener.id.clone(),
-                source,
-            })?;
+        match inherited {
+            // Socket activation: the orchestrator handed us this socket already
+            // bound and listening; adopt it instead of binding a second one.
+            Some(std_listener) => {
+                std_listener
+                    .set_nonblocking(true)
+                    .map_err(|source| DataPlaneError::Listener {
+                        listener_id: listener.id.clone(),
+                        source,
+                    })?;
+                TcpListener::from_std(std_listener).map_err(|source| DataPlaneError::Listener {
+                    listener_id: listener.id.clone(),
+                    source,
+                })?
+            }
+            None => bind_listener(requested_address).await.map_err(|source| {
+                DataPlaneError::Listener {
+                    listener_id: listener.id.clone(),
+                    source,
+                }
+            })?,
+        };
     let address = socket
         .local_addr()
         .map_err(|source| DataPlaneError::Listener {
@@ -1256,21 +1369,17 @@ async fn drive_connection<M>(
         builder
     };
     let builder = Arc::new(builder);
-    let tls = dynamic_tls
-        .or_else(|| generation.tls_configs.get(&listener_id).cloned().flatten());
-    let connection_info = match resolve_connection_info(
-        &mut stream,
-        peer,
-        listener_config.proxy_protocol.as_ref(),
-    )
-    .await
-    {
-        Ok(info) => info.with_tls(tls.is_some()),
-        Err(_) => {
-            metrics.record_connection_rejection(ConnectionRejection::ProxyProtocol);
-            return;
-        }
-    };
+    let tls = dynamic_tls.or_else(|| generation.tls_configs.get(&listener_id).cloned().flatten());
+    let connection_info =
+        match resolve_connection_info(&mut stream, peer, listener_config.proxy_protocol.as_ref())
+            .await
+        {
+            Ok(info) => info.with_tls(tls.is_some()),
+            Err(_) => {
+                metrics.record_connection_rejection(ConnectionRejection::ProxyProtocol);
+                return;
+            }
+        };
     let mut make_service = make_service.clone();
     if std::future::poll_fn(|context| make_service.poll_ready(context))
         .await
@@ -1294,8 +1403,7 @@ async fn drive_connection<M>(
             metrics.clone(),
         );
         let http2 = Http2WireGuardAcceptor::new_observed(http1, &limits, metrics.clone());
-        let keep_alive =
-            Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
+        let keep_alive = Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
         let acceptor = HandshakeTimeoutAcceptor::new_observed(
             WriteTimeoutAcceptor::new_observed(
                 keep_alive,
@@ -1327,8 +1435,7 @@ async fn drive_connection<M>(
         let http1 =
             Http1WireGuardAcceptor::new_observed(DefaultAcceptor::new(), &limits, metrics.clone());
         let http2 = Http2WireGuardAcceptor::new_observed(http1, &limits, metrics.clone());
-        let keep_alive =
-            Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
+        let keep_alive = Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
         let acceptor = HandshakeTimeoutAcceptor::new_observed(
             WriteTimeoutAcceptor::new_observed(
                 keep_alive,

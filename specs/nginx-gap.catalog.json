@@ -252,6 +252,12 @@
       "summary": "Watch reload for same listener topology (Wave 15 widened it: connection-plane configuration — limits, protocol parameters, TLS material — hot-applies per connection; the restart-required gate now covers only the socket set and process-built subsystems)"
     },
     {
+      "id": "ops.executable-upgrade.fd-inheritance",
+      "group": "operations",
+      "status": "implemented",
+      "summary": "Controlled descriptor-inheritance baseline for zero-downtime executable upgrades (PRD-production-operations §8): the gateway adopts systemd socket-activation descriptors (LISTEN_PID/LISTEN_FDS, TCP listeners and UDP sockets classified by SO_TYPE) in place of binding during bootstrap, matches each declared data-plane socket by its exact bound address, fails closed when socket activation is active but a declared socket has no inherited descriptor or when a leftover descriptor is not declared (split ownership), and drops the set after bootstrap so handoff prepares bind normally. Evidence: tests/socket_activation.rs (adopt-and-serve + fail-closed mismatch, unix-gated); systemd deployment note in bin/packaging/deb/sdkwork-webserver.service.template and TECH-runtime-data-plane."
+    },
+    {
       "id": "nginx.behavioral-corpus",
       "group": "operations",
       "status": "implemented",

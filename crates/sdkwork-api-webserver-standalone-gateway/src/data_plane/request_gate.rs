@@ -39,7 +39,9 @@ impl RequestAdmissionGate {
                 maximum_requests.saturating_sub(operations_reserve),
             )),
             total_capacity: AtomicUsize::new(maximum_requests),
-            business_capacity: AtomicUsize::new(maximum_requests.saturating_sub(operations_reserve)),
+            business_capacity: AtomicUsize::new(
+                maximum_requests.saturating_sub(operations_reserve),
+            ),
             resource_pressure,
         }
     }
@@ -62,14 +64,16 @@ impl RequestAdmissionGate {
             }
             std::cmp::Ordering::Equal => {}
         }
-        let business_current = self.business_capacity.swap(business_target, Ordering::AcqRel);
+        let business_current = self
+            .business_capacity
+            .swap(business_target, Ordering::AcqRel);
         match business_target.cmp(&business_current) {
-            std::cmp::Ordering::Greater => {
-                self.business.add_permits(business_target - business_current)
-            }
+            std::cmp::Ordering::Greater => self
+                .business
+                .add_permits(business_target - business_current),
             std::cmp::Ordering::Less => {
-                let drop = (business_current - business_target)
-                    .min(self.business.available_permits());
+                let drop =
+                    (business_current - business_target).min(self.business.available_permits());
                 if drop > 0 {
                     self.business.forget_permits(drop);
                 }

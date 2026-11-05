@@ -69,8 +69,7 @@ impl CompiledWebServerRevision {
     /// short-circuits against the active generation exactly when the effective
     /// configuration is unchanged.
     pub fn from_compiled_app(app: CompiledWebServerApp) -> Self {
-        let bytes = serde_json::to_vec(app.config())
-            .expect("Web Server config always serializes");
+        let bytes = serde_json::to_vec(app.config()).expect("Web Server config always serializes");
         Self {
             sha256: format!("runtime:{}", sha256_hash(&bytes)),
             app,

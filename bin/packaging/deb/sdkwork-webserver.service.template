@@ -18,6 +18,12 @@ RestartSec=5s
 # implicit 90s default; start includes database bootstrap + drift checks.
 TimeoutStopSec=45
 TimeoutStartSec=180
+# Zero-downtime executable upgrade (PRD-production-operations §8): the
+# gateway adopts LISTEN_FDS descriptors (systemd socket activation) when
+# present, so a socket-activated deployment can restart the service with a
+# new binary while the socket units keep the listening sockets open — no
+# accept gap, no dropped connection. Configure the public listeners through
+# .socket units and pass them in the declared socket-set order to enable it.
 LimitNOFILE=65536
 # Last-resort memory backstop behind the process admission controller
 # (PRD §8.1: bounded rejection, not allocator exhaustion). Tune per host.

@@ -19,12 +19,7 @@
 //! materialization (see `sdkwork_webserver_core::nginx::mapping`), never by
 //! silently ignoring an operator declaration.
 
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -86,9 +81,7 @@ pub(crate) struct PreparedMailListener {
 /// resolves a profile on first use (bounded `auth_http` DNS plus TLS material
 /// load); every session of that generation then shares the resolved profile.
 #[derive(Default)]
-pub(crate) struct MailProfileCache(
-    tokio::sync::Mutex<HashMap<String, Arc<MailConnectionProfile>>>,
-);
+pub(crate) struct MailProfileCache(tokio::sync::Mutex<HashMap<String, Arc<MailConnectionProfile>>>);
 
 impl MailProfileCache {
     pub(crate) async fn resolve(
@@ -226,7 +219,10 @@ impl MailProxyProfile {
 impl PreparedMailListener {
     /// Bind the listener socket. The session profile is resolved lazily from
     /// the published generation (`MailProfileCache`).
-    pub(crate) async fn bind(config: &MailServerConfig) -> Result<Self, DataPlaneError> {
+    pub(crate) async fn bind(
+        config: &MailServerConfig,
+        inherited: Option<std::net::TcpListener>,
+    ) -> Result<Self, DataPlaneError> {
         // The mail plane may be the only plane in the process (a mail-only
         // configuration), so it installs the rustls crypto provider itself
         // before any TLS material is built.
@@ -238,12 +234,26 @@ impl PreparedMailListener {
                     bind: config.bind.clone(),
                     source,
                 })?;
-        let socket = super::server::bind_listener(address)
-            .await
-            .map_err(|source| DataPlaneError::Listener {
-                listener_id: config.id.clone(),
-                source,
-            })?;
+        let socket = match inherited {
+            Some(std_listener) => {
+                std_listener
+                    .set_nonblocking(true)
+                    .map_err(|source| DataPlaneError::Listener {
+                        listener_id: config.id.clone(),
+                        source,
+                    })?;
+                TcpListener::from_std(std_listener).map_err(|source| DataPlaneError::Listener {
+                    listener_id: config.id.clone(),
+                    source,
+                })?
+            }
+            None => super::server::bind_listener(address)
+                .await
+                .map_err(|source| DataPlaneError::Listener {
+                    listener_id: config.id.clone(),
+                    source,
+                })?,
+        };
         tracing::info!(
             mail_server_id = %config.id,
             protocol = config.protocol.as_str(),
@@ -265,55 +275,55 @@ async fn resolve_mail_connection_profile(
 ) -> Result<MailConnectionProfile, DataPlaneError> {
     super::tls_material::install_crypto_provider()?;
     let protocol = match config.protocol {
-            MailServerProtocol::Pop3 => MailProtocol::Pop3,
-            MailServerProtocol::Imap => MailProtocol::Imap,
-            MailServerProtocol::Smtp => MailProtocol::Smtp,
-        };
-        let greeting_delay = match config.protocol {
-            MailServerProtocol::Smtp => Duration::from_millis(config.smtp_greeting_delay_ms),
-            MailServerProtocol::Pop3 | MailServerProtocol::Imap => Duration::ZERO,
-        };
-        let auth_http = match &config.auth_http {
-            None => None,
-            Some(auth) => Some(resolve_auth_http_profile(auth).await?),
-        };
-        let tls = match &config.tls {
-            None => None,
-            Some(tls) => Some(build_mail_tls_profile(&config.id, tls)?),
-        };
-        if auth_http.is_some() && tls.is_none() && config.tls.is_some() {
-            return Err(DataPlaneError::MailConfiguration {
+        MailServerProtocol::Pop3 => MailProtocol::Pop3,
+        MailServerProtocol::Imap => MailProtocol::Imap,
+        MailServerProtocol::Smtp => MailProtocol::Smtp,
+    };
+    let greeting_delay = match config.protocol {
+        MailServerProtocol::Smtp => Duration::from_millis(config.smtp_greeting_delay_ms),
+        MailServerProtocol::Pop3 | MailServerProtocol::Imap => Duration::ZERO,
+    };
+    let auth_http = match &config.auth_http {
+        None => None,
+        Some(auth) => Some(resolve_auth_http_profile(auth).await?),
+    };
+    let tls = match &config.tls {
+        None => None,
+        Some(tls) => Some(build_mail_tls_profile(&config.id, tls)?),
+    };
+    if auth_http.is_some() && tls.is_none() && config.tls.is_some() {
+        return Err(DataPlaneError::MailConfiguration {
                 mail_server_id: config.id.clone(),
                 detail: "mail TLS material is declared but unused; enable `listen … ssl` or `starttls on|only`".to_owned(),
             });
-        }
-        let profile = MailConnectionProfile {
-            id: config.id.clone(),
-            protocol,
-            greeting_name: config.effective_server_name(),
-            timeout: Duration::from_millis(config.timeout_ms),
-            so_keepalive: config.so_keepalive,
-            inbound_proxy_protocol: config.proxy_protocol,
-            real_ip_trusted: parse_mail_trusted_cidrs(&config.real_ip_trusted_cidrs),
-            max_line_bytes: config.client_buffer_bytes(),
-            greeting_delay,
-            mechanisms: config.auth_mechanisms().to_vec(),
-            capabilities: config.capabilities.clone(),
-            max_errors: config.max_errors,
-            auth_http,
-            tls,
-            proxy: MailProxyProfile::from_config(&config.proxy)?,
-        };
-        tracing::info!(
-            mail_server_id = %config.id,
-            protocol = config.protocol.as_str(),
-            proxy_protocol = config.proxy_protocol,
-            auth_http = profile.auth_http.is_some(),
-            tls = profile.tls.is_some(),
-            "mail session profile resolved"
-        );
-        Ok(profile)
     }
+    let profile = MailConnectionProfile {
+        id: config.id.clone(),
+        protocol,
+        greeting_name: config.effective_server_name(),
+        timeout: Duration::from_millis(config.timeout_ms),
+        so_keepalive: config.so_keepalive,
+        inbound_proxy_protocol: config.proxy_protocol,
+        real_ip_trusted: parse_mail_trusted_cidrs(&config.real_ip_trusted_cidrs),
+        max_line_bytes: config.client_buffer_bytes(),
+        greeting_delay,
+        mechanisms: config.auth_mechanisms().to_vec(),
+        capabilities: config.capabilities.clone(),
+        max_errors: config.max_errors,
+        auth_http,
+        tls,
+        proxy: MailProxyProfile::from_config(&config.proxy)?,
+    };
+    tracing::info!(
+        mail_server_id = %config.id,
+        protocol = config.protocol.as_str(),
+        proxy_protocol = config.proxy_protocol,
+        auth_http = profile.auth_http.is_some(),
+        tls = profile.tls.is_some(),
+        "mail session profile resolved"
+    );
+    Ok(profile)
+}
 
 /// Parse the mail `set_real_ip_from` trusted networks.
 fn parse_mail_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {

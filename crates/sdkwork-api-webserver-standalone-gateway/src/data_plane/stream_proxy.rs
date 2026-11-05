@@ -55,14 +55,29 @@ pub(crate) struct PreparedStreamListener {
 
 pub(crate) async fn prepare_stream_listener(
     config: &StreamServerConfig,
+    inherited: Option<std::net::TcpListener>,
 ) -> Result<PreparedStreamListener, DataPlaneError> {
     let address = format!("{}:{}", config.bind, config.port);
-    let socket = TcpListener::bind(&address)
-        .await
-        .map_err(|source| DataPlaneError::Listener {
-            listener_id: config.id.clone(),
-            source,
-        })?;
+    let socket = match inherited {
+        Some(std_listener) => {
+            std_listener
+                .set_nonblocking(true)
+                .map_err(|source| DataPlaneError::Listener {
+                    listener_id: config.id.clone(),
+                    source,
+                })?;
+            TcpListener::from_std(std_listener).map_err(|source| DataPlaneError::Listener {
+                listener_id: config.id.clone(),
+                source,
+            })?
+        }
+        None => TcpListener::bind(&address)
+            .await
+            .map_err(|source| DataPlaneError::Listener {
+                listener_id: config.id.clone(),
+                source,
+            })?,
+    };
     let local = socket
         .local_addr()
         .map_err(|source| DataPlaneError::Listener {
@@ -103,15 +118,30 @@ fn parse_trusted_cidrs(values: &[String]) -> Vec<ipnet::IpNet> {
 /// resolved per connection from the published generation.
 pub(crate) async fn prepare_stream_listener_group(
     configs: &[StreamServerConfig],
+    inherited: Option<std::net::TcpListener>,
 ) -> Result<PreparedStreamListener, DataPlaneError> {
     let first = &configs[0];
     let address = format!("{}:{}", first.bind, first.port);
-    let socket = TcpListener::bind(&address)
-        .await
-        .map_err(|source| DataPlaneError::Listener {
-            listener_id: first.id.clone(),
-            source,
-        })?;
+    let socket = match inherited {
+        Some(std_listener) => {
+            std_listener
+                .set_nonblocking(true)
+                .map_err(|source| DataPlaneError::Listener {
+                    listener_id: first.id.clone(),
+                    source,
+                })?;
+            TcpListener::from_std(std_listener).map_err(|source| DataPlaneError::Listener {
+                listener_id: first.id.clone(),
+                source,
+            })?
+        }
+        None => TcpListener::bind(&address)
+            .await
+            .map_err(|source| DataPlaneError::Listener {
+                listener_id: first.id.clone(),
+                source,
+            })?,
+    };
     let default = configs
         .iter()
         .position(|config| config.default_server)

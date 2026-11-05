@@ -103,9 +103,15 @@ pub async fn route_request(
             .limits
             .response_body_idle_timeout_ms,
     );
-    let response =
-        route_admitted_request(peer, transport_peer, connection.tls, state, request, &mut admitted)
-            .await;
+    let response = route_admitted_request(
+        peer,
+        transport_peer,
+        connection.tls,
+        state,
+        request,
+        &mut admitted,
+    )
+    .await;
     // App-config listeners (no website delivery executor) meter every served
     // response here; website listeners meter inside the delivery layer where
     // route identity and exact bytes are known. App-domain fallback responses

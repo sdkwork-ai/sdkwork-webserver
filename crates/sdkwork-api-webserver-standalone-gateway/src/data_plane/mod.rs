@@ -49,6 +49,7 @@ mod runtime;
 mod server;
 mod slice;
 mod smooth_weighted;
+pub(crate) mod socket_activation;
 pub(crate) mod static_file_response;
 pub(crate) mod static_files;
 pub(crate) mod static_path;

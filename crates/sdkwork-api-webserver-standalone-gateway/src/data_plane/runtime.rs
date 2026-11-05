@@ -231,9 +231,11 @@ impl RuntimeGeneration {
                             certificate_ref,
                             resolved.as_ref(),
                         )
-                        .map_err(|detail| DataPlaneError::StreamTlsMaterial {
-                            stream_id: stream.id.clone(),
-                            detail,
+                        .map_err(|detail| {
+                            DataPlaneError::StreamTlsMaterial {
+                                stream_id: stream.id.clone(),
+                                detail,
+                            }
                         })?,
                     )
                 }
@@ -617,11 +619,11 @@ impl DataPlaneRuntime {
         &self,
         supervisor: Arc<super::server::ListenerSupervisor>,
     ) -> Result<(), DataPlaneError> {
-        self.listener_supervisor
-            .set(supervisor)
-            .map_err(|_| DataPlaneError::LifecycleCoordinatorUnavailable {
+        self.listener_supervisor.set(supervisor).map_err(|_| {
+            DataPlaneError::LifecycleCoordinatorUnavailable {
                 subsystem: "data-plane listener supervisor is already installed",
-            })
+            }
+        })
     }
 
     fn supervisor(&self) -> Option<Arc<super::server::ListenerSupervisor>> {
@@ -668,8 +670,7 @@ impl DataPlaneRuntime {
             // A socket-set change can only hand off when a supervisor owns the
             // live sockets; process-built subsystems (tunnel gateway, usage
             // metering channel) cannot hot-apply at all.
-            let handoff_possible =
-                sockets_changed && self.supervisor().is_some();
+            let handoff_possible = sockets_changed && self.supervisor().is_some();
             if !handoff_possible {
                 self.metrics.record_reload(ReloadResult::RestartRequired);
                 return Err(DataPlaneError::ReloadRequiresRestart);
@@ -903,9 +904,7 @@ impl ReloadTopology {
             app_key: app.config().app_key.clone(),
             sockets: Self::socket_set(app),
             tunnel_fingerprint: subsystem_fingerprint(app.config().tunnel.as_ref()),
-            usage_metering_fingerprint: subsystem_fingerprint(
-                app.config().usage_metering.as_ref(),
-            ),
+            usage_metering_fingerprint: subsystem_fingerprint(app.config().usage_metering.as_ref()),
             resource_pressure: app.config().deployment.resource_pressure.clone(),
         }
     }
@@ -917,8 +916,7 @@ fn subsystem_fingerprint<T: serde::Serialize>(value: Option<&T>) -> [u8; 32] {
     match value {
         None => Sha256::digest(b"absent").into(),
         Some(value) => {
-            let bytes =
-                serde_json::to_vec(value).expect("validated config always serializes");
+            let bytes = serde_json::to_vec(value).expect("validated config always serializes");
             Sha256::digest(bytes).into()
         }
     }

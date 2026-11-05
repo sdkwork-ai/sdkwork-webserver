@@ -81,12 +81,12 @@ pub(crate) fn compile_policy_tls_material(
         .expect("the Rustls crypto provider was installed before certificate parsing");
     let mut certificates = Vec::new();
     for certificate_ref in policy.certificate_refs() {
-        let certificate = app.certificate(certificate_ref).ok_or_else(|| {
-            DataPlaneError::MissingCertificate {
-                policy_id: policy.id.clone(),
-                certificate_id: certificate_ref.to_owned(),
-            }
-        })?;
+        let certificate =
+            app.certificate(certificate_ref)
+                .ok_or_else(|| DataPlaneError::MissingCertificate {
+                    policy_id: policy.id.clone(),
+                    certificate_id: certificate_ref.to_owned(),
+                })?;
         let (certificate_file, private_key_file) = app
             .certificate_paths(&certificate.id)
             .ok_or_else(|| DataPlaneError::MissingCertificateFiles {

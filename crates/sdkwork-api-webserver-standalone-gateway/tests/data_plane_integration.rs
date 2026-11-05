@@ -5828,7 +5828,13 @@ async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_socket
     tokio::time::sleep(Duration::from_millis(300)).await;
     // The candidate keeps the socket set, so it hot-applies: the published
     // generation answers with its own body on the same socket.
-    wait_for_body(&client, &url, "test.localhost", "request-admission-candidate").await;
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "request-admission-candidate",
+    )
+    .await;
 
     let mut keep_alive_candidate = watched_response_config(port, "keep-alive-candidate");
     keep_alive_candidate["limits"]["http1KeepAliveIdleTimeoutMs"] = json!(60_000);
@@ -5855,7 +5861,13 @@ async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_socket
     tokio::time::sleep(Duration::from_millis(300)).await;
     // The candidate keeps the socket set, so it hot-applies: the published
     // generation answers with its own body on the same socket.
-    wait_for_body(&client, &url, "test.localhost", "h2-keep-alive-interval-candidate").await;
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "h2-keep-alive-interval-candidate",
+    )
+    .await;
 
     let mut maximum_age_candidate = watched_response_config(port, "maximum-age-candidate");
     maximum_age_candidate["limits"]["maxConnectionAgeMs"] = json!(3_000_000);
@@ -5882,7 +5894,13 @@ async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_socket
     tokio::time::sleep(Duration::from_millis(300)).await;
     // The candidate keeps the socket set, so it hot-applies: the published
     // generation answers with its own body on the same socket.
-    wait_for_body(&client, &url, "test.localhost", "h2-keep-alive-timeout-candidate").await;
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "h2-keep-alive-timeout-candidate",
+    )
+    .await;
 
     let mut pipeline_candidate = watched_response_config(port, "pipeline-candidate");
     pipeline_candidate["limits"]["http1MaxPipelineDepth"] = json!(8);
@@ -5909,7 +5927,13 @@ async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_socket
     tokio::time::sleep(Duration::from_millis(300)).await;
     // The candidate keeps the socket set, so it hot-applies: the published
     // generation answers with its own body on the same socket.
-    wait_for_body(&client, &url, "test.localhost", "request-body-start-candidate").await;
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "request-body-start-candidate",
+    )
+    .await;
 
     let mut request_body_idle_candidate =
         watched_response_config(port, "request-body-idle-candidate");
@@ -5923,7 +5947,13 @@ async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_socket
     tokio::time::sleep(Duration::from_millis(300)).await;
     // The candidate keeps the socket set, so it hot-applies: the published
     // generation answers with its own body on the same socket.
-    wait_for_body(&client, &url, "test.localhost", "request-body-idle-candidate").await;
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "request-body-idle-candidate",
+    )
+    .await;
 
     let mut response_idle_candidate = watched_response_config(port, "response-idle-candidate");
     response_idle_candidate["limits"]["responseBodyIdleTimeoutMs"] = json!(25_000);
@@ -5980,11 +6010,8 @@ async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_socket
     let handoff_path = path.clone();
     fs::write(
         &handoff_path,
-        serde_json::to_vec_pretty(&watched_response_config(
-            handoff_port,
-            "handoff-candidate",
-        ))
-        .expect("serialize handoff candidate"),
+        serde_json::to_vec_pretty(&watched_response_config(handoff_port, "handoff-candidate"))
+            .expect("serialize handoff candidate"),
     )
     .expect("write handoff candidate");
     let handoff_url = format!("http://127.0.0.1:{handoff_port}/");
@@ -6410,7 +6437,6 @@ server {{
     stop_data_plane(shutdown_tx, task).await;
 }
 
-
 fn two_listener_config(port_a: u16, port_b: u16, body: &str) -> Value {
     let mut config = base_config(
         port_a,
@@ -6507,26 +6533,32 @@ fn spawn_watched_toml_source_data_plane(
 }
 
 /// One TLS probe: connects with the given roots, returns the served leaf
-/// certificate DER and the response body.
+/// certificate DER and the response body. Fallible: the wait loop retries a
+/// listener that is not accepting yet.
 async fn tls_probe_leaf_and_body(
     port: u16,
     roots: &rustls::RootCertStore,
-) -> (Vec<u8>, String) {
+) -> Result<(Vec<u8>, String), String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    // The process-level provider is installed lazily by the runtime; the probe
+    // may run before the data plane has built its first TLS acceptor.
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
     let client_config = ClientConfig::builder()
         .with_root_certificates(roots.clone())
         .with_no_client_auth();
     let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
     let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
         .await
-        .expect("tls tcp connect");
+        .map_err(|error| format!("tls tcp connect: {error}"))?;
     let mut tls = connector
         .connect(
             ServerName::try_from("localhost").expect("tls server name"),
             stream,
         )
         .await
-        .expect("tls handshake");
+        .map_err(|error| format!("tls handshake: {error}"))?;
     let leaf = tls
         .get_ref()
         .1
@@ -6535,12 +6567,12 @@ async fn tls_probe_leaf_and_body(
         .to_vec();
     tls.write_all(b"GET / HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n")
         .await
-        .expect("write tls request");
+        .map_err(|error| format!("write tls request: {error}"))?;
     let mut response = Vec::new();
     tls.read_to_end(&mut response)
         .await
-        .expect("read tls response");
-    (leaf, String::from_utf8_lossy(&response).to_string())
+        .map_err(|error| format!("read tls response: {error}"))?;
+    Ok((leaf, String::from_utf8_lossy(&response).to_string()))
 }
 
 /// Polls until the TLS endpoint serves the expected body AND the expected
@@ -6558,9 +6590,10 @@ async fn wait_for_tls_leaf_and_body(
             std::time::Instant::now() < deadline,
             "{message}: timed out waiting for the expected certificate and body"
         );
-        let (leaf, body) = tls_probe_leaf_and_body(port, roots).await;
-        if leaf == expected_leaf && body.contains(expected_body) {
-            return;
+        if let Ok((leaf, body)) = tls_probe_leaf_and_body(port, roots).await {
+            if leaf == expected_leaf && body.contains(expected_body) {
+                return;
+            }
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -6584,7 +6617,10 @@ async fn listener_handoff_binds_added_sockets_and_drains_removed_without_client_
         &two_listener_config(port_a, port_b, "generation-one"),
     );
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let url_a = format!("http://127.0.0.1:{port_a}/");
     let url_b = format!("http://127.0.0.1:{port_b}/");
     wait_for_body(&client, &url_a, "test.localhost", "generation-one").await;
@@ -6656,14 +6692,17 @@ async fn listener_handoff_fails_closed_when_added_socket_cannot_bind() {
         &watched_response_config(port, "generation-one"),
     );
     let (shutdown, task) = spawn_watched_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_for_body(&client, &url, "test.localhost", "generation-one").await;
 
     // An out-of-band listener holds the port the candidate wants to move to.
     let occupied = available_port();
-    let _blocker = std::net::TcpListener::bind(("127.0.0.1", occupied))
-        .expect("hold the contested port");
+    let _blocker =
+        std::net::TcpListener::bind(("127.0.0.1", occupied)).expect("hold the contested port");
 
     let mut candidate = watched_response_config(occupied, "bind-fail-candidate");
     candidate["limits"]["maxConnections"] = json!(256);
@@ -6713,10 +6752,20 @@ async fn tls_material_change_hot_applies_to_new_connections() {
     )
     .await;
 
-    // Overwrite the same certificate files: the candidate keeps the socket and
-    // the file paths, only the material changes.
+    // Overwrite the same certificate files, then trigger a reload the way an
+    // operator rotates certificates on nginx: swap the files, then reload the
+    // configuration (any config change publishes a generation whose build
+    // re-reads the material; SIGHUP forces the same attempt).
     let leaf_b = write_self_signed_certificate(directory.path(), "server", &["localhost"]);
     assert_ne!(leaf_a, leaf_b, "the test must mint two distinct leaves");
+    let mut reload_candidate = single_https_config(port, "localhost", "server");
+    reload_candidate["resources"][0]["body"] = json!("tls-handoff-generation");
+    reload_candidate["deployment"] = json!({
+        "drainTimeoutMs": 1000,
+        "reload": {"mode": "watch", "pollIntervalMs": 100}
+    });
+    reload_candidate["limits"] = json!({"requestTimeoutMs": 5001, "drainTimeoutMs": 1000});
+    write_config(directory.path(), &reload_candidate);
     roots
         .add(CertificateDer::from(leaf_b.clone()))
         .expect("trust the second leaf");
@@ -6744,15 +6793,15 @@ async fn toml_source_watch_publishes_generations_and_hands_off_listeners() {
     std::env::set_var("SDKWORK_WEBSERVER_CONFIG_RELOAD_MODE", "watch");
     std::env::set_var("SDKWORK_WEBSERVER_CONFIG_RELOAD_POLL_INTERVAL_MS", "100");
     let (shutdown, task) = spawn_watched_toml_source_data_plane(&path);
-    let client = reqwest::Client::builder().no_proxy().build().expect("client");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
     let url = format!("http://127.0.0.1:{port}/");
     wait_for_body(&client, &url, "src.localhost", "toml-generation-one").await;
 
-    fs::write(
-        &path,
-        single_file_toml_source(port, "toml-generation-two"),
-    )
-    .expect("write server.toml candidate");
+    fs::write(&path, single_file_toml_source(port, "toml-generation-two"))
+        .expect("write server.toml candidate");
     wait_for_body(&client, &url, "src.localhost", "toml-generation-two").await;
 
     // A listen-port change hands off: the new socket serves, the old one drains.

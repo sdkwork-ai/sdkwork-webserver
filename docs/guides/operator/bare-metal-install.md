@@ -149,8 +149,11 @@ sudo -u sdkwork /opt/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gate
 ## 8. Lifecycle
 
 - **Config change**: edit the file, run `validate`, then `sudo systemctl restart
-  sdkwork-webserver` (or enable `"reload": {"mode": "watch"}` in the config for hot reload of
-  same-topology generations; listener/TLS-policy changes still require restart).
+  sdkwork-webserver` (or enable `"reload": {"mode": "watch"}` in the config for hot reload).
+  Watch reload hot-applies every connection-plane change on the running sockets — limits,
+  protocol parameters, TLS policy and certificate files (new connections serve the new
+  material), proxy-protocol policy — and hands listener add/remove/port changes off with zero
+  dropped connections (nginx SIGHUP equivalence); `SIGHUP` forces an immediate reload attempt.
 - **Upgrade**: extract the new archive to a fresh directory, `validate` with the new binary,
   restart the service, then remove the old tree after a soak window.
 - **Rollback**: keep the previous archive; point the unit back at the previous `ExecStart` and

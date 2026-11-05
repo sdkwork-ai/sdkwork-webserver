@@ -262,7 +262,8 @@ fn fingerprint_source(config_path: &Path) -> Result<String, String> {
         let read = std::fs::read_dir(directory)
             .map_err(|error| format!("cannot read {}: {error}", directory.display()))?;
         for entry in read {
-            let entry = entry.map_err(|error| format!("cannot list {}: {error}", directory.display()))?;
+            let entry =
+                entry.map_err(|error| format!("cannot list {}: {error}", directory.display()))?;
             let Ok(file_type) = entry.file_type() else {
                 continue;
             };
@@ -277,8 +278,9 @@ fn fingerprint_source(config_path: &Path) -> Result<String, String> {
                 walk(&path, &child_relative, depth + 1, entries, total)?;
                 continue;
             }
-            let metadata =
-                entry.metadata().map_err(|error| format!("cannot stat {}: {error}", path.display()))?;
+            let metadata = entry
+                .metadata()
+                .map_err(|error| format!("cannot stat {}: {error}", path.display()))?;
             if metadata.len() > FINGERPRINT_MAX_FILE_BYTES {
                 return Err(format!(
                     "config source file {} exceeds {FINGERPRINT_MAX_FILE_BYTES} bytes",
@@ -344,9 +346,7 @@ async fn watch_config_source(
     let mut last_observed_fingerprint = fingerprint_source(&config_path).ok();
     let mut last_error = None;
     #[cfg(unix)]
-    let mut hangup = match tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::hangup(),
-    ) {
+    let mut hangup = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
         Ok(signal) => Some(signal),
         Err(error) => {
             tracing::warn!(%error, "SIGHUP watching unavailable; reload stays poll-driven");
@@ -461,11 +461,7 @@ async fn reload_source_once(
     let candidate = match loaded {
         Ok(Ok(candidate)) => candidate,
         Ok(Err(error)) => {
-            log_reload_error_once(
-                last_error,
-                format!("candidate-{error}"),
-                config_path,
-            );
+            log_reload_error_once(last_error, format!("candidate-{error}"), config_path);
             return false;
         }
         Err(error) => {
@@ -495,7 +491,11 @@ async fn reload_source_once(
             })
             .collect::<Vec<_>>();
         if !executor.can_serve_config(&provider_types) {
-            log_reload_error_once(last_error, "candidate-provider-unavailable".to_owned(), config_path);
+            log_reload_error_once(
+                last_error,
+                "candidate-provider-unavailable".to_owned(),
+                config_path,
+            );
             return false;
         }
     }
@@ -537,9 +537,7 @@ async fn watch_config(
     let mut last_observed_revision = Some(runtime.current().revision.clone());
     let mut last_error = None;
     #[cfg(unix)]
-    let mut hangup = match tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::hangup(),
-    ) {
+    let mut hangup = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup()) {
         Ok(signal) => Some(signal),
         Err(error) => {
             tracing::warn!(%error, "SIGHUP watching unavailable; reload stays poll-driven");
