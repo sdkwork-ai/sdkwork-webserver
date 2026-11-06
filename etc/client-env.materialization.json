@@ -21,9 +21,14 @@
   "profiles": [
     "standalone.development",
     "standalone.test",
-    "standalone.production",
     "standalone.staging",
-    "standalone.demo"
+    "standalone.demo",
+    "standalone.production",
+    "cloud.development",
+    "cloud.test",
+    "cloud.staging",
+    "cloud.demo",
+    "cloud.production"
   ],
   "surfaces": [
     {
@@ -202,6 +207,20 @@
       "bindings": {},
       "accessToken": {
         "appId": "sdkwork-webserver-mini-program",
+        "tenantId": "100001",
+        "organizationId": "0",
+        "permissionScope": [
+          "iam:self"
+        ]
+      }
+    },
+    {
+      "id": "sdkwork-webserver-harmony-mobile",
+      "root": "apps/sdkwork-webserver-harmony-mobile",
+      "format": "harmony-native",
+      "runtimeTarget": "harmony-native",
+      "accessToken": {
+        "appId": "sdkwork-webserver-harmony-mobile",
         "tenantId": "100001",
         "organizationId": "0",
         "permissionScope": [

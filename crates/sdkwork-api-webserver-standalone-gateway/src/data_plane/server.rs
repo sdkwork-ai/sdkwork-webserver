@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     future::Future,
     io,
     net::SocketAddr,
@@ -11,7 +12,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
     Router,
 };
 use axum_server::{
@@ -27,17 +28,17 @@ use hyper_util::{
 };
 use sdkwork_webserver_core::{
     CompiledWebServerApp, ListenerConfig, ListenerProtocol, ListenerTlsRuntime,
-    ProxyProtocolConfig, TlsCertificateResolution, WebServerLimits,
+    TlsCertificateResolution, WebServerLimits,
 };
 use sdkwork_webserver_delivery_runtime::{AppConfigResourceExecutor, WebsiteDeliveryExecutor};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
-    sync::watch,
+    sync::{watch, Semaphore},
     task::JoinSet,
     time::timeout,
 };
-use tower_http::{compression::CompressionLayer, timeout::TimeoutLayer};
+use tower_http::compression::CompressionLayer;
 
 use super::{
     connection_limit::{ConnectionLimitedStream, ConnectionLimiter},
@@ -54,11 +55,11 @@ use super::{
         prepare_operations_listener, serve_operations_listener, DataPlaneOperationsConfig,
     },
     proxy_protocol::{resolve_connection_info, DownstreamConnectionInfo},
-    runtime::RuntimeGeneration,
-    stream_proxy::{prepare_stream_listener, prepare_stream_listener_group, serve_stream_listener},
-    tls::{build_tls_config, compile_policy_tls_material},
+    runtime::{RuntimeGeneration, SocketKind, SocketTopology},
+    stream_proxy::PreparedStreamListener,
+    tls::compile_policy_tls_material,
     tls_runtime::FileTlsRuntimeController,
-    udp_stream_proxy::{prepare_udp_stream_listener, serve_udp_stream_listener},
+    udp_stream_proxy::PreparedUdpStreamListener,
     DataPlaneError, DataPlaneRuntime, ListenerState,
 };
 
@@ -70,12 +71,566 @@ struct PreparedListener {
     config: ListenerConfig,
     socket: TcpListener,
     address: SocketAddr,
-    tls: Option<RustlsConfig>,
+}
+
+/// Owns every data-plane listening socket and applies each published
+/// generation's socket-set diff. Added sockets bind **before** the generation
+/// publishes (a bind failure retains the old generation, matching nginx
+/// SIGHUP), removed sockets stop accepting **after** publication and drain
+/// their in-flight connections detached. Kept sockets keep their file
+/// descriptors; per-connection resolution picks up the new configuration.
+pub(crate) struct ListenerSupervisor {
+    runtime: Arc<DataPlaneRuntime>,
+    website_delivery: Option<Arc<WebsiteDeliveryExecutor>>,
+    provider_resources: Option<Arc<AppConfigResourceExecutor>>,
+    deploy_fallback: Option<Arc<DeployFallbackResolver>>,
+    usage_meter: Option<Arc<UsageMeteringAggregator>>,
+    tls_runtime: Option<Arc<FileTlsRuntimeController>>,
+    /// Socket-activation descriptors (systemd `LISTEN_FDS`): consumed during
+    /// bootstrap only, then dropped so handoff prepares bind normally.
+    inherited: tokio::sync::Mutex<Option<super::socket_activation::InheritedSockets>>,
+    inner: tokio::sync::Mutex<SupervisorInner>,
+    events_tx: tokio::sync::mpsc::UnboundedSender<SupervisorEvent>,
+    events_rx: tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<SupervisorEvent>>,
+}
+
+struct SupervisorInner {
+    live: HashMap<SocketTopology, LiveEntry>,
+    /// Sockets bound by [`ListenerSupervisor::prepare_sockets`], served by
+    /// [`ListenerSupervisor::commit_sockets`].
+    pending: Vec<(SocketTopology, PendingSocket)>,
+}
+
+struct LiveEntry {
+    shutdown_tx: watch::Sender<bool>,
+    semaphore: Arc<Semaphore>,
+    capacity: usize,
+}
+
+enum PendingSocket {
+    Http(PreparedListener),
+    StreamTcp(PreparedStreamListener),
+    StreamUdp(PreparedUdpStreamListener),
+    Mail(PreparedMailListener),
+}
+
+/// One serve task reported completion through the events channel.
+pub(crate) enum SupervisorEvent {
+    TaskFinished {
+        socket: SocketTopology,
+        listener_id: String,
+        result: Result<(), DataPlaneError>,
+    },
+}
+
+impl ListenerSupervisor {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        runtime: Arc<DataPlaneRuntime>,
+        website_delivery: Option<Arc<WebsiteDeliveryExecutor>>,
+        provider_resources: Option<Arc<AppConfigResourceExecutor>>,
+        deploy_fallback: Option<Arc<DeployFallbackResolver>>,
+        usage_meter: Option<Arc<UsageMeteringAggregator>>,
+        tls_runtime: Option<Arc<FileTlsRuntimeController>>,
+        inherited: super::socket_activation::InheritedSockets,
+    ) -> Self {
+        let (events_tx, events_rx) = tokio::sync::mpsc::unbounded_channel();
+        Self {
+            runtime,
+            website_delivery,
+            provider_resources,
+            deploy_fallback,
+            usage_meter,
+            tls_runtime,
+            inherited: tokio::sync::Mutex::new(Some(inherited)),
+            inner: tokio::sync::Mutex::new(SupervisorInner {
+                live: HashMap::new(),
+                pending: Vec::new(),
+            }),
+            events_tx,
+            events_rx: tokio::sync::Mutex::new(events_rx),
+        }
+    }
+
+    /// Binds every socket of the initial generation and starts serving it.
+    /// Inherited socket-activation descriptors are consumed here; after
+    /// bootstrap they are dropped so handoff prepares bind normally.
+    pub(crate) async fn bootstrap(
+        &self,
+        initial: &Arc<RuntimeGeneration>,
+    ) -> Result<(), DataPlaneError> {
+        self.prepare_sockets(initial).await?;
+        self.commit_sockets(initial).await;
+        let mut inherited = self.inherited.lock().await;
+        if let Some(set) = inherited.as_ref() {
+            if set.is_active() {
+                set.verify_all_claimed()
+                    .map_err(|source| DataPlaneError::Listener {
+                        listener_id: "socket-activation".to_owned(),
+                        source,
+                    })?;
+            }
+        }
+        *inherited = None;
+        Ok(())
+    }
+
+    /// Claims the inherited TCP listener bound to `address`. While socket
+    /// activation is active, a declared socket with no matching descriptor is
+    /// a fail-closed error (the orchestrator passed an incompatible set).
+    async fn claim_inherited_tcp(
+        &self,
+        address: SocketAddr,
+        listener_id: &str,
+    ) -> Result<Option<std::net::TcpListener>, DataPlaneError> {
+        let mut guard = self.inherited.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Ok(None);
+        };
+        if !set.is_active() {
+            return Ok(None);
+        }
+        set.take_tcp(address)
+            .map(Some)
+            .ok_or_else(|| DataPlaneError::Listener {
+                listener_id: listener_id.to_owned(),
+                source: io::Error::other(format!(
+                    "socket activation is active but no inherited descriptor is bound to {address}"
+                )),
+            })
+    }
+
+    /// Claims the inherited UDP socket bound to `address` (see
+    /// [`ListenerSupervisor::claim_inherited_tcp`]).
+    async fn claim_inherited_udp(
+        &self,
+        address: SocketAddr,
+        listener_id: &str,
+    ) -> Result<Option<std::net::UdpSocket>, DataPlaneError> {
+        let mut guard = self.inherited.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Ok(None);
+        };
+        if !set.is_active() {
+            return Ok(None);
+        }
+        set.take_udp(address)
+            .map(Some)
+            .ok_or_else(|| DataPlaneError::Listener {
+                listener_id: listener_id.to_owned(),
+                source: io::Error::other(format!(
+                    "socket activation is active but no inherited descriptor is bound to {address}"
+                )),
+            })
+    }
+
+    /// Binds the sockets the candidate generation adds. A bind failure closes
+    /// everything this call bound and returns the error, so the reload keeps
+    /// the previous generation (nginx: "bind() to … failed, configuration
+    /// unchanged").
+    pub(crate) async fn prepare_sockets(
+        &self,
+        candidate: &Arc<RuntimeGeneration>,
+    ) -> Result<(), DataPlaneError> {
+        let mut inner = self.inner.lock().await;
+        // Drop any stale pending set (commit always follows prepare; this only
+        // matters if a caller skips commit after a successful prepare).
+        inner.pending.clear();
+        let mut bound: Vec<(SocketTopology, PendingSocket)> = Vec::new();
+        let outcome = async {
+            for socket in &candidate.sockets {
+                if inner.live.contains_key(socket) {
+                    continue;
+                }
+                let prepared = self.prepare_socket(candidate, socket).await?;
+                bound.push((socket.clone(), prepared));
+            }
+            Ok(())
+        }
+        .await;
+        match outcome {
+            Ok(()) => {
+                inner.pending.extend(bound);
+                Ok(())
+            }
+            Err(error) => {
+                // Dropping each prepared socket closes it; the live set is
+                // untouched and keeps serving the previous generation.
+                for (socket, prepared) in bound {
+                    drop(prepared);
+                    tracing::warn!(
+                        listener_id = %socket.id,
+                        "listener handoff rolled back a freshly bound socket"
+                    );
+                }
+                Err(error)
+            }
+        }
+    }
+
+    async fn prepare_socket(
+        &self,
+        candidate: &Arc<RuntimeGeneration>,
+        socket: &SocketTopology,
+    ) -> Result<PendingSocket, DataPlaneError> {
+        match socket.kind {
+            SocketKind::Http => {
+                let listener =
+                    candidate
+                        .app
+                        .listener(&socket.id)
+                        .ok_or_else(|| DataPlaneError::Listener {
+                            listener_id: socket.id.clone(),
+                            source: io::Error::new(
+                                io::ErrorKind::NotFound,
+                                format!(
+                                    "listener {} vanished from the candidate generation",
+                                    socket.id
+                                ),
+                            ),
+                        })?;
+                let requested = listener_address(&listener.bind, listener.port, &listener.id)?;
+                let inherited = self.claim_inherited_tcp(requested, &listener.id).await?;
+                Ok(PendingSocket::Http(
+                    prepare_listener(candidate, listener, self.tls_runtime.as_deref(), inherited)
+                        .await?,
+                ))
+            }
+            SocketKind::StreamTcp => {
+                let socket_key = socket.socket_key.clone().unwrap_or_default();
+                let members: Vec<sdkwork_webserver_core::StreamServerConfig> = candidate
+                    .app
+                    .streams()
+                    .iter()
+                    .filter(|stream| {
+                        stream.protocol == sdkwork_webserver_core::StreamProtocol::Tcp
+                            && stream.socket_key() == socket_key
+                    })
+                    .cloned()
+                    .collect();
+                if members.is_empty() {
+                    return Err(DataPlaneError::Listener {
+                        listener_id: socket.id.clone(),
+                        source: io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "stream socket has no configured server",
+                        ),
+                    });
+                }
+                let requested = listener_address(&members[0].bind, members[0].port, &socket.id)?;
+                let inherited = self.claim_inherited_tcp(requested, &socket.id).await?;
+                let prepared = if members.len() == 1 {
+                    super::stream_proxy::prepare_stream_listener(&members[0], inherited).await?
+                } else {
+                    super::stream_proxy::prepare_stream_listener_group(&members, inherited).await?
+                };
+                Ok(PendingSocket::StreamTcp(prepared))
+            }
+            SocketKind::StreamUdp => {
+                let stream = candidate
+                    .app
+                    .streams()
+                    .iter()
+                    .find(|stream| stream.id == socket.id)
+                    .ok_or_else(|| DataPlaneError::Listener {
+                        listener_id: socket.id.clone(),
+                        source: io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "udp stream listener vanished from the candidate generation",
+                        ),
+                    })?;
+                let requested = listener_address(&stream.bind, stream.port, &socket.id)?;
+                let inherited = self.claim_inherited_udp(requested, &socket.id).await?;
+                Ok(PendingSocket::StreamUdp(
+                    super::udp_stream_proxy::prepare_udp_stream_listener(stream, inherited).await?,
+                ))
+            }
+            SocketKind::Mail => {
+                let mail_server = candidate
+                    .app
+                    .mail_servers()
+                    .iter()
+                    .find(|server| server.id == socket.id)
+                    .ok_or_else(|| DataPlaneError::Listener {
+                        listener_id: socket.id.clone(),
+                        source: io::Error::new(
+                            io::ErrorKind::NotFound,
+                            "mail listener vanished from the candidate generation",
+                        ),
+                    })?;
+                let requested = listener_address(&mail_server.bind, mail_server.port, &socket.id)?;
+                let inherited = self.claim_inherited_tcp(requested, &socket.id).await?;
+                Ok(PendingSocket::Mail(
+                    PreparedMailListener::bind(mail_server, inherited).await?,
+                ))
+            }
+        }
+    }
+
+    /// After publication: serve the newly bound sockets, stop accepting on the
+    /// removed ones (they drain detached through their own bounded deadlines),
+    /// and reconcile per-listener admission capacity to the candidate.
+    pub(crate) async fn commit_sockets(&self, candidate: &Arc<RuntimeGeneration>) {
+        let mut inner = self.inner.lock().await;
+        // Retire sockets the candidate removed. The entry leaves `live` first,
+        // so its completion event reads as a normal retirement instead of an
+        // unexpected listener death.
+        let removed: Vec<SocketTopology> = inner
+            .live
+            .keys()
+            .filter(|socket| !candidate.sockets.contains(socket))
+            .cloned()
+            .collect();
+        for socket in removed {
+            if let Some(entry) = inner.live.remove(&socket) {
+                tracing::info!(
+                    listener_id = %socket.id,
+                    "listener handoff retires a removed socket; draining in-flight connections"
+                );
+                let _ = entry.shutdown_tx.send(true);
+                drop(entry);
+            }
+        }
+        // Serve the sockets prepared for this generation.
+        let pending = std::mem::take(&mut inner.pending);
+        for (socket, prepared) in pending {
+            self.spawn_socket(&mut inner, socket, prepared, candidate);
+        }
+        // Reconcile per-listener admission capacity (limit changes hot-apply).
+        for (socket, entry) in inner.live.iter_mut() {
+            let capacity_target = match socket.kind {
+                SocketKind::Http => candidate
+                    .app
+                    .listener(&socket.id)
+                    .and_then(|listener| listener.max_connections)
+                    .unwrap_or(candidate.app.config().limits.max_connections),
+                _ => candidate.app.config().limits.max_connections,
+            };
+            let current = entry.capacity;
+            match capacity_target.cmp(&current) {
+                std::cmp::Ordering::Greater => {
+                    entry.semaphore.add_permits(capacity_target - current);
+                    entry.capacity = capacity_target;
+                }
+                std::cmp::Ordering::Less => {
+                    let drop = (current - capacity_target).min(entry.semaphore.available_permits());
+                    if drop > 0 {
+                        entry.semaphore.forget_permits(drop);
+                    }
+                    entry.capacity = capacity_target;
+                }
+                std::cmp::Ordering::Equal => {}
+            }
+        }
+    }
+
+    fn spawn_socket(
+        &self,
+        inner: &mut SupervisorInner,
+        socket: SocketTopology,
+        prepared: PendingSocket,
+        candidate: &Arc<RuntimeGeneration>,
+    ) {
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let limits = candidate.app.config().limits.clone();
+        let capacity = match &prepared {
+            PendingSocket::Http(prepared) => prepared
+                .config
+                .max_connections
+                .unwrap_or(limits.max_connections),
+            _ => limits.max_connections,
+        };
+        let semaphore = Arc::new(Semaphore::new(capacity));
+        let events_tx = self.events_tx.clone();
+        // Dropping the join handle detaches the serve task on purpose: its
+        // lifecycle is reported through the supervisor event channel, and
+        // `shutdown_all` awaits completions through that channel.
+        match prepared {
+            PendingSocket::Http(prepared) => {
+                let runtime = self.runtime.clone();
+                let website_delivery = self.website_delivery.clone();
+                let provider_resources = self.provider_resources.clone();
+                let deploy_fallback = self.deploy_fallback.clone();
+                let usage_meter = self.usage_meter.clone();
+                let tls_runtime = self.tls_runtime.clone();
+                let listener_id = prepared.config.id.clone();
+                let socket_key = socket.clone();
+                let listener_semaphore = semaphore.clone();
+                tracing::info!(
+                    listener_id = %listener_id,
+                    address = %prepared.address,
+                    "data-plane listener prepared"
+                );
+                tokio::spawn(async move {
+                    // A dynamic assignment listener is owned by the
+                    // process-lifetime TLS runtime controller, which supplies
+                    // its acceptor configuration (and hot-swaps certificates).
+                    let dynamic_tls = match tls_runtime.as_ref() {
+                        Some(tls_runtime) if tls_runtime.listener_id() == listener_id => {
+                            Some(tls_runtime.rustls_config())
+                        }
+                        _ => None,
+                    };
+                    let result = serve_listener(
+                        runtime,
+                        website_delivery,
+                        provider_resources,
+                        deploy_fallback,
+                        usage_meter,
+                        prepared,
+                        listener_semaphore,
+                        shutdown_rx,
+                        dynamic_tls,
+                    )
+                    .await;
+                    let _ = events_tx.send(SupervisorEvent::TaskFinished {
+                        socket: socket_key,
+                        listener_id,
+                        result,
+                    });
+                })
+            }
+            PendingSocket::StreamTcp(prepared) => {
+                let runtime = self.runtime.clone();
+                let listener_id = prepared.id.clone();
+                let socket_key = socket.clone();
+                tokio::spawn(async move {
+                    let result =
+                        super::stream_proxy::serve_stream_listener(runtime, prepared, shutdown_rx)
+                            .await;
+                    let _ = events_tx.send(SupervisorEvent::TaskFinished {
+                        socket: socket_key,
+                        listener_id,
+                        result,
+                    });
+                })
+            }
+            PendingSocket::StreamUdp(prepared) => {
+                let runtime = self.runtime.clone();
+                let listener_id = prepared.id.clone();
+                let socket_key = socket.clone();
+                tokio::spawn(async move {
+                    let result = super::udp_stream_proxy::serve_udp_stream_listener(
+                        runtime,
+                        prepared,
+                        shutdown_rx,
+                    )
+                    .await;
+                    let _ = events_tx.send(SupervisorEvent::TaskFinished {
+                        socket: socket_key,
+                        listener_id,
+                        result,
+                    });
+                })
+            }
+            PendingSocket::Mail(prepared) => {
+                let runtime = self.runtime.clone();
+                let listener_id = prepared.id.clone();
+                let socket_key = socket.clone();
+                tokio::spawn(async move {
+                    let result = serve_mail_listener(runtime, prepared, shutdown_rx).await;
+                    let _ = events_tx.send(SupervisorEvent::TaskFinished {
+                        socket: socket_key,
+                        listener_id,
+                        result,
+                    });
+                })
+            }
+        };
+        inner.live.insert(
+            socket,
+            LiveEntry {
+                shutdown_tx,
+                semaphore,
+                capacity,
+            },
+        );
+    }
+
+    /// Whether the socket is still live (an unexpected serve-task death).
+    pub(crate) async fn is_live(&self, socket: &SocketTopology) -> bool {
+        self.inner.lock().await.live.contains_key(socket)
+    }
+
+    /// The next serve-task completion event; `None` when the supervisor is
+    /// shutting down and its event channel closed.
+    pub(crate) async fn next_event(&self) -> Option<SupervisorEvent> {
+        self.events_rx.lock().await.recv().await
+    }
+
+    /// Stop accepting everywhere and collect the serve tasks within the drain
+    /// deadline (plus the same small collection grace the process drain uses).
+    /// Completion is awaited through the supervisor event channel, which also
+    /// covers sockets retired by an earlier handoff.
+    pub(crate) async fn shutdown_all(&self, deadline: Instant) -> Result<(), DataPlaneError> {
+        let awaited: std::collections::HashSet<SocketTopology> = {
+            let mut inner = self.inner.lock().await;
+            for entry in inner.live.values() {
+                let _ = entry.shutdown_tx.send(true);
+            }
+            inner.live.drain().map(|(socket, _)| socket).collect()
+        };
+        if awaited.is_empty() {
+            return Ok(());
+        }
+        const COLLECTION_GRACE: Duration = Duration::from_secs(5);
+        let mut pending = awaited;
+        let mut first_error = None;
+        let collect = async {
+            let mut events = self.events_rx.lock().await;
+            while !pending.is_empty() {
+                match events.recv().await {
+                    Some(SupervisorEvent::TaskFinished {
+                        socket,
+                        listener_id,
+                        result,
+                    }) => {
+                        if pending.remove(&socket) {
+                            if let Err(error) = result {
+                                tracing::warn!(
+                                    listener_id = %listener_id,
+                                    %error,
+                                    "listener serve task failed during drain"
+                                );
+                                first_error.get_or_insert(error);
+                            }
+                        }
+                    }
+                    None => break,
+                }
+            }
+        };
+        if tokio::time::timeout_at((deadline + COLLECTION_GRACE).into(), collect)
+            .await
+            .is_err()
+        {
+            // Serve tasks that missed their own bounded drain deadline end
+            // through their internal timeouts; bound the report instead.
+            first_error.get_or_insert(DataPlaneError::ListenerDrainTimeout {
+                remaining: pending.len(),
+            });
+        }
+        first_error.map_or(Ok(()), Err)
+    }
 }
 
 /// Bind a listener socket, setting `IPV6_V6ONLY` on IPv6 wildcard binds so a
 /// `[::]:port` listener can coexist with `0.0.0.0:port` (nginx `listen`
 /// semantics; Linux would otherwise reject the second bind via IPv4-mapped).
+/// Resolves a configured `bind`/`port` pair to the socket address a listener
+/// claims (also the socket-activation matching key).
+fn listener_address(
+    bind: &str,
+    port: u16,
+    _listener_id: &str,
+) -> Result<SocketAddr, DataPlaneError> {
+    let ip = bind.parse().map_err(|source| DataPlaneError::InvalidBind {
+        bind: bind.to_owned(),
+        source,
+    })?;
+    Ok(SocketAddr::new(ip, port))
+}
+
 pub(crate) async fn bind_listener(address: SocketAddr) -> std::io::Result<TcpListener> {
     if address.is_ipv6() {
         let domain = socket2::Domain::IPV6;
@@ -262,49 +817,32 @@ where
             });
         }
     }
-    let mut prepared = Vec::with_capacity(initial.app.config().listeners.len());
-    for listener in initial.app.listeners() {
-        prepared.push(prepare_listener(&initial, listener, tls_runtime.as_deref()).await?);
-    }
-    let mut prepared_streams = Vec::with_capacity(initial.app.streams().len());
-    let mut prepared_udp_streams = Vec::with_capacity(initial.app.streams().len());
-    // stream `server_name` virtual servers share one listening socket: bind
-    // each socket once and select the server by the preread SNI.
-    let mut tcp_groups: Vec<Vec<sdkwork_webserver_core::StreamServerConfig>> = Vec::new();
-    for stream in initial.app.streams() {
-        match stream.protocol {
-            sdkwork_webserver_core::StreamProtocol::Tcp => {
-                if let Some(group) = tcp_groups
-                    .iter_mut()
-                    .find(|group| group[0].socket_key() == stream.socket_key())
-                {
-                    group.push(stream.clone());
-                } else {
-                    tcp_groups.push(vec![stream.clone()]);
-                }
-            }
-            sdkwork_webserver_core::StreamProtocol::Udp => {
-                prepared_udp_streams.push(prepare_udp_stream_listener(stream).await?);
-            }
+    // The supervisor owns every data-plane socket (HTTP, stream TCP/UDP, mail)
+    // for the process lifetime and applies each published generation's
+    // socket-set diff. The operations/management listeners stay process-fixed
+    // (management plane, not operator routing config).
+    // Adopt socket-activation descriptors (systemd LISTEN_FDS) before any
+    // bind: when present, the declared data-plane sockets inherit them
+    // instead of binding, which is the zero-downtime executable-upgrade
+    // baseline (PRD-production-operations §8).
+    let inherited = super::socket_activation::InheritedSockets::adopt().map_err(|source| {
+        DataPlaneError::Listener {
+            listener_id: "socket-activation".to_owned(),
+            source,
         }
-    }
-    for group in &tcp_groups {
-        if group.len() == 1 {
-            prepared_streams.push(prepare_stream_listener(&group[0], &initial).await?);
-        } else {
-            prepared_streams.push(prepare_stream_listener_group(group, &initial).await?);
-        }
-    }
-    let prepared_operations = match operations.as_ref() {
-        Some(config) => Some(prepare_operations_listener(config).await?),
-        None => None,
-    };
-    // nginx `mail {}` listeners: the plaintext POP3/IMAP/SMTP frontend plane.
-    let mut prepared_mail: Vec<PreparedMailListener> =
-        Vec::with_capacity(initial.app.mail_servers().len());
-    for mail_server in initial.app.mail_servers() {
-        prepared_mail.push(PreparedMailListener::prepare(mail_server).await?);
-    }
+    })?;
+    let supervisor = Arc::new(ListenerSupervisor::new(
+        runtime.clone(),
+        website_delivery.clone(),
+        provider_resources.clone(),
+        deploy_fallback.clone(),
+        usage_meter.clone(),
+        tls_runtime.clone(),
+        inherited,
+    ));
+    runtime.install_listener_supervisor(supervisor.clone())?;
+    supervisor.bootstrap(&initial).await?;
+    drop(initial);
     // Tunnel gateway: QUIC listener rides the data-plane lifecycle (PRD SS77
     // backward compatibility: absent/disabled config leaves nothing running).
     let mut tunnel_gateway = match runtime.tunnel_options.as_ref() {
@@ -337,84 +875,20 @@ where
         None => (None, None),
     };
 
-    let drain_timeout = Duration::from_millis(
-        initial
-            .app
-            .config()
-            .deployment
-            .drain_timeout_ms
-            .unwrap_or(initial.app.config().limits.drain_timeout_ms),
-    );
-    drop(initial);
-    let mut shutdown_senders = Vec::with_capacity(prepared.len());
-    let mut tasks = JoinSet::new();
-    for listener in prepared {
+    // Process-fixed operations listener (loopback health/metrics/tunnel
+    // control). Its death is fatal; it is not part of the handoff surface.
+    let mut operations_shutdown: Option<watch::Sender<bool>> = None;
+    let mut operations_handle: Option<
+        tokio::task::JoinHandle<(String, Result<(), DataPlaneError>)>,
+    > = None;
+    if let Some(operations_config) = operations.as_ref() {
+        let prepared_operations = prepare_operations_listener(operations_config).await?;
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        shutdown_senders.push(shutdown_tx);
         let runtime = runtime.clone();
         let website_delivery = website_delivery.clone();
         let provider_resources = provider_resources.clone();
-        let deploy_fallback = deploy_fallback.clone();
-        let usage_meter = usage_meter.clone();
-        let listener_id = listener.config.id.clone();
-        tracing::info!(
-            listener_id = %listener_id,
-            address = %listener.address,
-            tls = listener.tls.is_some(),
-            "data-plane listener prepared"
-        );
-        tasks.spawn(async move {
-            let result = serve_listener(
-                runtime,
-                website_delivery,
-                provider_resources,
-                deploy_fallback,
-                usage_meter,
-                listener,
-                shutdown_rx,
-                drain_timeout,
-            )
-            .await;
-            (listener_id, result)
-        });
-    }
-    for stream in prepared_streams {
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        shutdown_senders.push(shutdown_tx);
-        let runtime = runtime.clone();
-        let stream_id = stream.id.clone();
-        tasks.spawn(async move {
-            let result = serve_stream_listener(runtime, stream, shutdown_rx).await;
-            (stream_id, result)
-        });
-    }
-    for stream in prepared_udp_streams {
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        shutdown_senders.push(shutdown_tx);
-        let runtime = runtime.clone();
-        let stream_id = stream.id.clone();
-        tasks.spawn(async move {
-            let result = serve_udp_stream_listener(runtime, stream, shutdown_rx).await;
-            (stream_id, result)
-        });
-    }
-    for prepared_mail in prepared_mail {
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        shutdown_senders.push(shutdown_tx);
-        let runtime = runtime.clone();
-        let mail_server_id = prepared_mail.id.clone();
-        tasks.spawn(async move {
-            let result = serve_mail_listener(runtime, prepared_mail, shutdown_rx).await;
-            (mail_server_id, result)
-        });
-    }
-    if let Some(prepared_operations) = prepared_operations {
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        shutdown_senders.push(shutdown_tx);
-        let runtime = runtime.clone();
-        let website_delivery = website_delivery.clone();
-        let provider_resources = provider_resources.clone();
-        tasks.spawn(async move {
+        operations_shutdown = Some(shutdown_tx);
+        operations_handle = Some(tokio::spawn(async move {
             let result = serve_operations_listener(
                 prepared_operations,
                 runtime,
@@ -424,42 +898,82 @@ where
             )
             .await;
             ("host-operations".to_owned(), result)
-        });
+        }));
     }
 
-    tokio::pin!(shutdown);
-    let (result, drain_deadline) = tokio::select! {
-        () = &mut shutdown => {
-            let drain_deadline = Instant::now() + drain_timeout;
-            request_listener_shutdown(&shutdown_senders);
-            (collect_shutdown_results_until(&mut tasks, drain_deadline).await, drain_deadline)
-        }
-        result = tasks.join_next() => {
-            let drain_deadline = Instant::now() + drain_timeout;
-            request_listener_shutdown(&shutdown_senders);
-            let result = match result {
-                Some(Ok((listener_id, Ok(())))) => {
-                    let _ = collect_shutdown_results_until(&mut tasks, drain_deadline).await;
-                    if listener_id == "host-operations" {
-                        Err(DataPlaneError::OperationsListenerStopped)
-                    } else {
-                        Err(DataPlaneError::ListenerStopped { listener_id })
-                    }
-                }
-                Some(Ok((_listener_id, Err(error)))) => {
-                    let _ = collect_shutdown_results_until(&mut tasks, drain_deadline).await;
-                    Err(error)
-                }
-                Some(Err(error)) => {
-                    let _ = collect_shutdown_results_until(&mut tasks, drain_deadline).await;
-                    Err(DataPlaneError::ListenerTask(error))
-                }
-                None => Ok(()),
-            };
-            (result, drain_deadline)
+    let drain_timeout = || {
+        let generation = runtime.current();
+        let config = generation.app.config();
+        Duration::from_millis(
+            config
+                .deployment
+                .drain_timeout_ms
+                .unwrap_or(config.limits.drain_timeout_ms),
+        )
+    };
+    let stop_operations = |operations_shutdown: &Option<watch::Sender<bool>>| {
+        if let Some(shutdown_tx) = operations_shutdown {
+            let _ = shutdown_tx.send(true);
         }
     };
-    let remaining_drain = drain_deadline.saturating_duration_since(Instant::now());
+    let mut operations_handle = operations_handle;
+
+    tokio::pin!(shutdown);
+    let result = loop {
+        let drain_deadline = Instant::now() + drain_timeout();
+        let outcome = tokio::select! {
+            () = &mut shutdown => {
+                stop_operations(&operations_shutdown);
+                supervisor.shutdown_all(drain_deadline).await
+            }
+            event = supervisor.next_event() => {
+                match event {
+                    // A live listener ended without a shutdown request: fatal,
+                    // drain everything (same contract as the previous
+                    // `tasks.join_next` arm).
+                    Some(SupervisorEvent::TaskFinished { socket, listener_id, result })
+                        if supervisor.is_live(&socket).await =>
+                    {
+                        stop_operations(&operations_shutdown);
+                        let _ = supervisor.shutdown_all(drain_deadline).await;
+                        Err(match result {
+                            Err(error) => error,
+                            Ok(()) => DataPlaneError::ListenerStopped { listener_id },
+                        })
+                    }
+                    // A retired listener finished its detached drain: normal.
+                    Some(_) => continue,
+                    // The event channel closes only when the supervisor drops,
+                    // which cannot happen while this loop holds an Arc to it.
+                    None => Err(DataPlaneError::ListenerStopped {
+                        listener_id: "listener-supervisor-events".to_owned(),
+                    }),
+                }
+            }
+            operations = async {
+                match operations_handle.as_mut() {
+                    Some(handle) => Some(handle.await),
+                    None => {
+                        std::future::pending::<()>().await;
+                        None
+                    }
+                }
+            } => {
+                let _ = operations;
+                stop_operations(&operations_shutdown);
+                let _ = supervisor.shutdown_all(drain_deadline).await;
+                Err(DataPlaneError::OperationsListenerStopped)
+            }
+        };
+        break outcome;
+    };
+    // The operations handle may still be draining; it owns its own bounded
+    // shutdown, so drop the sender and detach.
+    drop(operations_shutdown);
+    if let Some(handle) = operations_handle.take() {
+        handle.abort();
+    }
+    let remaining_drain = drain_timeout();
     if let Some(gateway) = tunnel_gateway.take() {
         gateway.shutdown().await;
     }
@@ -508,22 +1022,32 @@ async fn prepare_listener(
     generation: &Arc<RuntimeGeneration>,
     listener: &ListenerConfig,
     tls_runtime: Option<&FileTlsRuntimeController>,
+    inherited: Option<std::net::TcpListener>,
 ) -> Result<PreparedListener, DataPlaneError> {
-    let ip = listener
-        .bind
-        .parse()
-        .map_err(|source| DataPlaneError::InvalidBind {
-            bind: listener.bind.clone(),
-            source,
-        })?;
-    let requested_address = SocketAddr::new(ip, listener.port);
+    let requested_address = listener_address(&listener.bind, listener.port, &listener.id)?;
     let socket =
-        bind_listener(requested_address)
-            .await
-            .map_err(|source| DataPlaneError::Listener {
-                listener_id: listener.id.clone(),
-                source,
-            })?;
+        match inherited {
+            // Socket activation: the orchestrator handed us this socket already
+            // bound and listening; adopt it instead of binding a second one.
+            Some(std_listener) => {
+                std_listener
+                    .set_nonblocking(true)
+                    .map_err(|source| DataPlaneError::Listener {
+                        listener_id: listener.id.clone(),
+                        source,
+                    })?;
+                TcpListener::from_std(std_listener).map_err(|source| DataPlaneError::Listener {
+                    listener_id: listener.id.clone(),
+                    source,
+                })?
+            }
+            None => bind_listener(requested_address).await.map_err(|source| {
+                DataPlaneError::Listener {
+                    listener_id: listener.id.clone(),
+                    source,
+                }
+            })?,
+        };
     let address = socket
         .local_addr()
         .map_err(|source| DataPlaneError::Listener {
@@ -535,12 +1059,15 @@ async fn prepare_listener(
     // both — configured files layered above the assigned set — when it declares
     // `tlsCertificateResolution: policy-first`. Which sources combine is
     // validated at config load; here the resolution only selects the wiring.
+    // Static policy material was already built (and its files read) when the
+    // generation compiled; a dynamic assignment listener is wired to its
+    // process-lifetime controller here, exactly once.
     let resolution = TlsCertificateResolution::effective(
         listener.tls_certificate_resolution,
         listener.tls_policy_ref.is_some(),
         listener.tls_runtime.is_some(),
     );
-    let tls = match tls_runtime.filter(|runtime| runtime.listener_id() == listener.id) {
+    match tls_runtime.filter(|runtime| runtime.listener_id() == listener.id) {
         Some(runtime) => {
             if listener.tls_runtime != Some(ListenerTlsRuntime::Assignment) {
                 return Err(DataPlaneError::DynamicTlsConfiguration {
@@ -563,7 +1090,8 @@ async fn prepare_listener(
                     })?;
                     Some(
                         compile_policy_tls_material(
-                            generation, listener,
+                            generation.app.as_ref(),
+                            listener,
                             // A policy-first listener has the assigned set
                             // underneath, so an unusable file degrades that
                             // server name instead of failing the listener.
@@ -589,7 +1117,6 @@ async fn prepare_listener(
                 .map_err(|error| DataPlaneError::DynamicTlsConfiguration {
                     detail: error.to_string(),
                 })?;
-            Some(runtime.rustls_config())
         }
         None if listener.tls_runtime.is_some() => {
             return Err(DataPlaneError::DynamicTlsConfiguration {
@@ -599,13 +1126,12 @@ async fn prepare_listener(
                 ),
             });
         }
-        None => build_tls_config(generation, listener)?,
-    };
+        None => {}
+    }
     Ok(PreparedListener {
         config: listener.clone(),
         socket,
         address,
-        tls,
     })
 }
 
@@ -616,17 +1142,11 @@ async fn serve_listener(
     deploy_fallback: Option<Arc<DeployFallbackResolver>>,
     usage_meter: Option<Arc<UsageMeteringAggregator>>,
     listener: PreparedListener,
+    listener_permits: Arc<Semaphore>,
     shutdown: watch::Receiver<bool>,
-    drain_timeout: Duration,
+    dynamic_tls: Option<RustlsConfig>,
 ) -> Result<(), DataPlaneError> {
     let listener_id = listener.config.id.clone();
-    let initial = runtime.current();
-    let limits = initial.app.config().limits.clone();
-    let maximum_connections = listener
-        .config
-        .max_connections
-        .unwrap_or(limits.max_connections);
-    drop(initial);
     let state = ListenerState {
         runtime: runtime.clone(),
         website_delivery,
@@ -634,14 +1154,15 @@ async fn serve_listener(
         deploy_fallback,
         usage_meter,
         listener_id: listener_id.clone(),
-        is_tls: listener.tls.is_some(),
     };
     let app = Router::new()
         .fallback(route_request)
         .with_state(state)
-        .layer(TimeoutLayer::with_status_code(
-            StatusCode::REQUEST_TIMEOUT,
-            Duration::from_millis(limits.request_timeout_ms),
+        // nginx request timeouts resolve per request from the published
+        // generation, so a limit change hot-applies without a rebind.
+        .layer(middleware::from_fn_with_state(
+            runtime.clone(),
+            apply_request_timeout,
         ))
         .layer(middleware::from_fn_with_state(
             runtime.metrics.clone(),
@@ -672,131 +1193,60 @@ async fn serve_listener(
             super::http2_chunk::apply_http2_chunking,
         ));
     let service = app.into_make_service_with_connect_info::<DownstreamConnectionInfo>();
-    let global_permits = runtime.connection_permits.clone();
-    let resource_pressure = runtime.resource_pressure.clone();
-    let http1_only = listener.config.protocols == [ListenerProtocol::Http1];
-    let http2_only = listener.config.protocols == [ListenerProtocol::Http2];
-    let connection_write_timeout = Duration::from_millis(limits.connection_write_timeout_ms);
-    let handshake_timeout = Duration::from_millis(limits.tls_handshake_timeout_ms);
-    let http1_keep_alive_idle_timeout =
-        Duration::from_millis(limits.http1_keep_alive_idle_timeout_ms);
-    let maximum_connection_age = Duration::from_millis(limits.max_connection_age_ms);
-    let mut builder = Builder::new(TokioExecutor::new());
-    configure_http_protocols(&mut builder, &limits);
-    let allow_upgrades = !http2_only;
-    let builder = if http1_only {
-        builder.http1_only()
-    } else if http2_only {
-        builder.http2_only()
-    } else {
-        builder
-    };
-    let builder = Arc::new(builder);
-
-    let result = if let Some(tls) = listener.tls {
-        let limiter =
-            ConnectionLimiter::new(global_permits, maximum_connections, runtime.metrics.clone());
-        let http1 = Http1WireGuardAcceptor::new_observed(
-            RustlsAcceptor::new(tls).acceptor(DefaultAcceptor::new()),
-            &limits,
-            runtime.metrics.clone(),
-        );
-        let http2 = Http2WireGuardAcceptor::new_observed(http1, &limits, runtime.metrics.clone());
-        let keep_alive = Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
-        let acceptor = HandshakeTimeoutAcceptor::new_observed(
-            WriteTimeoutAcceptor::new_observed(
-                keep_alive,
-                connection_write_timeout,
-                runtime.metrics.clone(),
-            ),
-            handshake_timeout,
-            runtime.metrics.clone(),
-        );
-        serve_connections(
-            listener.socket,
-            limiter,
-            resource_pressure,
-            runtime.metrics.clone(),
-            listener.config.proxy_protocol.clone(),
-            acceptor,
-            service,
-            builder,
-            allow_upgrades,
-            shutdown,
-            maximum_connection_age,
-            drain_timeout,
-        )
-        .await
-    } else {
-        let limiter =
-            ConnectionLimiter::new(global_permits, maximum_connections, runtime.metrics.clone());
-        let acceptor = HandshakeTimeoutAcceptor::new_observed(
-            WriteTimeoutAcceptor::new_observed(
-                Http1KeepAliveTimeoutAcceptor::new(
-                    Http2WireGuardAcceptor::new_observed(
-                        Http1WireGuardAcceptor::new_observed(
-                            DefaultAcceptor::new(),
-                            &limits,
-                            runtime.metrics.clone(),
-                        ),
-                        &limits,
-                        runtime.metrics.clone(),
-                    ),
-                    http1_keep_alive_idle_timeout,
-                ),
-                connection_write_timeout,
-                runtime.metrics.clone(),
-            ),
-            handshake_timeout,
-            runtime.metrics.clone(),
-        );
-        serve_connections(
-            listener.socket,
-            limiter,
-            resource_pressure,
-            runtime.metrics.clone(),
-            listener.config.proxy_protocol.clone(),
-            acceptor,
-            service,
-            builder,
-            allow_upgrades,
-            shutdown,
-            maximum_connection_age,
-            drain_timeout,
-        )
-        .await
-    };
-    result.map_err(|source| DataPlaneError::Listener {
+    let limiter = ConnectionLimiter::new(
+        runtime.connection_permits.clone(),
+        listener_permits,
+        runtime.metrics.clone(),
+    );
+    serve_connections(
+        listener.socket,
+        limiter,
+        runtime.resource_pressure.clone(),
+        runtime.metrics.clone(),
+        runtime,
+        listener_id.clone(),
+        dynamic_tls,
+        service,
+        shutdown,
+    )
+    .await
+    .map_err(|source| DataPlaneError::Listener {
         listener_id,
         source,
     })
 }
 
+/// Per-request equivalent of the fixed `TimeoutLayer`: the limit resolves from
+/// the published generation, so a `requestTimeoutMs` change hot-applies.
+async fn apply_request_timeout(
+    State(runtime): State<Arc<DataPlaneRuntime>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let limit = Duration::from_millis(runtime.current().app.config().limits.request_timeout_ms);
+    match timeout(limit, next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => StatusCode::REQUEST_TIMEOUT.into_response(),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
-async fn serve_connections<A, M>(
+async fn serve_connections<M>(
     listener: TcpListener,
     limiter: ConnectionLimiter,
     resource_pressure: Arc<super::resource_pressure::ResourcePressureController>,
     metrics: Arc<DataPlaneMetrics>,
-    proxy_protocol: Option<ProxyProtocolConfig>,
-    acceptor: A,
+    runtime: Arc<DataPlaneRuntime>,
+    listener_id: String,
+    dynamic_tls: Option<RustlsConfig>,
     make_service: M,
-    builder: Arc<Builder<TokioExecutor>>,
-    allow_upgrades: bool,
     mut shutdown: watch::Receiver<bool>,
-    maximum_connection_age: Duration,
-    drain_timeout: Duration,
 ) -> io::Result<()>
 where
     M: MakeService<DownstreamConnectionInfo, Request<Incoming>> + Clone + Send + 'static,
     M::MakeFuture: Send + 'static,
-    A: Accept<ConnectionLimitedStream<TcpStream>, M::Service> + Clone + Send + Sync + 'static,
-    A::Stream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    A::Service: SendService<Request<Incoming>> + Send + 'static,
-    A::Future: Send,
 {
     let mut connections = JoinSet::new();
-    let proxy_protocol = Arc::new(proxy_protocol);
     let mut accept_policy = super::accept::AcceptRetryPolicy::new();
     loop {
         tokio::select! {
@@ -834,68 +1284,225 @@ where
                     Ok(stream) => stream,
                     Err(_) => continue,
                 };
-                let acceptor = acceptor.clone();
-                let builder = builder.clone();
+                let runtime = runtime.clone();
+                let listener_id = listener_id.clone();
+                let dynamic_tls = dynamic_tls.clone();
                 let metrics = metrics.clone();
-                let proxy_protocol = proxy_protocol.clone();
-                let mut make_service = make_service.clone();
-                let mut connection_shutdown = shutdown.clone();
+                let make_service = make_service.clone();
+                let connection_shutdown = shutdown.clone();
                 connections.spawn(async move {
-                    let mut stream = stream;
-                    let connection_info = match resolve_connection_info(
-                        &mut stream,
+                    drive_connection(
+                        runtime,
+                        listener_id,
+                        dynamic_tls,
+                        stream,
                         peer,
-                        proxy_protocol.as_ref().as_ref(),
-                    ).await {
-                        Ok(info) => info,
-                        Err(_) => {
-                            metrics.record_connection_rejection(ConnectionRejection::ProxyProtocol);
-                            return;
-                        }
-                    };
-                    if std::future::poll_fn(|context| make_service.poll_ready(context)).await.is_err() {
-                        return;
-                    }
-                    let Ok(service) = make_service.make_service(connection_info).await else {
-                        return;
-                    };
-                    let Ok((stream, service)) = acceptor.accept(stream, service).await else {
-                        return;
-                    };
-                    let io = TokioIo::new(stream);
-                    let service = TowerToHyperService::new(service.into_service());
-                    let age = tokio::time::sleep(maximum_connection_age);
-                    tokio::pin!(age);
-                    if allow_upgrades {
-                        let connection = builder.serve_connection_with_upgrades(io, service);
-                        tokio::pin!(connection);
-                        tokio::select! {
-                            biased;
-                            _ = &mut connection => return,
-                            () = wait_for_shutdown(&mut connection_shutdown) => {}
-                            () = &mut age => {}
-                        }
-                        connection.as_mut().graceful_shutdown();
-                        let _ = timeout(drain_timeout, &mut connection).await;
-                    } else {
-                        let connection = builder.serve_connection(io, service);
-                        tokio::pin!(connection);
-                        tokio::select! {
-                            biased;
-                            _ = &mut connection => return,
-                            () = wait_for_shutdown(&mut connection_shutdown) => {}
-                            () = &mut age => {}
-                        }
-                        connection.as_mut().graceful_shutdown();
-                        let _ = timeout(drain_timeout, &mut connection).await;
-                    }
+                        make_service,
+                        connection_shutdown,
+                        metrics,
+                    )
+                    .await;
                 });
             }
         }
     }
 
+    // Bounded drain: the deadline resolves from the published generation.
+    let drain_timeout = {
+        let generation = runtime.current();
+        let config = generation.app.config();
+        Duration::from_millis(
+            config
+                .deployment
+                .drain_timeout_ms
+                .unwrap_or(config.limits.drain_timeout_ms),
+        )
+    };
     drain_connection_tasks(&mut connections, drain_timeout).await;
     Ok(())
+}
+
+/// Everything one accepted connection observes resolves from the generation it
+/// was admitted under: TLS material, protocol limits, timeouts, proxy-protocol
+/// policy and admission policy. In-flight connections keep their pinned
+/// generation, so a handoff or reload never disturbs them.
+#[allow(clippy::too_many_arguments)]
+async fn drive_connection<M>(
+    runtime: Arc<DataPlaneRuntime>,
+    listener_id: String,
+    dynamic_tls: Option<RustlsConfig>,
+    mut stream: ConnectionLimitedStream<TcpStream>,
+    peer: SocketAddr,
+    make_service: M,
+    connection_shutdown: watch::Receiver<bool>,
+    metrics: Arc<DataPlaneMetrics>,
+) where
+    M: MakeService<DownstreamConnectionInfo, Request<Incoming>> + Clone + Send + 'static,
+    M::MakeFuture: Send + 'static,
+{
+    let generation = runtime.current();
+    let Some(listener_config) = generation.app.listener(&listener_id).cloned() else {
+        // The socket is retiring after a handoff and this connection raced its
+        // shutdown; close it without serving.
+        return;
+    };
+    let limits = generation.app.config().limits.clone();
+    let drain_timeout = Duration::from_millis(
+        generation
+            .app
+            .config()
+            .deployment
+            .drain_timeout_ms
+            .unwrap_or(limits.drain_timeout_ms),
+    );
+    let maximum_connection_age = Duration::from_millis(limits.max_connection_age_ms);
+    let http1_only = listener_config.protocols == [ListenerProtocol::Http1];
+    let http2_only = listener_config.protocols == [ListenerProtocol::Http2];
+    let allow_upgrades = !http2_only;
+    let mut builder = Builder::new(TokioExecutor::new());
+    configure_http_protocols(&mut builder, &limits);
+    let builder = if http1_only {
+        builder.http1_only()
+    } else if http2_only {
+        builder.http2_only()
+    } else {
+        builder
+    };
+    let builder = Arc::new(builder);
+    let tls = dynamic_tls.or_else(|| generation.tls_configs.get(&listener_id).cloned().flatten());
+    let connection_info =
+        match resolve_connection_info(&mut stream, peer, listener_config.proxy_protocol.as_ref())
+            .await
+        {
+            Ok(info) => info.with_tls(tls.is_some()),
+            Err(_) => {
+                metrics.record_connection_rejection(ConnectionRejection::ProxyProtocol);
+                return;
+            }
+        };
+    let mut make_service = make_service.clone();
+    if std::future::poll_fn(|context| make_service.poll_ready(context))
+        .await
+        .is_err()
+    {
+        return;
+    }
+    let Ok(service) = make_service.make_service(connection_info).await else {
+        return;
+    };
+    if let Some(tls) = tls {
+        // TLS acceptor chain for one connection: nginx-ordered wire guards and
+        // timeouts over the generation's certificate material.
+        let connection_write_timeout = Duration::from_millis(limits.connection_write_timeout_ms);
+        let handshake_timeout = Duration::from_millis(limits.tls_handshake_timeout_ms);
+        let http1_keep_alive_idle_timeout =
+            Duration::from_millis(limits.http1_keep_alive_idle_timeout_ms);
+        let http1 = Http1WireGuardAcceptor::new_observed(
+            RustlsAcceptor::new(tls).acceptor(DefaultAcceptor::new()),
+            &limits,
+            metrics.clone(),
+        );
+        let http2 = Http2WireGuardAcceptor::new_observed(http1, &limits, metrics.clone());
+        let keep_alive = Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
+        let acceptor = HandshakeTimeoutAcceptor::new_observed(
+            WriteTimeoutAcceptor::new_observed(
+                keep_alive,
+                connection_write_timeout,
+                metrics.clone(),
+            ),
+            handshake_timeout,
+            metrics,
+        );
+        let Ok((stream, service)) = acceptor.accept(stream, service).await else {
+            return;
+        };
+        serve_connection_tail(
+            stream,
+            service,
+            builder,
+            allow_upgrades,
+            connection_shutdown,
+            maximum_connection_age,
+            drain_timeout,
+        )
+        .await;
+    } else {
+        // Plaintext acceptor chain for one connection.
+        let connection_write_timeout = Duration::from_millis(limits.connection_write_timeout_ms);
+        let handshake_timeout = Duration::from_millis(limits.tls_handshake_timeout_ms);
+        let http1_keep_alive_idle_timeout =
+            Duration::from_millis(limits.http1_keep_alive_idle_timeout_ms);
+        let http1 =
+            Http1WireGuardAcceptor::new_observed(DefaultAcceptor::new(), &limits, metrics.clone());
+        let http2 = Http2WireGuardAcceptor::new_observed(http1, &limits, metrics.clone());
+        let keep_alive = Http1KeepAliveTimeoutAcceptor::new(http2, http1_keep_alive_idle_timeout);
+        let acceptor = HandshakeTimeoutAcceptor::new_observed(
+            WriteTimeoutAcceptor::new_observed(
+                keep_alive,
+                connection_write_timeout,
+                metrics.clone(),
+            ),
+            handshake_timeout,
+            metrics,
+        );
+        let Ok((stream, service)) = acceptor.accept(stream, service).await else {
+            return;
+        };
+        serve_connection_tail(
+            stream,
+            service,
+            builder,
+            allow_upgrades,
+            connection_shutdown,
+            maximum_connection_age,
+            drain_timeout,
+        )
+        .await;
+    }
+}
+
+/// Serve one accepted connection to completion: bounded by the shutdown watch
+/// (graceful), the maximum-connection-age timer, then the drain deadline.
+/// Identical contract for TLS and plaintext streams.
+async fn serve_connection_tail<S, Service>(
+    stream: S,
+    service: Service,
+    builder: Arc<Builder<TokioExecutor>>,
+    allow_upgrades: bool,
+    mut connection_shutdown: watch::Receiver<bool>,
+    maximum_connection_age: Duration,
+    drain_timeout: Duration,
+) where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    Service: SendService<Request<Incoming>> + Send + 'static,
+{
+    let io = TokioIo::new(stream);
+    let service = TowerToHyperService::new(service.into_service());
+    let age = tokio::time::sleep(maximum_connection_age);
+    tokio::pin!(age);
+    if allow_upgrades {
+        let connection = builder.serve_connection_with_upgrades(io, service);
+        tokio::pin!(connection);
+        tokio::select! {
+            biased;
+            _ = &mut connection => return,
+            () = wait_for_shutdown(&mut connection_shutdown) => {}
+            () = &mut age => {}
+        }
+        connection.as_mut().graceful_shutdown();
+        let _ = timeout(drain_timeout, &mut connection).await;
+    } else {
+        let connection = builder.serve_connection(io, service);
+        tokio::pin!(connection);
+        tokio::select! {
+            biased;
+            _ = &mut connection => return,
+            () = wait_for_shutdown(&mut connection_shutdown) => {}
+            () = &mut age => {}
+        }
+        connection.as_mut().graceful_shutdown();
+        let _ = timeout(drain_timeout, &mut connection).await;
+    }
 }
 
 async fn wait_for_shutdown(shutdown: &mut watch::Receiver<bool>) {
@@ -925,12 +1532,6 @@ async fn drain_connection_tasks(connections: &mut JoinSet<()>, drain_timeout: Du
     }
 }
 
-fn request_listener_shutdown(shutdown_senders: &[watch::Sender<bool>]) {
-    for sender in shutdown_senders {
-        let _ = sender.send(true);
-    }
-}
-
 fn configure_http_protocols(builder: &mut Builder<TokioExecutor>, limits: &WebServerLimits) {
     let mut http1 = builder.http1();
     http1
@@ -957,49 +1558,6 @@ fn configure_http_protocols(builder: &mut Builder<TokioExecutor>, limits: &WebSe
         .keep_alive_interval(Duration::from_millis(limits.http2_keep_alive_interval_ms))
         .keep_alive_timeout(Duration::from_millis(limits.http2_keep_alive_timeout_ms))
         .timer(TokioTimer::new());
-}
-
-async fn collect_shutdown_results(
-    tasks: &mut JoinSet<(String, Result<(), DataPlaneError>)>,
-) -> Result<(), DataPlaneError> {
-    let mut first_error = None;
-    while let Some(result) = tasks.join_next().await {
-        match result {
-            Ok((_listener_id, Ok(()))) => {}
-            Ok((_listener_id, Err(error))) if first_error.is_none() => first_error = Some(error),
-            Err(error) if first_error.is_none() => {
-                first_error = Some(DataPlaneError::ListenerTask(error))
-            }
-            _ => {}
-        }
-    }
-    first_error.map_or(Ok(()), Err)
-}
-
-/// Drain the listener tasks but never past the shutdown deadline plus a small
-/// collection grace. The listeners themselves already stop accepting at
-/// `drain_timeout`; without the grace, the collector's timer races the
-/// listener's own timer at exactly the same instant and reports a spurious
-/// timeout for a listener that is in fact finishing. The grace still bounds
-/// process exit when a listener ignores its stop signal.
-async fn collect_shutdown_results_until(
-    tasks: &mut JoinSet<(String, Result<(), DataPlaneError>)>,
-    deadline: Instant,
-) -> Result<(), DataPlaneError> {
-    const COLLECTION_GRACE: Duration = Duration::from_secs(5);
-    match tokio::time::timeout_at(
-        (deadline + COLLECTION_GRACE).into(),
-        collect_shutdown_results(tasks),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => {
-            let remaining = tasks.len();
-            tasks.abort_all();
-            Err(DataPlaneError::ListenerDrainTimeout { remaining })
-        }
-    }
 }
 
 /// Build the SaaS traffic usage meter when the app config enables

@@ -29,20 +29,36 @@ const UDP_TARGET_RESOLVE_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) struct PreparedUdpStreamListener {
     pub(crate) id: String,
     socket: Arc<UdpSocket>,
-    proxy_timeout: Duration,
     round_robin: Arc<AtomicUsize>,
 }
 
+/// Bind one UDP stream socket. Session policy (`proxy_timeout`, targets)
+/// resolves per datagram from the published generation.
 pub(crate) async fn prepare_udp_stream_listener(
     config: &StreamServerConfig,
+    inherited: Option<std::net::UdpSocket>,
 ) -> Result<PreparedUdpStreamListener, DataPlaneError> {
     let address = format!("{}:{}", config.bind, config.port);
-    let socket = UdpSocket::bind(&address)
-        .await
-        .map_err(|source| DataPlaneError::Listener {
-            listener_id: config.id.clone(),
-            source,
-        })?;
+    let socket = match inherited {
+        Some(std_socket) => {
+            std_socket
+                .set_nonblocking(true)
+                .map_err(|source| DataPlaneError::Listener {
+                    listener_id: config.id.clone(),
+                    source,
+                })?;
+            UdpSocket::from_std(std_socket).map_err(|source| DataPlaneError::Listener {
+                listener_id: config.id.clone(),
+                source,
+            })?
+        }
+        None => UdpSocket::bind(&address)
+            .await
+            .map_err(|source| DataPlaneError::Listener {
+                listener_id: config.id.clone(),
+                source,
+            })?,
+    };
     tracing::info!(
         stream_id = %config.id,
         address = %socket.local_addr().map(|addr| addr.to_string()).unwrap_or_else(|_| address),
@@ -52,7 +68,6 @@ pub(crate) async fn prepare_udp_stream_listener(
     Ok(PreparedUdpStreamListener {
         id: config.id.clone(),
         socket: Arc::new(socket),
-        proxy_timeout: Duration::from_millis(config.proxy_timeout_ms),
         round_robin: Arc::new(AtomicUsize::new(0)),
     })
 }
@@ -128,7 +143,6 @@ pub(crate) async fn serve_udp_stream_listener(
     let PreparedUdpStreamListener {
         id,
         socket,
-        proxy_timeout,
         round_robin,
     } = listener;
     let shared = Arc::new(Mutex::new(UdpSessions::default()));
@@ -149,6 +163,9 @@ pub(crate) async fn serve_udp_stream_listener(
                 else {
                     continue;
                 };
+                // nginx stream `proxy_timeout` resolves per datagram from the
+                // published generation (a reload applies to new idle windows).
+                let proxy_timeout = Duration::from_millis(stream_config.proxy_timeout_ms);
                 let now = Instant::now();
                 let session = {
                     let mut state = shared

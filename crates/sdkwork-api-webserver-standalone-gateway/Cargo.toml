@@ -145,6 +145,9 @@ chrono = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
 sdkwork-iam-bootstrap = { workspace = true, optional = true }
 
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
 [dev-dependencies]
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 sdkwork-webserver-tunnel.workspace = true

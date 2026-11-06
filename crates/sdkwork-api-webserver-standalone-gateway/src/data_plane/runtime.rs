@@ -2,17 +2,18 @@ use std::{
     collections::HashMap,
     fs::File,
     io::Read,
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::Path,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, OnceLock,
+    },
     time::Duration,
 };
 
 use arc_swap::ArcSwap;
+use axum_server::tls_rustls::RustlsConfig;
 use sdkwork_utils_rust::crypto::sha256_hash;
-use sdkwork_webserver_core::{
-    CertificateConfig, CompiledWebServerApp, CompiledWebServerRevision, GeoIpDatabases,
-    ListenerProtocol, ReloadConfig, TlsPolicyConfig,
-};
+use sdkwork_webserver_core::{CompiledWebServerApp, CompiledWebServerRevision, GeoIpDatabases};
 use sdkwork_webserver_resolver_cache::{FileResolverSource, ResolutionChain};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, Semaphore};
@@ -102,6 +103,20 @@ pub(crate) struct RuntimeGeneration {
     /// the generation, so a reload starts a fresh budget and a per-generation
     /// directory; every spool file is removed on completion/error/drop.
     pub temp_spool: Arc<super::temp_spool::TempSpool>,
+    /// The listening-socket set this generation declares. The supervisor diffs
+    /// it against the live socket set at handoff time.
+    pub sockets: Vec<SocketTopology>,
+    /// Per-listener static TLS acceptor material, built once per generation so
+    /// a kept socket serves new connections with the new certificates without a
+    /// rebind. Listeners owned by a dynamic TLS runtime controller map to
+    /// `None` here; the controller supplies their configuration.
+    pub tls_configs: HashMap<String, Option<RustlsConfig>>,
+    /// Per-generation resolved mail session profiles (bounded DNS + TLS
+    /// material load on first use).
+    pub mail_profiles: super::mail_frontend::MailProfileCache,
+    /// Per-stream TLS terminate acceptors, built once per generation so a kept
+    /// socket serves new connections with the new certificates after handoff.
+    pub stream_tls_acceptors: HashMap<String, Option<tokio_rustls::TlsAcceptor>>,
 }
 
 impl RuntimeGeneration {
@@ -181,6 +196,53 @@ impl RuntimeGeneration {
             app.config().nginx.temp_spool_budget_bytes,
             app.config().nginx.temp_spool_max_files,
         ));
+        // Static TLS acceptor material per listener, built once per generation.
+        // A certificate file that is unreadable/malformed fails the generation
+        // build, so a reload keeps the previous generation (fail closed).
+        let mut tls_configs = HashMap::new();
+        for listener in app.listeners() {
+            let tls = if listener.tls_runtime.is_some() {
+                // Dynamic assignment listeners are owned by the process-lifetime
+                // TLS runtime controller; the supervisor wires them at bind time.
+                None
+            } else {
+                super::tls::build_tls_config(app.as_ref(), listener)?
+            };
+            tls_configs.insert(listener.id.clone(), tls);
+        }
+        let sockets = ReloadTopology::socket_set(&app);
+        // Stream TLS terminate acceptors, built once per generation. A bad
+        // certificate fails the generation build (fail closed, like HTTP TLS).
+        let mut stream_tls_acceptors = HashMap::new();
+        for stream in app.streams() {
+            let acceptor = match stream.tls.as_ref() {
+                Some(sdkwork_webserver_core::StreamTlsMode::Terminate {
+                    certificate_ref,
+                    client_auth,
+                }) => {
+                    let resolved = super::stream_proxy::resolve_stream_client_auth(
+                        app.as_ref(),
+                        &stream.id,
+                        client_auth.as_ref(),
+                    );
+                    Some(
+                        super::stream_proxy::build_stream_tls_acceptor(
+                            app.as_ref(),
+                            certificate_ref,
+                            resolved.as_ref(),
+                        )
+                        .map_err(|detail| {
+                            DataPlaneError::StreamTlsMaterial {
+                                stream_id: stream.id.clone(),
+                                detail,
+                            }
+                        })?,
+                    )
+                }
+                _ => None,
+            };
+            stream_tls_acceptors.insert(stream.id.clone(), acceptor);
+        }
         Ok(Arc::new(Self {
             id,
             revision,
@@ -198,6 +260,10 @@ impl RuntimeGeneration {
             geoip,
             stream_geoip,
             temp_spool,
+            sockets,
+            tls_configs,
+            mail_profiles: super::mail_frontend::MailProfileCache::default(),
+            stream_tls_acceptors,
         }))
     }
 
@@ -249,12 +315,20 @@ fn add_capacity(total: &mut [u64; 3], value: [u64; 3]) {
 
 pub(crate) struct DataPlaneRuntime {
     current: ArcSwap<RuntimeGeneration>,
-    topology: ReloadTopology,
+    topology: Mutex<ReloadTopology>,
     reload_lifecycle: Semaphore,
     active_health: Mutex<ActiveHealthRuntime>,
     resource_pressure_lifecycle: Semaphore,
     resource_pressure_runtime: Mutex<ResourcePressureRuntime>,
     pub connection_permits: Arc<Semaphore>,
+    /// Live capacity of `connection_permits`; the supervisor reconciles the
+    /// semaphore to the published generation's `max_connections` on handoff.
+    connection_permits_capacity: AtomicUsize,
+    /// The socket supervisor, installed by the serving loop once the initial
+    /// listeners are bound. A runtime that never served (unit tests calling
+    /// `reload` directly) has none, and a socket-set change stays
+    /// restart-required for it.
+    listener_supervisor: OnceLock<Arc<super::server::ListenerSupervisor>>,
     pub request_gate: RequestAdmissionGate,
     pub resource_pressure: Arc<ResourcePressureController>,
     pub tunnel_supervisor: Arc<TunnelSupervisor>,
@@ -382,7 +456,7 @@ impl DataPlaneRuntime {
         metric_dimensions: CanonicalMetricDimensions,
         cluster_overlay: Option<Arc<arc_swap::ArcSwap<sdkwork_webserver_cluster::ClusterTopology>>>,
     ) -> Result<Arc<Self>, DataPlaneError> {
-        let topology = ReloadTopology::from_app(&app)?;
+        let topology = ReloadTopology::from_app(&app);
         let maximum_connections = app.config().limits.max_connections;
         let maximum_requests = app.config().limits.max_concurrent_requests;
         let operations_reserve = app
@@ -402,12 +476,14 @@ impl DataPlaneRuntime {
         let initial = RuntimeGeneration::build(app, revision, 1, metrics.clone())?;
         Ok(Arc::new(Self {
             current: ArcSwap::from(initial),
-            topology,
+            topology: Mutex::new(topology),
             reload_lifecycle: Semaphore::new(1),
             active_health: Mutex::new(ActiveHealthRuntime::default()),
             resource_pressure_lifecycle: Semaphore::new(1),
             resource_pressure_runtime: Mutex::new(ResourcePressureRuntime::default()),
             connection_permits: Arc::new(Semaphore::new(maximum_connections)),
+            connection_permits_capacity: AtomicUsize::new(maximum_connections),
+            listener_supervisor: OnceLock::new(),
             request_gate: RequestAdmissionGate::new(
                 maximum_requests,
                 operations_reserve,
@@ -537,6 +613,47 @@ impl DataPlaneRuntime {
         }
     }
 
+    /// Installs the socket supervisor. Called once by the serving loop after
+    /// the initial listeners are bound; later calls fail closed.
+    pub(crate) fn install_listener_supervisor(
+        &self,
+        supervisor: Arc<super::server::ListenerSupervisor>,
+    ) -> Result<(), DataPlaneError> {
+        self.listener_supervisor.set(supervisor).map_err(|_| {
+            DataPlaneError::LifecycleCoordinatorUnavailable {
+                subsystem: "data-plane listener supervisor is already installed",
+            }
+        })
+    }
+
+    fn supervisor(&self) -> Option<Arc<super::server::ListenerSupervisor>> {
+        self.listener_supervisor.get().cloned()
+    }
+
+    /// Reconciles the global connection-admission semaphore to the published
+    /// generation's `max_connections` (limit changes hot-apply). A shrinking
+    /// capacity only drops currently-available permits; the remainder
+    /// converges as in-flight connections release theirs.
+    fn reconcile_connection_capacity(&self, maximum_connections: usize) {
+        let current = self
+            .connection_permits_capacity
+            .swap(maximum_connections, Ordering::AcqRel);
+        match maximum_connections.cmp(&current) {
+            std::cmp::Ordering::Greater => {
+                self.connection_permits
+                    .add_permits(maximum_connections - current);
+            }
+            std::cmp::Ordering::Less => {
+                let available = self.connection_permits.available_permits();
+                let drop = (current - maximum_connections).min(available);
+                if drop > 0 {
+                    self.connection_permits.forget_permits(drop);
+                }
+            }
+            std::cmp::Ordering::Equal => {}
+        }
+    }
+
     pub async fn reload(
         &self,
         revision: CompiledWebServerRevision,
@@ -546,16 +663,18 @@ impl DataPlaneRuntime {
                 subsystem: "data-plane reload",
             }
         })?;
-        let candidate_topology = match ReloadTopology::from_app(revision.app()) {
-            Ok(topology) => topology,
-            Err(error) => {
-                self.metrics.record_reload(ReloadResult::Failed);
-                return Err(error);
+        let candidate_topology = ReloadTopology::from_app(revision.app());
+        let live_topology = self.topology.lock().await.clone();
+        let sockets_changed = candidate_topology.sockets != live_topology.sockets;
+        if candidate_topology != live_topology {
+            // A socket-set change can only hand off when a supervisor owns the
+            // live sockets; process-built subsystems (tunnel gateway, usage
+            // metering channel) cannot hot-apply at all.
+            let handoff_possible = sockets_changed && self.supervisor().is_some();
+            if !handoff_possible {
+                self.metrics.record_reload(ReloadResult::RestartRequired);
+                return Err(DataPlaneError::ReloadRequiresRestart);
             }
-        };
-        if candidate_topology != self.topology {
-            self.metrics.record_reload(ReloadResult::RestartRequired);
-            return Err(DataPlaneError::ReloadRequiresRestart);
         }
 
         let current = self.current();
@@ -566,6 +685,7 @@ impl DataPlaneRuntime {
                 previous_revision: current.revision.clone(),
                 revision: current.revision.clone(),
                 changed: false,
+                sockets_changed: false,
             });
         }
 
@@ -593,6 +713,20 @@ impl DataPlaneRuntime {
                 return Err(DataPlaneError::ReloadWorker(error));
             }
         };
+
+        // nginx SIGHUP ordering: bind NEW listening sockets before the new
+        // configuration takes effect, so a bind failure retains the old
+        // generation and nothing is published half-bound.
+        let supervisor = self.supervisor();
+        if let Some(supervisor) = supervisor.as_ref() {
+            if sockets_changed {
+                if let Err(error) = supervisor.prepare_sockets(&candidate).await {
+                    self.metrics.record_reload(ReloadResult::Failed);
+                    return Err(error);
+                }
+            }
+        }
+
         let previous_supervisor = {
             let mut active_health = self.active_health.lock().await;
             let next_supervisor = active_health
@@ -607,12 +741,37 @@ impl DataPlaneRuntime {
                 tracing::warn!(%error, "previous active health generation failed while stopping");
             }
         }
-        self.metrics.record_reload(ReloadResult::Published);
+        if let Some(supervisor) = supervisor.as_ref() {
+            if sockets_changed {
+                // After publication: serve the new sockets, stop accepting on
+                // the removed ones (they drain their in-flight connections
+                // detached), and reconcile admission capacity.
+                supervisor.commit_sockets(&candidate).await;
+            }
+        }
+        let limits = candidate.app.config().limits.clone();
+        self.reconcile_connection_capacity(limits.max_connections);
+        let operations_reserve = candidate
+            .app
+            .config()
+            .deployment
+            .resource_pressure
+            .as_ref()
+            .map_or(0, |policy| policy.operations_reserve_requests);
+        self.request_gate
+            .resize(limits.max_concurrent_requests, operations_reserve);
+        *self.topology.lock().await = candidate_topology;
+        self.metrics.record_reload(if sockets_changed {
+            ReloadResult::HandoffPublished
+        } else {
+            ReloadResult::Published
+        });
         Ok(DataPlaneReloadReport {
             generation,
             previous_revision: current.revision.clone(),
             revision: next_revision,
             changed: true,
+            sockets_changed,
         })
     }
 }
@@ -635,220 +794,132 @@ pub struct DataPlaneReloadReport {
     pub previous_revision: String,
     pub revision: String,
     pub changed: bool,
+    /// True when the published generation changed the listening-socket set:
+    /// added sockets bound before publication, removed sockets drain after.
+    pub sockets_changed: bool,
 }
 
-#[derive(PartialEq, Eq)]
+/// The restart-required identity of a configuration, shrunk to what genuinely
+/// cannot hot-apply:
+///
+/// - the listening-socket set (a socket can only change by binding a new one
+///   or closing an old one — the supervisor hands those off instead), and
+/// - subsystems whose runtime state is built once per process (tunnel gateway,
+///   usage-metering channel), and
+/// - the resource-pressure controller, whose enabled flag is fixed at runtime
+///   construction.
+///
+/// Everything else — connection/request limits, HTTP protocol parameters,
+/// TLS policy and certificate file contents, proxy-protocol policy, drain and
+/// reload tuning — hot-applies: per-connection resolution reads the published
+/// generation, and admission semaphores reconcile their capacity.
+#[derive(Clone, PartialEq, Eq)]
 struct ReloadTopology {
     app_key: String,
-    maximum_connections: usize,
-    maximum_requests: usize,
-    request_timeout_ms: u64,
-    request_body_start_timeout_ms: u64,
-    request_body_idle_timeout_ms: u64,
-    response_body_idle_timeout_ms: u64,
-    connection_write_timeout_ms: u64,
-    http1_keep_alive_idle_timeout_ms: u64,
-    max_connection_age_ms: u64,
-    drain_timeout_ms: u64,
-    reload: ReloadConfig,
+    sockets: Vec<SocketTopology>,
+    tunnel_fingerprint: [u8; 32],
+    usage_metering_fingerprint: [u8; 32],
     resource_pressure: Option<sdkwork_webserver_core::ResourcePressureConfig>,
-    protocol_limits: HttpProtocolTopology,
-    listeners: Vec<ListenerTopology>,
-    streams: Vec<StreamTopology>,
 }
 
-/// The reload-fixed portion of one `[[stream.server]]`: a stream listener set
-/// change requires a restart (same contract as HTTP listeners).
-#[derive(PartialEq, Eq)]
-struct StreamTopology {
-    id: String,
-    bind: String,
-    port: u16,
+/// One listening socket identity. `socket_key` groups stream TCP virtual
+/// servers that share one socket (SNI preread); group membership changes do
+/// not change the socket and therefore hot-apply.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub(crate) struct SocketTopology {
+    pub(crate) kind: SocketKind,
+    pub(crate) id: String,
+    pub(crate) bind: String,
+    pub(crate) port: u16,
+    pub(crate) socket_key: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub(crate) enum SocketKind {
+    Http,
+    StreamTcp,
+    StreamUdp,
+    Mail,
 }
 
 impl ReloadTopology {
-    fn from_app(app: &CompiledWebServerApp) -> Result<Self, DataPlaneError> {
-        let mut listeners = app
-            .listeners()
-            .map(|listener| {
-                let tls = listener
-                    .tls_policy_ref
-                    .as_deref()
-                    .map(|policy_id| tls_topology(app, policy_id))
-                    .transpose()?;
-                Ok(ListenerTopology {
-                    id: listener.id.clone(),
-                    bind: listener.bind.clone(),
-                    port: listener.port,
-                    protocols: listener.protocols.clone(),
-                    maximum_connections: listener
-                        .max_connections
-                        .unwrap_or(app.config().limits.max_connections),
-                    proxy_protocol: listener.proxy_protocol.clone(),
-                    tls,
-                })
-            })
-            .collect::<Result<Vec<_>, DataPlaneError>>()?;
-        listeners.sort_by(|left, right| left.id.cmp(&right.id));
-        let mut streams = app
-            .streams()
-            .iter()
-            .map(|stream| StreamTopology {
-                id: stream.id.clone(),
-                bind: stream.bind.clone(),
-                port: stream.port,
-            })
-            .collect::<Vec<_>>();
-        streams.sort_by(|left, right| left.id.cmp(&right.id));
-        Ok(Self {
-            app_key: app.config().app_key.clone(),
-            maximum_connections: app.config().limits.max_connections,
-            maximum_requests: app.config().limits.max_concurrent_requests,
-            request_timeout_ms: app.config().limits.request_timeout_ms,
-            request_body_start_timeout_ms: app.config().limits.request_body_start_timeout_ms,
-            request_body_idle_timeout_ms: app.config().limits.request_body_idle_timeout_ms,
-            response_body_idle_timeout_ms: app.config().limits.response_body_idle_timeout_ms,
-            connection_write_timeout_ms: app.config().limits.connection_write_timeout_ms,
-            http1_keep_alive_idle_timeout_ms: app.config().limits.http1_keep_alive_idle_timeout_ms,
-            max_connection_age_ms: app.config().limits.max_connection_age_ms,
-            drain_timeout_ms: app
-                .config()
-                .deployment
-                .drain_timeout_ms
-                .unwrap_or(app.config().limits.drain_timeout_ms),
-            reload: app.config().deployment.reload.clone(),
-            resource_pressure: app.config().deployment.resource_pressure.clone(),
-            protocol_limits: HttpProtocolTopology::from_app(app),
-            listeners,
-            streams,
-        })
+    /// The listening-socket set of a compiled app. Stream TCP servers sharing
+    /// a `socket_key` collapse to one socket entry (the authored-order first
+    /// member owns the identity).
+    fn socket_set(app: &CompiledWebServerApp) -> Vec<SocketTopology> {
+        let mut sockets: Vec<SocketTopology> = Vec::new();
+        for listener in app.listeners() {
+            sockets.push(SocketTopology {
+                kind: SocketKind::Http,
+                id: listener.id.clone(),
+                bind: listener.bind.clone(),
+                port: listener.port,
+                socket_key: None,
+            });
+        }
+        for stream in app.streams() {
+            match stream.protocol {
+                sdkwork_webserver_core::StreamProtocol::Tcp => {
+                    let socket_key = stream.socket_key().to_owned();
+                    if sockets.iter().any(|socket| {
+                        socket.kind == SocketKind::StreamTcp
+                            && socket.socket_key.as_deref() == Some(socket_key.as_str())
+                    }) {
+                        continue;
+                    }
+                    sockets.push(SocketTopology {
+                        kind: SocketKind::StreamTcp,
+                        id: stream.id.clone(),
+                        bind: stream.bind.clone(),
+                        port: stream.port,
+                        socket_key: Some(socket_key),
+                    });
+                }
+                sdkwork_webserver_core::StreamProtocol::Udp => {
+                    sockets.push(SocketTopology {
+                        kind: SocketKind::StreamUdp,
+                        id: stream.id.clone(),
+                        bind: stream.bind.clone(),
+                        port: stream.port,
+                        socket_key: None,
+                    });
+                }
+            }
+        }
+        for mail_server in app.mail_servers() {
+            sockets.push(SocketTopology {
+                kind: SocketKind::Mail,
+                id: mail_server.id.clone(),
+                bind: mail_server.bind.clone(),
+                port: mail_server.port,
+                socket_key: None,
+            });
+        }
+        sockets.sort();
+        sockets
     }
-}
 
-#[derive(PartialEq, Eq)]
-struct HttpProtocolTopology {
-    http1_max_pipeline_depth: usize,
-    max_request_header_bytes: usize,
-    max_request_line_bytes: usize,
-    max_request_method_bytes: usize,
-    max_request_target_bytes: usize,
-    max_header_name_bytes: usize,
-    max_header_value_bytes: usize,
-    max_request_headers: usize,
-    request_header_timeout_ms: u64,
-    max_chunk_line_bytes: usize,
-    max_trailer_bytes: usize,
-    max_trailers: usize,
-    http2_max_concurrent_streams: u32,
-    http2_keep_alive_interval_ms: u64,
-    http2_keep_alive_timeout_ms: u64,
-    http2_max_pending_accept_reset_streams: usize,
-    http2_max_local_error_reset_streams: usize,
-    http2_max_send_buffer_bytes: usize,
-    http2_max_header_list_bytes: u32,
-    http2_max_frame_bytes: u32,
-    http2_abuse_window_ms: u64,
-    http2_max_frames_per_window: usize,
-    http2_max_new_streams_per_window: usize,
-    http2_max_reset_frames_per_window: usize,
-    http2_max_continuation_frames: usize,
-    http2_max_encoded_header_block_bytes: usize,
-}
-
-impl HttpProtocolTopology {
     fn from_app(app: &CompiledWebServerApp) -> Self {
-        let limits = &app.config().limits;
         Self {
-            http1_max_pipeline_depth: limits.http1_max_pipeline_depth,
-            max_request_header_bytes: limits.max_request_header_bytes,
-            max_request_line_bytes: limits.max_request_line_bytes,
-            max_request_method_bytes: limits.max_request_method_bytes,
-            max_request_target_bytes: limits.max_request_target_bytes,
-            max_header_name_bytes: limits.max_header_name_bytes,
-            max_header_value_bytes: limits.max_header_value_bytes,
-            max_request_headers: limits.max_request_headers,
-            request_header_timeout_ms: limits.request_header_timeout_ms,
-            max_chunk_line_bytes: limits.max_chunk_line_bytes,
-            max_trailer_bytes: limits.max_trailer_bytes,
-            max_trailers: limits.max_trailers,
-            http2_max_concurrent_streams: limits.http2_max_concurrent_streams,
-            http2_keep_alive_interval_ms: limits.http2_keep_alive_interval_ms,
-            http2_keep_alive_timeout_ms: limits.http2_keep_alive_timeout_ms,
-            http2_max_pending_accept_reset_streams: limits.http2_max_pending_accept_reset_streams,
-            http2_max_local_error_reset_streams: limits.http2_max_local_error_reset_streams,
-            http2_max_send_buffer_bytes: limits.http2_max_send_buffer_bytes,
-            http2_max_header_list_bytes: limits.http2_max_header_list_bytes,
-            http2_max_frame_bytes: limits.http2_max_frame_bytes,
-            http2_abuse_window_ms: limits.http2_abuse_window_ms,
-            http2_max_frames_per_window: limits.http2_max_frames_per_window,
-            http2_max_new_streams_per_window: limits.http2_max_new_streams_per_window,
-            http2_max_reset_frames_per_window: limits.http2_max_reset_frames_per_window,
-            http2_max_continuation_frames: limits.http2_max_continuation_frames,
-            http2_max_encoded_header_block_bytes: limits.http2_max_encoded_header_block_bytes,
+            app_key: app.config().app_key.clone(),
+            sockets: Self::socket_set(app),
+            tunnel_fingerprint: subsystem_fingerprint(app.config().tunnel.as_ref()),
+            usage_metering_fingerprint: subsystem_fingerprint(app.config().usage_metering.as_ref()),
+            resource_pressure: app.config().deployment.resource_pressure.clone(),
         }
     }
 }
 
-#[derive(PartialEq, Eq)]
-struct ListenerTopology {
-    id: String,
-    bind: String,
-    port: u16,
-    protocols: Vec<ListenerProtocol>,
-    maximum_connections: usize,
-    proxy_protocol: Option<sdkwork_webserver_core::ProxyProtocolConfig>,
-    tls: Option<TlsTopology>,
-}
-
-#[derive(PartialEq, Eq)]
-struct TlsTopology {
-    policy: TlsPolicyConfig,
-    certificates: Vec<TlsCertificateTopology>,
-}
-
-#[derive(PartialEq, Eq)]
-struct TlsCertificateTopology {
-    certificate: CertificateConfig,
-    certificate_path: PathBuf,
-    certificate_sha256: [u8; 32],
-    private_key_path: PathBuf,
-    private_key_sha256: [u8; 32],
-}
-
-fn tls_topology(
-    app: &CompiledWebServerApp,
-    policy_id: &str,
-) -> Result<TlsTopology, DataPlaneError> {
-    let policy = app
-        .tls_policy(policy_id)
-        .expect("semantic validation guarantees TLS policy references");
-    let certificates = policy
-        .certificate_refs()
-        .map(|certificate_ref| tls_certificate_topology(app, certificate_ref))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(TlsTopology {
-        policy: policy.clone(),
-        certificates,
-    })
-}
-
-fn tls_certificate_topology(
-    app: &CompiledWebServerApp,
-    certificate_ref: &str,
-) -> Result<TlsCertificateTopology, DataPlaneError> {
-    let certificate = app
-        .certificate(certificate_ref)
-        .expect("semantic validation guarantees certificate references");
-    let (certificate_path, private_key_path) = app
-        .certificate_paths(&certificate.id)
-        .expect("compilation resolves certificate paths");
-    Ok(TlsCertificateTopology {
-        certificate: certificate.clone(),
-        certificate_path: certificate_path.to_path_buf(),
-        certificate_sha256: bounded_file_sha256(certificate_path)?,
-        private_key_path: private_key_path.to_path_buf(),
-        private_key_sha256: bounded_file_sha256(private_key_path)?,
-    })
+/// Hashes a process-built subsystem's configuration. The config types always
+/// serialize (the compiler validated them), like `revision_for_compiled_app`.
+fn subsystem_fingerprint<T: serde::Serialize>(value: Option<&T>) -> [u8; 32] {
+    match value {
+        None => Sha256::digest(b"absent").into(),
+        Some(value) => {
+            let bytes = serde_json::to_vec(value).expect("validated config always serializes");
+            Sha256::digest(bytes).into()
+        }
+    }
 }
 
 pub(crate) fn read_bounded_tls_material(path: &Path) -> Result<Vec<u8>, DataPlaneError> {
@@ -872,10 +943,6 @@ pub(crate) fn read_bounded_tls_material(path: &Path) -> Result<Vec<u8>, DataPlan
         });
     }
     Ok(bytes)
-}
-
-fn bounded_file_sha256(path: &Path) -> Result<[u8; 32], DataPlaneError> {
-    Ok(Sha256::digest(read_bounded_tls_material(path)?).into())
 }
 
 fn revision_for_compiled_app(app: &CompiledWebServerApp) -> String {

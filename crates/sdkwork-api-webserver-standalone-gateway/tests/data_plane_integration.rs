@@ -5743,7 +5743,7 @@ async fn enforces_http1_header_count_bytes_timeout_and_strict_framing() {
 }
 
 #[tokio::test]
-async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
+async fn atomically_reloads_valid_config_hot_applies_limits_and_hands_off_sockets() {
     let directory = TempDir::new().expect("create temp directory");
     let port = available_port();
     let path = write_config(
@@ -5777,28 +5777,6 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
         "generation-two"
     );
 
-    let restart_port = available_port();
-    fs::write(
-        &path,
-        serde_json::to_vec_pretty(&watched_response_config(
-            restart_port,
-            "restart-only-candidate",
-        ))
-        .expect("serialize restart-only candidate"),
-    )
-    .expect("write restart-only candidate");
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
-
     let mut protocol_limit_candidate = watched_response_config(port, "protocol-limit-candidate");
     protocol_limit_candidate["limits"]["requestHeaderTimeoutMs"] = json!(500);
     fs::write(
@@ -5808,16 +5786,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write protocol-limit candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after protocol-limit topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "protocol-limit-candidate").await;
 
     let mut request_field_candidate = watched_response_config(port, "request-field-candidate");
     request_field_candidate["limits"]["maxRequestTargetBytes"] = json!(4_096);
@@ -5828,16 +5799,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write request-field candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after request-field topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "request-field-candidate").await;
 
     let mut http2_abuse_candidate = watched_response_config(port, "http2-abuse-candidate");
     http2_abuse_candidate["limits"]["http2MaxFramesPerWindow"] = json!(9_999);
@@ -5848,16 +5812,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write HTTP/2 abuse-limit candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after HTTP/2 abuse-limit topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "http2-abuse-candidate").await;
 
     let mut request_admission_candidate =
         watched_response_config(port, "request-admission-candidate");
@@ -5869,16 +5826,15 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write request-admission candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after request-admission topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "request-admission-candidate",
+    )
+    .await;
 
     let mut keep_alive_candidate = watched_response_config(port, "keep-alive-candidate");
     keep_alive_candidate["limits"]["http1KeepAliveIdleTimeoutMs"] = json!(60_000);
@@ -5889,16 +5845,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write HTTP/1 Keep-Alive candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after Keep-Alive topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "keep-alive-candidate").await;
 
     let mut h2_keep_alive_interval_candidate =
         watched_response_config(port, "h2-keep-alive-interval-candidate");
@@ -5910,16 +5859,15 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write H2 Keep-Alive interval candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after H2 Keep-Alive interval rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "h2-keep-alive-interval-candidate",
+    )
+    .await;
 
     let mut maximum_age_candidate = watched_response_config(port, "maximum-age-candidate");
     maximum_age_candidate["limits"]["maxConnectionAgeMs"] = json!(3_000_000);
@@ -5930,16 +5878,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write connection maximum-age candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after maximum-age topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "maximum-age-candidate").await;
 
     let mut h2_keep_alive_timeout_candidate =
         watched_response_config(port, "h2-keep-alive-timeout-candidate");
@@ -5951,16 +5892,15 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write H2 Keep-Alive timeout candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after H2 Keep-Alive timeout rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "h2-keep-alive-timeout-candidate",
+    )
+    .await;
 
     let mut pipeline_candidate = watched_response_config(port, "pipeline-candidate");
     pipeline_candidate["limits"]["http1MaxPipelineDepth"] = json!(8);
@@ -5971,16 +5911,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write HTTP/1 Pipeline candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after Pipeline topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "pipeline-candidate").await;
 
     let mut request_body_start_candidate =
         watched_response_config(port, "request-body-start-candidate");
@@ -5992,16 +5925,15 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write request-Body-start candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after request-Body-start topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "request-body-start-candidate",
+    )
+    .await;
 
     let mut request_body_idle_candidate =
         watched_response_config(port, "request-body-idle-candidate");
@@ -6013,16 +5945,15 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write request-Body-idle candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after request-Body-idle topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(
+        &client,
+        &url,
+        "test.localhost",
+        "request-body-idle-candidate",
+    )
+    .await;
 
     let mut response_idle_candidate = watched_response_config(port, "response-idle-candidate");
     response_idle_candidate["limits"]["responseBodyIdleTimeoutMs"] = json!(25_000);
@@ -6033,16 +5964,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write response-idle candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after response-idle topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "response-idle-candidate").await;
 
     let mut write_timeout_candidate = watched_response_config(port, "write-timeout-candidate");
     write_timeout_candidate["limits"]["connectionWriteTimeoutMs"] = json!(25_000);
@@ -6053,16 +5977,9 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
     )
     .expect("write write-timeout candidate");
     tokio::time::sleep(Duration::from_millis(300)).await;
-    let retained = client
-        .get(&url)
-        .header("host", "test.localhost")
-        .send()
-        .await
-        .expect("request generation after write-timeout topology rejection");
-    assert_eq!(
-        retained.text().await.expect("read retained response"),
-        "generation-two"
-    );
+    // The candidate keeps the socket set, so it hot-applies: the published
+    // generation answers with its own body on the same socket.
+    wait_for_body(&client, &url, "test.localhost", "write-timeout-candidate").await;
 
     let mut body_limit_generation = watched_response_config(port, "body-limit-generation");
     body_limit_generation["limits"]["maxRequestBodyBytes"] = json!(1);
@@ -6085,6 +6002,21 @@ async fn atomically_reloads_valid_config_and_retains_generation_on_failure() {
         &watched_response_config(port, "generation-three"),
     );
     wait_for_body(&client, &url, "test.localhost", "generation-three").await;
+
+    // A listener-port change is a zero-downtime handoff: the new socket binds
+    // before the generation publishes, the old socket drains after it, and the
+    // in-flight surface never disappears (nginx SIGHUP equivalence).
+    let handoff_port = available_port();
+    let handoff_path = path.clone();
+    fs::write(
+        &handoff_path,
+        serde_json::to_vec_pretty(&watched_response_config(handoff_port, "handoff-candidate"))
+            .expect("serialize handoff candidate"),
+    )
+    .expect("write handoff candidate");
+    let handoff_url = format!("http://127.0.0.1:{handoff_port}/");
+    wait_for_body(&client, &handoff_url, "test.localhost", "handoff-candidate").await;
+
     stop_data_plane(shutdown, task).await;
 }
 
@@ -6503,4 +6435,407 @@ server {{
     );
 
     stop_data_plane(shutdown_tx, task).await;
+}
+
+fn two_listener_config(port_a: u16, port_b: u16, body: &str) -> Value {
+    let mut config = base_config(
+        port_a,
+        json!([{
+            "id": "response",
+            "type": "respond",
+            "status": 200,
+            "body": body
+        }]),
+        json!([]),
+        json!([{
+            "id": "response-route",
+            "match": {"pathType": "prefix", "path": "/"},
+            "resourceRef": "response"
+        }]),
+    );
+    config["listeners"]
+        .as_array_mut()
+        .expect("listeners array")
+        .push(json!({
+            "id": "second",
+            "bind": "127.0.0.1",
+            "port": port_b,
+            "protocols": ["http1"],
+            "defaultVirtualHostRef": "second-host",
+            "maxConnections": 64
+        }));
+    config["virtualHosts"]
+        .as_array_mut()
+        .expect("virtual hosts array")
+        .push(json!({
+            "id": "second-host",
+            "listenerRefs": ["second"],
+            "serverNames": ["second.localhost"],
+            "routes": [{
+                "id": "second-response-route",
+                "match": {"pathType": "prefix", "path": "/"},
+                "resourceRef": "response"
+            }]
+        }));
+    config["deployment"] = json!({
+        "drainTimeoutMs": 1000,
+        "reload": {"mode": "watch", "pollIntervalMs": 100}
+    });
+    config
+}
+
+fn add_remove_listeners_config(port_a: u16, port_c: u16, body: &str) -> Value {
+    // Listener B is gone; listener C takes its place with its own virtual
+    // host (the default reference must point at a host that lists it).
+    let mut config = two_listener_config(port_a, port_c, body);
+    config["listeners"][1]["id"] = json!("third");
+    config["listeners"][1]["defaultVirtualHostRef"] = json!("third-host");
+    config["virtualHosts"][1] = json!({
+        "id": "third-host",
+        "listenerRefs": ["third"],
+        "serverNames": ["third.localhost"],
+        "routes": [{
+            "id": "third-response-route",
+            "match": {"pathType": "prefix", "path": "/"},
+            "resourceRef": "response"
+        }]
+    });
+    config
+}
+
+fn single_file_toml_source(port: u16, body: &str) -> String {
+    format!(
+        "[[http.server]]\nlisten = [\"{port}\"]\nserverName = [\"src.localhost\"]\n\n[[http.server.location]]\nmatch = \"/\"\nreturnStatus = 200\nreturnBody = \"{body}\"\n"
+    )
+}
+
+fn spawn_watched_toml_source_data_plane(
+    config_path: &Path,
+) -> (
+    oneshot::Sender<()>,
+    JoinHandle<Result<(), sdkwork_api_webserver_standalone_gateway::DataPlaneError>>,
+) {
+    let config_path = config_path.to_path_buf();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let task = tokio::spawn(async move {
+        sdkwork_api_webserver_standalone_gateway::run_data_plane_from_source_with_operations_until(
+            config_path,
+            sdkwork_webserver_core::ConfigFormat::Toml,
+            Vec::new(),
+            None,
+            async move {
+                let _ = shutdown_rx.await;
+            },
+        )
+        .await
+    });
+    (shutdown_tx, task)
+}
+
+/// One TLS probe: connects with the given roots, returns the served leaf
+/// certificate DER and the response body. Fallible: the wait loop retries a
+/// listener that is not accepting yet.
+async fn tls_probe_leaf_and_body(
+    port: u16,
+    roots: &rustls::RootCertStore,
+) -> Result<(Vec<u8>, String), String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    // The process-level provider is installed lazily by the runtime; the probe
+    // may run before the data plane has built its first TLS acceptor.
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
+    let client_config = ClientConfig::builder()
+        .with_root_certificates(roots.clone())
+        .with_no_client_auth();
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
+    let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .map_err(|error| format!("tls tcp connect: {error}"))?;
+    let mut tls = connector
+        .connect(
+            ServerName::try_from("localhost").expect("tls server name"),
+            stream,
+        )
+        .await
+        .map_err(|error| format!("tls handshake: {error}"))?;
+    let leaf = tls
+        .get_ref()
+        .1
+        .peer_certificates()
+        .expect("peer certificate")[0]
+        .to_vec();
+    tls.write_all(b"GET / HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\n\r\n")
+        .await
+        .map_err(|error| format!("write tls request: {error}"))?;
+    let mut response = Vec::new();
+    tls.read_to_end(&mut response)
+        .await
+        .map_err(|error| format!("read tls response: {error}"))?;
+    Ok((leaf, String::from_utf8_lossy(&response).to_string()))
+}
+
+/// Polls until the TLS endpoint serves the expected body AND the expected
+/// leaf certificate.
+async fn wait_for_tls_leaf_and_body(
+    port: u16,
+    roots: &rustls::RootCertStore,
+    expected_body: &str,
+    expected_leaf: &[u8],
+    message: &str,
+) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{message}: timed out waiting for the expected certificate and body"
+        );
+        if let Ok((leaf, body)) = tls_probe_leaf_and_body(port, roots).await {
+            if leaf == expected_leaf && body.contains(expected_body) {
+                return;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// nginx SIGHUP equivalence (`ops.reload.listener-handoff`): one handoff adds a
+/// listener and removes another; the removed listener drains its in-flight
+/// connection instead of resetting it, new connections to it are refused after
+/// the drain, and the kept listener never drops.
+#[tokio::test]
+async fn listener_handoff_binds_added_sockets_and_drains_removed_without_client_reset() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::new("debug"))
+        .with_test_writer()
+        .try_init();
+    let directory = TempDir::new().expect("create temp directory");
+    let port_a = available_port();
+    let port_b = available_port();
+    let path = write_config(
+        directory.path(),
+        &two_listener_config(port_a, port_b, "generation-one"),
+    );
+    let (shutdown, task) = spawn_watched_data_plane(&path);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
+    let url_a = format!("http://127.0.0.1:{port_a}/");
+    let url_b = format!("http://127.0.0.1:{port_b}/");
+    wait_for_body(&client, &url_a, "test.localhost", "generation-one").await;
+    wait_for_body(&client, &url_b, "second.localhost", "generation-one").await;
+
+    // An in-flight request on the listener that is about to be removed: the
+    // request is fully written but unread, so the handoff must not reset it.
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port_b))
+        .await
+        .expect("connect to removed listener before handoff");
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nhost: second.localhost\r\nconnection: close\r\n\r\n")
+        .await
+        .expect("write request");
+    tokio::time::sleep(Duration::from_millis(150)).await;
+
+    // One candidate adds listener C and removes listener B; listener A stays.
+    let port_c = available_port();
+    write_config(
+        directory.path(),
+        &add_remove_listeners_config(port_a, port_c, "handoff-generation"),
+    );
+    let url_c = format!("http://127.0.0.1:{port_c}/");
+    wait_for_body(&client, &url_a, "test.localhost", "handoff-generation").await;
+    wait_for_body(&client, &url_c, "third.localhost", "handoff-generation").await;
+
+    // The in-flight request on the removed listener completes.
+    let mut response = Vec::new();
+    timeout(Duration::from_secs(3), stream.read_to_end(&mut response))
+        .await
+        .expect("removed listener drains the in-flight request")
+        .expect("read in-flight response");
+    let response = String::from_utf8_lossy(&response);
+    assert!(
+        response.contains("generation-one"),
+        "the in-flight response must arrive unreset: {response}"
+    );
+
+    // New connections to the removed listener are refused after its drain.
+    let mut refused_after_drain = false;
+    for _ in 0..30 {
+        match tokio::net::TcpStream::connect(("127.0.0.1", port_b)).await {
+            Ok(socket) => drop(socket),
+            Err(_) => {
+                refused_after_drain = true;
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        refused_after_drain,
+        "removed listener must stop accepting after its drain"
+    );
+
+    stop_data_plane(shutdown, task).await;
+}
+
+/// A handoff whose added socket cannot bind fails closed: the previous
+/// generation keeps serving, and the watcher stays healthy for later
+/// candidates (nginx: "bind() ... failed, configuration unchanged").
+#[tokio::test]
+async fn listener_handoff_fails_closed_when_added_socket_cannot_bind() {
+    let directory = TempDir::new().expect("create temp directory");
+    let port = available_port();
+    let path = write_config(
+        directory.path(),
+        &watched_response_config(port, "generation-one"),
+    );
+    let (shutdown, task) = spawn_watched_data_plane(&path);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
+    let url = format!("http://127.0.0.1:{port}/");
+    wait_for_body(&client, &url, "test.localhost", "generation-one").await;
+
+    // An out-of-band listener holds the port the candidate wants to move to.
+    let occupied = available_port();
+    let _blocker =
+        std::net::TcpListener::bind(("127.0.0.1", occupied)).expect("hold the contested port");
+
+    let mut candidate = watched_response_config(occupied, "bind-fail-candidate");
+    candidate["limits"]["maxConnections"] = json!(256);
+    write_config(directory.path(), &candidate);
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    // The bind failure retains the previous generation on the original port.
+    wait_for_body(&client, &url, "test.localhost", "generation-one").await;
+
+    // The watcher survived the failed handoff: the next valid candidate
+    // publishes on the original socket.
+    write_config(
+        directory.path(),
+        &watched_response_config(port, "recovered-generation"),
+    );
+    wait_for_body(&client, &url, "test.localhost", "recovered-generation").await;
+
+    stop_data_plane(shutdown, task).await;
+}
+
+/// Static TLS material on a kept socket hot-applies: new connections serve the
+/// new certificate while the socket never rebinds (nginx rebuilds its workers
+/// with the new certificates the same way).
+#[tokio::test]
+async fn tls_material_change_hot_applies_to_new_connections() {
+    let directory = TempDir::new().expect("create temp directory");
+    let port = available_port();
+    let leaf_a = write_self_signed_certificate(directory.path(), "server", &["localhost"]);
+    let mut config = single_https_config(port, "localhost", "server");
+    config["resources"][0]["body"] = json!("tls-handoff-generation");
+    config["deployment"] = json!({
+        "drainTimeoutMs": 1000,
+        "reload": {"mode": "watch", "pollIntervalMs": 100}
+    });
+    let path = write_config(directory.path(), &config);
+    let (shutdown, task) = spawn_watched_data_plane(&path);
+
+    let mut roots = RootCertStore::empty();
+    roots
+        .add(CertificateDer::from(leaf_a.clone()))
+        .expect("trust the first leaf");
+    wait_for_tls_leaf_and_body(
+        port,
+        &roots,
+        "tls-handoff-generation",
+        &leaf_a,
+        "first certificate serves the initial generation",
+    )
+    .await;
+
+    // Overwrite the same certificate files, then trigger a reload the way an
+    // operator rotates certificates on nginx: swap the files, then reload the
+    // configuration (any config change publishes a generation whose build
+    // re-reads the material; SIGHUP forces the same attempt).
+    let leaf_b = write_self_signed_certificate(directory.path(), "server", &["localhost"]);
+    assert_ne!(leaf_a, leaf_b, "the test must mint two distinct leaves");
+    let mut reload_candidate = single_https_config(port, "localhost", "server");
+    reload_candidate["resources"][0]["body"] = json!("tls-handoff-generation");
+    reload_candidate["deployment"] = json!({
+        "drainTimeoutMs": 1000,
+        "reload": {"mode": "watch", "pollIntervalMs": 100}
+    });
+    reload_candidate["limits"] = json!({"requestTimeoutMs": 5001, "drainTimeoutMs": 1000});
+    write_config(directory.path(), &reload_candidate);
+    roots
+        .add(CertificateDer::from(leaf_b.clone()))
+        .expect("trust the second leaf");
+    wait_for_tls_leaf_and_body(
+        port,
+        &roots,
+        "tls-handoff-generation",
+        &leaf_b,
+        "new connections serve the replaced certificate",
+    )
+    .await;
+
+    stop_data_plane(shutdown, task).await;
+}
+
+/// A TOML source with the operator-declared watch mode reloads on file
+/// changes and hands off a listener-port change without a restart.
+#[tokio::test]
+async fn toml_source_watch_publishes_generations_and_hands_off_listeners() {
+    let directory = TempDir::new().expect("create temp directory");
+    let port = available_port();
+    let path = directory.path().join("server.toml");
+    fs::write(&path, single_file_toml_source(port, "toml-generation-one"))
+        .expect("write server.toml");
+    std::env::set_var("SDKWORK_WEBSERVER_CONFIG_RELOAD_MODE", "watch");
+    std::env::set_var("SDKWORK_WEBSERVER_CONFIG_RELOAD_POLL_INTERVAL_MS", "100");
+    let (shutdown, task) = spawn_watched_toml_source_data_plane(&path);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
+    let url = format!("http://127.0.0.1:{port}/");
+    wait_for_body(&client, &url, "src.localhost", "toml-generation-one").await;
+
+    fs::write(&path, single_file_toml_source(port, "toml-generation-two"))
+        .expect("write server.toml candidate");
+    wait_for_body(&client, &url, "src.localhost", "toml-generation-two").await;
+
+    // A listen-port change hands off: the new socket serves, the old one drains.
+    let handoff_port = available_port();
+    fs::write(
+        &path,
+        single_file_toml_source(handoff_port, "toml-handoff-generation"),
+    )
+    .expect("write server.toml handoff candidate");
+    let handoff_url = format!("http://127.0.0.1:{handoff_port}/");
+    wait_for_body(
+        &client,
+        &handoff_url,
+        "src.localhost",
+        "toml-handoff-generation",
+    )
+    .await;
+    let mut refused_after_drain = false;
+    for _ in 0..30 {
+        match tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
+            Ok(socket) => drop(socket),
+            Err(_) => {
+                refused_after_drain = true;
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        refused_after_drain,
+        "the retired TOML listener must stop accepting after its drain"
+    );
+
+    std::env::remove_var("SDKWORK_WEBSERVER_CONFIG_RELOAD_MODE");
+    std::env::remove_var("SDKWORK_WEBSERVER_CONFIG_RELOAD_POLL_INTERVAL_MS");
+    stop_data_plane(shutdown, task).await;
 }

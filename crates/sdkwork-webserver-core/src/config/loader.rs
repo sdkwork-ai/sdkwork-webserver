@@ -62,6 +62,20 @@ impl CompiledWebServerRevision {
     pub fn into_app(self) -> CompiledWebServerApp {
         self.app
     }
+
+    /// Builds a revision from an already-compiled app (TOML/nginx sources,
+    /// which have no single file hash). The revision identity matches the
+    /// data-plane runtime's own `runtime:{sha256}` form, so a reload candidate
+    /// short-circuits against the active generation exactly when the effective
+    /// configuration is unchanged.
+    pub fn from_compiled_app(app: CompiledWebServerApp) -> Self {
+        let bytes = serde_json::to_vec(app.config()).expect("Web Server config always serializes");
+        Self {
+            sha256: format!("runtime:{}", sha256_hash(&bytes)),
+            app,
+            size_bytes: bytes.len() as u64,
+        }
+    }
 }
 
 pub fn load_and_compile_webserver_config(

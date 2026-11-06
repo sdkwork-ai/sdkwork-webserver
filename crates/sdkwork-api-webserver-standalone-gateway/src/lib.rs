@@ -71,7 +71,8 @@ pub use credential_entry_bootstrap::issue_credential_entry_bootstrap_token_to_fi
 pub use data_plane::certificates_metrics::record_certificate_expiry;
 pub use data_plane::{
     probe_data_plane_operations_from_env, run_data_plane_from_config_until,
-    run_data_plane_from_config_with_operations_until, run_data_plane_until,
+    run_data_plane_from_config_with_operations_until,
+    run_data_plane_from_source_with_operations_until, run_data_plane_until,
     run_data_plane_until_with_cluster_overlay, run_data_plane_with_operations_until,
     run_website_data_plane_until, run_website_data_plane_with_operations_until,
     run_website_data_plane_with_tls_operations_until, DataPlaneError, DataPlaneOperationsConfig,

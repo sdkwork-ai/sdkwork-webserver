@@ -4,7 +4,8 @@ use sdkwork_api_webserver_standalone_gateway::{
     build_router, configure_packaged_runtime_roots_from_env,
     issue_credential_entry_bootstrap_token_to_file, reconcile_application_registry_at_startup,
     reconcile_served_domains_at_startup, reset_admin_account_from_env,
-    run_data_plane_from_config_with_operations_until, run_data_plane_with_operations_until,
+    run_data_plane_from_config_with_operations_until,
+    run_data_plane_from_source_with_operations_until, run_data_plane_with_operations_until,
     run_database_migrate_only, validate_adaptive_app_shell_from_env, AdminResetOptions,
     DataPlaneOperationsConfig,
 };
@@ -336,9 +337,11 @@ fn validate_nginx_compat(configured: Option<String>) -> MainResult<()> {
     Ok(())
 }
 
-/// `data-plane` with the unified config loader. JSON configurations keep
-/// their revision-based watch reload; TOML and nginx configurations are
-/// loaded once (their multi-file nature has no single-file revision).
+/// `data-plane` with the unified config loader. Every format shares the same
+/// revision-based watch reload contract: JSON watches the file hash, TOML and
+/// nginx watch a bounded fingerprint of their source tree (the nginx grammar
+/// resolves `include` relatives against its own directory). `deployment.reload`
+/// and `SIGHUP` drive both planes identically.
 async fn run_data_plane_command(
     path: PathBuf,
     format_override: Option<ConfigFormat>,
@@ -354,10 +357,14 @@ async fn run_data_plane_command(
         run_data_plane_from_config_with_operations_until(path, operations, shutdown).await?;
         return Ok(());
     }
-    let compiled = loader
-        .load_and_compile(&path, &options)
-        .map_err(|error| io::Error::other(format!("config materialization failed: {error}")))?;
-    run_data_plane_with_operations_until(compiled, operations, shutdown).await?;
+    run_data_plane_from_source_with_operations_until(
+        path,
+        format,
+        document_root_allowlist_from_env(),
+        operations,
+        shutdown,
+    )
+    .await?;
     Ok(())
 }
 
