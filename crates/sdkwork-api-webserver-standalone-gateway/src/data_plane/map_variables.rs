@@ -182,10 +182,13 @@ impl MapResults {
         let mut values =
             Vec::with_capacity(config.maps.len() + config.geo.len() + config.split_clients.len());
         for map in &config.maps {
-            let value = sdkwork_webserver_core::evaluate_map(map, &ChainedFacts {
-                results_so_far: &values,
-                request: facts,
-            });
+            let value = sdkwork_webserver_core::evaluate_map(
+                map,
+                &ChainedFacts {
+                    results_so_far: &values,
+                    request: facts,
+                },
+            );
             if let Some(name) = map.result.strip_prefix('$') {
                 values.push((name.to_owned(), value));
             }

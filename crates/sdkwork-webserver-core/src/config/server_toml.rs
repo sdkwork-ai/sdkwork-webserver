@@ -14,17 +14,10 @@ use std::{
 use serde_json::{json, Map, Value};
 
 use super::{
-    error::ConfigDiagnostic,
-    error::WebServerConfigError,
-    map_variables::validate_map_definitions,
-    model::CachePolicyConfig,
-    model::MapConfig,
-    model::MapEntryConfig,
-    model::TlsVersion,
-    model::WebServerAppConfig,
-    model::HTTP2_MAX_FRAME_SIZE,
-    network::hostname_upstream_allowed_cidrs,
-    proxy_headers::merge_proxy_set_headers,
+    error::ConfigDiagnostic, error::WebServerConfigError, map_variables::validate_map_definitions,
+    model::CachePolicyConfig, model::MapConfig, model::MapEntryConfig, model::TlsVersion,
+    model::WebServerAppConfig, model::HTTP2_MAX_FRAME_SIZE,
+    network::hostname_upstream_allowed_cidrs, proxy_headers::merge_proxy_set_headers,
     validate_webserver_config,
 };
 use crate::nginx::{parse_nginx_config, NginxDirective};

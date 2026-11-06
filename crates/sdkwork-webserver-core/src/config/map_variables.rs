@@ -483,7 +483,8 @@ pub fn validate_map_value_template_with_pool(
             rest = &after[end..];
             continue;
         }
-        if !is_supported_map_variable(name) && !declared_results.iter().any(|result| *result == name)
+        if !is_supported_map_variable(name)
+            && !declared_results.iter().any(|result| *result == name)
         {
             return Err(format!(
                 "map value `{template}` uses `${name}`, which the runtime does not expand in map context; supported: ${} and $http_<name>/$arg_<name>/$cookie_<name>, or a map result declared earlier in the same configuration",
@@ -703,7 +704,10 @@ pub fn validate_map_declaration<'a>(
 /// # Errors
 /// The unsupported-source diagnostic (with the chain-reference hint) when the
 /// source is neither a built-in request variable nor a declared map result.
-pub fn validate_map_source_with_pool(source: &str, declared_results: &[&str]) -> Result<(), String> {
+pub fn validate_map_source_with_pool(
+    source: &str,
+    declared_results: &[&str],
+) -> Result<(), String> {
     if validate_map_source(source).is_ok() {
         return Ok(());
     }
@@ -888,15 +892,9 @@ mod tests {
         // The caller feeds already-computed map results through the facts
         // provider (data-plane `ChainedFacts`); a value template referencing
         // another map result expands at evaluation time like nginx.
-        let facts = Facts::new(&[
-            ("sdkwork_webserver_mobile_ch", "1"),
-            ("base_surface", "pc"),
-        ]);
+        let facts = Facts::new(&[("sdkwork_webserver_mobile_ch", "1"), ("base_surface", "pc")]);
         assert_eq!(evaluate_map(&chained, &facts), "h5");
-        let facts = Facts::new(&[
-            ("sdkwork_webserver_mobile_ch", ""),
-            ("base_surface", "pc"),
-        ]);
+        let facts = Facts::new(&[("sdkwork_webserver_mobile_ch", ""), ("base_surface", "pc")]);
         assert_eq!(evaluate_map(&chained, &facts), "pc");
     }
 

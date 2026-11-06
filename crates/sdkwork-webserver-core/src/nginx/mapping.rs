@@ -486,11 +486,8 @@ pub fn materialize_nginx_app(
             // pool (nginx resolves map chains; the bounded engine evaluates
             // in declaration order, so a forward or self reference fails
             // closed here).
-            let declared_results: Vec<&str> = mapper
-                .map_results
-                .iter()
-                .map(String::as_str)
-                .collect();
+            let declared_results: Vec<&str> =
+                mapper.map_results.iter().map(String::as_str).collect();
             validate_map_source_with_pool(&map.source, &declared_results)
                 .map_err(|message| NginxConfigError::unsupported(directive, message))?;
             validate_map_declaration(&map, &declared_results)

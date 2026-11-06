@@ -141,9 +141,12 @@ function generateStreamCertificates(directory) {
   const otherCa = path.join(directory, 'tls-other-ca.pem');
   const tlsCert = path.join(directory, 'tls-stream.pem');
   const tlsKey = path.join(directory, 'tls-stream.key');
-  if (fs.existsSync(tlsCa) && fs.existsSync(otherCa) && fs.existsSync(tlsCert) && fs.existsSync(tlsKey)) {
-    return { tlsCa, otherCa, tlsCert, tlsKey };
-  }
+  // Mint fresh certificates on EVERY run: the fixture CA chain is only valid
+  // for three days, and a cached set silently expires between runs — the
+  // runtime then (correctly) refuses the upstream handshake on the expired
+  // certificate and the differential reads as a phantom regression. The
+  // committed oracle carries no certificate material, so a per-run mint keeps
+  // both sides consistent.
   const run = (...args) => {
     const result = spawnSync('openssl', args, { encoding: 'utf8' });
     if (result.error || result.status !== 0) {

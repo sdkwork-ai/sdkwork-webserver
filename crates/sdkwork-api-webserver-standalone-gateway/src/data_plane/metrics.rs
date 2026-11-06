@@ -1394,6 +1394,7 @@ mod tests {
         metrics.record_reload(ReloadResult::Unchanged);
         metrics.record_reload(ReloadResult::RestartRequired);
         metrics.record_reload(ReloadResult::Failed);
+        metrics.record_reload(ReloadResult::HandoffPublished);
         metrics
             .begin_upstream_attempt()
             .finish(UpstreamResult::Timeout);

@@ -908,7 +908,7 @@ async fn connect_once(
         let tls = match connector.connect(server_name, tcp).await {
             Ok(stream) => stream,
             Err(error) => {
-                tracing::debug!(peer = %peer, target = %authority, error = %error, "stream proxy_ssl handshake failed");
+                tracing::warn!(peer = %peer, target = %authority, error = %error, "stream proxy_ssl handshake failed");
                 return Err((ExchangeKind::Transport, health));
             }
         };
