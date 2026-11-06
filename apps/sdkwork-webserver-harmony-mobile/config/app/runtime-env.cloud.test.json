@@ -1,0 +1,19 @@
+{
+  "environment": "test",
+  "deploymentProfile": "cloud",
+  "profileId": "cloud.test",
+  "runtimeTarget": "harmony-native",
+  "webserver": {
+    "apiBaseUrl": "http://server-test.sdkwork.com:8888/app/v3/api",
+    "backendApiBaseUrl": "http://server-test.sdkwork.com:8888/backend/v3/api"
+  },
+  "appbase": {
+    "appApiBaseUrl": "http://server-test.sdkwork.com:8888",
+    "loginUrl": "http://server-test.sdkwork.com:8888"
+  },
+  "metadata": {
+    "profileBinding": "runtime-configurable",
+    "applicationPublicHttpUrl": "http://server-test.sdkwork.com:8888"
+  },
+  "SDKWORK_ACCESS_TOKEN": "eyJhbGciOiJub25lIiwia2lkIjoicHVibGljLWFwcC10b2tlbiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJzZGt3b3JrLXdlYnNlcnZlci1oYXJtb255LW1vYmlsZSIsImF1ZCI6InNka3dvcmstd2Vic2VydmVyLWhhcm1vbnktbW9iaWxlIiwiZGVwbG95bWVudF9tb2RlIjoic2FhcyIsImRlcGxveW1lbnRfcHJvZmlsZSI6ImNsb3VkIiwiZW52aXJvbm1lbnQiOiJ0ZXN0IiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NjcyMjU2MDAsImlzcyI6InNka3dvcmstaWFtLXB1YmxpYyIsImxvZ2luX3Njb3BlIjoiVEVOQU5UIiwib3JnYW5pemF0aW9uX2lkIjoiMCIsInBlcm1pc3Npb25fc2NvcGUiOlsiaWFtOnNlbGYiXSwicnVudGltZV90YXJnZXQiOiJoYXJtb255LW5hdGl2ZSIsInNlc3Npb25faWQiOiJib290c3RyYXAtcHVibGljLXNka3dvcmstd2Vic2VydmVyLWhhcm1vbnktbW9iaWxlLWNsb3VkLnRlc3QiLCJ0ZW5hbnRfaWQiOiIxMDAwMDEiLCJ0b2tlbl9jbGFzcyI6ImFwcGxpY2F0aW9uIiwidG9rZW5fdHlwZSI6ImFjY2VzcyIsInRva2VuX3ZlcnNpb24iOjEsInVzZXJfaWQiOiIwIn0.public"
+}
