@@ -22,7 +22,6 @@ packages:
   - "../sdkwork-iam/sdks/sdkwork-iam-open-sdk/sdkwork-iam-open-sdk-typescript"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-user-center-core-pc-react"
-  - "../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core"
   - "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react"
@@ -82,6 +81,32 @@ packages:
   - "../sdkwork-skills/sdks/sdkwork-skills-backend-sdk/sdkwork-skills-backend-sdk-typescript"
 
 catalog:
+  "@tailwindcss/vite": ^4.3.3
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  react-hook-form: ^7.85.0
+  react-i18next: ^17.0.11
+  i18next: ^26.3.6
+  lucide-react: ^1.31.0
+  motion: ^12.38.0
+  clsx: ^2.1.1
+  tailwind-merge: ^3.6.0
+  tailwindcss: ^4.3.3
+  emoji-picker-react: ^4.18.0
+  qrcode: ^1.5.4
+  "@tiptap/extension-placeholder": ^3.23.4
+  "@tiptap/pm": ^3.23.4
+  "@tiptap/react": ^3.23.4
+  "@tiptap/starter-kit": ^3.23.4
+  typescript: ^6.0.2
+  tsx: ^4.23.12
+  vite: ^8.0.3
+  "@vitejs/plugin-react": ^6.0.5
+  vite-plugin-dts: ^5.0.3
+  vitest: ^4.1.10
+  jsdom: 29.1.1
+  "@types/react": ^19.2.14
+  "@types/react-dom": ^19.2.3
   "@aws-sdk/client-s3": ^3.1145.0
   "@aws-sdk/s3-request-presigner": ^3.1145.0
   "@monaco-editor/react": ^4.7.0
@@ -106,7 +131,6 @@ catalog:
   "@radix-ui/react-tooltip": ^1.2.8
   "@sdkwork/sdk-common": workspace:*
   "@tailwindcss/typography": ^0.5.19
-  "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": ^5.96.2
   "@tauri-apps/api": ~2.11.0
   "@tauri-apps/cli": ~2.11.0
@@ -124,7 +148,7 @@ catalog:
   "@tauri-apps/plugin-window-state": ^2.4.1
   "@testing-library/dom": 10.4.1
   "@testing-library/jest-dom": ^7.0.1
-  "@testing-library/react": 16.3.3
+  "@testing-library/react": 16.3.2
   "@tiptap/core": ^3.23.4
   "@tiptap/extension-bubble-menu": ^3.23.4
   "@tiptap/extension-character-count": ^3.23.4
@@ -134,22 +158,15 @@ catalog:
   "@tiptap/extension-image": ^3.23.4
   "@tiptap/extension-link": ^3.23.4
   "@tiptap/extension-mention": ^3.23.4
-  "@tiptap/extension-placeholder": ^3.23.4
   "@tiptap/extension-task-item": ^3.23.4
   "@tiptap/extension-task-list": ^3.23.4
   "@tiptap/extension-typography": ^3.23.4
   "@tiptap/extension-underline": ^3.23.4
-  "@tiptap/pm": ^3.23.4
-  "@tiptap/react": ^3.23.4
-  "@tiptap/starter-kit": ^3.23.4
   "@tiptap/suggestion": ^3.23.4
   "@types/express": ^4.17.21
   "@types/markdown-it": ^14.1.2
   "@types/node": ^25.9.2
   "@types/qrcode": ^1.5.6
-  "@types/react": ^19.3.0
-  "@types/react-dom": ^19.3.0
-  "@vitejs/plugin-react": ^6.0.5
   "@xterm/addon-fit": ^0.11.0
   "@xterm/addon-image": ^0.9.0
   "@xterm/addon-ligatures": ^0.10.0
@@ -161,38 +178,21 @@ catalog:
   "@xterm/xterm": ^6.0.0
   autoprefixer: ^10.4.27
   class-variance-authority: ^0.7.1
-  clsx: ^2.1.1
   cmdk: ^1.1.1
-  emoji-picker-react: ^4.18.0
   framer-motion: ^12.23.24
-  i18next: ^26.3.6
   immer: ^11.1.4
-  jsdom: 30.1.3
-  lucide-react: ^1.60.0
   markdown-it: ^14.1.1
   marked: ^18.0.5
   monaco-editor: ^0.57.0
-  motion: ^12.38.0
   postcss: ^8.5.8
-  qrcode: ^1.5.4
-  react: ^19.3.1
-  react-dom: ^19.3.1
-  react-hook-form: ^7.85.0
-  react-i18next: ^17.0.11
   react-markdown: ^10.1.0
   react-router: ^7.18.2
-  react-router-dom: ^7.18.4
+  react-router-dom: ^7.18.2
   sonner: ^2.0.7
-  tailwind-merge: ^3.6.0
-  tailwindcss: ^4.3.3
   tailwindcss-animate: ^1.0.7
   tsup: ^8.5.1
-  tsx: ^4.23.12
-  typescript: ^6.0.2
-  vite: ^8.3.4
-  vite-plugin-dts: ^5.0.3
-  vitest: ^5.0.5
   zustand: ^5.0.12
+  linkWorkspacePackages: true
 
 linkWorkspacePackages: true
 

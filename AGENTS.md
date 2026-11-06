@@ -327,11 +327,15 @@ go through them (or the repository pnpm scripts they delegate to):
   `--yes`; `--purge` requires `--yes` in every environment; each run appends
   its exit status to `target/bin-evidence/evidence.log`.
 - Validate with: `node ../sdkwork-specs/tools/check-module-bin.mjs --root .`
+
 <!-- SDKWORK-DESTRUCTIVE-OPERATION-STANDARD: v1 -->
 ## Destructive Operation Safety
+
 Authority: `../sdkwork-specs/DESTRUCTIVE_OPERATION_SPEC.md`.
+
 Deletion must be explicit, enumerated, and reviewable. Deleting by pattern instead of by named
 path is forbidden. Wildcards are for read-only commands only.
+
 - `git rm -r`, `git rm` over a directory or pattern, and `git clean -f`/`-fd`/`-fdx` are
   FORBIDDEN. A recursive `git rm` stages many deletions in one index transaction; if the process
   is interrupted (SIGTERM, timeout, sandbox kill, crash) entries are already gone from disk while
@@ -362,15 +366,21 @@ path is forbidden. Wildcards are for read-only commands only.
   and the native tool path space disagree), and run a single
   `git restore --worktree --pathspec-from-file=<repo-relative-list>`. Never loop one
   version-control call per path; the same termination cause interrupts the loop part-way.
+
 Verification (from the repository root):
+
 ```bash
 node ../sdkwork-specs/tools/sync-agent-destructive-operation-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-DESTRUCTIVE-OPERATION-STANDARD: v1 -->
+
 <!-- SDKWORK-ROLLBACK-RESTRICTION-STANDARD: v1 -->
 ## Rollback Restriction And Fix-Forward Discipline
+
 Authority: `../sdkwork-specs/ROLLBACK_RESTRICTION_SPEC.md`.
+
 Errors are fixed forward. Version-control history is never rewound to make an error disappear.
+
 - A rollback is any operation that moves a ref, resets the index or the working tree to an earlier
   state, discards uncommitted or committed work, or rewrites published history. It is FORBIDDEN as
   the remedy for a defect — a build failure, a type error, a lint failure, a failing test, a merge
@@ -410,15 +420,21 @@ Errors are fixed forward. Version-control history is never rewound to make an er
   revision with `git show <ref>:<path>`, not reasoned about. Fix forward. Never un-restore.
 - Never bypass a hook, signature, or gate with `--force`, `--no-verify`, or `--no-gpg-sign` to
   land a repair.
+
 Verification (from the repository root):
+
 ```bash
 node ../sdkwork-specs/tools/sync-agent-rollback-restriction-standard.mjs --root . --check
 ```
 <!-- /SDKWORK-ROLLBACK-RESTRICTION-STANDARD: v1 -->
+
 <!-- SDKWORK-MAIN-BRANCH-STANDARD: v1 -->
 ## Main-Branch Development
+
 Authority: `../sdkwork-specs/REPOSITORY_BASELINE_SPEC.md` section 1.
+
 Development happens on `main`. Everything authored in this repository is committed onto `main`.
+
 - A working tree that receives authored content MUST have `main` checked out as its current branch
   for the whole time that work is in progress. Commit onto `main` directly; do not commit onto a
   branch a later merge is expected to bring in.
@@ -437,11 +453,14 @@ Development happens on `main`. Everything authored in this repository is committ
   branch, the commits, and the state, and let a human decide: moving commits onto `main` and
   discarding work are both governed by `../sdkwork-specs/DESTRUCTIVE_OPERATION_SPEC.md` and
   `../sdkwork-specs/ROLLBACK_RESTRICTION_SPEC.md`.
+
 Verification (from the repository root):
+
 ```bash
 node ../sdkwork-specs/tools/audit-repository-baseline.mjs --root . --only branch-main
 node ../sdkwork-specs/tools/sync-agent-main-branch-standard.mjs --root . --check
 ```
+
 The first fails when the current branch is anything other than `main`, and reports a detached HEAD
 as `detached`. The second fails when this block is out of date.
 <!-- /SDKWORK-MAIN-BRANCH-STANDARD: v1 -->
