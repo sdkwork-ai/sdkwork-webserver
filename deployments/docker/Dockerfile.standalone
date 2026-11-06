@@ -1,4 +1,7 @@
-FROM debian:bookworm-slim
+# trixie (glibc 2.41), not bookworm (2.36): the release archive carries
+# binaries compiled on ubuntu-24.04+ build hosts (glibc >= 2.39); a bookworm
+# image cannot load them (GLIBC_2.38/2.39 not found at container start).
+FROM debian:trixie-slim
 
 # Full language toolchain: Python 3, Node.js + pnpm, and Rust — the container
 # can build and execute SDKWork module apps (H5/PC) and Rust libraries in

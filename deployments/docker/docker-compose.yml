@@ -125,7 +125,10 @@ x-certificate-worker-common: &certificate-worker-common
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector image: the shared postgres-init scripts (002-enable-pgvector.sh)
+    # enable the vector extension in the workspace schemas, and gateway
+    # knowledgebase schemas require it (bundle compose uses pgvector/pgvector:pg16).
+    image: pgvector/pgvector:pg16
     profiles: [development, test, staging, production]
     restart: unless-stopped
     logging: *default-logging

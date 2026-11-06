@@ -16,7 +16,7 @@ use serde_json::{json, Map, Value};
 use super::{
     error::ConfigDiagnostic,
     error::WebServerConfigError,
-    map_variables::{validate_map_definitions, validate_map_source},
+    map_variables::validate_map_definitions,
     model::CachePolicyConfig,
     model::MapConfig,
     model::MapEntryConfig,
@@ -3067,6 +3067,7 @@ impl<'a> Materializer<'a> {
             ));
         };
         let mut maps: Vec<MapConfig> = Vec::with_capacity(entries.len());
+        let mut declared_results: Vec<String> = Vec::with_capacity(entries.len());
         for (index, entry) in entries.iter().enumerate() {
             let path = format!("server.toml.http.maps[{index}]");
             let entry = entry
@@ -3084,8 +3085,17 @@ impl<'a> Materializer<'a> {
                     materialize_error(&format!("{path}.source"), "`source` is required")
                 })?
                 .to_owned();
-            validate_map_source(&source)
-                .map_err(|message| materialize_error(&format!("{path}.source"), message))?;
+            // Chain-aware: a source may name a map result declared earlier in
+            // this array (nginx resolves map chains; the engine evaluates in
+            // declaration order, so a forward or self reference fails closed).
+            crate::config::map_variables::validate_map_source_with_pool(
+                &source,
+                &declared_results
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|message| materialize_error(&format!("{path}.source"), message))?;
             let result = entry
                 .get("result")
                 .and_then(Value::as_str)
@@ -3142,6 +3152,9 @@ impl<'a> Materializer<'a> {
                         value: value.to_owned(),
                     });
                 }
+            }
+            if let Ok(name) = crate::config::map_variables::parse_variable_reference(&result) {
+                declared_results.push(name.to_owned());
             }
             maps.push(MapConfig {
                 source,

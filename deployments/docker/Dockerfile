@@ -1,4 +1,6 @@
-FROM debian:bookworm-slim
+# trixie (glibc 2.41), not bookworm (2.36): workspace-built binaries target
+# glibc >= 2.39 build hosts and cannot load on a bookworm image.
+FROM debian:trixie-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
