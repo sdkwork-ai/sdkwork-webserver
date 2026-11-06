@@ -137,6 +137,15 @@ importers:
 
   ../sdkwork-app-topology: {}
 
+  ../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@types/node@25.9.9)(jsdom@30.1.3)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   ../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap:
     dependencies:
       '@sdkwork/utils':
@@ -149,6 +158,9 @@ importers:
 
   ../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react:
     dependencies:
+      '@sdkwork/appbase-component-core':
+        specifier: workspace:*
+        version: link:../../../common/foundation/sdkwork-appbase-component-core
       '@sdkwork/core-pc-react':
         specifier: '*'
         version: link:../../../../../sdkwork-core/sdkwork-core-pc-react
@@ -168,6 +180,15 @@ importers:
       '@sdkwork/ui-pc-react':
         specifier: workspace:*
         version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
 
   ../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react:
     dependencies:
@@ -193,6 +214,9 @@ importers:
 
   ../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react:
     dependencies:
+      '@sdkwork/appbase-component-core':
+        specifier: workspace:*
+        version: link:../../../common/foundation/sdkwork-appbase-component-core
       '@sdkwork/runtime-bootstrap':
         specifier: workspace:*
         version: link:../../../common/foundation/sdkwork-runtime-bootstrap
@@ -755,6 +779,9 @@ importers:
       '@sdkwork/iam-backend-sdk':
         specifier: workspace:*
         version: link:../../../../sdks/sdkwork-iam-backend-sdk/sdkwork-iam-backend-sdk-typescript
+      '@sdkwork/iam-credential-entry':
+        specifier: workspace:*
+        version: link:../sdkwork-iam-credential-entry
       '@sdkwork/iam-sdk-adapter':
         specifier: workspace:*
         version: link:../sdkwork-iam-sdk-adapter
@@ -1509,6 +1536,9 @@ importers:
       '@sdkwork/drive-upload-image-core':
         specifier: workspace:*
         version: link:../../../../../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core
+      '@sdkwork/iam-credential-entry':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry
       '@sdkwork/mcp-app-sdk':
         specifier: workspace:*
         version: link:../../../../sdks/sdkwork-mcp-app-sdk/sdkwork-mcp-app-sdk-typescript

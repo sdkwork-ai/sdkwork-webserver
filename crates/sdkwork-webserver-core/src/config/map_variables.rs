@@ -436,7 +436,7 @@ pub fn validate_map_source(source: &str) -> Result<&str, String> {
 
 /// Validate the variables referenced by a map value template.
 pub fn validate_map_value_template(template: &str) -> Result<(), String> {
-    validate_map_value_template_with_captures(template, false)
+    validate_map_value_template_with_pool(template, false, &[])
 }
 
 /// [`validate_map_value_template`] with `$0`–`$9` capture references allowed
@@ -444,6 +444,19 @@ pub fn validate_map_value_template(template: &str) -> Result<(), String> {
 pub fn validate_map_value_template_with_captures(
     template: &str,
     allow_captures: bool,
+) -> Result<(), String> {
+    validate_map_value_template_with_pool(template, allow_captures, &[])
+}
+
+/// [`validate_map_value_template_with_captures`] with the map result
+/// variables (without `$`) declared before this map also accepted: nginx
+/// expands a map value that references another map's result, and the bounded
+/// engine resolves those chains in declaration order, so only backward
+/// references are executable and a forward reference fails closed here.
+pub fn validate_map_value_template_with_pool(
+    template: &str,
+    allow_captures: bool,
+    declared_results: &[&str],
 ) -> Result<(), String> {
     if template.len() > MAX_MAP_VALUE_BYTES {
         return Err(format!(
@@ -470,9 +483,10 @@ pub fn validate_map_value_template_with_captures(
             rest = &after[end..];
             continue;
         }
-        if !is_supported_map_variable(name) {
+        if !is_supported_map_variable(name) && !declared_results.iter().any(|result| *result == name)
+        {
             return Err(format!(
-                "map value `{template}` uses `${name}`, which the runtime does not expand in map context; supported: ${} and $http_<name>/$arg_<name>/$cookie_<name>",
+                "map value `{template}` uses `${name}`, which the runtime does not expand in map context; supported: ${} and $http_<name>/$arg_<name>/$cookie_<name>, or a map result declared earlier in the same configuration",
                 MAP_SOURCE_VARIABLES.join(" $")
             ));
         }
@@ -535,9 +549,16 @@ pub fn expand_map_template(template: &str, variables: &dyn MapVariables) -> Stri
 }
 
 /// Evaluate one `map` declaration against the request facts.
+///
+/// The source variable is resolved structurally here; the executable
+/// vocabulary (built-in request variables plus map results declared earlier
+/// in the same configuration) is enforced by
+/// [`validate_map_source_with_pool`] at configuration-validation time, and
+/// chain sources are answered by the caller's facts provider (the data plane
+/// feeds already-computed map results back through [`MapVariables`]).
 #[must_use]
 pub fn evaluate_map(map: &MapConfig, variables: &dyn MapVariables) -> String {
-    let Ok(source_name) = validate_map_source(&map.source) else {
+    let Ok(source_name) = parse_variable_reference(&map.source) else {
         return String::new();
     };
     let source_value = variables.map_variable(source_name).unwrap_or_default();
@@ -547,6 +568,155 @@ pub fn evaluate_map(map: &MapConfig, variables: &dyn MapVariables) -> String {
         None => matched.template.to_owned(),
     };
     expand_map_template(&template, variables)
+}
+
+/// Validate one `map` declaration's own surface: result-variable naming,
+/// entry keys/values, bounds, and duplicate keys. Cross-map checks (duplicate
+/// result variables, chain-aware source validation) live in
+/// [`validate_map_definitions`]. Returns the validated result name (without
+/// `$`).
+///
+/// `declared_results` carries the map result variables (without `$`)
+/// declared before this map: a value template may reference one of them
+/// (nginx expands map-value references lazily; the bounded engine resolves
+/// them in declaration order, so a forward reference fails closed).
+///
+/// # Errors
+/// A located message for every rejected surface element.
+pub fn validate_map_declaration<'a>(
+    map: &'a MapConfig,
+    declared_results: &[&str],
+) -> Result<&'a str, String> {
+    let result = parse_variable_reference(&map.result)
+        .map_err(|message| format!("map result `{}` is invalid: {message}", map.result))?;
+    if !result
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return Err(format!(
+            "map result `{}` is not a valid nginx variable name",
+            map.result
+        ));
+    }
+    if MAP_SOURCE_VARIABLES.contains(&result)
+        || MAP_SOURCE_PREFIXES.iter().any(|prefix| {
+            result
+                .strip_prefix(prefix)
+                .is_some_and(|rest| !rest.is_empty())
+        })
+    {
+        return Err(format!(
+            "map result `{}` collides with a built-in request variable; choose another name",
+            map.result
+        ));
+    }
+    if result == "request" || result == "document_root" || result == "realpath_root" {
+        return Err(format!(
+            "map result `{}` collides with a built-in request variable; choose another name",
+            map.result
+        ));
+    }
+    // A map with at least one regex key may write `$0`–`$9` capture
+    // references into its values (nginx expands them from the matching
+    // regex); capture references in a map without regex keys fail closed.
+    let has_regex_key = map.entries.iter().any(|entry| entry.key.starts_with('~'));
+    for entry in &map.entries {
+        if entry.key.len() > MAX_MAP_KEY_BYTES {
+            return Err(format!(
+                "map `{}` key exceeds the {MAX_MAP_KEY_BYTES}-byte bound",
+                map.result
+            ));
+        }
+        parse_map_key(&entry.key, map.hostnames).map_err(|message| {
+            format!(
+                "map `{}` key `{}` is invalid: {message}",
+                map.result, entry.key
+            )
+        })?;
+        validate_map_value_template_with_pool(&entry.value, has_regex_key, declared_results)
+            .map_err(|message| {
+                format!(
+                    "map `{}` value `{}` is invalid: {message}",
+                    map.result, entry.value
+                )
+            })?;
+    }
+    if let Some(default) = &map.default {
+        validate_map_value_template_with_pool(default, has_regex_key, declared_results).map_err(
+            |message| {
+                format!(
+                    "map `{}` default `{default}` is invalid: {message}",
+                    map.result
+                )
+            },
+        )?;
+    }
+    if map.entries.len() > MAX_MAP_ENTRIES {
+        return Err(format!(
+            "map `{}` has {} entries; the runtime executes at most {MAX_MAP_ENTRIES}",
+            map.result,
+            map.entries.len()
+        ));
+    }
+    // Duplicate authored keys are a configuration error in nginx too
+    // (`conflicting parameter`), including the `.suffix` / `*.suffix`
+    // shorthand collision; reject them deterministically.
+    let mut seen: Vec<(MapKey, &str)> = Vec::new();
+    for entry in &map.entries {
+        let key = parse_map_key(&entry.key, map.hostnames)?;
+        if matches!(key, MapKey::Regex(_)) {
+            // nginx keeps every regex key in authored order; duplicate
+            // patterns are legal (the first one wins at request time).
+            continue;
+        }
+        if matches!(key, MapKey::Default) {
+            return Err(format!(
+                "map `{}` declares key `default`; use the `default <value>;` form",
+                map.result
+            ));
+        }
+        if seen.iter().any(|(existing, _)| same_key(existing, &key)) {
+            return Err(format!(
+                "map `{}` declares duplicate key `{}`; nginx rejects conflicting map parameters",
+                map.result, entry.key
+            ));
+        }
+        seen.push((key, &entry.key));
+    }
+    if map.entries.is_empty() && map.default.is_none() {
+        return Err(format!(
+            "map `{}` declares no entries and no default; it can only ever expand to the empty string",
+            map.result
+        ));
+    }
+    Ok(result)
+}
+
+/// Validate one `map` source against the executable vocabulary plus the map
+/// result variables declared earlier in the same configuration.
+///
+/// nginx resolves `map` chains lazily, so a source may name another map's
+/// result variable; the bounded engine evaluates maps in declaration order,
+/// so only a backward reference is executable and a forward or self reference
+/// fails closed here instead of silently observing an empty value.
+///
+/// # Errors
+/// The unsupported-source diagnostic (with the chain-reference hint) when the
+/// source is neither a built-in request variable nor a declared map result.
+pub fn validate_map_source_with_pool(source: &str, declared_results: &[&str]) -> Result<(), String> {
+    if validate_map_source(source).is_ok() {
+        return Ok(());
+    }
+    let declared = parse_variable_reference(source)
+        .ok()
+        .is_some_and(|name| declared_results.iter().any(|result| *result == name));
+    if declared {
+        return Ok(());
+    }
+    Err(format!(
+        "map source `{source}` is not supported; use one of ${} or $http_<name>/$arg_<name>/$cookie_<name>, or a map result declared earlier in the same configuration",
+        MAP_SOURCE_VARIABLES.join(" $")
+    ))
 }
 
 /// Validate the executable subset of every `map` declaration and every
@@ -560,35 +730,7 @@ pub fn evaluate_map(map: &MapConfig, variables: &dyn MapVariables) -> String {
 pub fn validate_map_definitions(maps: &[MapConfig]) -> Result<(), String> {
     let mut results: Vec<&str> = Vec::with_capacity(maps.len());
     for map in maps {
-        let result = parse_variable_reference(&map.result)
-            .map_err(|message| format!("map result `{}` is invalid: {message}", map.result))?;
-        if !result
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-        {
-            return Err(format!(
-                "map result `{}` is not a valid nginx variable name",
-                map.result
-            ));
-        }
-        if MAP_SOURCE_VARIABLES.contains(&result)
-            || MAP_SOURCE_PREFIXES.iter().any(|prefix| {
-                result
-                    .strip_prefix(prefix)
-                    .is_some_and(|rest| !rest.is_empty())
-            })
-        {
-            return Err(format!(
-                "map result `{}` collides with a built-in request variable; choose another name",
-                map.result
-            ));
-        }
-        if result == "request" || result == "document_root" || result == "realpath_root" {
-            return Err(format!(
-                "map result `{}` collides with a built-in request variable; choose another name",
-                map.result
-            ));
-        }
+        let result = validate_map_declaration(map, &results)?;
         if results.contains(&result) {
             return Err(format!(
                 "duplicate map result `{}`; each map result variable may be declared once (nginx would silently shadow it)",
@@ -597,81 +739,7 @@ pub fn validate_map_definitions(maps: &[MapConfig]) -> Result<(), String> {
         }
         results.push(result);
 
-        validate_map_source(&map.source)?;
-        // A map with at least one regex key may write `$0`–`$9` capture
-        // references into its values (nginx expands them from the matching
-        // regex); capture references in a map without regex keys fail closed.
-        let has_regex_key = map.entries.iter().any(|entry| entry.key.starts_with('~'));
-        for entry in &map.entries {
-            if entry.key.len() > MAX_MAP_KEY_BYTES {
-                return Err(format!(
-                    "map `{}` key exceeds the {MAX_MAP_KEY_BYTES}-byte bound",
-                    map.result
-                ));
-            }
-            parse_map_key(&entry.key, map.hostnames).map_err(|message| {
-                format!(
-                    "map `{}` key `{}` is invalid: {message}",
-                    map.result, entry.key
-                )
-            })?;
-            validate_map_value_template_with_captures(&entry.value, has_regex_key).map_err(
-                |message| {
-                    format!(
-                        "map `{}` value `{}` is invalid: {message}",
-                        map.result, entry.value
-                    )
-                },
-            )?;
-        }
-        if let Some(default) = &map.default {
-            validate_map_value_template_with_captures(default, has_regex_key).map_err(
-                |message| {
-                    format!(
-                        "map `{}` default `{default}` is invalid: {message}",
-                        map.result
-                    )
-                },
-            )?;
-        }
-        if map.entries.len() > MAX_MAP_ENTRIES {
-            return Err(format!(
-                "map `{}` has {} entries; the runtime executes at most {MAX_MAP_ENTRIES}",
-                map.result,
-                map.entries.len()
-            ));
-        }
-        // Duplicate authored keys are a configuration error in nginx too
-        // (`conflicting parameter`), including the `.suffix` / `*.suffix`
-        // shorthand collision; reject them deterministically.
-        let mut seen: Vec<(MapKey, &str)> = Vec::new();
-        for entry in &map.entries {
-            let key = parse_map_key(&entry.key, map.hostnames)?;
-            if matches!(key, MapKey::Regex(_)) {
-                // nginx keeps every regex key in authored order; duplicate
-                // patterns are legal (the first one wins at request time).
-                continue;
-            }
-            if matches!(key, MapKey::Default) {
-                return Err(format!(
-                    "map `{}` declares key `default`; use the `default <value>;` form",
-                    map.result
-                ));
-            }
-            if seen.iter().any(|(existing, _)| same_key(existing, &key)) {
-                return Err(format!(
-                    "map `{}` declares duplicate key `{}`; nginx rejects conflicting map parameters",
-                    map.result, entry.key
-                ));
-            }
-            seen.push((key, &entry.key));
-        }
-        if map.entries.is_empty() && map.default.is_none() {
-            return Err(format!(
-                "map `{}` declares no entries and no default; it can only ever expand to the empty string",
-                map.result
-            ));
-        }
+        validate_map_source_with_pool(&map.source, &results[..results.len() - 1])?;
     }
     Ok(())
 }
@@ -742,6 +810,94 @@ mod tests {
     fn lookup(map: &MapConfig, source: &str) -> String {
         let facts = Facts::new(&[("host", source)]);
         evaluate_map(map, &facts)
+    }
+
+    fn map_config(source: &str, result: &str, default: Option<&str>) -> MapConfig {
+        MapConfig {
+            source: source.to_owned(),
+            result: result.to_owned(),
+            hostnames: false,
+            default: default.map(str::to_owned),
+            entries: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn chained_map_source_backward_reference_is_accepted() {
+        // The fleet adaptive-web pattern: a map on `$http_*` feeds a second
+        // map whose source names the first map's result variable.
+        let first = MapConfig {
+            source: "$http_sec_ch_ua_mobile".to_owned(),
+            result: "$sdkwork_webserver_mobile_ch".to_owned(),
+            hostnames: false,
+            default: Some(String::new()),
+            entries: vec![MapEntryConfig {
+                key: "?1".to_owned(),
+                value: "1".to_owned(),
+            }],
+        };
+        let second = MapConfig {
+            source: "$sdkwork_webserver_mobile_ch".to_owned(),
+            result: "$sdkwork_webserver_surface_final".to_owned(),
+            hostnames: false,
+            default: Some("$base_surface".to_owned()),
+            entries: vec![MapEntryConfig {
+                key: "1".to_owned(),
+                value: "h5".to_owned(),
+            }],
+        };
+        let base = MapConfig {
+            source: "$http_user_agent".to_owned(),
+            result: "$base_surface".to_owned(),
+            hostnames: false,
+            default: Some("pc".to_owned()),
+            entries: Vec::new(),
+        };
+        // Self reference and forward reference fail closed; backward passes.
+        // `second` also references `base` in its default template, so only
+        // the order that declares every dependency first is accepted.
+        assert!(validate_map_definitions(&[base.clone(), first.clone(), second.clone()]).is_ok());
+        assert!(validate_map_definitions(&[first.clone(), second.clone()]).is_err());
+        assert!(validate_map_definitions(&[second.clone(), first.clone()]).is_err());
+        // Self reference (a map sourcing its own result) fails closed.
+        let self_referencing = MapConfig {
+            source: "$sdkwork_webserver_surface_final".to_owned(),
+            result: "$sdkwork_webserver_surface_final".to_owned(),
+            hostnames: false,
+            default: Some("pc".to_owned()),
+            entries: Vec::new(),
+        };
+        assert!(validate_map_definitions(std::slice::from_ref(&self_referencing)).is_err());
+        assert!(validate_map_source_with_pool("$undeclared", &[]).is_err());
+        assert!(validate_map_source_with_pool("$host", &[]).is_ok());
+        assert!(validate_map_source_with_pool("$undeclared", &["undeclared"]).is_ok());
+    }
+
+    #[test]
+    fn evaluate_map_resolves_a_chained_source_through_the_facts_provider() {
+        let chained = MapConfig {
+            source: "$sdkwork_webserver_mobile_ch".to_owned(),
+            result: "$sdkwork_webserver_surface_final".to_owned(),
+            hostnames: false,
+            default: Some("$base_surface".to_owned()),
+            entries: vec![MapEntryConfig {
+                key: "1".to_owned(),
+                value: "h5".to_owned(),
+            }],
+        };
+        // The caller feeds already-computed map results through the facts
+        // provider (data-plane `ChainedFacts`); a value template referencing
+        // another map result expands at evaluation time like nginx.
+        let facts = Facts::new(&[
+            ("sdkwork_webserver_mobile_ch", "1"),
+            ("base_surface", "pc"),
+        ]);
+        assert_eq!(evaluate_map(&chained, &facts), "h5");
+        let facts = Facts::new(&[
+            ("sdkwork_webserver_mobile_ch", ""),
+            ("base_surface", "pc"),
+        ]);
+        assert_eq!(evaluate_map(&chained, &facts), "pc");
     }
 
     #[test]

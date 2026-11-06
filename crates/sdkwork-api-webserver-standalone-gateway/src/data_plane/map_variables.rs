@@ -42,6 +42,29 @@ pub(crate) struct MapRequestFacts<'a> {
     pub geoip: Option<&'a GeoIpRequestState>,
 }
 
+/// Request facts prefixed with the map results already computed for this
+/// request (declaration order), so a map source — and a map value template —
+/// may reference an earlier map's result variable exactly as nginx resolves
+/// lazy `map` chains.
+struct ChainedFacts<'a> {
+    results_so_far: &'a [(String, String)],
+    request: &'a MapRequestFacts<'a>,
+}
+
+impl MapVariables for ChainedFacts<'_> {
+    fn map_variable(&self, name: &str) -> Option<String> {
+        if let Some((_, value)) = self
+            .results_so_far
+            .iter()
+            .rev()
+            .find(|(candidate, _)| candidate == name)
+        {
+            return Some(value.clone());
+        }
+        self.request.map_variable(name)
+    }
+}
+
 impl MapVariables for MapRequestFacts<'_> {
     fn map_variable(&self, name: &str) -> Option<String> {
         let value = match name {
@@ -145,6 +168,13 @@ pub(crate) struct MapResults {
 
 impl MapResults {
     /// Evaluate every `map` declaration against the request facts.
+    ///
+    /// Maps are evaluated in declaration order and each evaluation observes
+    /// the results already computed for earlier maps, so a map source (or a
+    /// map value template) may reference another map's result variable —
+    /// nginx resolves such chains lazily; the bounded engine resolves them in
+    /// declaration order and configuration validation fails closed on
+    /// forward or self references.
     pub(crate) fn evaluate(config: &WebServerAppConfig, facts: &MapRequestFacts<'_>) -> Self {
         if config.maps.is_empty() && config.geo.is_empty() && config.split_clients.is_empty() {
             return Self::default();
@@ -152,7 +182,10 @@ impl MapResults {
         let mut values =
             Vec::with_capacity(config.maps.len() + config.geo.len() + config.split_clients.len());
         for map in &config.maps {
-            let value = sdkwork_webserver_core::evaluate_map(map, facts);
+            let value = sdkwork_webserver_core::evaluate_map(map, &ChainedFacts {
+                results_so_far: &values,
+                request: facts,
+            });
             if let Some(name) = map.result.strip_prefix('$') {
                 values.push((name.to_owned(), value));
             }

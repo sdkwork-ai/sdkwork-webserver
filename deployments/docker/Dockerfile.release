@@ -11,7 +11,10 @@
 # The repository's deployments/docker/Dockerfile.standalone consumes a staged
 # context produced by scripts/docker/build-standalone-image.mjs and is not
 # usable from a tarball alone.
-FROM debian:bookworm-slim
+# trixie (glibc 2.41), not bookworm (2.36): the release tarball carries
+# binaries compiled on ubuntu-24.04+ build hosts (glibc >= 2.39); a bookworm
+# image cannot load them (GLIBC_2.38/2.39 not found at container start).
+FROM debian:trixie-slim
 
 # curl for health checks, util-linux for ss, tini as PID 1 so the gateway
 # receives SIGTERM and the container stops promptly.

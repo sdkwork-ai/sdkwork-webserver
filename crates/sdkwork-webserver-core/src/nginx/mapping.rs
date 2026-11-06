@@ -46,7 +46,7 @@ use thiserror::Error;
 use crate::config::{
     cache_policy::{parse_expires_arguments, parse_if_modified_since_token},
     format_proxy_set_header_entry_with_maps, hostname_upstream_allowed_cidrs,
-    map_variables::{map_result_name, validate_map_definitions, validate_map_source},
+    map_variables::{map_result_name, validate_map_declaration, validate_map_source_with_pool},
     parse_htpasswd, parse_limit_conn, parse_limit_conn_zone, parse_limit_req, parse_limit_req_zone,
     AutoindexConfig, AutoindexFormat, BrowserConfig, CachePolicyConfig, CharsetConfig,
     ConfigDiagnostic, CookieRewritePolicyConfig, CustomHeaderConfig, ExpiresMode, GeoConfig,
@@ -479,6 +479,22 @@ pub fn materialize_nginx_app(
     for directive in &http_directives {
         if directive.name == "map" {
             let map = parse_map(directive)?;
+            // Chain-aware validation with the declaring directive for a
+            // located diagnostic: a source may be a built-in request
+            // variable or a map result declared earlier in this
+            // configuration, and a value template may reference the same
+            // pool (nginx resolves map chains; the bounded engine evaluates
+            // in declaration order, so a forward or self reference fails
+            // closed here).
+            let declared_results: Vec<&str> = mapper
+                .map_results
+                .iter()
+                .map(String::as_str)
+                .collect();
+            validate_map_source_with_pool(&map.source, &declared_results)
+                .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+            validate_map_declaration(&map, &declared_results)
+                .map_err(|message| NginxConfigError::unsupported(directive, message))?;
             if let Some(result) = map_result_name(&map) {
                 // nginx map variables are changeable: a later declaration of
                 // the same result variable replaces the earlier one instead of
@@ -11523,8 +11539,10 @@ fn parse_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfigError> 
             format!("map result `{result}` must be a `$variable`"),
         ));
     }
-    validate_map_source(source)
-        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    // The source vocabulary check is chain-aware and therefore context
+    // dependent (a source may name a map result declared earlier in the same
+    // configuration), so it runs in the `materialize_nginx_app` collection
+    // loop with the same directive for a located diagnostic.
     if let Err(message) = crate::config::map_variables::parse_variable_reference(result) {
         return Err(NginxConfigError::unsupported(
             directive,
@@ -11594,10 +11612,10 @@ fn parse_map(directive: &NginxDirective) -> Result<MapConfig, NginxConfigError> 
         default,
         entries,
     };
-    // Validate the declaration immediately so the diagnostic points at the
-    // `map` block instead of surfacing later as a generic config failure.
-    validate_map_definitions(std::slice::from_ref(&map))
-        .map_err(|message| NginxConfigError::unsupported(directive, message))?;
+    // Structural validation only here: the chain-aware source check and the
+    // value-template check (which may reference a map result declared earlier
+    // in the same configuration) run in the `materialize_nginx_app`
+    // collection loop with the declaring directive for a located diagnostic.
     Ok(map)
 }
 

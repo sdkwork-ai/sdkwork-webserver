@@ -106,7 +106,9 @@ services:
       SDKWORK_CORS_CONSOLE_HOST_SUFFIX: ${SDKWORK_MODULE_API_GATEWAY_CORS_CONSOLE_HOST_SUFFIX:-}
       SDKWORK_CORS_CONSOLE_HOST_SCHEMES: ${SDKWORK_MODULE_API_GATEWAY_CORS_CONSOLE_HOST_SCHEMES:-}
       SDKWORK_DATABASE_ACQUIRE_TIMEOUT: 30
-      SDKWORK_DATABASE_AUTO_MIGRATE: false
+      # Env-tunable like the canonical gateway bundle compose; default false
+      # keeps the gateway from racing kb-rpc's drive-schema migration.
+      SDKWORK_DATABASE_AUTO_MIGRATE: ${SDKWORK_DATABASE_AUTO_MIGRATE:-false}
       SDKWORK_DATABASE_ENGINE: postgresql
       SDKWORK_DATABASE_HOST: ${SDKWORK_DATABASE_HOST:-postgres}
       SDKWORK_DATABASE_IDLE_TIMEOUT: 600
@@ -215,6 +217,11 @@ services:
       SDKWORK_KNOWLEDGEBASE_TENANT_ID: 100001
       SDKWORK_KNOWLEDGEBASE_ORGANIZATION_ID: 1
       SDKWORK_DATABASE_URL: postgresql://${SDKWORK_DATABASE_USERNAME:-sdkwork_ai_dev}:${SDKWORK_DATABASE_PASSWORD:-sdkworkdev123}@${SDKWORK_DATABASE_HOST:-postgres}:${SDKWORK_DATABASE_PORT:-5432}/${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}?sslmode=${SDKWORK_DATABASE_SSL_MODE:-disable}&options=-c%20search_path%3D${SDKWORK_DATABASE_SCHEMA:-${SDKWORK_DATABASE_NAME:-sdkwork_ai_dev}},public
+      # kb-rpc owns the drive-schema migration on a fresh shared workspace
+      # database (canonical gateway bundle compose sets "true"; without it a
+      # first-install knowledgebase-rpc fails drive-schema-connect before the
+      # gateway service ever starts).
+      SDKWORK_DATABASE_AUTO_MIGRATE: "true"
       SDKWORK_API_CLOUD_GATEWAY_PROVISION_KNOWLEDGEBASE_RPC_SECRETS: "true"
       RUST_LOG: ${RUST_LOG:-info}
     volumes:

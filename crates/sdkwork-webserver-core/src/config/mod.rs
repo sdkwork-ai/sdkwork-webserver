@@ -69,8 +69,9 @@ pub use loader::{
 };
 pub use map_variables::{
     evaluate_map, expand_map_template, is_supported_map_variable, map_result_name,
-    resolve_map_value, validate_map_definitions, validate_map_source, validate_map_value_template,
-    MapVariables, MAP_SOURCE_PREFIXES, MAP_SOURCE_VARIABLES,
+    resolve_map_value, validate_map_declaration, validate_map_definitions, validate_map_source,
+    validate_map_source_with_pool, validate_map_value_template, MapVariables,
+    MAP_SOURCE_PREFIXES, MAP_SOURCE_VARIABLES,
 };
 pub use model::{
     AccessAction, AccessRuleConfig, AcmeHttp01Config, AdditionConfig, AppDomainFallbackConfig,
