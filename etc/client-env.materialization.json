@@ -85,10 +85,7 @@
         "tenantId": "100001",
         "organizationId": "0",
         "permissionScope": [
-          "deploy.apps.read",
-          "web.plugins.read",
-          "web.servers.read",
-          "web.auditLogs.read"
+          "iam:self"
         ]
       }
     },
@@ -146,41 +143,7 @@
         "tenantId": "100001",
         "organizationId": "0",
         "permissionScope": [
-          "deploy.apps.read",
-          "deploy.apps.write",
-          "deploy.domainZones.read",
-          "deploy.domainZones.write",
-          "deploy.certificates.read",
-          "deploy.certificates.write",
-          "deploy.ownership.manage_all",
-          "deploy.marketplaceTemplates.read",
-          "deploy.templateCategories.read",
-          "deploy.templateCategories.write",
-          "deploy.appTemplates.read",
-          "deploy.appTemplates.write",
-          "deploy.appTemplateVersions.read",
-          "deploy.appTemplateVersions.write",
-          "web.plugins.read",
-          "web.certificates.read",
-          "web.certificates.write",
-          "web.nginx.write",
-          "web.servers.read",
-          "web.servers.write",
-          "web.auditLogs.read",
-          "web.cluster.read",
-          "web.cluster.write",
-          "iam.users.read",
-          "iam.organizations.read",
-          "iam.tenants.read",
-          "iam.tenant_applications.update",
-          "iam.roles.read",
-          "iam.permissions.read",
-          "iam.policies.read",
-          "iam.role_bindings.read",
-          "iam.oauth.read",
-          "iam.oauth.manage",
-          "iam.account_binding_policy.read",
-          "iam.audit_events.read"
+          "iam:self"
         ]
       }
     },
