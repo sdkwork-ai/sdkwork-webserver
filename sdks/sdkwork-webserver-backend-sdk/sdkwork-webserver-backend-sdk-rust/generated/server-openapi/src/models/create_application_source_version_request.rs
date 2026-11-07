@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::ApplicationSourceVersionConfigSnapshot;
+use crate::models::{ApplicationSourceVersionConfigSnapshot};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CreateApplicationSourceVersionRequest {

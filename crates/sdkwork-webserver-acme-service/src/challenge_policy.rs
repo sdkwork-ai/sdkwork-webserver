@@ -29,9 +29,10 @@
 use crate::{AcmeServiceError, AcmeServiceResult};
 
 /// Operator-declared challenge method (`webserver_tls_policy.challenge_method`).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum DeclaredChallengeMethod {
     /// Derive from the identifiers: HTTP-01 for exact names, DNS-01 for wildcards.
+    #[default]
     Auto,
     /// Force HTTP-01. Wildcards are rejected: the CA cannot validate them this way.
     Http01,
@@ -67,12 +68,6 @@ impl DeclaredChallengeMethod {
             Self::Http01 => CHALLENGE_METHOD_HTTP_01,
             Self::Dns01 => CHALLENGE_METHOD_DNS_01,
         }
-    }
-}
-
-impl Default for DeclaredChallengeMethod {
-    fn default() -> Self {
-        Self::Auto
     }
 }
 

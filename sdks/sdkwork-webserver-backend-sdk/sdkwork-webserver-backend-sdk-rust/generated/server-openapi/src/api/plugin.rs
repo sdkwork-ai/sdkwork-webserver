@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::api::base::RequestHeaders;
-use crate::api::paths::append_query_string;
+use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
+use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
 use crate::models::{CreatePluginRequest, PluginResponse, UpdatePluginRequest};
 
@@ -17,14 +17,7 @@ impl PluginApi {
     }
 
     /// List the caller's plugin catalog
-    pub async fn plugins_list(
-        &self,
-        page: Option<i64>,
-        page_size: Option<i64>,
-        status: Option<&str>,
-        q: Option<&str>,
-        owner_id: Option<&str>,
-    ) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn plugins_list(&self, page: Option<i64>, page_size: Option<i64>, status: Option<&str>, q: Option<&str>, owner_id: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page", page, "form", true, false, None),
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
@@ -37,96 +30,47 @@ impl PluginApi {
     }
 
     /// Create a plugin catalog record
-    pub async fn plugins_create(
-        &self,
-        body: &CreatePluginRequest,
-        idempotency_key: &str,
-    ) -> Result<PluginResponse, SdkworkError> {
+    pub async fn plugins_create(&self, body: &CreatePluginRequest, idempotency_key: &str) -> Result<PluginResponse, SdkworkError> {
         let path = backend_path(&"/plugins".to_string());
         let headers = build_request_headers(
-            &[(
-                "Idempotency-Key",
-                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
-            )],
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
             &[],
         );
-        self.client
-            .post(
-                &path,
-                Some(body),
-                None,
-                headers.as_ref(),
-                Some("application/json"),
-            )
-            .await
+        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
 
     /// Retrieve one plugin catalog record
     pub async fn plugins_retrieve(&self, plugin_id: &str) -> Result<PluginResponse, SdkworkError> {
-        let path = backend_path(&format!(
-            "/plugins/{}",
-            serialize_path_parameter(
-                plugin_id,
-                PathParameterSpec::new("pluginId", "simple", false)
-            )
-        ));
+        let path = backend_path(&format!("/plugins/{}", serialize_path_parameter(plugin_id, PathParameterSpec::new("pluginId", "simple", false))));
         self.client.get(&path, None, None).await
     }
 
     /// Update one plugin catalog record
-    pub async fn plugins_update(
-        &self,
-        plugin_id: &str,
-        body: &UpdatePluginRequest,
-        idempotency_key: &str,
-    ) -> Result<PluginResponse, SdkworkError> {
-        let path = backend_path(&format!(
-            "/plugins/{}",
-            serialize_path_parameter(
-                plugin_id,
-                PathParameterSpec::new("pluginId", "simple", false)
-            )
-        ));
+    pub async fn plugins_update(&self, plugin_id: &str, body: &UpdatePluginRequest, idempotency_key: &str) -> Result<PluginResponse, SdkworkError> {
+        let path = backend_path(&format!("/plugins/{}", serialize_path_parameter(plugin_id, PathParameterSpec::new("pluginId", "simple", false))));
         let headers = build_request_headers(
-            &[(
-                "Idempotency-Key",
-                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
-            )],
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
             &[],
         );
-        self.client
-            .patch(
-                &path,
-                Some(body),
-                None,
-                headers.as_ref(),
-                Some("application/json"),
-            )
-            .await
+        self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
 
     /// Delete one plugin catalog record
-    pub async fn plugins_delete(
-        &self,
-        plugin_id: &str,
-        idempotency_key: &str,
-    ) -> Result<(), SdkworkError> {
-        let path = backend_path(&format!(
-            "/plugins/{}",
-            serialize_path_parameter(
-                plugin_id,
-                PathParameterSpec::new("pluginId", "simple", false)
-            )
-        ));
+    pub async fn plugins_delete(&self, plugin_id: &str, idempotency_key: &str) -> Result<(), SdkworkError> {
+        let path = backend_path(&format!("/plugins/{}", serialize_path_parameter(plugin_id, PathParameterSpec::new("pluginId", "simple", false))));
         let headers = build_request_headers(
-            &[(
-                "Idempotency-Key",
-                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
-            )],
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
             &[],
         );
         self.client.delete(&path, None, headers.as_ref()).await
     }
+
 }
 
 struct PathParameterSpec<'a> {
@@ -137,11 +81,7 @@ struct PathParameterSpec<'a> {
 
 impl<'a> PathParameterSpec<'a> {
     fn new(name: &'a str, style: &'a str, explode: bool) -> Self {
-        Self {
-            name,
-            style,
-            explode,
-        }
+        Self { name, style, explode }
     }
 }
 
@@ -150,32 +90,15 @@ fn serialize_path_parameter<T: serde::Serialize>(value: T, spec: PathParameterSp
     if value.is_null() {
         return String::new();
     }
-    let style = if spec.style.is_empty() {
-        "simple"
-    } else {
-        spec.style
-    };
+    let style = if spec.style.is_empty() { "simple" } else { spec.style };
     match value {
-        serde_json::Value::Array(values) => {
-            serialize_path_array(spec.name, &values, style, spec.explode)
-        }
-        serde_json::Value::Object(values) => {
-            serialize_path_object(spec.name, &values, style, spec.explode)
-        }
-        value => format!(
-            "{}{}",
-            path_primitive_prefix(spec.name, style),
-            percent_encode(&primitive_to_string(&value))
-        ),
+        serde_json::Value::Array(values) => serialize_path_array(spec.name, &values, style, spec.explode),
+        serde_json::Value::Object(values) => serialize_path_object(spec.name, &values, style, spec.explode),
+        value => format!("{}{}", path_primitive_prefix(spec.name, style), percent_encode(&primitive_to_string(&value))),
     }
 }
 
-fn serialize_path_array(
-    name: &str,
-    values: &[serde_json::Value],
-    style: &str,
-    explode: bool,
-) -> String {
+fn serialize_path_array(name: &str, values: &[serde_json::Value], style: &str, explode: bool) -> String {
     let serialized = values
         .iter()
         .filter(|value| !value.is_null())
@@ -186,11 +109,7 @@ fn serialize_path_array(
     }
     if style == "matrix" {
         if explode {
-            return serialized
-                .iter()
-                .map(|item| format!(";{}={}", name, item))
-                .collect::<Vec<_>>()
-                .join("");
+            return serialized.iter().map(|item| format!(";{}={}", name, item)).collect::<Vec<_>>().join("");
         }
         return format!(";{}={}", name, serialized.join(","));
     }
@@ -273,10 +192,7 @@ impl HeaderParameterSpec {
     }
 }
 
-fn build_request_headers(
-    headers: &[(&str, HeaderParameterSpec)],
-    cookies: &[(&str, HeaderParameterSpec)],
-) -> Option<RequestHeaders> {
+fn build_request_headers(headers: &[(&str, HeaderParameterSpec)], cookies: &[(&str, HeaderParameterSpec)]) -> Option<RequestHeaders> {
     let mut request_headers = RequestHeaders::new();
     for (name, parameter) in headers {
         if let Some(value) = serialize_header_parameter(parameter) {
@@ -418,36 +334,12 @@ fn append_serialized_parameter(pairs: &mut Vec<String>, parameter: &QueryParamet
         return;
     }
 
-    let style = if parameter.style.is_empty() {
-        "form"
-    } else {
-        parameter.style
-    };
+    let style = if parameter.style.is_empty() { "form" } else { parameter.style };
     match &parameter.value {
-        serde_json::Value::Array(values) => append_array_parameter(
-            pairs,
-            parameter.name,
-            values,
-            style,
-            parameter.explode,
-            parameter.allow_reserved,
-        ),
-        serde_json::Value::Object(values) if style == "deepObject" => {
-            append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved)
-        }
-        serde_json::Value::Object(values) => append_object_parameter(
-            pairs,
-            parameter.name,
-            values,
-            style,
-            parameter.explode,
-            parameter.allow_reserved,
-        ),
-        value => pairs.push(format!(
-            "{}={}",
-            percent_encode(parameter.name),
-            encode_query_value(&primitive_to_string(value), parameter.allow_reserved)
-        )),
+        serde_json::Value::Array(values) => append_array_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
+        serde_json::Value::Object(values) if style == "deepObject" => append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved),
+        serde_json::Value::Object(values) => append_object_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
+        value => pairs.push(format!("{}={}", percent_encode(parameter.name), encode_query_value(&primitive_to_string(value), parameter.allow_reserved))),
     }
 }
 
@@ -459,29 +351,17 @@ fn append_array_parameter(
     explode: bool,
     allow_reserved: bool,
 ) {
-    let serialized = values
-        .iter()
-        .filter(|value| !value.is_null())
-        .map(primitive_to_string)
-        .collect::<Vec<_>>();
+    let serialized = values.iter().filter(|value| !value.is_null()).map(primitive_to_string).collect::<Vec<_>>();
     if serialized.is_empty() {
         return;
     }
     if style == "form" && explode {
         for item in serialized {
-            pairs.push(format!(
-                "{}={}",
-                percent_encode(name),
-                encode_query_value(&item, allow_reserved)
-            ));
+            pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&item, allow_reserved)));
         }
         return;
     }
-    pairs.push(format!(
-        "{}={}",
-        percent_encode(name),
-        encode_query_value(&serialized.join(","), allow_reserved)
-    ));
+    pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
 }
 
 fn append_object_parameter(
@@ -498,22 +378,14 @@ fn append_object_parameter(
             continue;
         }
         if style == "form" && explode {
-            pairs.push(format!(
-                "{}={}",
-                percent_encode(key),
-                encode_query_value(&primitive_to_string(value), allow_reserved)
-            ));
+            pairs.push(format!("{}={}", percent_encode(key), encode_query_value(&primitive_to_string(value), allow_reserved)));
         } else {
             serialized.push(key.clone());
             serialized.push(primitive_to_string(value));
         }
     }
     if !serialized.is_empty() {
-        pairs.push(format!(
-            "{}={}",
-            percent_encode(name),
-            encode_query_value(&serialized.join(","), allow_reserved)
-        ));
+        pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
     }
 }
 
@@ -525,11 +397,7 @@ fn append_deep_object_parameter(
 ) {
     for (key, value) in values {
         if !value.is_null() {
-            pairs.push(format!(
-                "{}={}",
-                percent_encode(&format!("{}[{}]", name, key)),
-                encode_query_value(&primitive_to_string(value), allow_reserved)
-            ));
+            pairs.push(format!("{}={}", percent_encode(&format!("{}[{}]", name, key)), encode_query_value(&primitive_to_string(value), allow_reserved)));
         }
     }
 }
@@ -540,24 +408,11 @@ fn encode_query_value(value: &str, allow_reserved: bool) -> String {
         return encoded;
     }
     for (escaped, reserved) in [
-        ("%3A", ":"),
-        ("%2F", "/"),
-        ("%3F", "?"),
-        ("%23", "#"),
-        ("%5B", "["),
-        ("%5D", "]"),
-        ("%40", "@"),
-        ("%21", "!"),
-        ("%24", "$"),
-        ("%26", "&"),
-        ("%27", "'"),
-        ("%28", "("),
-        ("%29", ")"),
-        ("%2A", "*"),
-        ("%2B", "+"),
-        ("%2C", ","),
-        ("%3B", ";"),
-        ("%3D", "="),
+        ("%3A", ":"), ("%2F", "/"), ("%3F", "?"), ("%23", "#"),
+        ("%5B", "["), ("%5D", "]"), ("%40", "@"), ("%21", "!"),
+        ("%24", "$"), ("%26", "&"), ("%27", "'"), ("%28", "("),
+        ("%29", ")"), ("%2A", "*"), ("%2B", "+"), ("%2C", ","),
+        ("%3B", ";"), ("%3D", "="),
     ] {
         encoded = encoded.replace(escaped, reserved);
     }

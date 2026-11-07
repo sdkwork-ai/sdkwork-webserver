@@ -483,9 +483,7 @@ pub fn validate_map_value_template_with_pool(
             rest = &after[end..];
             continue;
         }
-        if !is_supported_map_variable(name)
-            && !declared_results.iter().any(|result| *result == name)
-        {
+        if !is_supported_map_variable(name) && !declared_results.contains(&name) {
             return Err(format!(
                 "map value `{template}` uses `${name}`, which the runtime does not expand in map context; supported: ${} and $http_<name>/$arg_<name>/$cookie_<name>, or a map result declared earlier in the same configuration",
                 MAP_SOURCE_VARIABLES.join(" $")
@@ -713,7 +711,7 @@ pub fn validate_map_source_with_pool(
     }
     let declared = parse_variable_reference(source)
         .ok()
-        .is_some_and(|name| declared_results.iter().any(|result| *result == name));
+        .is_some_and(|name| declared_results.contains(&name));
     if declared {
         return Ok(());
     }
@@ -814,16 +812,6 @@ mod tests {
     fn lookup(map: &MapConfig, source: &str) -> String {
         let facts = Facts::new(&[("host", source)]);
         evaluate_map(map, &facts)
-    }
-
-    fn map_config(source: &str, result: &str, default: Option<&str>) -> MapConfig {
-        MapConfig {
-            source: source.to_owned(),
-            result: result.to_owned(),
-            hostnames: false,
-            default: default.map(str::to_owned),
-            entries: Vec::new(),
-        }
     }
 
     #[test]

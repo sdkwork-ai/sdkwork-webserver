@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::CertificateIdentifierResponse;
+use crate::models::{CertificateIdentifierResponse};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ListenerCertificateSummaryResponse {

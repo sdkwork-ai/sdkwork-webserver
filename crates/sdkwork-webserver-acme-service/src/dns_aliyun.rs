@@ -939,10 +939,7 @@ mod tests {
             .is_verified());
         let requests = state.requests.lock().expect("lock");
         assert_eq!(requests.len(), 1);
-        assert!(
-            requests[0].get("Signature").is_some(),
-            "the probe is signed"
-        );
+        assert!(requests[0].contains_key("Signature"), "the probe is signed");
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::DomainDeploymentResponse;
+use crate::models::{DomainDeploymentResponse};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ApplicationDomainResponse {

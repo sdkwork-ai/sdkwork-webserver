@@ -850,7 +850,6 @@ fn format_coordinate(value: f64) -> String {
 mod tests {
     use super::*;
     use mmdb_writer::{Ipv4Aliasing, Writer};
-    use serde_json::json;
     use std::time::{Duration, SystemTime};
 
     const BUILD_EPOCH: SystemTime = SystemTime::UNIX_EPOCH;

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::api::base::RequestHeaders;
-use crate::api::paths::append_query_string;
+use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
+use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
 use crate::models::{CreateServerRequest, CreateServerResponse};
 
@@ -17,11 +17,7 @@ impl ServerApi {
     }
 
     /// List managed servers
-    pub async fn servers_list(
-        &self,
-        page_size: Option<i64>,
-        cursor: Option<&str>,
-    ) -> Result<serde_json::Value, SdkworkError> {
+    pub async fn servers_list(&self, page_size: Option<i64>, cursor: Option<&str>) -> Result<serde_json::Value, SdkworkError> {
         let query = build_query_string(&[
             QueryParameterSpec::new("page_size", page_size, "form", true, false, None),
             QueryParameterSpec::new("cursor", cursor, "form", true, false, None),
@@ -31,30 +27,19 @@ impl ServerApi {
     }
 
     /// Register a managed server
-    pub async fn servers_create(
-        &self,
-        body: &CreateServerRequest,
-        idempotency_key: &str,
-    ) -> Result<CreateServerResponse, SdkworkError> {
+    pub async fn servers_create(&self, body: &CreateServerRequest, idempotency_key: &str) -> Result<CreateServerResponse, SdkworkError> {
         let path = backend_path(&"/servers".to_string());
         let headers = build_request_headers(
-            &[(
-                "Idempotency-Key",
-                HeaderParameterSpec::new(idempotency_key, "simple", false, None),
-            )],
+            &[
+                ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
+            ],
             &[],
         );
-        self.client
-            .post(
-                &path,
-                Some(body),
-                None,
-                headers.as_ref(),
-                Some("application/json"),
-            )
-            .await
+        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
+
 }
+
 
 struct HeaderParameterSpec {
     value: serde_json::Value,
@@ -77,10 +62,7 @@ impl HeaderParameterSpec {
     }
 }
 
-fn build_request_headers(
-    headers: &[(&str, HeaderParameterSpec)],
-    cookies: &[(&str, HeaderParameterSpec)],
-) -> Option<RequestHeaders> {
+fn build_request_headers(headers: &[(&str, HeaderParameterSpec)], cookies: &[(&str, HeaderParameterSpec)]) -> Option<RequestHeaders> {
     let mut request_headers = RequestHeaders::new();
     for (name, parameter) in headers {
         if let Some(value) = serialize_header_parameter(parameter) {
@@ -222,36 +204,12 @@ fn append_serialized_parameter(pairs: &mut Vec<String>, parameter: &QueryParamet
         return;
     }
 
-    let style = if parameter.style.is_empty() {
-        "form"
-    } else {
-        parameter.style
-    };
+    let style = if parameter.style.is_empty() { "form" } else { parameter.style };
     match &parameter.value {
-        serde_json::Value::Array(values) => append_array_parameter(
-            pairs,
-            parameter.name,
-            values,
-            style,
-            parameter.explode,
-            parameter.allow_reserved,
-        ),
-        serde_json::Value::Object(values) if style == "deepObject" => {
-            append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved)
-        }
-        serde_json::Value::Object(values) => append_object_parameter(
-            pairs,
-            parameter.name,
-            values,
-            style,
-            parameter.explode,
-            parameter.allow_reserved,
-        ),
-        value => pairs.push(format!(
-            "{}={}",
-            percent_encode(parameter.name),
-            encode_query_value(&primitive_to_string(value), parameter.allow_reserved)
-        )),
+        serde_json::Value::Array(values) => append_array_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
+        serde_json::Value::Object(values) if style == "deepObject" => append_deep_object_parameter(pairs, parameter.name, values, parameter.allow_reserved),
+        serde_json::Value::Object(values) => append_object_parameter(pairs, parameter.name, values, style, parameter.explode, parameter.allow_reserved),
+        value => pairs.push(format!("{}={}", percent_encode(parameter.name), encode_query_value(&primitive_to_string(value), parameter.allow_reserved))),
     }
 }
 
@@ -263,29 +221,17 @@ fn append_array_parameter(
     explode: bool,
     allow_reserved: bool,
 ) {
-    let serialized = values
-        .iter()
-        .filter(|value| !value.is_null())
-        .map(primitive_to_string)
-        .collect::<Vec<_>>();
+    let serialized = values.iter().filter(|value| !value.is_null()).map(primitive_to_string).collect::<Vec<_>>();
     if serialized.is_empty() {
         return;
     }
     if style == "form" && explode {
         for item in serialized {
-            pairs.push(format!(
-                "{}={}",
-                percent_encode(name),
-                encode_query_value(&item, allow_reserved)
-            ));
+            pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&item, allow_reserved)));
         }
         return;
     }
-    pairs.push(format!(
-        "{}={}",
-        percent_encode(name),
-        encode_query_value(&serialized.join(","), allow_reserved)
-    ));
+    pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
 }
 
 fn append_object_parameter(
@@ -302,22 +248,14 @@ fn append_object_parameter(
             continue;
         }
         if style == "form" && explode {
-            pairs.push(format!(
-                "{}={}",
-                percent_encode(key),
-                encode_query_value(&primitive_to_string(value), allow_reserved)
-            ));
+            pairs.push(format!("{}={}", percent_encode(key), encode_query_value(&primitive_to_string(value), allow_reserved)));
         } else {
             serialized.push(key.clone());
             serialized.push(primitive_to_string(value));
         }
     }
     if !serialized.is_empty() {
-        pairs.push(format!(
-            "{}={}",
-            percent_encode(name),
-            encode_query_value(&serialized.join(","), allow_reserved)
-        ));
+        pairs.push(format!("{}={}", percent_encode(name), encode_query_value(&serialized.join(","), allow_reserved)));
     }
 }
 
@@ -329,11 +267,7 @@ fn append_deep_object_parameter(
 ) {
     for (key, value) in values {
         if !value.is_null() {
-            pairs.push(format!(
-                "{}={}",
-                percent_encode(&format!("{}[{}]", name, key)),
-                encode_query_value(&primitive_to_string(value), allow_reserved)
-            ));
+            pairs.push(format!("{}={}", percent_encode(&format!("{}[{}]", name, key)), encode_query_value(&primitive_to_string(value), allow_reserved)));
         }
     }
 }
@@ -344,24 +278,11 @@ fn encode_query_value(value: &str, allow_reserved: bool) -> String {
         return encoded;
     }
     for (escaped, reserved) in [
-        ("%3A", ":"),
-        ("%2F", "/"),
-        ("%3F", "?"),
-        ("%23", "#"),
-        ("%5B", "["),
-        ("%5D", "]"),
-        ("%40", "@"),
-        ("%21", "!"),
-        ("%24", "$"),
-        ("%26", "&"),
-        ("%27", "'"),
-        ("%28", "("),
-        ("%29", ")"),
-        ("%2A", "*"),
-        ("%2B", "+"),
-        ("%2C", ","),
-        ("%3B", ";"),
-        ("%3D", "="),
+        ("%3A", ":"), ("%2F", "/"), ("%3F", "?"), ("%23", "#"),
+        ("%5B", "["), ("%5D", "]"), ("%40", "@"), ("%21", "!"),
+        ("%24", "$"), ("%26", "&"), ("%27", "'"), ("%28", "("),
+        ("%29", ")"), ("%2A", "*"), ("%2B", "+"), ("%2C", ","),
+        ("%3B", ";"), ("%3D", "="),
     ] {
         encoded = encoded.replace(escaped, reserved);
     }

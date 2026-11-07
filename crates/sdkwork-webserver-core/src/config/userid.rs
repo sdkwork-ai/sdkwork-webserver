@@ -719,7 +719,7 @@ mod tests {
             .and_then(|rest| rest.split(';').next())
             .expect("value");
         let mut padded = encoded.to_owned();
-        while padded.len() % 4 != 0 {
+        while !padded.len().is_multiple_of(4) {
             padded.push('=');
         }
         let bytes = BASE64.decode(padded).expect("decode");
@@ -734,7 +734,7 @@ mod tests {
             .and_then(|rest| rest.split(';').next())
             .expect("value");
         let mut padded = encoded.to_owned();
-        while padded.len() % 4 != 0 {
+        while !padded.len().is_multiple_of(4) {
             padded.push('=');
         }
         let bytes = BASE64.decode(padded).expect("decode");
