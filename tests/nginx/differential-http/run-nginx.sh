@@ -70,9 +70,18 @@ sed \
 # directory ($WORK), exactly like nginx's conf_prefix.
 cp "$HERE/maps.fragment" "$WORK/maps.fragment"
 # Inject the empty-string-key maps (the JS config parser cannot tokenise them).
-# `r` appends the file after the marker line, then the marker comment is removed.
-sed -i "\|# @EMPTY_KEY_MAP@|r $HERE/maps-empty-key.inc" "$CONF"
-sed -i "\|# @EMPTY_KEY_MAP@|d" "$CONF"
+# Replace the marker comment line with the contents of maps-empty-key.inc in a
+# single portable pass (GNU `sed -i` breaks on BSD/macOS harnesses).
+awk -v inc="$HERE/maps-empty-key.inc" '
+    /# @EMPTY_KEY_MAP@/ {
+        while ((getline line < inc) > 0) {
+            print line
+        }
+        close(inc)
+        next
+    }
+    { print }
+' "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
 
 probe_port() {
     "$PY" -c "import socket,sys; socket.create_connection(('127.0.0.1', $1), 1).close()" \
