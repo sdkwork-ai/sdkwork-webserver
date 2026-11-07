@@ -41,6 +41,14 @@ async fn run() -> MainResult<()> {
     sdkwork_webserver_core::runtime_config::load_runtime_toml_config().map_err(|error| {
         io::Error::other(format!("runtime TOML configuration is invalid: {error}"))
     })?;
+    // DISCOVERY_SPEC §12.1: install the database-backed resolver before any
+    // runtime component constructs an HTTP SDK client. Fail-open: without a
+    // registry database the authored topology values remain in effect.
+    let _http_service_registry = sdkwork_discovery_client::install_resolver_from_env(
+        sdkwork_discovery_client::registry_identity_from_env(),
+        sdkwork_discovery_client::HttpRegistryConfig::default(),
+    )
+    .await;
     let raw_arguments = std::env::args().skip(1).collect::<Vec<_>>();
     let (format_override, arguments) = extract_format_override(&raw_arguments)?;
     let leading_command = arguments.first().map(String::as_str);

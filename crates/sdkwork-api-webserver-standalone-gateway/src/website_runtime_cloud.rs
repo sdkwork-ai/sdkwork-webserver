@@ -1,3 +1,4 @@
+use sdkwork_utils_rust::service_base_url::registry_base_url_or;
 use sdkwork_utils_rust::uuid;
 use sdkwork_webserver_contract::RuntimeObservationState;
 use sdkwork_webserver_core::website_runtime::MAX_WEBSITE_RUNTIME_SET_BYTES;
@@ -51,6 +52,8 @@ impl CloudRuntimeAssignmentSource {
         environment: String,
         node_version: String,
     ) -> Result<Self, CloudRuntimeAssignmentError> {
+        // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
+        let base_url = registry_base_url_or("sdkwork-webserver", &base_url);
         let mut config = SdkworkConfig::new(base_url);
         config.timeout_ms = 30_000;
         config.max_response_body_bytes = MAX_WEBSITE_RUNTIME_SET_BYTES + RESPONSE_ENVELOPE_BYTES;

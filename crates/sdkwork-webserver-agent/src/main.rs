@@ -11,6 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use sdkwork_utils_rust::crypto::sha256_hash;
+use sdkwork_utils_rust::service_base_url::registry_base_url_or;
 use sdkwork_webserver_backend_sdk::{
     AgentCertificateObservation as SdkAgentCertificateObservation,
     AgentHeartbeatRequest as SdkAgentHeartbeatRequest,
@@ -65,7 +66,10 @@ fn build_backend_sdk_client(
     runtime: &NodeDaemonRuntimeConfig,
     maximum_response_bytes: usize,
 ) -> anyhow::Result<SdkworkBackendClient> {
-    let mut config = SdkworkConfig::new(runtime.control_plane.clone());
+    // DISCOVERY_SPEC §12.1: registry-first, configured control plane as the
+    // degradation fallback.
+    let base_url = registry_base_url_or("sdkwork-webserver", &runtime.control_plane);
+    let mut config = SdkworkConfig::new(base_url);
     config.timeout_ms = HTTP_TIMEOUT_SECS * 1_000;
     config.max_response_body_bytes = maximum_response_bytes;
     let client = SdkworkBackendClient::new(config)?;
@@ -104,6 +108,12 @@ pub async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+    // DISCOVERY_SPEC §12.1: registry-first control-plane URL, fail-open.
+    let _http_service_registry = sdkwork_discovery_client::install_resolver_from_env(
+        sdkwork_discovery_client::registry_identity_from_env(),
+        sdkwork_discovery_client::HttpRegistryConfig::default(),
+    )
+    .await;
 
     let edge = EdgeRuntime::from_env()?;
     let served_certificates = ServedCertificateAuthority::from_env();

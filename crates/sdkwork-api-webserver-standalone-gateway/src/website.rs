@@ -14,6 +14,7 @@ use sdkwork_knowledgebase_internal_sdk::{
     SdkworkCustomClient as KnowledgebaseSdkworkCustomClient,
 };
 use sdkwork_webserver_contract::RuntimeObservationState;
+use sdkwork_utils_rust::service_base_url::registry_base_url_or;
 use sdkwork_webserver_core::{
     load_and_compile_webserver_config_revision,
     runtime_env::web_environment_name,
@@ -974,7 +975,10 @@ fn build_knowledgebase_provider(
     let Some(config) = config else {
         return Ok(None);
     };
-    let mut sdk_config = KnowledgebaseSdkworkConfig::new(config.base_url);
+    let mut sdk_config = KnowledgebaseSdkworkConfig::new(registry_base_url_or(
+        "sdkwork-knowledgebase",
+        &config.base_url,
+    ));
     sdk_config.timeout_ms = 30_000;
     sdk_config.max_response_body_bytes = MAXIMUM_KNOWLEDGEBASE_RESPONSE_BYTES;
     let client = KnowledgebaseSdkworkCustomClient::new(sdk_config)
@@ -1005,7 +1009,10 @@ fn build_drive_provider(
     let Some(config) = config else {
         return Ok(None);
     };
-    let mut sdk_config = DriveSdkworkConfig::new(config.base_url);
+    let mut sdk_config = DriveSdkworkConfig::new(registry_base_url_or(
+        "sdkwork-drive",
+        &config.base_url,
+    ));
     sdk_config.timeout_ms = 30_000;
     sdk_config.max_response_body_bytes = usize::try_from(MAXIMUM_DRIVE_CONTENT_BYTES)
         .map_err(|_| WebsiteDataPlaneBootstrapError::DriveSdkClient)?;

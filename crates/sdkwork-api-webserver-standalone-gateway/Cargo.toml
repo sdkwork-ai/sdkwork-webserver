@@ -133,6 +133,7 @@ sdkwork-web-axum = { workspace = true, optional = true }
 sdkwork-web-contract = { workspace = true, optional = true }
 sdkwork-web-store-sqlx = { workspace = true, optional = true }
 sdkwork-utils-rust.workspace = true
+sdkwork-discovery-client.workspace = true
 sdkwork-web-core.workspace = true
 sdkwork-iam-web-adapter.workspace = true
 # `reset-admin` (bootstrap administrator password recovery) hashes the

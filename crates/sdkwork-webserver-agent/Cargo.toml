@@ -40,6 +40,7 @@ sdkwork-webserver-tunnel.workspace = true
 sdkwork-webserver-tunnel-transport.workspace = true
 sdkwork-webserver-core.workspace = true
 sdkwork-utils-rust.workspace = true
+sdkwork-discovery-client.workspace = true
 
 [dev-dependencies]
 axum.workspace = true

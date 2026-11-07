@@ -4236,6 +4236,7 @@ dependencies = [
  "sdkwork-deploy-contract",
  "sdkwork-deploy-core",
  "sdkwork-deploy-runtime-compiler",
+ "sdkwork-discovery-client",
  "sdkwork-drive-contract",
  "sdkwork-drive-internal-sdk-generated-rust",
  "sdkwork-iam-bootstrap",
@@ -4548,6 +4549,20 @@ dependencies = [
  "sdkwork-utils-rust",
  "sdkwork-webserver-internal-sdk-generated-rust",
  "serde_json",
+]
+
+[[package]]
+name = "sdkwork-discovery-client"
+version = "0.1.0"
+dependencies = [
+ "sdkwork-utils-rust",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -5734,6 +5749,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "rustls",
+ "sdkwork-discovery-client",
  "sdkwork-utils-rust",
  "sdkwork-webserver-backend-sdk-generated-rust",
  "sdkwork-webserver-contract",
