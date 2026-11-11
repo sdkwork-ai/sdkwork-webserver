@@ -9,6 +9,10 @@
       "file": "crates/sdkwork-api-webserver-standalone-gateway/src/website_provider_http_adapter.rs",
       "envVar": "SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_BASE_URL",
       "reason": "Opt-in split deployment only (SDKWORK_WEBSERVER_KNOWLEDGEBASE_PROVIDER_MODE=http). The in-process transport is the default and calls Knowledgebase's own KnowledgeWikiPublicProviderService; this module builds the HTTP client only after that explicit opt-in, and startup fails closed when the endpoint or its ingress token file is missing."
+    },
+    {
+      "file": "crates/sdkwork-api-webserver-standalone-gateway/src/usage_metering.rs",
+      "reason": "Explicit HTTP opt-in, default is in-process, startup-validated. File-scoped entry for the second detection mode: HttpUsageIngestChannel posts the metering windows to the Deploy control-plane /backend/v3/api/usage/ingest endpoint, and is selected only by usageMetering.channel.mode=http with an absolute http(s) endpoint (config validation rejects a blank or relative one at startup). The default UsageMeteringChannel::Embedded writes the same UsageEventIngestItem batch through the shared Deploy database in-process, so a single-process deployment never constructs this channel."
     }
   ]
 }
