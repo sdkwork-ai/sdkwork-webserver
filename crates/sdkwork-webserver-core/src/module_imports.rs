@@ -576,6 +576,28 @@ pub fn resolve_import_environment(
 
 /// Load one module import as a materialized app model. Layout v3 TOML
 /// directories and stock nginx `.conf` files are supported.
+/// Operator document-root allowlist for request-time `root $variable` /
+/// `alias $variable` values in imported nginx sidecars
+/// (`SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST`; a comma-separated list of
+/// absolute directory prefixes). The gateway's `main.rs` applies the same
+/// env through `document_root_allowlist_from_env` for its own config paths;
+/// the merged-imports loader needs the identical setting so an operator
+/// declaration covers every import without a second spelling.
+#[must_use]
+pub fn module_import_document_root_allowlist() -> Vec<String> {
+    std::env::var("SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST")
+        .ok()
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn load_module_import_app_config(
     import: &WebserverModuleImport,
 ) -> Result<WebServerAppConfig, ModuleImportError> {
@@ -585,6 +607,14 @@ pub fn load_module_import_app_config(
         let options = ConfigLoadOptions {
             format: Some(ConfigFormat::NginxConf),
             app_key: Some(app_key),
+            // Imported sidecars may declare request-time `root $variable` /
+            // `alias $variable` values; the operator allowlist env
+            // (`SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST`, the same setting
+            // the gateway's own config-file paths apply through
+            // `document_root_allowlist_from_env`) confines the evaluated
+            // paths. Without it a variable document root fails closed at
+            // materialization.
+            document_root_allowlist: module_import_document_root_allowlist(),
             ..ConfigLoadOptions::default()
         };
         let loaded = loader.load(&import.path, &options).map_err(|source| {

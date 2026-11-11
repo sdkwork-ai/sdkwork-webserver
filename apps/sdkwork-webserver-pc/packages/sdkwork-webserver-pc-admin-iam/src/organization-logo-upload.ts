@@ -3,10 +3,6 @@ import {
   createDriveUploadImageService,
   type DriveUploadImageService,
 } from "@sdkwork/drive-upload-image-core";
-import type {
-  SdkworkIamOrganizationLogoMediaResource,
-  SdkworkIamOrganizationLogoService,
-} from "@sdkwork/iam-pc-admin-organization";
 import {
   WEBSERVER_PC_ADMIN_ORGANIZATION_LOGO_UPLOAD,
   type SdkworkDriveAppClient,
@@ -39,69 +35,4 @@ export function createSdkworkIamOrganizationDriveUploadImageService(
     declaration: WEBSERVER_PC_ADMIN_ORGANIZATION_LOGO_UPLOAD,
     previewReader: createDriveNodesImagePreviewReader(drive.drive.nodes),
   });
-}
-
-export function createSdkworkIamOrganizationLogoService(
-  drive: SdkworkDriveAppClient,
-): SdkworkIamOrganizationLogoService {
-  return {
-    attachLogo: (organizationId, file) => attachOrganizationLogo(drive, organizationId, file),
-    resolveLogoUrl: (logo) => resolveOrganizationLogoUrl(drive, logo),
-  };
-}
-
-/**
- * Uploads the picked image for an existing organization and returns the
- * drive-backed media resource stored as the organization's logo snapshot
- * (`DRIVE_SPEC.md` §10 mapping: `source: "drive"`,
- * `uri: drive://spaces/{spaceId}/nodes/{nodeId}`, and the `metadata.drive`
- * block).
- */
-async function attachOrganizationLogo(
-  drive: SdkworkDriveAppClient,
-  organizationId: string,
-  file: File,
-): Promise<SdkworkIamOrganizationLogoMediaResource> {
-  const uploaded = await createSdkworkIamOrganizationDriveUploadImageService(drive).upload({
-    appResourceId: organizationId,
-    file,
-  });
-  const driveMetadata = uploaded.metadata?.drive;
-  const spaceId = driveMetadata?.spaceId;
-  const nodeId = driveMetadata?.nodeId;
-  if (!spaceId || !nodeId) {
-    throw new Error("Drive did not return the uploaded logo identity");
-  }
-  return {
-    fileName: driveMetadata.originalFileName || file.name,
-    id: nodeId,
-    kind: "image",
-    metadata: { drive: { nodeId, spaceId } },
-    mimeType: driveMetadata.contentType || file.type || undefined,
-    sizeBytes: driveMetadata.contentLength || String(file.size),
-    source: "drive",
-    uri: uploaded.uri,
-  };
-}
-
-/**
- * Transient display URL for a stored logo snapshot. Drive-backed resources
- * resolve through the shared bounded preview reader; other sources keep their
- * own delivery URL. The result is presentation-only state and never persisted.
- */
-async function resolveOrganizationLogoUrl(
-  drive: SdkworkDriveAppClient,
-  logo: SdkworkIamOrganizationLogoMediaResource,
-): Promise<string | undefined> {
-  const directUrl = logo.publicUrl || logo.url;
-  if (logo.source !== "drive") {
-    return directUrl || logo.uri || undefined;
-  }
-  if (!logo.uri) {
-    return directUrl || undefined;
-  }
-  const previewUrl = await createSdkworkIamOrganizationDriveUploadImageService(drive).resolvePreview({
-    uri: logo.uri,
-  });
-  return previewUrl ?? undefined;
 }

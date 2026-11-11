@@ -154,6 +154,11 @@ x-webserver-common: &webserver-common
     SDKWORK_WEBSERVER_PC_STATIC_ROOT: ${SDKWORK_WEBSERVER_PC_STATIC_ROOT:-/app/share/sdkwork/webserver/web/pc}
     SDKWORK_WEBSERVER_H5_STATIC_ROOT: ${SDKWORK_WEBSERVER_H5_STATIC_ROOT:-/app/share/sdkwork/webserver/web/h5}
     SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT: ${SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT:-/app/share/sdkwork/webserver/web/static}
+    # Variable document roots (`root $surface` in module adaptive-web sidecars)
+    # fail closed without the operator allowlist (main.rs document_root_
+    # allowlist_from_env); the entrypoint materializes module web roots under
+    # /usr/share/sdkwork/<module>/web/, so that prefix confines them.
+    SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST: ${SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST:-/usr/share/sdkwork}
     RUST_LOG: ${RUST_LOG:-info}
   volumes:
     # SDKWORK_WEBSERVER_SPEC.md §17: the space root is read-only; the checkout

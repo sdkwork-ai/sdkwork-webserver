@@ -119,6 +119,66 @@ pub fn merge_nginx_apps(
         }
     }
 
+    // `map` / `geo` / `split_clients` declare request variables at
+    // configuration init, and an imported sidecar's routes may reference the
+    // results it declares (the adaptive-web surface maps). Dropping them in
+    // the merge would leave the merged routes referencing undeclared
+    // variables. nginx lets a later declaration of the same result variable
+    // replace the earlier one (differential-confirmed, mapping.rs); the merge
+    // applies the same upsert so the merged document stays consistent.
+    for map in right.maps {
+        let result = map.result.clone();
+        if let Some(existing) = left.maps.iter().position(|map| map.result == result) {
+            left.maps[existing] = map;
+        } else {
+            left.maps.push(map);
+        }
+    }
+    for geo in right.geo {
+        let result = geo.result.clone();
+        if let Some(existing) = left.geo.iter().position(|geo| geo.result == result) {
+            left.geo[existing] = geo;
+        } else {
+            left.geo.push(geo);
+        }
+    }
+    for split in right.split_clients {
+        let result = split.result.clone();
+        if let Some(existing) = left
+            .split_clients
+            .iter()
+            .position(|split| split.result == result)
+        {
+            left.split_clients[existing] = split;
+        } else {
+            left.split_clients.push(split);
+        }
+    }
+    for map in right.stream_maps {
+        let result = map.result.clone();
+        if let Some(existing) = left
+            .stream_maps
+            .iter()
+            .position(|map| map.result == result)
+        {
+            left.stream_maps[existing] = map;
+        } else {
+            left.stream_maps.push(map);
+        }
+    }
+    for split in right.stream_split_clients {
+        let result = split.result.clone();
+        if let Some(existing) = left
+            .stream_split_clients
+            .iter()
+            .position(|split| split.result == result)
+        {
+            left.stream_split_clients[existing] = split;
+        } else {
+            left.stream_split_clients.push(split);
+        }
+    }
+
     if right.gzip.enabled {
         left.gzip.enabled = true;
     }

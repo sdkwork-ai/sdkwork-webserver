@@ -2029,11 +2029,14 @@ environment = "${environment}"
 profile_id = "standalone.${environment}"
 use_memory_drive = false
 use_memory_content_provider = false
-drive_facade_url = "${internal_api_url}"
-drive_internal_api_url = "${internal_api_url}"
-drive_internal_api_ingress_token_file = "$(posix_path "${SECRETS_ROOT}/drive-internal-api-ingress-token")"
-knowledgebase_internal_api_url = "${internal_api_url}"
-knowledgebase_internal_api_ingress_token_file = "$(posix_path "${SECRETS_ROOT}/knowledgebase-internal-api-ingress-token")"
+# Drive and knowledgebase providers are wired in-process (default) or via the
+# HTTP transports configured through SDKWORK_WEBSERVER_<DRIVE|KNOWLEDGEBASE>_
+# PROVIDER_MODE and their *_INTERNAL_API_BASE_URL / *_INGRESS_TOKEN_FILE env
+# (runtime_config.rs DeploySection; the former [deploy] facade keys were
+# removed with the provider adapters). The provider identity envs
+# (SDKWORK_WEBSERVER_TENANT_ID / _ORGANIZATION_ID) are required only when a
+# provider runs in-process; declare them in the deployment env when enabling
+# that surface.
 web_internal_api_url = "${internal_api_url}"
 web_internal_api_ingress_token_file = "$(posix_path "${SECRETS_ROOT}/web-internal-api-ingress-token")"
 runtime_assignment_worker_id = "deploy-worker-0"

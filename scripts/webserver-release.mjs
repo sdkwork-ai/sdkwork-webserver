@@ -39,7 +39,10 @@ const MAX_PACKAGE_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_PACKAGE_CONTENT_BYTES = 1024 * 1024 * 1024;
 const MAX_PACKAGE_ENTRIES = 2048;
 const MAX_PC_STATIC_FILES = 256;
-const MAX_DEPENDENCY_RUNTIME_FILES = 256;
+// Sibling runtime-asset trees grow with their modules (the 0.1.9 baseline
+// already sums to 264 across iam/drive/skills/mcp/deploy/webstore); 512 keeps
+// one headroom generation before this sanity bound trips again.
+const MAX_DEPENDENCY_RUNTIME_FILES = 512;
 const MAX_PC_BOOTSTRAP_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_CHECKSUM_BYTES = 256;

@@ -558,13 +558,27 @@ async fn run_management_plane() -> MainResult<()> {
     reconcile_application_registry_at_startup().await;
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "management listener started");
+    // The drain deadline bounds only the post-signal tail, never the serving
+    // lifetime: arming `timeout(MANAGEMENT_DRAIN_TIMEOUT, serve)` directly
+    // would end every healthy management process 30s after bind (the deadline
+    // fires while the signal is still pending). The watcher observes the same
+    // signals the graceful shutdown observes and arms the deadline only once
+    // the drain has actually begun.
     let serve = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal());
-    match tokio::time::timeout(MANAGEMENT_DRAIN_TIMEOUT, serve).await {
-        Ok(result) => result?,
-        Err(_) => tracing::warn!(
-            timeout_s = MANAGEMENT_DRAIN_TIMEOUT.as_secs(),
-            "management drain deadline expired; terminating with in-flight requests cut"
-        ),
+    let (drain_expired, drain_expired_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        tokio::time::sleep(MANAGEMENT_DRAIN_TIMEOUT).await;
+        let _ = drain_expired.send(());
+    });
+    tokio::select! {
+        result = serve => result?,
+        _ = drain_expired_rx => {
+            tracing::warn!(
+                timeout_s = MANAGEMENT_DRAIN_TIMEOUT.as_secs(),
+                "management drain deadline expired; terminating with in-flight requests cut"
+            );
+        }
     }
     Ok(())
 }
