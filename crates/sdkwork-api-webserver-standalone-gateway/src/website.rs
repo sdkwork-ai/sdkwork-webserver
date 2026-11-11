@@ -6,15 +6,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use sdkwork_drive_internal_sdk::{
-    SdkworkConfig as DriveSdkworkConfig, SdkworkCustomClient as DriveSdkworkCustomClient,
-};
-use sdkwork_knowledgebase_internal_sdk::{
-    SdkworkConfig as KnowledgebaseSdkworkConfig,
-    SdkworkCustomClient as KnowledgebaseSdkworkCustomClient,
-};
 use sdkwork_webserver_contract::RuntimeObservationState;
-use sdkwork_utils_rust::service_base_url::registry_base_url_or;
 use sdkwork_webserver_core::{
     load_and_compile_webserver_config_revision,
     runtime_env::web_environment_name,
@@ -34,12 +26,12 @@ use sdkwork_webserver_delivery_runtime::{
     MAXIMUM_PROVIDER_RESOLUTION_CACHE_ENTRIES,
 };
 use sdkwork_webserver_drive_provider::{
-    DriveWebsiteProvider, FixedDriveWebsiteSdkClientResolver,
+    DriveWebsiteProvider, DriveWebsiteSdkClient, FixedDriveWebsiteSdkClientResolver,
     DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION, MAXIMUM_DRIVE_CONTENT_BYTES,
 };
 use sdkwork_webserver_knowledgebase_provider::{
-    FixedKnowledgebaseWikiSdkClientResolver, KnowledgebaseWikiWebsiteProvider,
-    KNOWLEDGEBASE_WIKI_PROVIDER_CONTRACT_VERSION,
+    FixedKnowledgebaseWikiSdkClientResolver, KnowledgebaseWikiSdkClient,
+    KnowledgebaseWikiWebsiteProvider, KNOWLEDGEBASE_WIKI_PROVIDER_CONTRACT_VERSION,
 };
 use thiserror::Error;
 use tokio::{
@@ -51,6 +43,9 @@ use url::Url;
 use crate::{
     provider_event_ingress::WebsiteProviderEventIngress,
     run_website_data_plane_with_operations_until, run_website_data_plane_with_tls_operations_until,
+    website_provider_http_adapter::{
+        drive_http_client, knowledgebase_http_client, provider_transport, WebsiteProviderTransport,
+    },
     website_runtime_cloud::{
         CloudRuntimeAssignment, CloudRuntimeAssignmentError, CloudRuntimeAssignmentSource,
         CloudRuntimeDelivery,
@@ -83,13 +78,17 @@ pub const WEBSITE_PROVIDER_RESOLUTION_CACHE_ENTRIES_ENV: &str =
     "SDKWORK_WEBSERVER_WEBSITE_PROVIDER_RESOLUTION_CACHE_ENTRIES";
 pub const WEBSITE_PROVIDER_EVENT_CONFIG_FILE_ENV: &str =
     "SDKWORK_WEBSERVER_WEBSITE_PROVIDER_EVENT_CONFIG_FILE";
-pub const KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV: &str =
-    "SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_BASE_URL";
-pub const KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV: &str =
-    "SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE";
-pub const DRIVE_INTERNAL_API_BASE_URL_ENV: &str = "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_BASE_URL";
-pub const DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV: &str =
-    "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE";
+/// Deployment identity of the Web Node. The in-process provider transports
+/// (MODULE_SPEC.md §4.2) scope every sibling read with it; it is required only
+/// when a provider runs in-process, because the split-deployment HTTP transport
+/// carries the identity in its ingress credential instead.
+pub const WEBSITE_TENANT_ID_ENV: &str = "SDKWORK_WEBSERVER_TENANT_ID";
+pub const WEBSITE_ORGANIZATION_ID_ENV: &str = "SDKWORK_WEBSERVER_ORGANIZATION_ID";
+pub use crate::website_provider_http_adapter::{
+    DRIVE_INTERNAL_API_BASE_URL_ENV, DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+    DRIVE_PROVIDER_MODE_ENV, KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV,
+    KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV, KNOWLEDGEBASE_PROVIDER_MODE_ENV,
+};
 pub const TLS_RUNTIME_SOURCE_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_SOURCE";
 /// The data plane's TLS runtime snapshot, shared with the node daemon.
 ///
@@ -279,7 +278,8 @@ where
         &tenant_scope_hash,
         initial.runtime_set().environment(),
         require_knowledgebase,
-    )?;
+    )
+    .await?;
     let knowledgebase_registered = knowledgebase.is_some();
     if let Some(provider) = knowledgebase {
         providers.register_wiki(WebsiteProviderType::Knowledgebase, provider)?;
@@ -288,7 +288,8 @@ where
         &tenant_scope_hash,
         initial.runtime_set().environment(),
         require_drive,
-    )?;
+    )
+    .await?;
     let drive_registered = drive.is_some();
     if let Some(provider) = drive {
         providers.register_static(WebsiteProviderType::Drive, provider)?;
@@ -960,33 +961,44 @@ where
     }
 }
 
-fn build_knowledgebase_provider(
+async fn build_knowledgebase_provider(
     tenant_scope_hash: &str,
     environment: WebsiteRuntimeEnvironment,
     required: bool,
 ) -> Result<Option<Arc<KnowledgebaseWikiWebsiteProvider>>, WebsiteDataPlaneBootstrapError> {
-    let config = ProviderSdkConfig::from_env(
-        environment,
-        required,
-        WebsiteProviderType::Knowledgebase,
-        KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV,
-        KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
-    )?;
-    let Some(config) = config else {
-        return Ok(None);
+    // MODULE_SPEC.md §4.2: in-process is the default; the Internal API is an
+    // explicit split-deployment opt-in whose endpoints are validated here, at
+    // startup, never at the first request.
+    let transport = provider_transport(KNOWLEDGEBASE_PROVIDER_MODE_ENV)
+        .map_err(WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig)?;
+    let client: Arc<dyn KnowledgebaseWikiSdkClient> = match transport {
+        WebsiteProviderTransport::Http => {
+            let config = ProviderSdkConfig::from_env(
+                environment,
+                required,
+                WebsiteProviderType::Knowledgebase,
+                KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV,
+                KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+            )?;
+            let Some(config) = config else {
+                return Ok(None);
+            };
+            knowledgebase_http_client(
+                &config.base_url,
+                config.ingress_token,
+                MAXIMUM_KNOWLEDGEBASE_RESPONSE_BYTES,
+            )
+            .map_err(|_| WebsiteDataPlaneBootstrapError::KnowledgebaseSdkClient)?
+        }
+        WebsiteProviderTransport::InProcess => {
+            if !required {
+                return Ok(None);
+            }
+            in_process_knowledgebase_transport().await?
+        }
     };
-    let mut sdk_config = KnowledgebaseSdkworkConfig::new(registry_base_url_or(
-        "sdkwork-knowledgebase",
-        &config.base_url,
-    ));
-    sdk_config.timeout_ms = 30_000;
-    sdk_config.max_response_body_bytes = MAXIMUM_KNOWLEDGEBASE_RESPONSE_BYTES;
-    let client = KnowledgebaseSdkworkCustomClient::new(sdk_config)
-        .map_err(|_| WebsiteDataPlaneBootstrapError::KnowledgebaseSdkClient)?;
-    client.set_api_key(config.ingress_token);
-    let wiki_client = Arc::new(client.knowledgebase_internal_wiki());
     let resolver = Arc::new(
-        FixedKnowledgebaseWikiSdkClientResolver::new(tenant_scope_hash, wiki_client)
+        FixedKnowledgebaseWikiSdkClientResolver::new(tenant_scope_hash, client)
             .map_err(WebsiteDataPlaneBootstrapError::ProviderConfig)?,
     );
     Ok(Some(Arc::new(KnowledgebaseWikiWebsiteProvider::new(
@@ -994,34 +1006,41 @@ fn build_knowledgebase_provider(
     ))))
 }
 
-fn build_drive_provider(
+async fn build_drive_provider(
     tenant_scope_hash: &str,
     environment: WebsiteRuntimeEnvironment,
     required: bool,
 ) -> Result<Option<Arc<DriveWebsiteProvider>>, WebsiteDataPlaneBootstrapError> {
-    let config = ProviderSdkConfig::from_env(
-        environment,
-        required,
-        WebsiteProviderType::Drive,
-        DRIVE_INTERNAL_API_BASE_URL_ENV,
-        DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
-    )?;
-    let Some(config) = config else {
-        return Ok(None);
+    let transport = provider_transport(DRIVE_PROVIDER_MODE_ENV)
+        .map_err(WebsiteDataPlaneBootstrapError::RuntimeAssignmentConfig)?;
+    let client: Arc<dyn DriveWebsiteSdkClient> = match transport {
+        WebsiteProviderTransport::Http => {
+            let config = ProviderSdkConfig::from_env(
+                environment,
+                required,
+                WebsiteProviderType::Drive,
+                DRIVE_INTERNAL_API_BASE_URL_ENV,
+                DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+            )?;
+            let Some(config) = config else {
+                return Ok(None);
+            };
+            drive_http_client(
+                &config.base_url,
+                config.ingress_token,
+                MAXIMUM_DRIVE_CONTENT_BYTES,
+            )
+            .map_err(|_| WebsiteDataPlaneBootstrapError::DriveSdkClient)?
+        }
+        WebsiteProviderTransport::InProcess => {
+            if !required {
+                return Ok(None);
+            }
+            in_process_drive_transport().await?
+        }
     };
-    let mut sdk_config = DriveSdkworkConfig::new(registry_base_url_or(
-        "sdkwork-drive",
-        &config.base_url,
-    ));
-    sdk_config.timeout_ms = 30_000;
-    sdk_config.max_response_body_bytes = usize::try_from(MAXIMUM_DRIVE_CONTENT_BYTES)
-        .map_err(|_| WebsiteDataPlaneBootstrapError::DriveSdkClient)?;
-    let client = DriveSdkworkCustomClient::new(sdk_config)
-        .map_err(|_| WebsiteDataPlaneBootstrapError::DriveSdkClient)?;
-    client.set_api_key(config.ingress_token);
-    let drive_client = Arc::new(client.drive_internal_publishing());
     let resolver = Arc::new(
-        FixedDriveWebsiteSdkClientResolver::new(tenant_scope_hash, drive_client)
+        FixedDriveWebsiteSdkClientResolver::new(tenant_scope_hash, client)
             .map_err(WebsiteDataPlaneBootstrapError::ProviderConfig)?,
     );
     // Local delivery cache (DRIVE_SPEC.md §17): binds when
@@ -1031,6 +1050,120 @@ fn build_drive_provider(
     Ok(Some(Arc::new(DriveWebsiteProvider::with_cache(
         resolver, cache,
     ))))
+}
+
+/// The in-process Drive transport reads the shared PostgreSQL pool, so a
+/// split-deployment composition (no database in this process) must select the
+/// explicit HTTP opt-in instead of silently degrading.
+#[cfg(feature = "management")]
+async fn in_process_drive_transport(
+) -> Result<Arc<dyn DriveWebsiteSdkClient>, WebsiteDataPlaneBootstrapError> {
+    let pool = in_process_pg_pool()?;
+    let tenant_id = in_process_identity(WEBSITE_TENANT_ID_ENV)?;
+    Ok(sdkwork_webserver_drive_provider::in_process_drive_client(
+        pool, tenant_id,
+    ))
+}
+
+#[cfg(not(feature = "management"))]
+async fn in_process_drive_transport(
+) -> Result<Arc<dyn DriveWebsiteSdkClient>, WebsiteDataPlaneBootstrapError> {
+    Err(in_process_transport_requires_management())
+}
+
+#[cfg(feature = "management")]
+async fn in_process_knowledgebase_transport(
+) -> Result<Arc<dyn KnowledgebaseWikiSdkClient>, WebsiteDataPlaneBootstrapError> {
+    let pool = in_process_pg_pool()?;
+    let tenant_id = in_process_identity(WEBSITE_TENANT_ID_ENV)?;
+    let organization_id = in_process_identity(WEBSITE_ORGANIZATION_ID_ENV)?;
+    let compatibility_pool = in_process_compatibility_pool().await?;
+    Ok(
+        sdkwork_webserver_knowledgebase_provider::in_process_knowledgebase_wiki_client(
+            pool,
+            compatibility_pool,
+            tenant_id.parse::<u64>().map_err(|_| {
+                WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
+                    "{WEBSITE_TENANT_ID_ENV} is outside the unsigned range"
+                ))
+            })?,
+            organization_id.parse::<u64>().map_err(|_| {
+                WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
+                    "{WEBSITE_ORGANIZATION_ID_ENV} is outside the unsigned range"
+                ))
+            })?,
+        ),
+    )
+}
+
+#[cfg(not(feature = "management"))]
+async fn in_process_knowledgebase_transport(
+) -> Result<Arc<dyn KnowledgebaseWikiSdkClient>, WebsiteDataPlaneBootstrapError> {
+    Err(in_process_transport_requires_management())
+}
+
+#[cfg(feature = "management")]
+fn in_process_pg_pool() -> Result<sqlx::PgPool, WebsiteDataPlaneBootstrapError> {
+    let pool = sdkwork_database_sqlx::process_shared_database_pool().ok_or_else(|| {
+        WebsiteDataPlaneBootstrapError::ProviderConfig(
+            "in-process provider transport requires the process-shared PostgreSQL pool; \
+             a split deployment must opt in with SDKWORK_WEBSERVER_DRIVE_PROVIDER_MODE=http \
+             (or SDKWORK_WEBSERVER_KNOWLEDGEBASE_PROVIDER_MODE=http)"
+                .to_owned(),
+        )
+    })?;
+    pool.as_postgres().cloned().ok_or_else(|| {
+        WebsiteDataPlaneBootstrapError::ProviderConfig(
+            "in-process provider transport requires a PostgreSQL pool".to_owned(),
+        )
+    })
+}
+
+/// The Knowledgebase persistence port is `sqlx::AnyPool`-typed, so the database
+/// framework's reserved compatibility pool is the only bounded way to reach it
+/// without opening an unbudgeted second pool (MODULE_SPEC.md §4.2.7).
+#[cfg(feature = "management")]
+async fn in_process_compatibility_pool() -> Result<sqlx::AnyPool, WebsiteDataPlaneBootstrapError> {
+    let pool = sdkwork_database_sqlx::process_shared_database_pool().ok_or_else(|| {
+        WebsiteDataPlaneBootstrapError::ProviderConfig(
+            "in-process Knowledgebase transport requires the process-shared PostgreSQL pool"
+                .to_owned(),
+        )
+    })?;
+    let config = pool.config().clone();
+    sdkwork_database_sqlx::create_any_pool_from_config(config)
+        .await
+        .map_err(|error| {
+            WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
+                "in-process Knowledgebase transport requires the reserved compatibility pool \
+                 (SDKWORK_DATABASE_TEMPORARY_ANY_POOL_EXCEPTION=true and \
+                 SDKWORK_DATABASE_TEMPORARY_DRIVER_POOL_COUNT>=1), or an explicit \
+                 SDKWORK_WEBSERVER_KNOWLEDGEBASE_PROVIDER_MODE=http opt-in: {error}"
+            ))
+        })
+}
+
+#[cfg(not(feature = "management"))]
+fn in_process_transport_requires_management() -> WebsiteDataPlaneBootstrapError {
+    WebsiteDataPlaneBootstrapError::ProviderConfig(
+        "in-process provider transport requires the management composition".to_owned(),
+    )
+}
+
+/// Deployment identity for in-process sibling reads. Validated at startup; a
+/// provider request never falls back to a default tenant.
+#[cfg(feature = "management")]
+fn in_process_identity(key: &'static str) -> Result<String, WebsiteDataPlaneBootstrapError> {
+    let value = required_env(key)?;
+    let parsed = value.parse::<i64>().map_err(|_| {
+        WebsiteDataPlaneBootstrapError::ProviderConfig(format!("{key} must be an int64"))
+    })?;
+    if parsed < 1 || parsed.to_string() != value {
+        return Err(WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
+            "{key} must be a canonical positive int64"
+        )));
+    }
+    Ok(value)
 }
 
 /// Assembles the provider executor for `drive` and `knowledgebase` resources
@@ -1061,12 +1194,14 @@ pub(crate) async fn build_app_config_provider_executor(
     let environment = app_config_runtime_environment()?;
     let mut registry = WebsiteProviderRegistry::new();
     if requires_drive {
-        let provider = build_drive_provider(&tenant_scope_hash, environment, true)?
+        let provider = build_drive_provider(&tenant_scope_hash, environment, true)
+            .await?
             .expect("required drive provider is configured");
         registry.register_static(WebsiteProviderType::Drive, provider)?;
     }
     if requires_knowledgebase {
-        let provider = build_knowledgebase_provider(&tenant_scope_hash, environment, true)?
+        let provider = build_knowledgebase_provider(&tenant_scope_hash, environment, true)
+            .await?
             .expect("required knowledgebase provider is configured");
         registry.register_wiki(WebsiteProviderType::Knowledgebase, provider)?;
     }

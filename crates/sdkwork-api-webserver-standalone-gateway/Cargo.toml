@@ -91,7 +91,7 @@ x509-parser.workspace = true
 windows-sys.workspace = true
 woothee.workspace = true
 zeroize.workspace = true
-sdkwork-database-sqlx = { workspace = true, optional = true }
+sdkwork-database-sqlx = { workspace = true, optional = true, features = ["any"] }
 sdkwork-webserver-http-host = { workspace = true, optional = true }
 sdkwork-api-deployments-assembly = { workspace = true, optional = true }
 # Served-domain reconciliation writes `webserver_root_domain` /

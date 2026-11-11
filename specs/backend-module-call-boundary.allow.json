@@ -1,0 +1,14 @@
+{
+  "allow": [
+    {
+      "file": "crates/sdkwork-api-webserver-standalone-gateway/src/website_provider_http_adapter.rs",
+      "envVar": "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_BASE_URL",
+      "reason": "Opt-in split deployment only (SDKWORK_WEBSERVER_DRIVE_PROVIDER_MODE=http). The in-process Drive transport is the default and reads Drive's own website-root, resource-resolution and object-store ports on the shared PostgreSQL pool; this module builds the HTTP client only after that explicit opt-in, and startup fails closed when the endpoint or its ingress token file is missing."
+    },
+    {
+      "file": "crates/sdkwork-api-webserver-standalone-gateway/src/website_provider_http_adapter.rs",
+      "envVar": "SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_BASE_URL",
+      "reason": "Opt-in split deployment only (SDKWORK_WEBSERVER_KNOWLEDGEBASE_PROVIDER_MODE=http). The in-process transport is the default and calls Knowledgebase's own KnowledgeWikiPublicProviderService; this module builds the HTTP client only after that explicit opt-in, and startup fails closed when the endpoint or its ingress token file is missing."
+    }
+  ]
+}

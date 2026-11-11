@@ -203,10 +203,18 @@ sdkwork-discovery-client = { path = "../sdkwork-discovery/crates/sdkwork-discove
 sdkwork-drive-contract = { path = "../sdkwork-drive/crates/sdkwork-drive-contract" }
 sdkwork-drive-config = { path = "../sdkwork-drive/crates/sdkwork-drive-config" }
 sdkwork-drive-object-runtime = { path = "../sdkwork-drive/crates/sdkwork-drive-object-runtime" }
+sdkwork-drive-storage-contract = { path = "../sdkwork-drive/crates/sdkwork-drive-storage-contract" }
 sdkwork-drive-uploader-service = { path = "../sdkwork-drive/crates/sdkwork-drive-uploader-service" }
 sdkwork-drive-workspace-service = { path = "../sdkwork-drive/crates/sdkwork-drive-workspace-service" }
 sdkwork-drive-internal-sdk = { path = "../sdkwork-drive/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-rust/generated/server-openapi", package = "sdkwork-drive-internal-sdk-generated-rust" }
 sdkwork-knowledgebase-internal-sdk = { path = "../sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-rust/generated/server-openapi", package = "sdkwork-knowledgebase-internal-sdk-generated-rust" }
+# The public Wiki provider the Knowledgebase Internal API itself delegates to
+# (`KnowledgeWikiPublicProviderService`) plus its `AnyPool`-typed persistence
+# store and the module's embedded Drive source. MODULE_SPEC.md §4.2: the Web
+# Server calls the sibling's own service in-process instead of its HTTP surface.
+sdkwork-intelligence-knowledgebase-service = { path = "../sdkwork-knowledgebase/crates/sdkwork-intelligence-knowledgebase-service" }
+sdkwork-intelligence-knowledgebase-repository-sqlx = { path = "../sdkwork-knowledgebase/crates/sdkwork-intelligence-knowledgebase-repository-sqlx" }
+sdkwork-knowledgebase-drive = { path = "../sdkwork-knowledgebase/crates/sdkwork-knowledgebase-drive" }
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Production binaries benefit from LTO and a single codegen unit; panic=unwind

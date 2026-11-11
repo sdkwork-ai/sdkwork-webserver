@@ -10,7 +10,11 @@ name = "sdkwork_webserver_knowledgebase_provider"
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+sqlx.workspace = true
 tokio = { workspace = true, features = ["time"] }
+sdkwork-intelligence-knowledgebase-repository-sqlx.workspace = true
+sdkwork-intelligence-knowledgebase-service.workspace = true
+sdkwork-knowledgebase-drive.workspace = true
 sdkwork-knowledgebase-internal-sdk.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-webserver-core.workspace = true

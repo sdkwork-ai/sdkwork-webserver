@@ -113,6 +113,14 @@ spec:
               value: "268435456"
             - name: SDKWORK_WEBSERVER_WEBSITE_PROVIDER_EVENT_CONFIG_FILE
               value: /run/secrets/sdkwork-webserver-node/website-provider-events.json
+            # Split deployment: this pod runs the website data plane only, with
+            # no Drive/Knowledgebase module in-process, so it opts in to their
+            # Internal APIs (MODULE_SPEC.md 4.2.3). The in-process transport is
+            # the default everywhere the modules share the process.
+            - name: SDKWORK_WEBSERVER_DRIVE_PROVIDER_MODE
+              value: http
+            - name: SDKWORK_WEBSERVER_KNOWLEDGEBASE_PROVIDER_MODE
+              value: http
             - name: SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_BASE_URL
               value: https://drive-internal.sdkwork.com
             - name: SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE

@@ -902,11 +902,6 @@ pub struct DeploySection {
     pub profile_id: Option<String>,
     pub use_memory_drive: Option<bool>,
     pub use_memory_content_provider: Option<bool>,
-    pub drive_facade_url: Option<String>,
-    pub drive_internal_api_url: Option<String>,
-    pub drive_internal_api_ingress_token_file: Option<String>,
-    pub knowledgebase_internal_api_url: Option<String>,
-    pub knowledgebase_internal_api_ingress_token_file: Option<String>,
     pub web_internal_api_url: Option<String>,
     pub web_internal_api_ingress_token_file: Option<String>,
     pub runtime_assignment_worker_id: Option<String>,
@@ -930,27 +925,6 @@ impl DeploySection {
             set_env(
                 "SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER",
                 &value.to_string(),
-            );
-        }
-        if let Some(value) = &self.drive_facade_url {
-            set_env("SDKWORK_DRIVE_FACADE_URL", value);
-        }
-        if let Some(value) = &self.drive_internal_api_url {
-            set_env("SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL", value);
-        }
-        if let Some(value) = &self.drive_internal_api_ingress_token_file {
-            set_env(
-                "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE",
-                value,
-            );
-        }
-        if let Some(value) = &self.knowledgebase_internal_api_url {
-            set_env("SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL", value);
-        }
-        if let Some(value) = &self.knowledgebase_internal_api_ingress_token_file {
-            set_env(
-                "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE",
-                value,
             );
         }
         if let Some(value) = &self.web_internal_api_url {
@@ -1182,12 +1156,23 @@ impl TlsSection {
 #[serde(deny_unknown_fields)]
 pub struct NodeSection {
     pub uuid: Option<String>,
+    /// Deployment identity used by the in-process sibling provider transports
+    /// (MODULE_SPEC.md §4.2): the Web Node serves exactly this tenant and
+    /// organization.
+    pub tenant_id: Option<String>,
+    pub organization_id: Option<String>,
 }
 
 impl NodeSection {
     fn apply_to_env(&self) {
         if let Some(value) = &self.uuid {
             set_env("SDKWORK_WEBSERVER_NODE_UUID", value);
+        }
+        if let Some(value) = &self.tenant_id {
+            set_env("SDKWORK_WEBSERVER_TENANT_ID", value);
+        }
+        if let Some(value) = &self.organization_id {
+            set_env("SDKWORK_WEBSERVER_ORGANIZATION_ID", value);
         }
     }
 }
@@ -1270,7 +1255,6 @@ environment = "test"
 profile_id = "standalone.test"
 use_memory_drive = false
 use_memory_content_provider = false
-drive_facade_url = "http://server-test.sdkwork.com:8888"
 web_internal_api_url = "http://server-test.sdkwork.com:8888"
 runtime_assignment_worker_id = "deploy-worker-0"
 
@@ -1302,6 +1286,8 @@ snapshot_alpn = "h2,http/1.1"
 
 [node]
 uuid = "standalone-test-node"
+tenant_id = "100001"
+organization_id = "100001"
 
 [region]
 region_code = "cn"

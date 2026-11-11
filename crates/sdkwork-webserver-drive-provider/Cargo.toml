@@ -11,12 +11,17 @@ name = "sdkwork_webserver_drive_provider"
 async-trait.workspace = true
 chrono.workspace = true
 hex.workspace = true
+httpdate.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sqlx.workspace = true
 tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true
 sdkwork-drive-internal-sdk.workspace = true
+sdkwork-drive-object-runtime.workspace = true
+sdkwork-drive-storage-contract.workspace = true
+sdkwork-drive-workspace-service.workspace = true
 sdkwork-webserver-contract.workspace = true
 sdkwork-webserver-core.workspace = true
 
