@@ -186,6 +186,18 @@ on:
         description: 'SDKWORK_SANDBOX_REF dependency ref; blank falls back to the repository variable.'
         required: false
         default: ''
+      sdkwork_cloudrouter_ref:
+        description: 'SDKWORK_CLOUDROUTER_REF dependency ref; blank falls back to the repository variable.'
+        required: false
+        default: ''
+      sdkwork_discovery_ref:
+        description: 'SDKWORK_DISCOVERY_REF dependency ref; blank falls back to the repository variable.'
+        required: false
+        default: ''
+      sdkwork_kernel_ref:
+        description: 'SDKWORK_KERNEL_REF dependency ref; blank falls back to the repository variable.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -232,6 +244,9 @@ jobs:
                     "SDKWORK_MCP_REF": "${{ github.event.inputs.sdkwork_mcp_ref || vars.SDKWORK_MCP_REF }}",
                     "SDKWORK_SKILLS_REF": "${{ github.event.inputs.sdkwork_skills_ref || vars.SDKWORK_SKILLS_REF }}",
                     "SDKWORK_ORDER_REF": "${{ github.event.inputs.sdkwork_order_ref || vars.SDKWORK_ORDER_REF }}",
-                    "SDKWORK_SANDBOX_REF": "${{ github.event.inputs.sdkwork_sandbox_ref || vars.SDKWORK_SANDBOX_REF }}"
+                    "SDKWORK_SANDBOX_REF": "${{ github.event.inputs.sdkwork_sandbox_ref || vars.SDKWORK_SANDBOX_REF }}",
+                    "SDKWORK_CLOUDROUTER_REF": "${{ github.event.inputs.sdkwork_cloudrouter_ref || vars.SDKWORK_CLOUDROUTER_REF }}",
+                    "SDKWORK_DISCOVERY_REF": "${{ github.event.inputs.sdkwork_discovery_ref || vars.SDKWORK_DISCOVERY_REF }}",
+                    "SDKWORK_KERNEL_REF": "${{ github.event.inputs.sdkwork_kernel_ref || vars.SDKWORK_KERNEL_REF }}"
         }
     secrets: inherit

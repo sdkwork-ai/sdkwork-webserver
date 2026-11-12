@@ -108,7 +108,10 @@ struct LiveEntry {
 }
 
 enum PendingSocket {
-    Http(PreparedListener),
+    // Boxed: `PreparedListener` carries the full HTTP listener configuration
+    // (~360 bytes) while the other variants stay small; boxing keeps the enum
+    // at pointer size so every per-listener move stays cheap.
+    Http(Box<PreparedListener>),
     StreamTcp(PreparedStreamListener),
     StreamUdp(PreparedUdpStreamListener),
     Mail(PreparedMailListener),
@@ -291,10 +294,15 @@ impl ListenerSupervisor {
                         })?;
                 let requested = listener_address(&listener.bind, listener.port, &listener.id)?;
                 let inherited = self.claim_inherited_tcp(requested, &listener.id).await?;
-                Ok(PendingSocket::Http(
-                    prepare_listener(candidate, listener, self.tls_runtime.as_deref(), inherited)
-                        .await?,
-                ))
+                Ok(PendingSocket::Http(Box::new(
+                    prepare_listener(
+                        candidate,
+                        listener,
+                        self.tls_runtime.as_deref(),
+                        inherited,
+                    )
+                    .await?,
+                )))
             }
             SocketKind::StreamTcp => {
                 let socket_key = socket.socket_key.clone().unwrap_or_default();
@@ -477,7 +485,7 @@ impl ListenerSupervisor {
                         provider_resources,
                         deploy_fallback,
                         usage_meter,
-                        prepared,
+                        *prepared,
                         listener_semaphore,
                         shutdown_rx,
                         dynamic_tls,

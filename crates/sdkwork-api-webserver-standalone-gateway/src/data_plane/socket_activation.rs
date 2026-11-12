@@ -116,12 +116,15 @@ impl InheritedSockets {
     /// A leftover means the orchestrator passed sockets the configuration does
     /// not declare: split ownership, refused instead of silently ignored.
     pub(crate) fn verify_all_claimed(&self) -> Result<(), io::Error> {
-        for (bound, _) in &self.tcp {
+        // First leftover only: every unclaimed descriptor means the same
+        // configuration/orchestrator mismatch, so one located diagnostic is
+        // the actionable report.
+        if let Some((bound, _)) = self.tcp.first() {
             return Err(io::Error::other(format!(
                 "inherited TCP socket {bound} is not declared by the active configuration"
             )));
         }
-        for (bound, _) in &self.udp {
+        if let Some((bound, _)) = self.udp.first() {
             return Err(io::Error::other(format!(
                 "inherited UDP socket {bound} is not declared by the active configuration"
             )));

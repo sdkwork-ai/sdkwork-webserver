@@ -124,6 +124,24 @@
       "repository": "sdkwork-ai/sdkwork-sandbox",
       "refInput": "SDKWORK_SANDBOX_REF",
       "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
+      "id": "sdkwork-cloudrouter",
+      "repository": "sdkwork-ai/sdkwork-cloudrouter",
+      "refInput": "SDKWORK_CLOUDROUTER_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
+      "id": "sdkwork-discovery",
+      "repository": "sdkwork-ai/sdkwork-discovery",
+      "refInput": "SDKWORK_DISCOVERY_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
+      "id": "sdkwork-kernel",
+      "repository": "sdkwork-ai/sdkwork-kernel",
+      "refInput": "SDKWORK_KERNEL_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
     }
   ],
   "toolchains": {
