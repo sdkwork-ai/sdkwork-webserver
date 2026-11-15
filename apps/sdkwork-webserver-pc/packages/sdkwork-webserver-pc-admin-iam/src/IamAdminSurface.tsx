@@ -377,10 +377,9 @@ const LazyIamOauthMiniProgramsAdmin = lazy(async () => {
   const { createSdkworkIamOauthAdminController, SdkworkIamOauthMiniProgramAccountsPage } =
     await import("@sdkwork/iam-pc-admin-oauth");
   return {
-    default: function IamOauthMiniProgramsAdminContent({ permissionScope }: IamAdminContentProps) {
+    default: function IamOauthMiniProgramsAdminContent() {
       const { drive } = useWebserverConsoleSdk();
       const service = useIamAdminService();
-      const can = useIamAdminPermission(permissionScope);
       const controller = useMemo(() => createSdkworkIamOauthAdminController(service), [service]);
       const driveUploadImageService = useMemo(
         () => createSdkworkIamOauthAccountDriveUploadImageService(drive),
@@ -390,11 +389,6 @@ const LazyIamOauthMiniProgramsAdmin = lazy(async () => {
         <SdkworkIamOauthMiniProgramAccountsPage
           controller={controller}
           driveUploadImageService={driveUploadImageService}
-          permissions={{
-            create: can("iam.oauth.resourceAccounts.create"),
-            delete: can("iam.oauth.resourceAccounts.delete"),
-            update: can("iam.oauth.resourceAccounts.update"),
-          }}
         />
       );
     } satisfies ComponentType<IamAdminContentProps>,
@@ -408,10 +402,9 @@ const LazyIamOauthOfficialAccountsAdmin = lazy(async () => {
     SdkworkIamOauthOfficialAccountsPage,
   } = await import("@sdkwork/iam-pc-admin-oauth");
   return {
-    default: function IamOauthOfficialAccountsAdminContent({ permissionScope }: IamAdminContentProps) {
+    default: function IamOauthOfficialAccountsAdminContent() {
       const { drive } = useWebserverConsoleSdk();
       const service = useIamAdminService();
-      const can = useIamAdminPermission(permissionScope);
       const controller = useMemo(() => createSdkworkIamOauthAdminController(service), [service]);
       const driveUploadImageService = useMemo(
         () => createSdkworkIamOauthAccountDriveUploadImageService(drive),
@@ -420,17 +413,14 @@ const LazyIamOauthOfficialAccountsAdmin = lazy(async () => {
       const navigate = useNavigate();
       const customMenuMatch = OAUTH_CUSTOM_MENU_SPLAT.exec(useParams()["*"] ?? "");
       // The custom menu manager opens as a full-screen view inside the page;
-      // the sub-path remains for deep links. Its editor answers to the
-      // dedicated customMenus codes rather than the account-mutation family.
+      // the sub-path remains for deep links. Account maintenance is available
+      // to every signed-in member, so neither the page nor the editor derives
+      // its capabilities from an OAuth admin scope.
       if (customMenuMatch) {
         return (
           <SdkworkIamOauthOfficialAccountCustomMenuPage
             controller={controller}
             onClose={() => navigate("/admin/iam/oauth/official-accounts")}
-            permissions={{
-              publish: can("iam.oauth.resourceAccounts.customMenus.publish"),
-              update: can("iam.oauth.resourceAccounts.customMenus.update"),
-            }}
             resourceAccountId={decodeURIComponent(customMenuMatch[1])}
           />
         );
@@ -438,16 +428,7 @@ const LazyIamOauthOfficialAccountsAdmin = lazy(async () => {
       return (
         <SdkworkIamOauthOfficialAccountsPage
           controller={controller}
-          customMenuPermissions={{
-            publish: can("iam.oauth.resourceAccounts.customMenus.publish"),
-            update: can("iam.oauth.resourceAccounts.customMenus.update"),
-          }}
           driveUploadImageService={driveUploadImageService}
-          permissions={{
-            create: can("iam.oauth.resourceAccounts.create"),
-            delete: can("iam.oauth.resourceAccounts.delete"),
-            update: can("iam.oauth.resourceAccounts.update"),
-          }}
         />
       );
     } satisfies ComponentType<IamAdminContentProps>,
