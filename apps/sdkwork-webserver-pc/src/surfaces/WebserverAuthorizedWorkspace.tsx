@@ -16,6 +16,7 @@ import { webserverModule as tunnelAdminModule } from "@sdkwork/webserver-pc-admi
 import { hasWebserverAdminAccess, type WebserverPcModuleDefinition, type WebserverPcSurface, type WebserverResourceKey } from "@sdkwork/webserver-pc-commons";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-core";
 import { CloudAccountManagementSurface, webserverModule as cloudAccountModule } from "@sdkwork/webserver-pc-console-cloud-account";
+import { OfficialAccountsConsoleSurface, officialAccountsConsoleModule } from "./OfficialAccountsConsoleSurface.tsx";
 import { DashboardSurface, TrafficStatisticsSurface, webserverModule as dataStatisticsModule } from "@sdkwork/webserver-pc-console-data-statistics";
 import { WebserverConsoleSdkProvider } from "@sdkwork/webserver-pc-console-core";
 import { DeployAppsManagementSurface, DeployDomainManagementSurface, webserverModule as deliveryModule } from "@sdkwork/webserver-pc-console-delivery";
@@ -49,7 +50,7 @@ import { useCloudAccountOptions } from "./cloudAccounts.ts";
 // it, or retires it. It is console-only — the tenant-wide inventory needs a
 // different authorization argument — and its transport is composed by
 // console-core, so the capability package holds no request shape of its own.
-export const consoleModules = [deliveryModule, marketplaceModule, pluginsModule, skillsModule, mcpModule, sandboxModule, cloudAccountModule, dataStatisticsModule] satisfies readonly WebserverPcModuleDefinition[];
+export const consoleModules = [deliveryModule, marketplaceModule, pluginsModule, skillsModule, mcpModule, sandboxModule, cloudAccountModule, dataStatisticsModule, officialAccountsConsoleModule] satisfies readonly WebserverPcModuleDefinition[];
 // Domains and Certificates reappear here at the *tenant* level: the served root
 // domains / subdomains this edge answers for (reconciled from its configuration
 // at startup) and the TLS certificates over them. That is a different plane from
@@ -259,6 +260,10 @@ function WebserverAuthorizedWorkspaceSurface({ locale, runtime }: { locale: Webs
     // clients (deploy + order) come from the sibling's own factory, and the
     // host injects only base URLs plus the shared session.
     ...marketplaceConsoleResourceRenderers({ deployBaseUrl, driveBaseUrl, locale, tokenManager: runtime.tokenManager }),
+    // The caller's own official accounts: the unified component in its
+    // self-service posture over the IAM app API, so the console never needs a
+    // backend-admin client or a tenant-wide listing.
+    "official-accounts": <OfficialAccountsConsoleSurface appApiBaseUrl={runtime.config.appApiBaseUrl} tokenManager={runtime.tokenManager} />,
     // Plugins / Skills / MCP are module self-service surfaces; menu entries stay
     // in the host while pages share the IAM dual-token session via tokenManager.
     // Plugins additionally receive the IAM subject so each user reads/writes

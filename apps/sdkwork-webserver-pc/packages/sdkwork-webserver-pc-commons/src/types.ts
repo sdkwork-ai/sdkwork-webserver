@@ -31,6 +31,7 @@ export type WebserverPcSurface = "app-console" | "backend-admin";
  */
 export type WebserverResourceKey =
   | "apps"
+  | "official-accounts"
   | "domains"
   | "certificates"
   // The app-template marketplace, bridged from sdkwork-deployments like the
