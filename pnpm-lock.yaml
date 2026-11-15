@@ -1140,6 +1140,9 @@ importers:
       '@sdkwork/iam-pc-admin-core':
         specifier: workspace:*
         version: link:../sdkwork-iam-pc-admin-core
+      '@sdkwork/iam-pc-mini-program':
+        specifier: workspace:*
+        version: link:../sdkwork-iam-pc-mini-program
       '@sdkwork/iam-pc-official-accounts':
         specifier: workspace:*
         version: link:../sdkwork-iam-pc-official-accounts
@@ -1399,6 +1402,37 @@ importers:
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
+
+  ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-mini-program:
+    dependencies:
+      '@sdkwork/i18n-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      react:
+        specifier: '>=18.2.0 <20.0.0'
+        version: 19.3.1
+      react-dom:
+        specifier: '>=18.2.0 <20.0.0'
+        version: 19.3.1(react@19.3.1)
+    devDependencies:
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@types/node@25.9.9)(jsdom@30.1.3)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-official-accounts:
     dependencies:
