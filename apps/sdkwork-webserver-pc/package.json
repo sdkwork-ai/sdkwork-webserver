@@ -36,6 +36,7 @@
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/i18n-pc-react": "workspace:*",
     "@sdkwork/iam-app-sdk": "workspace:*",
+    "@sdkwork/iam-pc-admin-oauth": "workspace:*",
     "@sdkwork/iam-pc-official-accounts": "workspace:*",
     "@sdkwork/iam-contracts": "workspace:*",
     "@sdkwork/iam-credential-entry": "workspace:*",

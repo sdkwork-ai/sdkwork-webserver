@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* Mounted by the admin-iam adapter: the shared official-account panel and the
+   shared mini-program panel both live in the IAM repo, out of this app root.
+   The IAM admin OAuth package owns their Tailwind source fragment, so this
+   entry imports that fragment instead of enumerating IAM paths. */
+@import "@sdkwork/iam-pc-admin-oauth/panel-tailwind.css";
 @source "../src";
 @source "../packages";
 @source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react/src";
@@ -14,13 +19,6 @@
    field's placeholder/hover/dark chrome are otherwise emitted only when some
    scanned source happens to use the same class. */
 @source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-admin-user/src";
-/* Mounted by the admin-iam adapter: the shared official-account panel and the
-   shared mini-program panel both live in the IAM repo, out of this app root.
-   Tailwind v4 only scans the project root by default, so without these rows the
-   panels' utilities would be emitted only when another scanned source happens
-   to use the same class — a missing utility fails silently. */
-@source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-official-accounts/src";
-@source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-pc-mini-program/src";
 @source "../../../../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image/src";
 @source "../../../../sdkwork-ui/sdkwork-ui-pc-react/src";
 @source "../../../../sdkwork-skills/apps/sdkwork-skills-pc/packages/sdkwork-skills-pc-console-skills/src";
