@@ -1,5 +1,6 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { SdkworkI18nProvider, useSdkworkI18n, useSdkworkModuleMessages } from "@sdkwork/i18n-pc-react";
+import { SDKWORK_OFFICIAL_ACCOUNTS_I18N_CATALOG } from "@sdkwork/iam-pc-official-accounts";
 import { SdkworkThemeProvider } from "@sdkwork/ui-pc-react/theme";
 import { portalAgentCatalog } from "@sdkwork/webserver-pc-portal";
 import type { SdkworkThemeSelection } from "@sdkwork/ui-pc-react/theme";
@@ -37,7 +38,7 @@ export function App({ runtime }: { runtime: BootstrappedWebserverPcRuntime }) {
 
   return (
     <SdkworkI18nProvider
-      catalogs={[webserverApplicationCatalog]}
+      catalogs={[webserverApplicationCatalog, SDKWORK_OFFICIAL_ACCOUNTS_I18N_CATALOG]}
       config={i18nRuntimeConfig}
       locale={initialLocale}
       syncDocumentLanguage
