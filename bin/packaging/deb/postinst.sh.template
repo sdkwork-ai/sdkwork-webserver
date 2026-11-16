@@ -207,13 +207,14 @@ environment = "${ENVIRONMENT}"
 profile_id = "standalone.${ENVIRONMENT}"
 use_memory_drive = false
 use_memory_content_provider = false
-# Same-process Drive facade: the gateway serves the Drive App API same-origin
-# on the loopback ingress port.
-drive_facade_url = "__INTERNAL_API_URL__"
-drive_internal_api_url = "__INTERNAL_API_URL__"
-drive_internal_api_ingress_token_file = "${CONFIG_ROOT}/secrets/drive-internal-api-ingress-token"
-knowledgebase_internal_api_url = "__INTERNAL_API_URL__"
-knowledgebase_internal_api_ingress_token_file = "${CONFIG_ROOT}/secrets/knowledgebase-internal-api-ingress-token"
+# Drive and knowledgebase providers are wired in-process (default) or via the
+# HTTP transports configured through SDKWORK_WEBSERVER_<DRIVE|KNOWLEDGEBASE>_
+# PROVIDER_MODE and their *_INTERNAL_API_BASE_URL / *_INGRESS_TOKEN_FILE env
+# (runtime_config.rs DeploySection; the former [deploy] facade keys were
+# removed with the provider adapters). The provider identity envs
+# (SDKWORK_WEBSERVER_TENANT_ID / _ORGANIZATION_ID) are required only when a
+# provider runs in-process; declare them in the deployment env when enabling
+# that surface.
 # Same-process Web Internal API for the Deployments runtime publication port.
 web_internal_api_url = "__INTERNAL_API_URL__"
 web_internal_api_ingress_token_file = "${CONFIG_ROOT}/secrets/web-internal-api-ingress-token"
