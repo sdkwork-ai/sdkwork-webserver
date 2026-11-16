@@ -161,6 +161,9 @@ describe("backend-admin iam sidebar (rendered)", () => {
     "iam.policies.read",
     "iam.role_bindings.read",
     "iam.oauth.read",
+    // The account-maintenance entries answer to the universal signed-in code,
+    // so their rows render for every member rather than only OAuth operators.
+    "iam:self",
     "iam.account_binding_policy.read",
     "iam.audit_events.read",
     "drive.storage.admin",

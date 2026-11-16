@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* Mounted by the admin-iam adapter: the shared official-account panel and the
+   shared mini-program panel both live in the IAM repo, out of this app root.
+   The IAM admin OAuth package owns their Tailwind source fragment, so this
+   entry imports that fragment instead of enumerating IAM paths. */
+@import "@sdkwork/iam-pc-admin-oauth/panel-tailwind.css";
 @source "../src";
 @source "../packages";
 @source "../../../../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react/src";
