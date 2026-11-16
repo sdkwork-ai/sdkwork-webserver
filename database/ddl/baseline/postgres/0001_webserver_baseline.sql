@@ -2981,8 +2981,9 @@ BEGIN
       CONTINUE;
     END IF;
 
-    -- The baseline uses CREATE TABLE IF NOT EXISTS, so on a database that still
-    -- carries the legacy web_* tables it materialises an empty webserver_* twin.
+    -- The baseline declares every table with an IF NOT EXISTS guard, so on a
+    -- database that still carries the legacy web_* tables it materialises an
+    -- empty webserver_* twin.
     -- Discard that empty twin so the rename below can carry the legacy rows across.
     -- Refuse loudly if the twin is not empty rather than silently discarding data.
     IF to_regclass(pair[2]) IS NOT NULL THEN
