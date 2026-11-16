@@ -79,6 +79,12 @@ KNOWN_HEADER_ALLOWANCES: dict[str, str] = {
     "accept-ch": "adaptive ingress advertises Sec-CH-UA-Mobile (APP_RUNTIME_TOPOLOGY_SPEC)",
     "x-content-type-options": "secure-response baseline adds nosniff (SECURITY_SPEC)",
     "vary": "adaptive runtime declares UA/Sec-CH-UA-Mobile selectors",
+    # Request-scoped trace propagation: the gateway generates a fresh trace id
+    # per request, so these fields differ between two captures by construction
+    # (the battery normalizes 32-hex trace ids inside bodies for the same
+    # reason).
+    "traceparent": "per-request W3C trace context",
+    "x-sdkwork-trace-id": "per-request gateway trace id",
 }
 
 # Directory-probe cases where the runtime's static resolver answers 403

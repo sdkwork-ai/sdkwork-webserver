@@ -82,6 +82,12 @@ BOOTSTRAP_INJECTION_RE = re.compile(
 NGINX_ERROR_PAGE_RE = re.compile(
     r"<title>\d{3} [^<]*</title>.*<center>nginx</center>", re.DOTALL
 )
+# Request-scoped trace identifiers: the gateway's ProblemDetail body embeds
+# the per-request trace id (dash-separated UUID or bare 32-hex), so the body
+# hash normalizes both forms.
+TRACE_ID_RE = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{32}\b"
+)
 ASSET_PATH_RE = re.compile(r'(?:src|href)="(/assets/[^"]+)"')
 
 API_DEV_HOSTS = ["api-dev.birdcoder.com", "api-dev.sdkwork.com"]
@@ -167,16 +173,37 @@ def classify_body(body: bytes) -> tuple[str | None, str | None]:
     return surface, bootstrap_app_id
 
 
+def decode_chunked(raw: bytes) -> bytes:
+    """Decode a chunked transfer-encoded payload (RFC 9112 §7.1)."""
+    out = bytearray()
+    pos = 0
+    while pos < len(raw):
+        line_end = raw.find(b"\r\n", pos)
+        if line_end < 0:
+            break
+        try:
+            size = int(raw[pos:line_end].split(b";")[0].strip() or b"0", 16)
+        except ValueError:
+            return bytes(raw)  # not actually chunked: keep as-is
+        if size == 0:
+            break
+        out += raw[line_end + 2 : line_end + 2 + size]
+        pos = line_end + 2 + size + 2
+    return bytes(out)
+
+
 def record_response(response: CapturedResponse, body: bytes) -> None:
     # The development credential-entry bootstrap token is injected into SPA
     # documents by whichever edge serves them; the runtime injects its
     # instance-scoped token (credential_entry_injection.rs single-policy) while
-    # the stock-nginx edge injected per-surface tokens. The token VALUE is a
-    # stated-contract difference asserted separately via `bootstrapAppId`, so
-    # the body hash is computed over the token-normalized document: everything
-    # else in the body must still match byte for byte.
+    # the stock-nginx edge injected per-surface tokens. The injected element is
+    # a stated-contract difference asserted separately via `bootstrapAppId`, and
+    # per-request gateway trace ids vary by construction, so the body hash is
+    # computed over the normalized document: everything else must match byte
+    # for byte.
     text = body.decode("utf-8", errors="replace")
     normalized = BOOTSTRAP_INJECTION_RE.sub("__SDKWORK_BOOTSTRAP_HANDOFF__", text)
+    normalized = TRACE_ID_RE.sub("__TRACE_ID__", normalized)
     response.body_sha256 = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
     response.body_bytes = len(body)
     response.body_prefix = body[:240].decode("utf-8", errors="replace")
@@ -250,6 +277,8 @@ def http_capture(
             for name, value in ordered
             if name not in HOP_BY_HOP and name not in TIME_VARYING
         }
+        if any(name == "transfer-encoding" and "chunked" in value for name, value in ordered):
+            body = decode_chunked(body)
         record_response(captured, body)
     finally:
         sock.close()
@@ -377,6 +406,8 @@ def http_over_socket(
         for name, value in ordered
         if name not in HOP_BY_HOP and name not in TIME_VARYING
     }
+    if any(name == "transfer-encoding" and "chunked" in value for name, value in ordered):
+        body = decode_chunked(body)
     record_response(captured, body)
     return captured
 
