@@ -89,6 +89,12 @@ services:
       SDKWORK_CLOUDROUTER_INTERNAL_GATEWAY_SIGNING_SECRET: '${SDKWORK_CLOUDROUTER_INTERNAL_GATEWAY_SIGNING_SECRET:?Required. Mirror GATEWAY_CLOUDROUTER_INTERNAL_GATEWAY_SIGNING_SECRET from the co-deployed gateway bundle env.}'
       SDKWORK_CLOUDROUTER_OPEN_API_BASE_URL: http://127.0.0.1:3900
       SDKWORK_CLOUDROUTER_PAYMENT_WEBHOOK_SECRET: '${SDKWORK_CLOUDROUTER_PAYMENT_WEBHOOK_SECRET:?Required. Mirror GATEWAY_CLOUDROUTER_PAYMENT_WEBHOOK_SECRET from the co-deployed gateway bundle env.}'
+      # Public ingress bind of the embedded cloudrouter router application:
+      # tracks the gateway listener bind above (canonical gateway compose
+      # keeps GATEWAY_CONTAINER_PORT in sync the same way). Without it the
+      # embedded router has no serving bind and the gateway exits cleanly
+      # after bootstrap, crash-looping the sibling.
+      SDKWORK_CLOUDROUTER_ROUTER_APPLICATION_PUBLIC_INGRESS_BIND: 0.0.0.0:${SDKWORK_MODULE_API_GATEWAY_UPSTREAM_PORT:-8080}
       SDKWORK_CLOUDROUTER_REDIS_DATABASE: 0
       SDKWORK_CLOUDROUTER_REDIS_ENABLED: true
       SDKWORK_CLOUDROUTER_REDIS_HOST: ${SDKWORK_WEBSERVER_REDIS_HOST:-redis}
