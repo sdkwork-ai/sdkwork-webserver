@@ -1445,6 +1445,9 @@ importers:
       '@sdkwork/ui-pc-react':
         specifier: workspace:*
         version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      lucide-react:
+        specifier: ^1.7.0
+        version: 1.7.0(react@19.3.1)
       react:
         specifier: '>=18.2.0 <20.0.0'
         version: 19.3.1
