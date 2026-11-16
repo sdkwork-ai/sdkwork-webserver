@@ -235,16 +235,16 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.12",
+    "currentVersion": "0.1.13",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.12"
+      "BETA": "0.1.13"
     },
     "notes": [
       {
         "version": "0.1.12",
         "channel": "BETA",
-        "current": true,
+        "current": false,
         "summary": "Completes the 0.1.11 management bootstrap fix: the packaged IAM registry ships skills/mcp/sandbox alongside web, so all four federated consumer manifests now yield when the IAM app root packages the module (sandbox duplicated after the web fix landed). This changelog describes 0.1.12 only."
       },
       {
