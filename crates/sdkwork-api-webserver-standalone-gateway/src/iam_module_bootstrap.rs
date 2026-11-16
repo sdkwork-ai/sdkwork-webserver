@@ -18,7 +18,15 @@ const SANDBOX_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, String> {
     let enabled = iam_registry_enabled_modules();
     let mut manifests = Vec::with_capacity(4);
-    manifests.push(web_iam_module_manifest_path()?);
+    // Web always federates from its own manifest — except when the packaged
+    // IAM registry ships the web module itself (the 0.1.10 packaging added
+    // `iam/modules/web/` under the IAM app root). Registry discovery then
+    // materializes `web` already, and the additional manifest would duplicate
+    // the moduleId and crash management bootstrap with
+    // `additional module manifest duplicates moduleId web`.
+    if !iam_app_root_packages_module("web") {
+        manifests.push(web_iam_module_manifest_path()?);
+    }
     if !enabled.contains("skills") {
         if let Some(path) = optional_module_manifest_path(
             "skills",
@@ -106,6 +114,22 @@ pub(crate) fn web_iam_module_manifest_path() -> Result<PathBuf, String> {
         ));
     }
     Ok(manifest_path)
+}
+
+/// True when the packaged IAM app root ships the module itself under
+/// `iam/modules/<moduleId>/iam.module.manifest.json`; registry discovery then
+/// materializes it and a federated manifest for the same moduleId is a
+/// duplicate.
+fn iam_app_root_packages_module(module_id: &str) -> bool {
+    env_app_root("SDKWORK_IAM_APP_ROOT")
+        .map(|root| {
+            root.join("iam")
+                .join("modules")
+                .join(module_id)
+                .join("iam.module.manifest.json")
+                .is_file()
+        })
+        .unwrap_or(false)
 }
 
 fn optional_module_manifest_path(

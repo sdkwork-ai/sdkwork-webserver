@@ -235,16 +235,22 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.10",
+    "currentVersion": "0.1.11",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.10"
+      "BETA": "0.1.11"
     },
     "notes": [
       {
-        "version": "0.1.10",
+        "version": "0.1.11",
         "channel": "BETA",
         "current": true,
+        "summary": "Management bootstrap fix: the 0.1.10 packaging ships the web IAM module inside the packaged IAM registry (iam/modules/web/), and the gateway's unconditional web federation crashed management bootstrap with 'additional module manifest duplicates moduleId web'. The federation now yields to the packaged module when the IAM app root ships it. This changelog describes 0.1.11 only."
+      },
+      {
+        "version": "0.1.10",
+        "channel": "BETA",
+        "current": false,
         "summary": "Edge takeover release: the development host retires its stock-nginx convenience edge and sdkwork-webserver takes over host 80/443. Adds tests/nginx/edge-parity, a 27-case capture battery over the api-dev.*/mall-dev.*/platform-dev.* vhost families (proxy exposure governance, adaptive static delivery, credential-entry bootstrap injection, unknown-host drop, TLS/SNI semantics) with the live stock-nginx edge captured as the committed oracle and an audited allowance list mirroring differential-http. This changelog describes 0.1.10 only."
       },
       {
