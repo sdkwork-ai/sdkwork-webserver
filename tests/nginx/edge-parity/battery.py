@@ -71,6 +71,17 @@ IPAD_UA = (
 BOOTSTRAP_TOKEN_RE = re.compile(
     r'__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__\s*=\s*"([^"]+)"'
 )
+# The full injected handoff: nginx's sub_filter and the runtime injector use
+# slightly different script wrappers around the same canonical global, so the
+# body hash normalizes the whole injected element while the token value inside
+# it is still extracted for the application-identity assertion.
+BOOTSTRAP_INJECTION_RE = re.compile(
+    r'<script>\s*globalThis\.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__'
+    r'\s*=\s*"[^"]*";?\s*</script>'
+)
+NGINX_ERROR_PAGE_RE = re.compile(
+    r"<title>\d{3} [^<]*</title>.*<center>nginx</center>", re.DOTALL
+)
 ASSET_PATH_RE = re.compile(r'(?:src|href)="(/assets/[^"]+)"')
 
 API_DEV_HOSTS = ["api-dev.birdcoder.com", "api-dev.sdkwork.com"]
@@ -104,6 +115,7 @@ class CapturedResponse:
         self.body_sha256: str | None = None
         self.body_bytes: int | None = None
         self.body_prefix: str | None = None
+        self.nginx_error_page = False
         self.surface: str | None = None
         self.bootstrap_app_id: str | None = None
         self.tls: dict[str, object] | None = None
@@ -122,6 +134,8 @@ class CapturedResponse:
             out["bodyBytes"] = self.body_bytes
         if self.body_prefix is not None:
             out["bodyPrefix"] = self.body_prefix
+        if self.nginx_error_page:
+            out["nginxErrorPage"] = True
         if self.surface:
             out["surface"] = self.surface
         if self.bootstrap_app_id:
@@ -154,9 +168,19 @@ def classify_body(body: bytes) -> tuple[str | None, str | None]:
 
 
 def record_response(response: CapturedResponse, body: bytes) -> None:
-    response.body_sha256 = hashlib.sha256(body).hexdigest()
+    # The development credential-entry bootstrap token is injected into SPA
+    # documents by whichever edge serves them; the runtime injects its
+    # instance-scoped token (credential_entry_injection.rs single-policy) while
+    # the stock-nginx edge injected per-surface tokens. The token VALUE is a
+    # stated-contract difference asserted separately via `bootstrapAppId`, so
+    # the body hash is computed over the token-normalized document: everything
+    # else in the body must still match byte for byte.
+    text = body.decode("utf-8", errors="replace")
+    normalized = BOOTSTRAP_INJECTION_RE.sub("__SDKWORK_BOOTSTRAP_HANDOFF__", text)
+    response.body_sha256 = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
     response.body_bytes = len(body)
     response.body_prefix = body[:240].decode("utf-8", errors="replace")
+    response.nginx_error_page = bool(NGINX_ERROR_PAGE_RE.search(text))
     response.surface, response.bootstrap_app_id = classify_body(body)
 
 
@@ -244,7 +268,11 @@ def tls_capture(
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
-    context.set_alpn_protocols(["h2", "http/1.1"])
+    # The battery compares HTTP/1.1 semantics. Offering h2 makes an
+    # http2-enabled oracle switch protocols after the handshake and drop the
+    # plain HTTP/1.1 exchange, so the ALPN offer is http/1.1-only; the
+    # negotiated protocol is still recorded per case.
+    context.set_alpn_protocols(["http/1.1"])
     try:
         raw_sock = socket.create_connection((target_host, target_port), timeout=10)
     except OSError as exc:
