@@ -223,14 +223,9 @@ const PACKAGE_ASSETS = [
     source: 'database/ddl/baseline/postgres/0001_webserver_baseline.sql',
     target: 'database/ddl/baseline/postgres/0001_webserver_baseline.sql',
   },
-  {
-    source: 'database/migrations/postgres/0005_webserver_application.up.sql',
-    target: 'database/migrations/postgres/0005_webserver_application.up.sql',
-  },
-  {
-    source: 'database/migrations/postgres/0006_organization_id_not_null.up.sql',
-    target: 'database/migrations/postgres/0006_organization_id_not_null.up.sql',
-  },
+  // The initialization-state consolidation folded the loose migrations into
+  // the baseline (reset-database-initialization-state.mjs); migrations/ is
+  // reserved for post-GA changes, so only the baseline ships here.
   {
     source: 'database/drift/policy.yaml',
     target: 'database/drift/policy.yaml',
