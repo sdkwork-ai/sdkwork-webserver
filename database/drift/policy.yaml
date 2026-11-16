@@ -3,4 +3,11 @@ kind: sdkwork.database.drift-policy
 rules:
   ignoreTables: []
   ignoreColumns: []
-  severityOverrides: {}
+  severityOverrides:
+    # The initialization baseline consolidates the folded 0005-0029 migrations;
+    # databases provisioned by earlier binaries still carry their applied
+    # history rows, which this binary's known-migration set intentionally no
+    # longer lists. The schema/table/column checks still fail the bootstrap at
+    # error severity — only the folded history acknowledgement is a transition
+    # warning.
+    migration_unknown: warn
