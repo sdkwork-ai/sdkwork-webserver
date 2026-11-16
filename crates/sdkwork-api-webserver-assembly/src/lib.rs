@@ -49,7 +49,7 @@ pub use runtime_shutdown::{request_shutdown, shutdown_reason, wait_for_shutdown,
 // (API_ASSEMBLY_SPEC §4/§6).
 pub use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 pub use sdkwork_intelligence_webserver_repository_sqlx::{
-    resolution_cache_from_shared_pool, wechat_verification_by_hostname_lookup,
+    resolution_cache_from_shared_pool, verification_files_by_hostname_lookup,
 };
 
 pub fn assembly_route_count() -> usize {

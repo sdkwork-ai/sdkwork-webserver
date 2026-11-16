@@ -464,7 +464,7 @@ where
     // 保持未装载：验证文件是窄优先级附加能力，缺位只是没有这个能力，其余
     // 服务不受影响。
     #[cfg(feature = "management")]
-    install_wechat_verification_source();
+    install_verification_file_source();
     let data_plane = async move {
         match tls_runtime {
             Some(tls_runtime) => {
@@ -2806,19 +2806,19 @@ fn build_deploy_fallback(
     Some(std::sync::Arc::new(resolver))
 }
 
-/// 装载微信验证文件的进程级共享读取源。
+/// 装载域名归属校验文件的进程级共享读取源。
 ///
 /// 与 [`build_deploy_fallback`] 同一数据通道（共享 Deploy 数据库的进程内
 /// 查询），但不受 `appDomainFallback` 开关约束：验证文件是域名归属验证的
 /// 一部分，不是应用回退的一部分。共享库不可用时保持未装载并留下一条
 /// 说明，验证文件的请求随后落到宿主应用自己的 404 上。
 #[cfg(feature = "management")]
-fn install_wechat_verification_source() {
+fn install_verification_file_source() {
     use sdkwork_database_sqlx::process_shared_database_pool;
 
     let Some(pool) = process_shared_database_pool() else {
         tracing::warn!(
-            "shared database pool is unavailable; WeChat verification files will not be served"
+            "shared database pool is unavailable; domain verification files will not be served"
         );
         return;
     };
@@ -2826,20 +2826,20 @@ fn install_wechat_verification_source() {
     // 两个控制面各自的验证文件登记，边缘按主机名先 Deploy、再 Web Server
     // 合并查找；Web Server 侧的读取走该表所属的 repository 契约，边缘不另
     // 写一份 SQL。
-    let merged = crate::data_plane::wechat_verify::MergedWechatVerificationSource::new(
+    let merged = crate::data_plane::verification_file::MergedVerificationFileSource::new(
         std::sync::Arc::new(
-            crate::data_plane::wechat_verify::DeployWechatVerificationSource::new(
+            crate::data_plane::verification_file::DeployVerificationFileSource::new(
                 sdkwork_api_webserver_assembly::DeployRepository::new_lookup(pool.clone()),
             ),
         ),
         std::sync::Arc::new(
-            crate::data_plane::wechat_verify::WebserverWechatVerificationSource::new(pool),
+            crate::data_plane::verification_file::WebserverVerificationFileSource::new(pool),
         ),
     );
-    let source = crate::data_plane::wechat_verify::CachedWechatVerificationSource::new(
+    let source = crate::data_plane::verification_file::CachedVerificationFileSource::new(
         std::sync::Arc::new(merged),
     );
-    crate::data_plane::wechat_verify::install_shared_source(source);
+    crate::data_plane::verification_file::install_shared_source(source);
 }
 
 /// Non-management builds never construct the embedded Deploy lookup; the

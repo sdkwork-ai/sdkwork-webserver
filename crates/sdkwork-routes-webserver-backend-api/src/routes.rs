@@ -6,15 +6,15 @@ use axum::{
 };
 use sdkwork_webserver_contract::{
     CreateApplicationRequest, CreateDomainDnsRecordRequest, CreateDomainRequest,
-    CreateListenerCertificateBindingRequest, CreateManagedDomainRequest, CreateNginxConfigRequest,
-    CreatePluginRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest,
-    CreateServerRequest, CreateSourceVersionRequest, DomainDnsRecordStatusRequest,
-    ImportGitSourceVersionRequest, IssueCertificateRequest, ListApplicationsQuery,
-    ListAuditLogsQuery, ListDomainDnsRecordsQuery, ListNginxConfigsQuery, ListPluginsQuery,
-    ListRootDomainsQuery, RevokeCertificateRequest, UpdateApplicationRequest,
-    UpdateCertificateRequest, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest,
-    UpdateNginxConfigRequest, UpdatePluginRequest, UpdateRootDomainRequest,
-    UpsertDomainWechatVerificationRequest, WebBackendApi, WebBackendRequestContext,
+    CreateDomainVerificationFileRequest, CreateListenerCertificateBindingRequest,
+    CreateManagedDomainRequest, CreateNginxConfigRequest, CreatePluginRequest,
+    CreateRootDomainHostnameRequest, CreateRootDomainRequest, CreateServerRequest,
+    CreateSourceVersionRequest, DomainDnsRecordStatusRequest, ImportGitSourceVersionRequest,
+    IssueCertificateRequest, ListApplicationsQuery, ListAuditLogsQuery, ListDomainDnsRecordsQuery,
+    ListNginxConfigsQuery, ListPluginsQuery, ListRootDomainsQuery, RevokeCertificateRequest,
+    UpdateApplicationRequest, UpdateCertificateRequest, UpdateDomainApplicationBindingRequest,
+    UpdateDomainDnsRecordRequest, UpdateNginxConfigRequest, UpdatePluginRequest,
+    UpdateRootDomainRequest, WebBackendApi, WebBackendRequestContext,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -29,7 +29,7 @@ use sdkwork_routes_webserver_common::{
     ok_domain_dns_record_page, ok_domain_page, ok_listener_certificate_binding_page,
     ok_nginx_config_page, ok_nginx_config_revision, ok_nginx_config_revision_page, ok_plugin_page,
     ok_resource, ok_root_domain_page, ok_server_page, ok_source_version_page,
-    validate_pagination_query, WebApiError,
+    ok_verification_file_page, validate_pagination_query, WebApiError,
 };
 
 /// Router state shared by every handler of this surface.
@@ -113,14 +113,16 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn WebBackendApi>) -> Rout
             axum::routing::patch(set_root_domain_dns_record_status),
         )
         .route(
-            paths::ROOT_DOMAIN_WECHAT_VERIFICATION,
-            get(retrieve_root_domain_wechat_verification)
-                .put(upsert_root_domain_wechat_verification)
-                .delete(delete_root_domain_wechat_verification),
+            paths::ROOT_DOMAIN_VERIFICATION_FILES,
+            get(list_root_domain_verification_files).post(create_root_domain_verification_file),
         )
         .route(
-            paths::ROOT_DOMAIN_WECHAT_VERIFICATION_CHECK,
-            post(check_root_domain_wechat_verification),
+            paths::ROOT_DOMAIN_VERIFICATION_FILE,
+            axum::routing::delete(delete_root_domain_verification_file),
+        )
+        .route(
+            paths::ROOT_DOMAIN_VERIFICATION_FILE_CHECK,
+            post(check_root_domain_verification_file),
         )
         .route(
             paths::ROOT_DOMAIN_DNS_RECORDS_SYNC,
@@ -698,59 +700,59 @@ async fn set_root_domain_dns_record_status(
     )
 }
 
-async fn retrieve_root_domain_wechat_verification(
+async fn list_root_domain_verification_files(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
     Path(root_domain_id): Path<String>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
-    ok_resource(
+    ok_verification_file_page(
         state
             .api
-            .retrieve_root_domain_wechat_verification(&context, &root_domain_id)
+            .list_root_domain_verification_files(&context, &root_domain_id)
             .await,
     )
 }
 
-async fn upsert_root_domain_wechat_verification(
+async fn create_root_domain_verification_file(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
     Path(root_domain_id): Path<String>,
-    Json(request): Json<UpsertDomainWechatVerificationRequest>,
+    Json(request): Json<CreateDomainVerificationFileRequest>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
-    ok_resource(
+    created_resource(
         state
             .api
-            .upsert_root_domain_wechat_verification(&context, &root_domain_id, &request)
+            .create_root_domain_verification_file(&context, &root_domain_id, &request)
             .await,
     )
 }
 
-async fn delete_root_domain_wechat_verification(
+async fn delete_root_domain_verification_file(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
-    Path(root_domain_id): Path<String>,
+    Path((root_domain_id, file_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
     no_content(
         state
             .api
-            .delete_root_domain_wechat_verification(&context, &root_domain_id)
+            .delete_root_domain_verification_file(&context, &root_domain_id, &file_id)
             .await,
     )
 }
 
-async fn check_root_domain_wechat_verification(
+async fn check_root_domain_verification_file(
     State(state): State<BackendState>,
     context: Option<Extension<WebBackendRequestContext>>,
-    Path(root_domain_id): Path<String>,
+    Path((root_domain_id, file_id)): Path<(String, String)>,
 ) -> Result<Response, WebApiError> {
     let context = require_backend_context(context)?;
     ok_resource(
         state
             .api
-            .check_root_domain_wechat_verification(&context, &root_domain_id)
+            .check_root_domain_verification_file(&context, &root_domain_id, &file_id)
             .await,
     )
 }

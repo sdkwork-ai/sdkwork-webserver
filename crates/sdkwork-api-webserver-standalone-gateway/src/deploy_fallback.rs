@@ -207,7 +207,7 @@ const MAXIMUM_NGINX_APPLICATION_LEDGER_ENTRIES: usize = 4096;
 ///
 /// 原地更新调用方已加锁的 map：每次解析都克隆整张表会让插入变成 O(n) 拷贝，
 /// 在主机多样性攻击下把缓存本身变成放大器。抽成自由函数以便直接测试
-/// “清扫 + 驱逐”行为（与 `data_plane::wechat_verify` 的缓存同款约束）。
+/// “清扫 + 驱逐”行为（与 `data_plane::verification_file` 的缓存同款约束）。
 fn remember_resolution(
     cache: &mut HashMap<String, Arc<CacheEntry>>,
     hostname: String,

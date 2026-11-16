@@ -1,7 +1,7 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerifyResponse, DomainWechatVerificationCheckResponse, DomainWechatVerificationResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest, UpsertDomainWechatVerificationRequest } from '../types';
+import type { ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateDomainVerificationFileRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerificationFileCheckResponse, DomainVerificationFileResponse, DomainVerifyResponse, PageInfo, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest } from '../types';
 
 
 export interface DomainApplicationBindingUpdateParams {
@@ -43,11 +43,11 @@ export class DomainApplicationBindingApi {
   }
 }
 
-export interface DomainRootDomainsWechatVerificationUpdateParams {
+export interface DomainRootDomainsVerificationFilesCreateParams {
   idempotencyKey: string;
 }
 
-export class DomainRootDomainsWechatVerificationApi {
+export class DomainRootDomainsVerificationFilesApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -55,30 +55,30 @@ export class DomainRootDomainsWechatVerificationApi {
   }
 
 
-/** Read the root domain's WeChat MP domain-ownership verification file */
-  async retrieve(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
-    return this.client.request<DomainWechatVerificationResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+/** List the root domain's domain-ownership verification files */
+  async list(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<{ items: DomainVerificationFileResponse[]; pageInfo: PageInfo; }> {
+    return this.client.request<{ items: DomainVerificationFileResponse[]; pageInfo: PageInfo; }>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_files`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** Upload (or wholly replace) the root domain's WeChat verification file */
-  async update(rootDomainId: string, body: UpsertDomainWechatVerificationRequest, params: DomainRootDomainsWechatVerificationUpdateParams, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
+/** Register (or replace) a verification file on the root domain */
+  async create(rootDomainId: string, body: CreateDomainVerificationFileRequest, params: DomainRootDomainsVerificationFilesCreateParams, requestOptions?: ApiRequestOptions): Promise<DomainVerificationFileResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<DomainWechatVerificationResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+    return this.client.request<DomainVerificationFileResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_files`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** Delete the root domain's WeChat verification file */
-  async delete(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<void> {
-    return this.client.request<void>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+/** Delete one verification file from the root domain */
+  async delete(rootDomainId: string, fileId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_files/${serializePathParameter(fileId, { name: 'fileId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 
-/** Self-check the root domain's WeChat verification file */
-  async check(rootDomainId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationCheckResponse> {
-    return this.client.request<DomainWechatVerificationCheckResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_file/check`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+/** Self-check one verification file */
+  async check(rootDomainId: string, fileId: string, requestOptions?: ApiRequestOptions): Promise<DomainVerificationFileCheckResponse> {
+    return this.client.request<DomainVerificationFileCheckResponse>(backendApiPath(`/root_domains/${serializePathParameter(rootDomainId, { name: 'rootDomainId', style: 'simple', explode: false })}/verification_files/${serializePathParameter(fileId, { name: 'fileId', style: 'simple', explode: false })}/check`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -259,13 +259,13 @@ export class DomainRootDomainsApi {
   private client: HttpClient;
   public readonly subdomains: DomainRootDomainsSubdomainsApi;
   public readonly dnsRecords: DomainRootDomainsDnsRecordsApi;
-  public readonly wechatVerification: DomainRootDomainsWechatVerificationApi;
+  public readonly verificationFiles: DomainRootDomainsVerificationFilesApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.subdomains = new DomainRootDomainsSubdomainsApi(client);
     this.dnsRecords = new DomainRootDomainsDnsRecordsApi(client);
-    this.wechatVerification = new DomainRootDomainsWechatVerificationApi(client);
+    this.verificationFiles = new DomainRootDomainsVerificationFilesApi(client);
   }
 
 

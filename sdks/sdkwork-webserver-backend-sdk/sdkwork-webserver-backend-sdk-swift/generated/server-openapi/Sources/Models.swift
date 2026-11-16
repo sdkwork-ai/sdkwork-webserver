@@ -719,33 +719,41 @@ public struct RootDomainResponse: Codable {
     }
 }
 
-public struct DomainWechatVerificationResponse: Codable {
+public struct DomainVerificationFileResponse: Codable {
+    public let id: String?
     public let rootDomainId: String?
+    public let platform: String?
     public let fileName: String?
     public let content: String?
+    public let createdAt: String?
     public let updatedAt: String?
 
 
-    public init(rootDomainId: String? = nil, fileName: String? = nil, content: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, rootDomainId: String? = nil, platform: String? = nil, fileName: String? = nil, content: String? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+        self.id = id
         self.rootDomainId = rootDomainId
+        self.platform = platform
         self.fileName = fileName
         self.content = content
+        self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 }
 
-public struct UpsertDomainWechatVerificationRequest: Codable {
+public struct CreateDomainVerificationFileRequest: Codable {
+    public let platform: String?
     public let fileName: String?
     public let content: String?
 
 
-    public init(fileName: String? = nil, content: String? = nil) {
+    public init(platform: String? = nil, fileName: String? = nil, content: String? = nil) {
+        self.platform = platform
         self.fileName = fileName
         self.content = content
     }
 }
 
-public struct DomainWechatVerificationCheckResponse: Codable {
+public struct DomainVerificationFileCheckResponse: Codable {
     public let reachable: Bool?
     public let matched: Bool?
     public let statusCode: Int?
@@ -2863,7 +2871,7 @@ public struct RootDomainsDnsRecordsStatusUpdateResponse: Codable {
     }
 }
 
-public struct RootDomainsWechatVerificationRetrieveResponse: Codable {
+public struct RootDomainsVerificationFilesListResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -2876,7 +2884,7 @@ public struct RootDomainsWechatVerificationRetrieveResponse: Codable {
     }
 }
 
-public struct RootDomainsWechatVerificationUpdateResponse: Codable {
+public struct RootDomainsVerificationFilesCreateResponse201: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?
@@ -2889,7 +2897,7 @@ public struct RootDomainsWechatVerificationUpdateResponse: Codable {
     }
 }
 
-public struct RootDomainsWechatVerificationCheckResponse: Codable {
+public struct RootDomainsVerificationFilesCheckResponse: Codable {
     public let code: Int?
     public let data: Any?
     public let traceId: String?

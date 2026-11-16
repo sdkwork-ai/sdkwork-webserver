@@ -823,8 +823,8 @@
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
-      "operationId": "rootDomains.wechatVerification.retrieve",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_files",
+      "operationId": "rootDomains.verificationFiles.list",
       "tags": [
         "domain"
       ],
@@ -848,9 +848,9 @@
       "rateLimitTier": null
     },
     {
-      "method": "PUT",
-      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
-      "operationId": "rootDomains.wechatVerification.update",
+      "method": "POST",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_files",
+      "operationId": "rootDomains.verificationFiles.create",
       "tags": [
         "domain"
       ],
@@ -875,8 +875,8 @@
     },
     {
       "method": "DELETE",
-      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file",
-      "operationId": "rootDomains.wechatVerification.delete",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_files/{fileId}",
+      "operationId": "rootDomains.verificationFiles.delete",
       "tags": [
         "domain"
       ],
@@ -901,8 +901,8 @@
     },
     {
       "method": "POST",
-      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_file/check",
-      "operationId": "rootDomains.wechatVerification.check",
+      "path": "/backend/v3/api/root_domains/{rootDomainId}/verification_files/{fileId}/check",
+      "operationId": "rootDomains.verificationFiles.check",
       "tags": [
         "domain"
       ],

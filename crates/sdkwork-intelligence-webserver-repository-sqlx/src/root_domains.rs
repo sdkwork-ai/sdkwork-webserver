@@ -288,6 +288,19 @@ impl WebRepository {
         .execute(&mut *tx)
         .await
         .map_err(|error| store_error("delete webserver_domain_dns_record", error))?;
+        // Domain-ownership verification files are published at this zone's
+        // hostnames, so the edge must stop answering them the moment the zone is
+        // gone. Like the snapshot above, the row *is* the publication: an orphan
+        // would sit invisible until the same apex is registered again.
+        sqlx::query(
+            "DELETE FROM webserver_domain_verification_file
+             WHERE tenant_id = $1 AND root_domain_id = $2",
+        )
+        .bind(tenant_id)
+        .bind(row_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| store_error("delete webserver_domain_verification_file", error))?;
         tx.commit()
             .await
             .map_err(|error| store_error("commit root domain delete", error))?;

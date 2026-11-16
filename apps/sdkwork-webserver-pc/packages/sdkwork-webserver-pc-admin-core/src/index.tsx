@@ -25,10 +25,11 @@ export type {
   ClusterOverviewResponse,
   ClusterResponse,
   CreateDomainDnsRecordRequest,
+  CreateDomainVerificationFileRequest,
   DnsAccountResponse,
   DomainDnsRecordStatusRequest,
-  DomainWechatVerificationCheckResponse,
-  DomainWechatVerificationResponse,
+  DomainVerificationFileCheckResponse,
+  DomainVerificationFileResponse,
   UpdateDomainDnsRecordRequest,
   DomainDnsRecordResponse,
   DomainDnsSyncResponse,
@@ -58,7 +59,6 @@ export type {
   TunnelMachineResponse,
   TunnelMachineRouteDeclarationResponse,
   TunnelMachineRouteResponse,
-  UpsertDomainWechatVerificationRequest,
 } from "@sdkwork/webserver-backend-sdk";
 
 export type WebserverAdminSdkClient = SdkworkBackendClient;

@@ -21,10 +21,18 @@ pub const ROOT_DOMAIN_DNS_RECORD: &str =
 pub const ROOT_DOMAIN_DNS_RECORD_STATUS: &str =
     "/backend/v3/api/root_domains/{rootDomainId}/dns_records/{recordId}/status";
 
-pub const ROOT_DOMAIN_WECHAT_VERIFICATION: &str =
-    "/backend/v3/api/root_domains/{rootDomainId}/verification_file";
-pub const ROOT_DOMAIN_WECHAT_VERIFICATION_CHECK: &str =
-    "/backend/v3/api/root_domains/{rootDomainId}/verification_file/check";
+/// Domain-ownership verification files registered on a root domain.
+///
+/// A collection rather than a singleton: a root domain publishes one file per
+/// platform that asks for a root-path proof (WeChat official account, WeChat
+/// mini program, Alipay, ByteDance, Google, Apple, custom), and a reissued file
+/// is a new resource until the old one is deleted.
+pub const ROOT_DOMAIN_VERIFICATION_FILES: &str =
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_files";
+pub const ROOT_DOMAIN_VERIFICATION_FILE: &str =
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_files/{fileId}";
+pub const ROOT_DOMAIN_VERIFICATION_FILE_CHECK: &str =
+    "/backend/v3/api/root_domains/{rootDomainId}/verification_files/{fileId}/check";
 pub const ROOT_DOMAIN_DNS_RECORDS_SYNC: &str =
     "/backend/v3/api/root_domains/{rootDomainId}/dns_records/sync";
 pub const DOMAINS: &str = "/backend/v3/api/domains";

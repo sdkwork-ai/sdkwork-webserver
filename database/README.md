@@ -12,31 +12,11 @@ Canonical lifecycle assets for the `sdkwork-webserver` PostgreSQL control-plane 
 
 ## Initialization state
 
-- `baselineStrategy`: committed primary baseline
-- baseline: `database/ddl/baseline/postgres/0001_webserver_baseline.sql` (full PostgreSQL DDL snapshot)
-- ordered migration range: `0005_webserver_application` through
-  `0029_webserver_nginx_config_revision`
-- consolidation level: the baseline is the consolidated pre-launch snapshot; the ordered post-baseline
-  migrations remain the load-bearing upgrade path and are replayed idempotently by the lifecycle on a
-  fresh install, so both a baseline-only and a baseline-plus-migrations database converge on the same
-  schema and migration history.
+This module is in **initialization state** for greenfield deployments:
 
-`0005`–`0012` upgrade databases created before the Website control plane, `application_type`, the
-`webserver_` table prefix and the cluster plane. `0013`–`0026` complete the application kind checks,
-runtime assignments, certificate lifecycle, node WeChat verification and their indexes. `0027` closes
-the tenant-integrity audit findings: tenant-scoped business tables no longer default to tenant `0`,
-site/root-domain children carry tenant-bound composite foreign keys, application slugs and active
-nginx configurations are unique through partial indexes, and the cluster admin listings gain the
-tenant-leading indexes their predicates seek. `0028` adds the per-owner plugin catalog
-(`webserver_plugin`): tenant/user scoping, one active plugin key per owner, draft/active status,
-git/archive source fields, and checksum/plugin-key checks. `0029` adds
-`webserver_nginx_config_revision`: one immutable snapshot per `(config_id, version_no)`, so the
-revision counter written by nginx config updates has readable, restorable history.
-
-SQLite is not an authoritative server engine or deployment profile. This Web Server repository does
-not provide a server-side SQLite repository or SQLite release profile. Any future SQLite fixture must
-be declared separately as `client-local`; it cannot be used as server parity evidence, an authority
-fallback, or a rollback target.
+1. **Baseline** — `database/ddl/baseline/{engine}/0001_webserver_baseline.sql` contains the full DDL snapshot.
+2. **Migrations** — `database/migrations/{engine}/` is reserved for post-GA incremental schema changes only. It is intentionally empty at initialization.
+3. **Drift** — run `pnpm db:drift:check` before release.
 
 ## Commands
 

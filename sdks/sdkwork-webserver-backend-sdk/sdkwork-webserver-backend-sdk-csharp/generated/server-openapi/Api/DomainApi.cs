@@ -189,17 +189,17 @@ namespace SDKWork.WebserverBackendSdk.Api
         }
 
         /// <summary>
-        /// Read the root domain's WeChat MP domain-ownership verification file
+        /// List the root domain's domain-ownership verification files
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationRetrieveResponse?> RootDomainsWechatVerificationRetrieveAsync(string rootDomainId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsVerificationFilesListResponse?> RootDomainsVerificationFilesListAsync(string rootDomainId)
         {
-            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationRetrieveResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file"));
+            return await _client.GetAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsVerificationFilesListResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_files"));
         }
 
         /// <summary>
-        /// Upload (or wholly replace) the root domain's WeChat verification file
+        /// Register (or replace) a verification file on the root domain
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationUpdateResponse?> RootDomainsWechatVerificationUpdateAsync(string rootDomainId, SDKWork.WebserverBackendSdk.Models.UpsertDomainWechatVerificationRequest body, string idempotencyKey)
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsVerificationFilesCreateResponse201?> RootDomainsVerificationFilesCreateAsync(string rootDomainId, SDKWork.WebserverBackendSdk.Models.CreateDomainVerificationFileRequest body, string idempotencyKey)
         {
             var requestHeaders = BuildRequestHeaders(
                 new Dictionary<string, HeaderParameterSpec>
@@ -208,23 +208,23 @@ namespace SDKWork.WebserverBackendSdk.Api
                 },
                 new Dictionary<string, HeaderParameterSpec>()
             );
-            return await _client.PutAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationUpdateResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file"), body, null, requestHeaders, "application/json");
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsVerificationFilesCreateResponse201>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_files"), body, null, requestHeaders, "application/json");
         }
 
         /// <summary>
-        /// Delete the root domain's WeChat verification file
+        /// Delete one verification file from the root domain
         /// </summary>
-        public async Task RootDomainsWechatVerificationDeleteAsync(string rootDomainId)
+        public async Task RootDomainsVerificationFilesDeleteAsync(string rootDomainId, string fileId)
         {
-            await _client.DeleteAsync<object>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file"));
+            await _client.DeleteAsync<object>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_files/{SerializePathParameter(fileId, new PathParameterSpec("fileId", "simple", false))}"));
         }
 
         /// <summary>
-        /// Self-check the root domain's WeChat verification file
+        /// Self-check one verification file
         /// </summary>
-        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationCheckResponse?> RootDomainsWechatVerificationCheckAsync(string rootDomainId)
+        public async Task<SDKWork.WebserverBackendSdk.Models.RootDomainsVerificationFilesCheckResponse?> RootDomainsVerificationFilesCheckAsync(string rootDomainId, string fileId)
         {
-            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsWechatVerificationCheckResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_file/check"), null);
+            return await _client.PostAsync<SDKWork.WebserverBackendSdk.Models.RootDomainsVerificationFilesCheckResponse>(ApiPaths.BackendPath($"/root_domains/{SerializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false))}/verification_files/{SerializePathParameter(fileId, new PathParameterSpec("fileId", "simple", false))}/check"), null);
         }
 
         /// <summary>
