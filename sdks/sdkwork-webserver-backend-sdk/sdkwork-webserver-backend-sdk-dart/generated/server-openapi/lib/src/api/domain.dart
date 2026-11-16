@@ -183,17 +183,17 @@ class DomainApi {
     })();
   }
 
-  /// Read the root domain's WeChat MP domain-ownership verification file
-  Future<RootDomainsWechatVerificationRetrieveResponse?> rootDomainsWechatVerificationRetrieve(String rootDomainId) async {
-    final response = await _client.get(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file'));
+  /// List the root domain's domain-ownership verification files
+  Future<RootDomainsVerificationFilesListResponse?> rootDomainsVerificationFilesList(String rootDomainId) async {
+    final response = await _client.get(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_files'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : RootDomainsWechatVerificationRetrieveResponse.fromJson(map);
+      return map == null ? null : RootDomainsVerificationFilesListResponse.fromJson(map);
     })();
   }
 
-  /// Upload (or wholly replace) the root domain's WeChat verification file
-  Future<RootDomainsWechatVerificationUpdateResponse?> rootDomainsWechatVerificationUpdate(String rootDomainId, UpsertDomainWechatVerificationRequest body, String idempotencyKey) async {
+  /// Register (or replace) a verification file on the root domain
+  Future<RootDomainsVerificationFilesCreateResponse201?> rootDomainsVerificationFilesCreate(String rootDomainId, CreateDomainVerificationFileRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -201,24 +201,24 @@ class DomainApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.put(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_files'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : RootDomainsWechatVerificationUpdateResponse.fromJson(map);
+      return map == null ? null : RootDomainsVerificationFilesCreateResponse201.fromJson(map);
     })();
   }
 
-  /// Delete the root domain's WeChat verification file
-  Future<void> rootDomainsWechatVerificationDelete(String rootDomainId) async {
-    await _client.delete(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file'));
+  /// Delete one verification file from the root domain
+  Future<void> rootDomainsVerificationFilesDelete(String rootDomainId, String fileId) async {
+    await _client.delete(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_files/${serializePathParameter(fileId, const PathParameterSpec('fileId', 'simple', false))}'));
   }
 
-  /// Self-check the root domain's WeChat verification file
-  Future<RootDomainsWechatVerificationCheckResponse?> rootDomainsWechatVerificationCheck(String rootDomainId) async {
-    final response = await _client.post(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_file/check'));
+  /// Self-check one verification file
+  Future<RootDomainsVerificationFilesCheckResponse?> rootDomainsVerificationFilesCheck(String rootDomainId, String fileId) async {
+    final response = await _client.post(ApiPaths.backendPath('/root_domains/${serializePathParameter(rootDomainId, const PathParameterSpec('rootDomainId', 'simple', false))}/verification_files/${serializePathParameter(fileId, const PathParameterSpec('fileId', 'simple', false))}/check'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : RootDomainsWechatVerificationCheckResponse.fromJson(map);
+      return map == null ? null : RootDomainsVerificationFilesCheckResponse.fromJson(map);
     })();
   }
 

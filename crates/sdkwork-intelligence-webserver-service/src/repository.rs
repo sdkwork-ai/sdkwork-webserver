@@ -778,30 +778,39 @@ pub trait WebRepositoryPort: Send + Sync {
         root_domain_id: &str,
     ) -> WebServiceResult<()>;
 
-    /// Uploads (or wholly replaces) the root domain's WeChat verification
-    /// file; answers the write's timestamp.
-    async fn upsert_root_domain_wechat_verification(
+    /// Lists every domain-ownership verification file the root domain publishes.
+    async fn list_root_domain_verification_files(
         &self,
         tenant_id: i64,
         root_domain_id: &str,
+    ) -> WebServiceResult<Vec<crate::verification_file::VerificationFileRecord>>;
+
+    /// Registers a verification file, replacing the row with the same
+    /// `(root_domain, file_name)` — a platform that reissues its file replaces
+    /// the previous one whole.
+    async fn upsert_root_domain_verification_file(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        platform: &str,
         file_name: &str,
         content: &str,
-    ) -> WebServiceResult<String>;
+    ) -> WebServiceResult<crate::verification_file::VerificationFileRecord>;
 
-    /// Reads the root domain's WeChat verification file as
-    /// `(file_name, content, updated_at)`; `None` when none is configured.
-    async fn root_domain_wechat_verification(
+    /// Reads one verification file by its own id.
+    async fn root_domain_verification_file(
         &self,
         tenant_id: i64,
         root_domain_id: &str,
-    ) -> WebServiceResult<Option<(String, String, String)>>;
+        file_id: &str,
+    ) -> WebServiceResult<crate::verification_file::VerificationFileRecord>;
 
-    /// Deletes the root domain's WeChat verification file; `false` when
-    /// there was none.
-    async fn delete_root_domain_wechat_verification(
+    /// Deletes one verification file; `false` when there was none.
+    async fn delete_root_domain_verification_file(
         &self,
         tenant_id: i64,
         root_domain_id: &str,
+        file_id: &str,
     ) -> WebServiceResult<bool>;
 
     async fn update_root_domain(

@@ -1376,18 +1376,19 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
-  /backend/v3/api/root_domains/{rootDomainId}/verification_file:
+  /backend/v3/api/root_domains/{rootDomainId}/verification_files:
     parameters:
     - $ref: '#/components/parameters/RootDomainIdParam'
     get:
-      operationId: rootDomains.wechatVerification.retrieve
-      summary: Read the root domain's WeChat MP domain-ownership verification file
+      operationId: rootDomains.verificationFiles.list
+      summary: List the root domain's domain-ownership verification files
       description: >-
-        The platform-issued MP_verify_xxx.txt file this root domain publishes,
-        if any. The edge serves it verbatim at
+        Every verification file this root domain publishes to a platform crawler.
+        A root domain may carry several at once (WeChat official account, WeChat
+        mini program, Alipay, ByteDance, Google Search Console, Apple, or a custom
+        platform), and the edge serves each one byte-for-byte at
         https://<hostname>/<fileName> for the root domain's hostname and every
-        registered subdomain under it; the apex row and a subdomain row manage
-        the same file.
+        registered subdomain under it.
       tags:
       - domain
       security:
@@ -1401,7 +1402,7 @@ paths:
       x-sdkwork-owner: sdkwork-webserver
       responses:
         '200':
-          description: Verification file state read successfully.
+          description: Verification files read successfully.
           content:
             application/json:
               schema:
@@ -1412,18 +1413,25 @@ paths:
                     data:
                       type: object
                       required:
-                      - item
+                      - items
+                      - pageInfo
                       properties:
-                        item:
-                          $ref: '#/components/schemas/DomainWechatVerificationResponse'
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/DomainVerificationFileResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
         '404':
           $ref: '#/components/responses/NotFound'
-    put:
-      operationId: rootDomains.wechatVerification.update
-      summary: Upload (or wholly replace) the root domain's WeChat verification file
+    post:
+      operationId: rootDomains.verificationFiles.create
+      summary: Register (or replace) a verification file on the root domain
       description: >-
-        Content is stored byte-exact: the platform compares bytes, so nothing
-        is normalized. A fresh platform file replaces the previous one whole.
+        Content is stored byte-exact: platforms compare bytes, so nothing is
+        normalized. Registering the same fileName again replaces the previous row
+        whole; a platform that reissues its file replaces the old name and
+        content together.
       tags:
       - domain
       security:
@@ -1443,9 +1451,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertDomainWechatVerificationRequest'
+              $ref: '#/components/schemas/CreateDomainVerificationFileRequest'
       responses:
-        '200':
+        '201':
           description: Verification file stored successfully.
           content:
             application/json:
@@ -1460,14 +1468,20 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/DomainWechatVerificationResponse'
+                          $ref: '#/components/schemas/DomainVerificationFileResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /backend/v3/api/root_domains/{rootDomainId}/verification_files/{fileId}:
+    parameters:
+    - $ref: '#/components/parameters/RootDomainIdParam'
+    - $ref: '#/components/parameters/VerificationFileIdParam'
     delete:
-      operationId: rootDomains.wechatVerification.delete
-      summary: Delete the root domain's WeChat verification file
+      operationId: rootDomains.verificationFiles.delete
+      summary: Delete one verification file from the root domain
       tags:
       - domain
       security:
@@ -1484,14 +1498,15 @@ paths:
           description: Verification file deleted successfully.
         '404':
           $ref: '#/components/responses/NotFound'
-  /backend/v3/api/root_domains/{rootDomainId}/verification_file/check:
+  /backend/v3/api/root_domains/{rootDomainId}/verification_files/{fileId}/check:
     parameters:
     - $ref: '#/components/parameters/RootDomainIdParam'
+    - $ref: '#/components/parameters/VerificationFileIdParam'
     post:
-      operationId: rootDomains.wechatVerification.check
-      summary: Self-check the root domain's WeChat verification file
+      operationId: rootDomains.verificationFiles.check
+      summary: Self-check one verification file
       description: >-
-        Fetches https://<hostname>/<fileName> the way the WeChat crawler does
+        Fetches https://<hostname>/<fileName> the way the platform crawler does
         (falling back to http to separate "no TLS" from "no DNS") and compares
         the body byte-for-byte with the stored file. Never throws: transport
         failures fold into the returned facts.
@@ -1522,7 +1537,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/DomainWechatVerificationCheckResponse'
+                          $ref: '#/components/schemas/DomainVerificationFileCheckResponse'
         '404':
           $ref: '#/components/responses/NotFound'
   /backend/v3/api/root_domains/{rootDomainId}/dns_records/sync:
@@ -5208,6 +5223,13 @@ components:
       schema:
         type: string
         format: uuid
+    VerificationFileIdParam:
+      name: fileId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     DeploymentIdParam:
       name: deploymentId
       in: path
@@ -6486,38 +6508,76 @@ components:
         updatedAt:
           type: string
           format: date-time
-    DomainWechatVerificationResponse:
+    DomainVerificationFileResponse:
       type: object
+      additionalProperties: false
       required:
+      - id
       - rootDomainId
+      - platform
+      - fileName
+      - content
+      - createdAt
+      - updatedAt
       properties:
+        id:
+          type: string
+          format: uuid
         rootDomainId:
           type: string
+          format: uuid
+        platform:
+          type: string
+          enum:
+          - WECHAT_OFFICIAL_ACCOUNT
+          - WECHAT_MINI_PROGRAM
+          - ALIPAY
+          - BYTEDANCE
+          - APPLE
+          - GOOGLE
+          - CUSTOM
+          description: Issuing platform. Grouping/audit only; the edge matches by file name.
         fileName:
           type: string
-          description: File name issued by the platform (for example MP_verify_xxx.txt); served by exact name.
+          description: File name issued by the platform (for example MP_verify_xxx.txt, google123.html); served by exact name.
         content:
           type: string
           description: Verbatim file content, stored and returned byte for byte.
+        createdAt:
+          type: string
+          description: Time the file was first registered.
         updatedAt:
           type: string
           description: Time of the most recent upload or replacement.
-    UpsertDomainWechatVerificationRequest:
+    CreateDomainVerificationFileRequest:
       type: object
+      additionalProperties: false
       required:
+      - platform
       - fileName
       - content
       properties:
+        platform:
+          type: string
+          enum:
+          - WECHAT_OFFICIAL_ACCOUNT
+          - WECHAT_MINI_PROGRAM
+          - ALIPAY
+          - BYTEDANCE
+          - APPLE
+          - GOOGLE
+          - CUSTOM
+          description: Issuing platform.
         fileName:
           type: string
-          maxLength: 64
-          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.txt$'
-          description: File name issued by the platform; must end with .txt.
+          maxLength: 128
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.(txt|html|xml)$'
+          description: Single-segment ASCII file name ending with .txt, .html or .xml.
         content:
           type: string
-          maxLength: 2048
+          maxLength: 4096
           description: Verbatim file content, stored and returned byte for byte.
-    DomainWechatVerificationCheckResponse:
+    DomainVerificationFileCheckResponse:
       type: object
       required:
       - reachable

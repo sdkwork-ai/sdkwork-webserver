@@ -133,30 +133,30 @@ public class DomainApi {
         return try await client.patch(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/dns_records/\(serializePathParameter(recordId, PathParameterSpec(name: "recordId", style: "simple", explode: false)))/status"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsDnsRecordsStatusUpdateResponse.self)
     }
 
-    /// Read the root domain's WeChat MP domain-ownership verification file
-    public func rootDomainsWechatVerificationRetrieve(rootDomainId: String) async throws -> RootDomainsWechatVerificationRetrieveResponse? {
-        return try await client.get(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file"), responseType: RootDomainsWechatVerificationRetrieveResponse.self)
+    /// List the root domain's domain-ownership verification files
+    public func rootDomainsVerificationFilesList(rootDomainId: String) async throws -> RootDomainsVerificationFilesListResponse? {
+        return try await client.get(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_files"), responseType: RootDomainsVerificationFilesListResponse.self)
     }
 
-    /// Upload (or wholly replace) the root domain's WeChat verification file
-    public func rootDomainsWechatVerificationUpdate(rootDomainId: String, body: UpsertDomainWechatVerificationRequest, idempotencyKey: String) async throws -> RootDomainsWechatVerificationUpdateResponse? {
+    /// Register (or replace) a verification file on the root domain
+    public func rootDomainsVerificationFilesCreate(rootDomainId: String, body: CreateDomainVerificationFileRequest, idempotencyKey: String) async throws -> RootDomainsVerificationFilesCreateResponse201? {
         let requestHeaders = buildRequestHeaders(
             [
                 "Idempotency-Key": HeaderParameterSpec(value: idempotencyKey, style: "simple", explode: false, contentType: nil),
             ],
             [:]
         )
-        return try await client.put(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsWechatVerificationUpdateResponse.self)
+        return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_files"), body: body, params: nil, headers: requestHeaders, contentType: "application/json", responseType: RootDomainsVerificationFilesCreateResponse201.self)
     }
 
-    /// Delete the root domain's WeChat verification file
-    public func rootDomainsWechatVerificationDelete(rootDomainId: String) async throws -> Void {
-        _ = try await client.delete(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file"))
+    /// Delete one verification file from the root domain
+    public func rootDomainsVerificationFilesDelete(rootDomainId: String, fileId: String) async throws -> Void {
+        _ = try await client.delete(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_files/\(serializePathParameter(fileId, PathParameterSpec(name: "fileId", style: "simple", explode: false)))"))
     }
 
-    /// Self-check the root domain's WeChat verification file
-    public func rootDomainsWechatVerificationCheck(rootDomainId: String) async throws -> RootDomainsWechatVerificationCheckResponse? {
-        return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_file/check"), body: nil, responseType: RootDomainsWechatVerificationCheckResponse.self)
+    /// Self-check one verification file
+    public func rootDomainsVerificationFilesCheck(rootDomainId: String, fileId: String) async throws -> RootDomainsVerificationFilesCheckResponse? {
+        return try await client.post(ApiPaths.backendPath("/root_domains/\(serializePathParameter(rootDomainId, PathParameterSpec(name: "rootDomainId", style: "simple", explode: false)))/verification_files/\(serializePathParameter(fileId, PathParameterSpec(name: "fileId", style: "simple", explode: false)))/check"), body: nil, responseType: RootDomainsVerificationFilesCheckResponse.self)
     }
 
     /// Sync a root-domain Zone's resolution records through its cloud account

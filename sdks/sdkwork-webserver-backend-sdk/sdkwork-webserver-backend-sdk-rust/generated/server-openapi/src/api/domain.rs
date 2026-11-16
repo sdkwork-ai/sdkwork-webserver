@@ -4,7 +4,7 @@ use crate::api::base::{RequestHeaders};
 use crate::api::paths::backend_path;
 use crate::api::paths::append_query_string;
 use crate::http::{SdkworkError, SdkworkHttpClient};
-use crate::models::{ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerifyResponse, DomainWechatVerificationCheckResponse, DomainWechatVerificationResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest, UpsertDomainWechatVerificationRequest};
+use crate::models::{ApplicationDomainResponse, CreateDomainDnsRecordRequest, CreateDomainVerificationFileRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainVerificationFileCheckResponse, DomainVerificationFileResponse, DomainVerifyResponse, RootDomainResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest};
 
 #[derive(Clone)]
 pub struct DomainApi {
@@ -154,33 +154,33 @@ impl DomainApi {
         self.client.patch(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
 
-    /// Read the root domain's WeChat MP domain-ownership verification file
-    pub async fn root_domains_wechat_verification_retrieve(&self, root_domain_id: &str) -> Result<DomainWechatVerificationResponse, SdkworkError> {
-        let path = backend_path(&format!("/root_domains/{}/verification_file", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+    /// List the root domain's domain-ownership verification files
+    pub async fn root_domains_verification_files_list(&self, root_domain_id: &str) -> Result<serde_json::Value, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/verification_files", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
         self.client.get(&path, None, None).await
     }
 
-    /// Upload (or wholly replace) the root domain's WeChat verification file
-    pub async fn root_domains_wechat_verification_update(&self, root_domain_id: &str, body: &UpsertDomainWechatVerificationRequest, idempotency_key: &str) -> Result<DomainWechatVerificationResponse, SdkworkError> {
-        let path = backend_path(&format!("/root_domains/{}/verification_file", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+    /// Register (or replace) a verification file on the root domain
+    pub async fn root_domains_verification_files_create(&self, root_domain_id: &str, body: &CreateDomainVerificationFileRequest, idempotency_key: &str) -> Result<DomainVerificationFileResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/verification_files", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
         let headers = build_request_headers(
             &[
                 ("Idempotency-Key", HeaderParameterSpec::new(idempotency_key, "simple", false, None)),
             ],
             &[],
         );
-        self.client.put(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
+        self.client.post(&path, Some(body), None, headers.as_ref(), Some("application/json")).await
     }
 
-    /// Delete the root domain's WeChat verification file
-    pub async fn root_domains_wechat_verification_delete(&self, root_domain_id: &str) -> Result<(), SdkworkError> {
-        let path = backend_path(&format!("/root_domains/{}/verification_file", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+    /// Delete one verification file from the root domain
+    pub async fn root_domains_verification_files_delete(&self, root_domain_id: &str, file_id: &str) -> Result<(), SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/verification_files/{}", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)), serialize_path_parameter(file_id, PathParameterSpec::new("fileId", "simple", false))));
         self.client.delete(&path, None, None).await
     }
 
-    /// Self-check the root domain's WeChat verification file
-    pub async fn root_domains_wechat_verification_check(&self, root_domain_id: &str) -> Result<DomainWechatVerificationCheckResponse, SdkworkError> {
-        let path = backend_path(&format!("/root_domains/{}/verification_file/check", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false))));
+    /// Self-check one verification file
+    pub async fn root_domains_verification_files_check(&self, root_domain_id: &str, file_id: &str) -> Result<DomainVerificationFileCheckResponse, SdkworkError> {
+        let path = backend_path(&format!("/root_domains/{}/verification_files/{}/check", serialize_path_parameter(root_domain_id, PathParameterSpec::new("rootDomainId", "simple", false)), serialize_path_parameter(file_id, PathParameterSpec::new("fileId", "simple", false))));
         self.client.post(&path, Option::<&serde_json::Value>::None, None, None, None).await
     }
 

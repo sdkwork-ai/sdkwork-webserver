@@ -280,20 +280,25 @@ CREATE INDEX IF NOT EXISTS idx_webserver_domain_dns_record_domain
     ON webserver_domain_dns_record (tenant_id, domain_id)
     WHERE deleted_at IS NULL;
 
--- The WeChat MP domain-ownership verification file for one root domain
--- (公众号/小程序 JS 接口安全域名、网页授权域名、业务域名验证). The operator
--- uploads the platform-issued MP_verify_xxx.txt verbatim and the edge data
--- plane serves it for the root domain's hostname and every registered
--- subdomain under it. One row per root domain: a fresh platform file replaces
--- the previous one whole. Content is kept byte-exact — WeChat compares bytes.
-CREATE TABLE IF NOT EXISTS webserver_domain_wechat_verification (
+-- Domain ownership verification files for one root domain. Every platform that
+-- grants a domain-scoped capability (WeChat MP / mini program JS 安全域名与业务
+-- 域名、支付宝/抖音小程序、Google Search Console、Apple Associated Domains、
+-- Bing 站点验证) proves ownership by fetching a file it issued from the domain
+-- root. The operator uploads that file verbatim and the edge data plane serves
+-- it for the root domain's hostname and every registered subdomain under it.
+-- A root domain may carry several files at once — one per platform, plus a new
+-- one alongside an old one until the operator deletes it — so the uniqueness
+-- that matters is (root_domain_id, file_name), not root_domain_id. Content is
+-- kept byte-exact: platforms compare bytes.
+CREATE TABLE IF NOT EXISTS webserver_domain_verification_file (
     id              BIGINT        NOT NULL,
     uuid            VARCHAR(64)   NOT NULL,
     tenant_id       BIGINT        NOT NULL DEFAULT 0,
     organization_id BIGINT        NOT NULL DEFAULT 0,
     root_domain_id  BIGINT        NOT NULL,
-    file_name       VARCHAR(64)   NOT NULL,
-    content         VARCHAR(2048) NOT NULL,
+    platform        VARCHAR(32)   NOT NULL,
+    file_name       VARCHAR(128)  NOT NULL,
+    content         VARCHAR(4096) NOT NULL,
     user_id         BIGINT,
     created_by      BIGINT,
     updated_by      BIGINT,
@@ -302,21 +307,30 @@ CREATE TABLE IF NOT EXISTS webserver_domain_wechat_verification (
     version         BIGINT        NOT NULL DEFAULT 1,
     deleted_at      TIMESTAMPTZ,
     PRIMARY KEY (id),
-    CONSTRAINT uk_webserver_domain_wechat_verification_uuid UNIQUE (uuid),
-    CONSTRAINT uk_webserver_domain_wechat_verification_root UNIQUE (root_domain_id),
-    CONSTRAINT fk_webserver_domain_wechat_verification_root
+    CONSTRAINT uk_webserver_domain_verification_file_uuid UNIQUE (uuid),
+    CONSTRAINT uk_webserver_domain_verification_file_name UNIQUE (root_domain_id, file_name),
+    CONSTRAINT fk_webserver_domain_verification_file_root
         FOREIGN KEY (root_domain_id) REFERENCES webserver_root_domain(id),
-    CONSTRAINT chk_webserver_domain_wechat_verification_name CHECK (file_name LIKE '%.txt'),
-    CONSTRAINT chk_webserver_domain_wechat_verification_content CHECK (content <> '')
+    CONSTRAINT chk_webserver_domain_verification_file_platform CHECK (platform IN (
+        'WECHAT_OFFICIAL_ACCOUNT', 'WECHAT_MINI_PROGRAM', 'ALIPAY',
+        'BYTEDANCE', 'APPLE', 'GOOGLE', 'CUSTOM'
+    )),
+    -- Single-segment ASCII, one of the three extensions domain verification
+    -- actually uses: .txt (WeChat, Apple), .html (Google), .xml (Bing).
+    CONSTRAINT chk_webserver_domain_verification_file_name CHECK (
+        file_name ~ '^[A-Za-z0-9][A-Za-z0-9._-]*\.(txt|html|xml)$'
+    ),
+    CONSTRAINT chk_webserver_domain_verification_file_content CHECK (content <> '')
 );
 
-COMMENT ON TABLE webserver_domain_wechat_verification IS 'WeChat MP domain-ownership verification file; one per root domain, served verbatim per request hostname';
-COMMENT ON COLUMN webserver_domain_wechat_verification.file_name IS 'Platform-issued file name (MP_verify_xxx.txt), served by exact name without case folding';
-COMMENT ON COLUMN webserver_domain_wechat_verification.content IS 'Verification file bytes, stored and returned verbatim';
-COMMENT ON COLUMN webserver_domain_wechat_verification.user_id IS 'Owning user; NULL means tenant-level, same semantics as webserver_domain.user_id';
+COMMENT ON TABLE webserver_domain_verification_file IS 'Domain ownership verification file; a root domain may register several (one per platform), served verbatim per request hostname';
+COMMENT ON COLUMN webserver_domain_verification_file.platform IS 'Issuing platform: WECHAT_OFFICIAL_ACCOUNT / WECHAT_MINI_PROGRAM / ALIPAY / BYTEDANCE / APPLE / GOOGLE / CUSTOM';
+COMMENT ON COLUMN webserver_domain_verification_file.file_name IS 'Platform-issued file name (MP_verify_xxx.txt, googleXXX.html, …), served by exact name without case folding';
+COMMENT ON COLUMN webserver_domain_verification_file.content IS 'Verification file bytes, stored and returned verbatim';
+COMMENT ON COLUMN webserver_domain_verification_file.user_id IS 'Owning user; NULL means tenant-level, same semantics as webserver_domain.user_id';
 
-CREATE INDEX IF NOT EXISTS idx_webserver_domain_wechat_verification_tenant
-    ON webserver_domain_wechat_verification (tenant_id, root_domain_id)
+CREATE INDEX IF NOT EXISTS idx_webserver_domain_verification_file_tenant
+    ON webserver_domain_verification_file (tenant_id, root_domain_id)
     WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS webserver_site_binding (
@@ -2605,7 +2619,7 @@ ALTER TABLE webserver_site ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_deployment ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_domain ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_domain_dns_record ALTER COLUMN tenant_id DROP DEFAULT;
-ALTER TABLE webserver_domain_wechat_verification ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_domain_verification_file ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_env_variable ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_health_check ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_nginx_config ALTER COLUMN tenant_id DROP DEFAULT;
@@ -2656,10 +2670,10 @@ ALTER TABLE webserver_health_check
     ADD CONSTRAINT fk_webserver_health_check_site
     FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
 
-ALTER TABLE webserver_domain_wechat_verification
-    DROP CONSTRAINT IF EXISTS fk_webserver_domain_wechat_verification_root;
-ALTER TABLE webserver_domain_wechat_verification
-    ADD CONSTRAINT fk_webserver_domain_wechat_verification_root
+ALTER TABLE webserver_domain_verification_file
+    DROP CONSTRAINT IF EXISTS fk_webserver_domain_verification_file_root;
+ALTER TABLE webserver_domain_verification_file
+    ADD CONSTRAINT fk_webserver_domain_verification_file_root
     FOREIGN KEY (tenant_id, root_domain_id)
     REFERENCES webserver_root_domain (tenant_id, id);
 

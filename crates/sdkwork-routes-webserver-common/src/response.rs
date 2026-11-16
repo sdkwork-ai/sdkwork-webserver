@@ -8,9 +8,10 @@ use sdkwork_utils_rust::{
 use sdkwork_webserver_contract::{
     ApplicationPage, AuditLogPage, CertificateDistributionPage, CertificatePage, ClusterEventPage,
     ClusterHeartbeatSamplePage, ClusterHostPage, ClusterInstancePage, ClusterPage, DeploymentPage,
-    DnsAccountPage, DomainDnsRecordPage, DomainPage, ListenerCertificateBindingPage,
-    NginxConfigPage, NginxConfigRevisionPage, NginxConfigRevisionResponse, PlatformTargetPage,
-    PluginPage, RootDomainPage, ServerPage, SourceVersionPage, WebServiceResult,
+    DnsAccountPage, DomainDnsRecordPage, DomainPage, DomainVerificationFilePage,
+    ListenerCertificateBindingPage, NginxConfigPage, NginxConfigRevisionPage,
+    NginxConfigRevisionResponse, PlatformTargetPage, PluginPage, RootDomainPage, ServerPage,
+    SourceVersionPage, WebServiceResult,
 };
 use serde::Serialize;
 
@@ -276,6 +277,24 @@ pub fn ok_domain_dns_record_page(
             StatusCode::OK,
             build_page_data(page_data.items, page, page_size, page_data.total),
         )),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// The root domain's domain-ownership verification files, as a single
+/// unpaginated page: the number of platforms that ask for a root-path proof
+/// file is small and bounded.
+pub fn ok_verification_file_page(
+    result: WebServiceResult<DomainVerificationFilePage>,
+) -> Result<Response, WebApiError> {
+    match result {
+        Ok(page_data) => {
+            let page_size = page_data.items.len().max(1) as i32;
+            Ok(envelope(
+                StatusCode::OK,
+                build_page_data(page_data.items, 1, page_size, page_data.total),
+            ))
+        }
         Err(error) => Err(error.into()),
     }
 }

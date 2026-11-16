@@ -135,32 +135,32 @@ public class DomainApi {
         return client.convertValue(raw, new TypeReference<RootDomainsDnsRecordsStatusUpdateResponse>() {});
     }
 
-    /** Read the root domain's WeChat MP domain-ownership verification file */
-    public RootDomainsWechatVerificationRetrieveResponse rootDomainsWechatVerificationRetrieve(String rootDomainId) throws Exception {
-        Object raw = client.get(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file"));
-        return client.convertValue(raw, new TypeReference<RootDomainsWechatVerificationRetrieveResponse>() {});
+    /** List the root domain's domain-ownership verification files */
+    public RootDomainsVerificationFilesListResponse rootDomainsVerificationFilesList(String rootDomainId) throws Exception {
+        Object raw = client.get(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_files"));
+        return client.convertValue(raw, new TypeReference<RootDomainsVerificationFilesListResponse>() {});
     }
 
-    /** Upload (or wholly replace) the root domain's WeChat verification file */
-    public RootDomainsWechatVerificationUpdateResponse rootDomainsWechatVerificationUpdate(String rootDomainId, UpsertDomainWechatVerificationRequest body, String idempotencyKey) throws Exception {
+    /** Register (or replace) a verification file on the root domain */
+    public RootDomainsVerificationFilesCreateResponse201 rootDomainsVerificationFilesCreate(String rootDomainId, CreateDomainVerificationFileRequest body, String idempotencyKey) throws Exception {
         Map<String, String> requestHeaders = buildRequestHeaders(
                 Map.of("Idempotency-Key", new HeaderParameterSpec(idempotencyKey, "simple", false, null)),
                 Map.of()
         );
-        Object raw = client.put(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file"), body, null, requestHeaders, "application/json");
-        return client.convertValue(raw, new TypeReference<RootDomainsWechatVerificationUpdateResponse>() {});
+        Object raw = client.post(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_files"), body, null, requestHeaders, "application/json");
+        return client.convertValue(raw, new TypeReference<RootDomainsVerificationFilesCreateResponse201>() {});
     }
 
-    /** Delete the root domain's WeChat verification file */
-    public Void rootDomainsWechatVerificationDelete(String rootDomainId) throws Exception {
-        client.delete(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file"));
+    /** Delete one verification file from the root domain */
+    public Void rootDomainsVerificationFilesDelete(String rootDomainId, String fileId) throws Exception {
+        client.delete(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_files/" + serializePathParameter(fileId, new PathParameterSpec("fileId", "simple", false)) + ""));
         return null;
     }
 
-    /** Self-check the root domain's WeChat verification file */
-    public RootDomainsWechatVerificationCheckResponse rootDomainsWechatVerificationCheck(String rootDomainId) throws Exception {
-        Object raw = client.post(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_file/check"), null);
-        return client.convertValue(raw, new TypeReference<RootDomainsWechatVerificationCheckResponse>() {});
+    /** Self-check one verification file */
+    public RootDomainsVerificationFilesCheckResponse rootDomainsVerificationFilesCheck(String rootDomainId, String fileId) throws Exception {
+        Object raw = client.post(ApiPaths.backendPath("/root_domains/" + serializePathParameter(rootDomainId, new PathParameterSpec("rootDomainId", "simple", false)) + "/verification_files/" + serializePathParameter(fileId, new PathParameterSpec("fileId", "simple", false)) + "/check"), null);
+        return client.convertValue(raw, new TypeReference<RootDomainsVerificationFilesCheckResponse>() {});
     }
 
     /** Sync a root-domain Zone's resolution records through its cloud account */

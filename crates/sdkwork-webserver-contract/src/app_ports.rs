@@ -668,54 +668,55 @@ pub trait WebBackendApi: Send + Sync {
         request: &CreateRootDomainHostnameRequest,
     ) -> WebServiceResult<DomainResponse>;
 
-    /// Reads the root domain's WeChat MP domain-ownership verification file;
-    /// `fileName` absent means none is configured.
-    async fn retrieve_root_domain_wechat_verification(
+    /// Lists every domain-ownership verification file the root domain publishes.
+    async fn list_root_domain_verification_files(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
-    ) -> WebServiceResult<DomainWechatVerificationResponse> {
+    ) -> WebServiceResult<DomainVerificationFilePage> {
         let _ = (context, root_domain_id);
         Err(crate::problem::WebServiceError::Internal(
             "root domain API is not implemented".to_owned(),
         ))
     }
 
-    /// Uploads (or wholly replaces) the root domain's WeChat verification
-    /// file. Content is stored byte-exact: the platform compares bytes.
-    async fn upsert_root_domain_wechat_verification(
+    /// Registers (or replaces, by file name) one verification file. Content is
+    /// stored byte-exact: the platform compares bytes.
+    async fn create_root_domain_verification_file(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
-        request: &UpsertDomainWechatVerificationRequest,
-    ) -> WebServiceResult<DomainWechatVerificationResponse> {
+        request: &CreateDomainVerificationFileRequest,
+    ) -> WebServiceResult<DomainVerificationFileResponse> {
         let _ = (context, root_domain_id, request);
         Err(crate::problem::WebServiceError::Internal(
             "root domain API is not implemented".to_owned(),
         ))
     }
 
-    /// Deletes the root domain's WeChat verification file.
-    async fn delete_root_domain_wechat_verification(
+    /// Deletes one verification file by its own id.
+    async fn delete_root_domain_verification_file(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
+        file_id: &str,
     ) -> WebServiceResult<()> {
-        let _ = (context, root_domain_id);
+        let _ = (context, root_domain_id, file_id);
         Err(crate::problem::WebServiceError::Internal(
             "root domain API is not implemented".to_owned(),
         ))
     }
 
-    /// Self-checks the file the way the WeChat crawler reads it: fetch
+    /// Self-checks the file the way the platform crawler reads it: fetch
     /// `https(s)://<hostname>/<fileName>` and compare byte-for-byte. Never
     /// throws; transport failures fold into the returned facts.
-    async fn check_root_domain_wechat_verification(
+    async fn check_root_domain_verification_file(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
-    ) -> WebServiceResult<DomainWechatVerificationCheckResponse> {
-        let _ = (context, root_domain_id);
+        file_id: &str,
+    ) -> WebServiceResult<DomainVerificationFileCheckResponse> {
+        let _ = (context, root_domain_id, file_id);
         Err(crate::problem::WebServiceError::Internal(
             "root domain API is not implemented".to_owned(),
         ))

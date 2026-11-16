@@ -8,46 +8,55 @@ mod runtime;
 pub use resolution_cache::{resolution_cache_from_shared_pool, SqlxResolutionCache};
 pub use runtime::{bootstrap_web_runtime_from_env, WebRuntime};
 
-/// The WeChat verification file a request hostname resolves to, via its root
-/// domain. Exposed for the standalone gateway's data plane: the edge answers
-/// `https://<hostname>/<fileName>` from here for the apex and every registered
-/// subdomain of the root domain.
+/// The domain-ownership verification files a request hostname resolves to,
+/// via its root domain. Exposed for the standalone gateway's data plane: the
+/// edge answers `https://<hostname>/<fileName>` from here for the apex and
+/// every registered subdomain of the root domain, matching the requested file
+/// name exactly.
 ///
 /// Self-contained on purpose: it needs only a PostgreSQL pool, so it does not
 /// depend on the domain-repository engine surface.
-pub async fn wechat_verification_by_hostname_lookup(
+pub async fn verification_files_by_hostname_lookup(
     pool: &sqlx::PgPool,
     hostname: &str,
-) -> WebServiceResult<Option<(String, String)>> {
+) -> WebServiceResult<Vec<(String, String)>> {
     let normalized = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
-    let row = sqlx::query(
+    let rows = sqlx::query(
         "SELECT v.file_name, v.content
-         FROM webserver_domain_wechat_verification v
+         FROM webserver_domain_verification_file v
          JOIN webserver_root_domain r ON r.id = v.root_domain_id
          LEFT JOIN webserver_domain d
            ON d.root_domain_id = r.id AND d.hostname = $1 AND d.deleted_at IS NULL
-         WHERE r.deleted_at IS NULL AND (r.hostname = $1 OR d.id IS NOT NULL)
-         ORDER BY r.id DESC
-         LIMIT 1",
+         WHERE r.deleted_at IS NULL AND v.deleted_at IS NULL
+           AND (r.hostname = $1 OR d.id IS NOT NULL)
+         ORDER BY r.id DESC, v.file_name ASC",
     )
     .bind(&normalized)
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await
     .map_err(|error| {
         WebServiceError::Internal(format!(
-            "read webserver_domain_wechat_verification by hostname: {error}"
+            "read webserver_domain_verification_file by hostname: {error}"
         ))
     })?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let file_name: String = row
-        .try_get("file_name")
-        .map_err(|error| WebServiceError::Internal(format!("map file name: {error}")))?;
-    let content: String = row
-        .try_get("content")
-        .map_err(|error| WebServiceError::Internal(format!("map content: {error}")))?;
-    Ok(Some((file_name, content)))
+    // One hostname can match more than one registered zone: a name that is a
+    // root domain of its own *and* a subdomain of another root listed above.
+    // `ORDER BY r.id DESC` puts the most recently registered zone first, and the
+    // first row per file name wins, so the answer is deterministic instead of
+    // depending on row order the plan happens to produce.
+    let mut files: Vec<(String, String)> = Vec::new();
+    for row in &rows {
+        let file_name: String = row
+            .try_get("file_name")
+            .map_err(|error| WebServiceError::Internal(format!("map file name: {error}")))?;
+        let content: String = row
+            .try_get("content")
+            .map_err(|error| WebServiceError::Internal(format!("map content: {error}")))?;
+        if !files.iter().any(|(name, _)| name == &file_name) {
+            files.push((file_name, content));
+        }
+    }
+    Ok(files)
 }
 
 /// Marks a dynamically assembled SQL statement as audited for sqlx 0.9's

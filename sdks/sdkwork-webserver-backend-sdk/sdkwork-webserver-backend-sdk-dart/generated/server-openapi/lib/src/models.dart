@@ -1729,49 +1729,64 @@ class RootDomainResponse {
   }
 }
 
-class DomainWechatVerificationResponse {
+class DomainVerificationFileResponse {
+  final String? id;
   final String? rootDomainId;
+  final String? platform;
   final String? fileName;
   final String? content;
+  final String? createdAt;
   final String? updatedAt;
 
-  DomainWechatVerificationResponse({
+  DomainVerificationFileResponse({
+    this.id,
     this.rootDomainId,
+    this.platform,
     this.fileName,
     this.content,
+    this.createdAt,
     this.updatedAt
   });
 
-  factory DomainWechatVerificationResponse.fromJson(Map<String, dynamic> json) {
-    return DomainWechatVerificationResponse(
+  factory DomainVerificationFileResponse.fromJson(Map<String, dynamic> json) {
+    return DomainVerificationFileResponse(
+      id: json['id']?.toString(),
       rootDomainId: json['rootDomainId']?.toString(),
+      platform: json['platform']?.toString(),
       fileName: json['fileName']?.toString(),
       content: json['content']?.toString(),
+      createdAt: json['createdAt']?.toString(),
       updatedAt: json['updatedAt']?.toString()
     );
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
+      'id': id,
       'rootDomainId': rootDomainId,
+      'platform': platform,
       'fileName': fileName,
       'content': content,
+      'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
   }
 }
 
-class UpsertDomainWechatVerificationRequest {
+class CreateDomainVerificationFileRequest {
+  final String? platform;
   final String? fileName;
   final String? content;
 
-  UpsertDomainWechatVerificationRequest({
+  CreateDomainVerificationFileRequest({
+    this.platform,
     this.fileName,
     this.content
   });
 
-  factory UpsertDomainWechatVerificationRequest.fromJson(Map<String, dynamic> json) {
-    return UpsertDomainWechatVerificationRequest(
+  factory CreateDomainVerificationFileRequest.fromJson(Map<String, dynamic> json) {
+    return CreateDomainVerificationFileRequest(
+      platform: json['platform']?.toString(),
       fileName: json['fileName']?.toString(),
       content: json['content']?.toString()
     );
@@ -1779,13 +1794,14 @@ class UpsertDomainWechatVerificationRequest {
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
+      'platform': platform,
       'fileName': fileName,
       'content': content,
     };
   }
 }
 
-class DomainWechatVerificationCheckResponse {
+class DomainVerificationFileCheckResponse {
   final bool? reachable;
   final bool? matched;
   final int? statusCode;
@@ -1793,7 +1809,7 @@ class DomainWechatVerificationCheckResponse {
   final String? detail;
   final String? checkedAt;
 
-  DomainWechatVerificationCheckResponse({
+  DomainVerificationFileCheckResponse({
     this.reachable,
     this.matched,
     this.statusCode,
@@ -1802,8 +1818,8 @@ class DomainWechatVerificationCheckResponse {
     this.checkedAt
   });
 
-  factory DomainWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
-    return DomainWechatVerificationCheckResponse(
+  factory DomainVerificationFileCheckResponse.fromJson(Map<String, dynamic> json) {
+    return DomainVerificationFileCheckResponse(
       reachable: json['reachable'] is bool ? json['reachable'] : null,
       matched: json['matched'] is bool ? json['matched'] : null,
       statusCode: json['statusCode'] is int ? json['statusCode'] : null,
@@ -6660,19 +6676,19 @@ class RootDomainsDnsRecordsStatusUpdateResponse {
   }
 }
 
-class RootDomainsWechatVerificationRetrieveResponse {
+class RootDomainsVerificationFilesListResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  RootDomainsWechatVerificationRetrieveResponse({
+  RootDomainsVerificationFilesListResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory RootDomainsWechatVerificationRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return RootDomainsWechatVerificationRetrieveResponse(
+  factory RootDomainsVerificationFilesListResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsVerificationFilesListResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -6688,19 +6704,19 @@ class RootDomainsWechatVerificationRetrieveResponse {
   }
 }
 
-class RootDomainsWechatVerificationUpdateResponse {
+class RootDomainsVerificationFilesCreateResponse201 {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  RootDomainsWechatVerificationUpdateResponse({
+  RootDomainsVerificationFilesCreateResponse201({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory RootDomainsWechatVerificationUpdateResponse.fromJson(Map<String, dynamic> json) {
-    return RootDomainsWechatVerificationUpdateResponse(
+  factory RootDomainsVerificationFilesCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return RootDomainsVerificationFilesCreateResponse201(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()
@@ -6716,19 +6732,19 @@ class RootDomainsWechatVerificationUpdateResponse {
   }
 }
 
-class RootDomainsWechatVerificationCheckResponse {
+class RootDomainsVerificationFilesCheckResponse {
   final int? code;
   final dynamic data;
   final String? traceId;
 
-  RootDomainsWechatVerificationCheckResponse({
+  RootDomainsVerificationFilesCheckResponse({
     this.code,
     this.data,
     this.traceId
   });
 
-  factory RootDomainsWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
-    return RootDomainsWechatVerificationCheckResponse(
+  factory RootDomainsVerificationFilesCheckResponse.fromJson(Map<String, dynamic> json) {
+    return RootDomainsVerificationFilesCheckResponse(
       code: json['code'] is int ? json['code'] : null,
       data: _sdkworkAsMap(json['data']),
       traceId: json['traceId']?.toString()

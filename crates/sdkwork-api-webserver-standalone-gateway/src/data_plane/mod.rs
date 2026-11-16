@@ -69,9 +69,9 @@ mod udp_stream_proxy;
 mod upstream_admission;
 mod upstream_client;
 mod upstream_tls;
+pub(crate) mod verification_file;
 mod watch;
 mod website_delivery;
-pub(crate) mod wechat_verify;
 
 pub use error::DataPlaneError;
 pub use operations::{probe_data_plane_operations_from_env, DataPlaneOperationsConfig};

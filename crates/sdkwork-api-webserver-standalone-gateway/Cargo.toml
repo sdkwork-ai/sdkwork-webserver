@@ -99,10 +99,11 @@ sdkwork-api-deployments-assembly = { workspace = true, optional = true }
 # identifier generator (`next_id` / `new_uuid`) every other writer of those
 # tables uses, so ids stay from one snowflake sequence.
 sdkwork-database-id = { workspace = true, optional = true }
-# The WeChat verification files the Web Server control plane registers live in
-# `webserver_domain_wechat_verification`; the edge answers
-# `https://<hostname>/MP_verify_*.txt` straight from that table
-# (`src/data_plane/wechat_verify.rs`). The lookup is re-exported by the owner API
+# The domain-ownership verification files the Web Server control plane registers
+# live in `webserver_domain_verification_file`; the edge answers
+# `https://<hostname>/<fileName>` straight from that table (and from the Deploy
+# plane's `deploy_dns_zone_verification_file`) in
+# `src/data_plane/verification_file.rs`. The lookup is re-exported by the owner API
 # assembly (`sdkwork-api-webserver-assembly`), so the gateway never depends on
 # the repository crate directly (API_ASSEMBLY_SPEC §4/§6).
 # Served hostnames fold to their registrable root the same way the Deployments

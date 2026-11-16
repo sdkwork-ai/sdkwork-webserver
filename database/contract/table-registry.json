@@ -213,13 +213,13 @@
       "lifecycle_status": "active"
     },
     {
-      "table_name": "webserver_domain_wechat_verification",
+      "table_name": "webserver_plugin",
       "owner": "web-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
     },
     {
-      "table_name": "webserver_plugin",
+      "table_name": "webserver_domain_verification_file",
       "owner": "web-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"

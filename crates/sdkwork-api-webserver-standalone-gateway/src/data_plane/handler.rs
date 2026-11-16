@@ -437,15 +437,15 @@ async fn route_admitted_request(
             return response;
         }
     }
-    // 微信公众号域名验证文件：与 ACME 挑战同级的窄优先级命名空间。只在
-    // "单段 .txt 根路径 + 该主机名的 zone 上报了同名文件"时接管；其余请求
-    // 原样放行给宿主应用。共享源未装载（非 management 构建/无共享库）时
-    // 整段跳过。
-    if path.ends_with(".txt") {
-        if let Some(source) = super::wechat_verify::shared_source() {
+    // 域名归属校验文件：与 ACME 挑战同级的窄优先级命名空间。只在
+    // "单段 .txt/.html/.xml 根路径 + 该主机名的 zone 上报了同名文件"时接管；
+    // 其余请求原样放行给宿主应用。共享源未装载（非 management 构建/无共享库）
+    // 时整段跳过。
+    if path.ends_with(".txt") || path.ends_with(".html") || path.ends_with(".xml") {
+        if let Some(source) = super::verification_file::shared_source() {
             let host = sdkwork_webserver_core::normalize_authority_host(&authority)
                 .unwrap_or_else(|| authority.to_ascii_lowercase());
-            if let Some(response) = super::wechat_verify::serve_wechat_verification_file(
+            if let Some(response) = super::verification_file::serve_verification_file(
                 source.as_ref(),
                 &host,
                 &path,

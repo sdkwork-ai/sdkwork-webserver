@@ -922,44 +922,46 @@ impl WebBackendApi for WebService {
     /// unconfigured id, an account that cannot see the zone) is a validation
     /// error the operator can fix; a provider refusal is an internal failure
     /// carrying the provider's own words.
-    async fn retrieve_root_domain_wechat_verification(
+    async fn list_root_domain_verification_files(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::DomainWechatVerificationResponse> {
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainVerificationFilePage> {
         let tenant_id = Self::require_backend_tenant(context)?;
-        self.retrieve_wechat_verification(tenant_id, root_domain_id)
+        self.list_verification_files(tenant_id, root_domain_id)
             .await
     }
 
-    async fn upsert_root_domain_wechat_verification(
+    async fn create_root_domain_verification_file(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
-        request: &sdkwork_webserver_contract::UpsertDomainWechatVerificationRequest,
-    ) -> WebServiceResult<sdkwork_webserver_contract::DomainWechatVerificationResponse> {
+        request: &sdkwork_webserver_contract::CreateDomainVerificationFileRequest,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainVerificationFileResponse> {
         let tenant_id = Self::require_backend_tenant(context)?;
-        self.upsert_wechat_verification(tenant_id, root_domain_id, request)
+        self.create_verification_file(tenant_id, root_domain_id, request)
             .await
     }
 
-    async fn delete_root_domain_wechat_verification(
+    async fn delete_root_domain_verification_file(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
+        file_id: &str,
     ) -> WebServiceResult<()> {
         let tenant_id = Self::require_backend_tenant(context)?;
-        self.delete_wechat_verification(tenant_id, root_domain_id)
+        self.delete_verification_file(tenant_id, root_domain_id, file_id)
             .await
     }
 
-    async fn check_root_domain_wechat_verification(
+    async fn check_root_domain_verification_file(
         &self,
         context: &WebBackendRequestContext,
         root_domain_id: &str,
-    ) -> WebServiceResult<sdkwork_webserver_contract::DomainWechatVerificationCheckResponse> {
+        file_id: &str,
+    ) -> WebServiceResult<sdkwork_webserver_contract::DomainVerificationFileCheckResponse> {
         let tenant_id = Self::require_backend_tenant(context)?;
-        self.check_wechat_verification(tenant_id, root_domain_id)
+        self.check_verification_file(tenant_id, root_domain_id, file_id)
             .await
     }
 

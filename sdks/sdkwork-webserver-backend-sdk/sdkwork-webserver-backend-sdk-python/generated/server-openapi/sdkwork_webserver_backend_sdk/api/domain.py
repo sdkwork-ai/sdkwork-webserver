@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from ..http_client import HttpClient
-from ..models import CreateDomainDnsRecordRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordStatusRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsRetrieveResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsDnsRecordsCreateResponse201, RootDomainsDnsRecordsListResponse, RootDomainsDnsRecordsStatusUpdateResponse, RootDomainsDnsRecordsSyncResponse, RootDomainsDnsRecordsUpdateResponse, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, RootDomainsWechatVerificationCheckResponse, RootDomainsWechatVerificationRetrieveResponse, RootDomainsWechatVerificationUpdateResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest, UpsertDomainWechatVerificationRequest
+from ..models import CreateDomainDnsRecordRequest, CreateDomainVerificationFileRequest, CreateManagedDomainRequest, CreateRootDomainHostnameRequest, CreateRootDomainRequest, DomainDnsRecordStatusRequest, DomainsApplicationBindingUpdateResponse, DomainsCreateResponse201, DomainsListResponse, DomainsRetrieveResponse, DomainsVerifyResponse, RootDomainsCreateResponse201, RootDomainsDnsRecordsCreateResponse201, RootDomainsDnsRecordsListResponse, RootDomainsDnsRecordsStatusUpdateResponse, RootDomainsDnsRecordsSyncResponse, RootDomainsDnsRecordsUpdateResponse, RootDomainsListResponse, RootDomainsRetrieveResponse, RootDomainsSubdomainsCreateResponse201, RootDomainsSubdomainsListResponse, RootDomainsUpdateResponse, RootDomainsVerificationFilesCheckResponse, RootDomainsVerificationFilesCreateResponse201, RootDomainsVerificationFilesListResponse, UpdateDomainApplicationBindingRequest, UpdateDomainDnsRecordRequest, UpdateRootDomainRequest
 
 def _append_query_string(path: str, raw_query_string: str) -> str:
     query = raw_query_string.lstrip('?')
@@ -295,7 +295,7 @@ class DomainRootDomainsApi:
         self._client = client
         self.subdomains = DomainRootDomainsSubdomainsApi(client)
         self.dns_records = DomainRootDomainsDnsRecordsApi(client)
-        self.wechat_verification = DomainRootDomainsWechatVerificationApi(client)
+        self.verification_files = DomainRootDomainsVerificationFilesApi(client)
 
 
     def list(self, page: Optional[int] = None, page_size: Optional[int] = None, status: Optional[int] = None, q: Optional[str] = None, cloud_account_id: Optional[str] = None) -> RootDomainsListResponse:
@@ -444,34 +444,34 @@ class DomainRootDomainsDnsRecordsStatusApi:
         )
         return self._client.patch(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/dns_records/{serialize_path_parameter(record_id, {'name': 'recordId', 'style': 'simple', 'explode': False})}/status", json=body, headers=request_headers)
 
-class DomainRootDomainsWechatVerificationApi:
-    """domain domain.root_domains.wechat_verification API client."""
+class DomainRootDomainsVerificationFilesApi:
+    """domain domain.root_domains.verification_files API client."""
 
     def __init__(self, client: HttpClient):
         self._client = client
 
 
-    def retrieve(self, root_domain_id: str) -> RootDomainsWechatVerificationRetrieveResponse:
-        """Read the root domain's WeChat MP domain-ownership verification file"""
-        return self._client.get(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file")
+    def list(self, root_domain_id: str) -> RootDomainsVerificationFilesListResponse:
+        """List the root domain's domain-ownership verification files"""
+        return self._client.get(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_files")
 
-    def update(self, root_domain_id: str, body: UpsertDomainWechatVerificationRequest, idempotency_key: str) -> RootDomainsWechatVerificationUpdateResponse:
-        """Upload (or wholly replace) the root domain's WeChat verification file"""
+    def create(self, root_domain_id: str, body: CreateDomainVerificationFileRequest, idempotency_key: str) -> RootDomainsVerificationFilesCreateResponse201:
+        """Register (or replace) a verification file on the root domain"""
         request_headers = build_request_headers(
             {
                 'Idempotency-Key': {'value': idempotency_key, 'style': 'simple', 'explode': False},
             },
             {}
         )
-        return self._client.put(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file", json=body, headers=request_headers)
+        return self._client.post(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_files", json=body, headers=request_headers)
 
-    def delete(self, root_domain_id: str) -> None:
-        """Delete the root domain's WeChat verification file"""
-        return self._client.delete(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file")
+    def delete(self, root_domain_id: str, file_id: str) -> None:
+        """Delete one verification file from the root domain"""
+        return self._client.delete(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_files/{serialize_path_parameter(file_id, {'name': 'fileId', 'style': 'simple', 'explode': False})}")
 
-    def check(self, root_domain_id: str) -> RootDomainsWechatVerificationCheckResponse:
-        """Self-check the root domain's WeChat verification file"""
-        return self._client.post(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_file/check")
+    def check(self, root_domain_id: str, file_id: str) -> RootDomainsVerificationFilesCheckResponse:
+        """Self-check one verification file"""
+        return self._client.post(f"/backend/v3/api/root_domains/{serialize_path_parameter(root_domain_id, {'name': 'rootDomainId', 'style': 'simple', 'explode': False})}/verification_files/{serialize_path_parameter(file_id, {'name': 'fileId', 'style': 'simple', 'explode': False})}/check")
 
 class DomainApplicationBindingApi:
     """domain domains.application_binding API client."""

@@ -144,33 +144,33 @@ class DomainApi(private val client: HttpClient) {
         return client.convertValue(raw, object : TypeReference<RootDomainsDnsRecordsStatusUpdateResponse>() {})
     }
 
-    /** Read the root domain's WeChat MP domain-ownership verification file */
-    suspend fun rootDomainsWechatVerificationRetrieve(rootDomainId: String): RootDomainsWechatVerificationRetrieveResponse? {
-        val raw = client.get(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file"))
-        return client.convertValue(raw, object : TypeReference<RootDomainsWechatVerificationRetrieveResponse>() {})
+    /** List the root domain's domain-ownership verification files */
+    suspend fun rootDomainsVerificationFilesList(rootDomainId: String): RootDomainsVerificationFilesListResponse? {
+        val raw = client.get(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_files"))
+        return client.convertValue(raw, object : TypeReference<RootDomainsVerificationFilesListResponse>() {})
     }
 
-    /** Upload (or wholly replace) the root domain's WeChat verification file */
-    suspend fun rootDomainsWechatVerificationUpdate(rootDomainId: String, body: UpsertDomainWechatVerificationRequest, idempotencyKey: String): RootDomainsWechatVerificationUpdateResponse? {
+    /** Register (or replace) a verification file on the root domain */
+    suspend fun rootDomainsVerificationFilesCreate(rootDomainId: String, body: CreateDomainVerificationFileRequest, idempotencyKey: String): RootDomainsVerificationFilesCreateResponse201? {
         val requestHeaders = buildRequestHeaders(
             mapOf(
                 "Idempotency-Key" to HeaderParameterSpec(idempotencyKey, "simple", false, null),
             ),
             emptyMap()
         )
-        val raw = client.put(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file"), body, null, requestHeaders, "application/json")
-        return client.convertValue(raw, object : TypeReference<RootDomainsWechatVerificationUpdateResponse>() {})
+        val raw = client.post(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_files"), body, null, requestHeaders, "application/json")
+        return client.convertValue(raw, object : TypeReference<RootDomainsVerificationFilesCreateResponse201>() {})
     }
 
-    /** Delete the root domain's WeChat verification file */
-    suspend fun rootDomainsWechatVerificationDelete(rootDomainId: String): Unit {
-        client.delete(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file"))
+    /** Delete one verification file from the root domain */
+    suspend fun rootDomainsVerificationFilesDelete(rootDomainId: String, fileId: String): Unit {
+        client.delete(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_files/${serializePathParameter(fileId, PathParameterSpec("fileId", "simple", false))}"))
     }
 
-    /** Self-check the root domain's WeChat verification file */
-    suspend fun rootDomainsWechatVerificationCheck(rootDomainId: String): RootDomainsWechatVerificationCheckResponse? {
-        val raw = client.post(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_file/check"), null)
-        return client.convertValue(raw, object : TypeReference<RootDomainsWechatVerificationCheckResponse>() {})
+    /** Self-check one verification file */
+    suspend fun rootDomainsVerificationFilesCheck(rootDomainId: String, fileId: String): RootDomainsVerificationFilesCheckResponse? {
+        val raw = client.post(ApiPaths.backendPath("/root_domains/${serializePathParameter(rootDomainId, PathParameterSpec("rootDomainId", "simple", false))}/verification_files/${serializePathParameter(fileId, PathParameterSpec("fileId", "simple", false))}/check"), null)
+        return client.convertValue(raw, object : TypeReference<RootDomainsVerificationFilesCheckResponse>() {})
     }
 
     /** Sync a root-domain Zone's resolution records through its cloud account */

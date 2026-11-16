@@ -681,45 +681,53 @@ pub struct DomainVerifyResponse {
     pub failure_code: Option<String>,
 }
 
-/// One synced DNS resolution record of a root-domain Zone.
+/// 一份域名归属校验文件。
 ///
-/// A row of the snapshot the cloud account maintains with the provider —
-/// the "how does this subdomain resolve" answer the subdomain page renders:
-/// the record type (解析类型) and the record content (解析 IP for `A`/`AAAA`,
-/// the target for `CNAME`/`MX`). A sync replaces the whole snapshot with the
-/// provider's answer; a write through the management plane
-/// (`dnsRecords.create`/`update`) joins the same table, so the page always
-/// reads one place.
-/// 微信公众号/小程序域名归属验证文件的当前状态。
-///
-/// 平台要求在域名根路径可访问一个形如 `MP_verify_xxxxx.txt` 的校验文件后
-/// 才能完成归属验证。本响应返回该根域名当前保存的文件名与原文；
-/// `fileName` 缺省表示尚未配置。
+/// 各平台（微信公众号 / 小程序、支付宝、抖音、Google Search Console、Apple、
+/// 其他站点验证）都要求在域名根路径公开取回一个自己签发的文件。一个根域名可
+/// 同时登记多份，因此文件按自身 id 寻址，而不是按根域名。
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct DomainWechatVerificationResponse {
+pub struct DomainVerificationFileResponse {
+    pub id: String,
     #[serde(rename = "rootDomainId")]
     pub root_domain_id: String,
-    #[serde(rename = "fileName", skip_serializing_if = "Option::is_none")]
-    pub file_name: Option<String>,
-    /// 文件内容原样返回，供控制台展示与复制；微信按精确字节比对。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-    #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
+    /// 签发平台线上码（`WECHAT_OFFICIAL_ACCOUNT` 等）。
+    pub platform: String,
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    /// 文件内容原样返回，供控制台展示与复制；平台按精确字节比对。
+    pub content: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
 }
 
-/// 上传（或替换）微信验证文件。
+/// 一个根域名已登记的全部校验文件。
+///
+/// 不做分页：需要根路径证明文件的平台数量有界，整份返回才是有用的答案。
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DomainVerificationFilePage {
+    pub items: Vec<DomainVerificationFileResponse>,
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
+/// 登记（或替换）一份校验文件；同名文件是替换。
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UpsertDomainWechatVerificationRequest {
+pub struct CreateDomainVerificationFileRequest {
+    /// 签发平台线上码，取 DDL `CHECK` 的封闭集合。
+    pub platform: String,
     #[serde(rename = "fileName")]
     pub file_name: String,
     pub content: String,
 }
 
-/// 微信验证文件自检结果：服务端按微信爬虫的视角取回
+/// 校验文件自检结果：服务端按平台爬虫的视角取回
 /// `https(s)://<hostname>/<fileName>` 并与保存内容逐字节比对。
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DomainWechatVerificationCheckResponse {
+pub struct DomainVerificationFileCheckResponse {
     pub reachable: bool,
     pub matched: bool,
     #[serde(rename = "statusCode", skip_serializing_if = "Option::is_none")]
@@ -732,6 +740,15 @@ pub struct DomainWechatVerificationCheckResponse {
     pub checked_at: String,
 }
 
+/// One synced DNS resolution record of a root-domain Zone.
+///
+/// A row of the snapshot the cloud account maintains with the provider —
+/// the "how does this subdomain resolve" answer the subdomain page renders:
+/// the record type (解析类型) and the record content (解析 IP for `A`/`AAAA`,
+/// the target for `CNAME`/`MX`). A sync replaces the whole snapshot with the
+/// provider's answer; a write through the management plane
+/// (`dnsRecords.create`/`update`) joins the same table, so the page always
+/// reads one place.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DomainDnsRecordResponse {
     pub id: String,

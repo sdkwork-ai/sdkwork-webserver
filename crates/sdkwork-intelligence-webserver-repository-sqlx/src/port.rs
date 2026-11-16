@@ -10,7 +10,7 @@ use sdkwork_intelligence_webserver_service::{
     DomainDnsSnapshotWrite, DomainHostnameAsset, DomainVerificationChallenge,
     DomainVerificationObservation, ExpiredClusterHost, ExpiredClusterInstance,
     RootDomainDnsSyncTarget, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
-    RuntimeObservationWrite, WebRepositoryPort,
+    RuntimeObservationWrite, VerificationFileRecord, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
     AgentHeartbeatRequest, AgentHeartbeatResponse, AgentSyncResponse, ApplicationPage,
@@ -320,32 +320,50 @@ impl WebRepositoryPort for WebRepository {
             .await
     }
 
-    async fn upsert_root_domain_wechat_verification(
+    async fn list_root_domain_verification_files(
         &self,
         tenant_id: i64,
         root_domain_id: &str,
+    ) -> WebServiceResult<Vec<VerificationFileRecord>> {
+        self.list_root_domain_verification_files_repo(tenant_id, root_domain_id)
+            .await
+    }
+
+    async fn upsert_root_domain_verification_file(
+        &self,
+        tenant_id: i64,
+        root_domain_id: &str,
+        platform: &str,
         file_name: &str,
         content: &str,
-    ) -> WebServiceResult<String> {
-        self.upsert_root_domain_wechat_verification_repo(tenant_id, root_domain_id, file_name, content)
-            .await
+    ) -> WebServiceResult<VerificationFileRecord> {
+        self.upsert_root_domain_verification_file_repo(
+            tenant_id,
+            root_domain_id,
+            platform,
+            file_name,
+            content,
+        )
+        .await
     }
 
-    async fn root_domain_wechat_verification(
+    async fn root_domain_verification_file(
         &self,
         tenant_id: i64,
         root_domain_id: &str,
-    ) -> WebServiceResult<Option<(String, String, String)>> {
-        self.root_domain_wechat_verification_repo(tenant_id, root_domain_id)
+        file_id: &str,
+    ) -> WebServiceResult<VerificationFileRecord> {
+        self.root_domain_verification_file_repo(tenant_id, root_domain_id, file_id)
             .await
     }
 
-    async fn delete_root_domain_wechat_verification(
+    async fn delete_root_domain_verification_file(
         &self,
         tenant_id: i64,
         root_domain_id: &str,
+        file_id: &str,
     ) -> WebServiceResult<bool> {
-        self.delete_root_domain_wechat_verification_repo(tenant_id, root_domain_id)
+        self.delete_root_domain_verification_file_repo(tenant_id, root_domain_id, file_id)
             .await
     }
 

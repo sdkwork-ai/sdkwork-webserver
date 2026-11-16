@@ -2,18 +2,18 @@ import { useWebserverAdminSdk } from "@sdkwork/webserver-pc-admin-core";
 import type {
   ApplicationDomainResponse,
   CreateDomainDnsRecordRequest,
+  CreateDomainVerificationFileRequest,
   DomainDnsRecordResponse,
   DomainDnsRecordStatusRequest,
+  DomainVerificationFileCheckResponse,
+  DomainVerificationFileResponse,
   UpdateDomainDnsRecordRequest,
   DomainVerifyResponse,
-  DomainWechatVerificationCheckResponse,
-  DomainWechatVerificationResponse,
   RootDomainResponse,
-  UpsertDomainWechatVerificationRequest,
 } from "@sdkwork/webserver-pc-admin-core";
 import type { WebserverLocale } from "@sdkwork/webserver-pc-commons";
 import { ArrowLeft, BadgeCheck, CirclePause, CirclePlay, FileCheck2, FileKey2, Globe2, Network, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Link, Route, Routes, useParams } from "react-router-dom";
 
 import {
@@ -28,6 +28,7 @@ import {
   formatInstant,
   newIdempotencyKey,
   translator,
+  type MessageKey,
   type Translator,
 } from "./AdminSurfaceAtoms.tsx";
 import type { CloudAccountOption } from "./cloudAccounts.ts";
@@ -497,14 +498,14 @@ function RootDomainLedger({
                             alone. The literal word stays inside the accessible
                             name so the label still matches what is read out. */}
                         <button
-                          aria-label={`${t("resource.domains.wechatVerifyFile")} · ${root.hostname}`}
+                          aria-label={`${t("resource.domains.verificationFile")} · ${root.hostname}`}
                           className="table-action table-action-text"
                           onClick={() => setVerifyFileRoot(root)}
-                          title={t("resource.domains.wechatVerifyTitle")}
+                          title={t("resource.domains.verificationFileTitle")}
                           type="button"
                         >
                           <FileCheck2 size={15} />
-                          <span>{t("resource.domains.wechatVerifyFile")}</span>
+                          <span>{t("resource.domains.verificationFile")}</span>
                         </button>
                         <Link
                           aria-label={`${t("resource.domains.dnsResolution")} · ${root.hostname}`}
@@ -669,18 +670,18 @@ function RootDomainLedger({
       ) : null}
 
       {verifyFileRoot ? (
-        <WechatVerifyFileDialog
+        <VerificationFileDialog
           close={() => setVerifyFileRoot(undefined)}
           locale={locale}
           rootDomainId={verifyFileRoot.id}
           service={{
-            check: (id) => client.domain.rootDomains.wechatVerification.check(id),
-            remove: (id) => client.domain.rootDomains.wechatVerification.delete(id),
-            retrieve: (id) => client.domain.rootDomains.wechatVerification.retrieve(id),
-            upsert: (id, body) =>
-              client.domain.rootDomains.wechatVerification.update(id, body, {
+            check: (id, fileId) => client.domain.rootDomains.verificationFiles.check(id, fileId),
+            create: (id, body) =>
+              client.domain.rootDomains.verificationFiles.create(id, body, {
                 idempotencyKey: newIdempotencyKey(),
               }),
+            list: (id) => client.domain.rootDomains.verificationFiles.list(id).then((page) => page.items),
+            remove: (id, fileId) => client.domain.rootDomains.verificationFiles.delete(id, fileId),
           }}
           t={t}
         />
@@ -1235,11 +1236,11 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
                           certificate can cover — and on an already-verified row it
                           is a control that does nothing. */}
                       <button
-                        aria-label={`${t("resource.domains.wechatVerifyFile")} ${hostname.hostname}`}
+                        aria-label={`${t("resource.domains.verificationFile")} ${hostname.hostname}`}
                         className="table-action"
                         disabled={busy}
                         onClick={() => setVerifyFileHostname(hostname)}
-                        title={t("resource.domains.wechatVerifyTitle")}
+                        title={t("resource.domains.verificationFileTitle")}
                         type="button"
                       >
                         <FileCheck2 size={16} />
@@ -1380,18 +1381,18 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
       ) : null}
 
       {verifyFileHostname ? (
-        <WechatVerifyFileDialog
+        <VerificationFileDialog
           close={() => setVerifyFileHostname(undefined)}
           locale={locale}
           rootDomainId={rootDomainId}
           service={{
-            check: (id) => client.domain.rootDomains.wechatVerification.check(id),
-            remove: (id) => client.domain.rootDomains.wechatVerification.delete(id),
-            retrieve: (id) => client.domain.rootDomains.wechatVerification.retrieve(id),
-            upsert: (id, body) =>
-              client.domain.rootDomains.wechatVerification.update(id, body, {
+            check: (id, fileId) => client.domain.rootDomains.verificationFiles.check(id, fileId),
+            create: (id, body) =>
+              client.domain.rootDomains.verificationFiles.create(id, body, {
                 idempotencyKey: newIdempotencyKey(),
               }),
+            list: (id) => client.domain.rootDomains.verificationFiles.list(id).then((page) => page.items),
+            remove: (id, fileId) => client.domain.rootDomains.verificationFiles.delete(id, fileId),
           }}
           t={t}
         />
@@ -1450,11 +1451,44 @@ function DnsRecordFormValues_from(record: DomainDnsRecordResponse): DnsRecordFor
 }
 
 /**
- * 微信公众号/小程序域名归属认证文件:平台上下载 MP_verify_xxx.txt,把文件名
- * 与内容按原文保存到根域名;边缘数据面对该根域名及其子域名按请求主机名
- * 原样提供这份文件。自检按微信爬虫的视角取回比对,失败也只陈述事实。
+ * 域名归属认证文件:各平台都要求在域名根路径公开取回一个自己签发的文件。
+ *
+ * 微信公众平台(公众号 / 小程序 / 业务域名)、支付宝与抖音小程序、Google
+ * Search Console、Apple 的关联域名等都走这套机制,只有文件形态不同:微信与
+ * Apple 是 `.txt`,Google 是 `.html`,Bing 一类是 `.xml`。一个根域名可以同时
+ * 登记多份;边缘数据面对该根域名及其子域名按请求主机名原样提供;自检按平台
+ * 爬虫的视角取回比对,失败也只陈述事实。
  */
-function WechatVerifyFileDialog({
+type VerificationPlatform =
+  | "WECHAT_OFFICIAL_ACCOUNT"
+  | "WECHAT_MINI_PROGRAM"
+  | "ALIPAY"
+  | "BYTEDANCE"
+  | "APPLE"
+  | "GOOGLE"
+  | "CUSTOM";
+
+const VERIFICATION_PLATFORM_LABELS: Record<VerificationPlatform, MessageKey> = {
+  WECHAT_OFFICIAL_ACCOUNT: "resource.domains.verificationFilePlatformWECHAT_OFFICIAL_ACCOUNT",
+  WECHAT_MINI_PROGRAM: "resource.domains.verificationFilePlatformWECHAT_MINI_PROGRAM",
+  ALIPAY: "resource.domains.verificationFilePlatformALIPAY",
+  BYTEDANCE: "resource.domains.verificationFilePlatformBYTEDANCE",
+  APPLE: "resource.domains.verificationFilePlatformAPPLE",
+  GOOGLE: "resource.domains.verificationFilePlatformGOOGLE",
+  CUSTOM: "resource.domains.verificationFilePlatformCUSTOM",
+};
+
+const VERIFICATION_PLATFORMS = Object.keys(VERIFICATION_PLATFORM_LABELS) as VerificationPlatform[];
+
+/** 服务端的内容上限(字节);超过它的文件在读入前就被拒绝。 */
+const VERIFICATION_CONTENT_LIMIT = 4096;
+
+function verificationPlatformLabel(t: Translator, platform: string): string {
+  const key = VERIFICATION_PLATFORM_LABELS[platform as VerificationPlatform];
+  return t(key ?? "resource.domains.verificationFilePlatformCUSTOM");
+}
+
+function VerificationFileDialog({
   close,
   locale,
   rootDomainId,
@@ -1465,69 +1499,71 @@ function WechatVerifyFileDialog({
   locale: WebserverLocale;
   rootDomainId: string;
   service: {
-    check(rootDomainId: string): Promise<DomainWechatVerificationCheckResponse>;
-    remove(rootDomainId: string): Promise<void>;
-    retrieve(rootDomainId: string): Promise<DomainWechatVerificationResponse>;
-    upsert(rootDomainId: string, body: UpsertDomainWechatVerificationRequest): Promise<DomainWechatVerificationResponse>;
+    check(rootDomainId: string, fileId: string): Promise<DomainVerificationFileCheckResponse>;
+    create(rootDomainId: string, body: CreateDomainVerificationFileRequest): Promise<DomainVerificationFileResponse>;
+    list(rootDomainId: string): Promise<DomainVerificationFileResponse[]>;
+    remove(rootDomainId: string, fileId: string): Promise<void>;
   };
   t: Translator;
 }) {
+  const [files, setFiles] = useState<readonly DomainVerificationFileResponse[]>();
+  const [platform, setPlatform] = useState<VerificationPlatform>("WECHAT_OFFICIAL_ACCOUNT");
   const [fileName, setFileName] = useState("");
   const [content, setContent] = useState("");
-  const [existing, setExisting] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState<string>();
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [checkResult, setCheckResult] = useState<DomainWechatVerificationCheckResponse>();
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
+  const [checks, setChecks] = useState<Record<string, DomainVerificationFileCheckResponse>>({});
+  const [deleteTarget, setDeleteTarget] = useState<DomainVerificationFileResponse>();
+
+  const load = useCallback(async () => {
+    setFiles(await service.list(rootDomainId));
+  }, [rootDomainId, service]);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    void service.retrieve(rootDomainId).then((result) => {
+    void service.list(rootDomainId).then((items) => {
       if (!active) return;
-      setFileName(result.fileName ?? "");
-      setContent(result.content ?? "");
-      setExisting(result.fileName !== undefined);
-      setUpdatedAt(result.updatedAt);
-      setLoading(false);
+      setFiles(items);
     }).catch((cause) => {
       if (!active) return;
       setError(errorText(cause, t));
-      setLoading(false);
+      setFiles([]);
     });
     return () => { active = false; };
   }, [rootDomainId, service, t]);
 
+  /**
+   * 选择平台下发的校验文件:填入文件名与内容,两个字段仍可手工粘贴。超过服务端
+   * 上限的文件在读入前就拒绝。
+   */
+  async function pickFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // 清空选择器,再次选择同一文件仍会触发 change。
+    event.target.value = "";
+    if (!file) return;
+    setUploaded(false);
+    setError(undefined);
+    if (file.size > VERIFICATION_CONTENT_LIMIT) {
+      setError(t("resource.domains.verificationFileTooLarge"));
+      return;
+    }
+    setFileName(file.name);
+    setContent(await file.text());
+  }
+
   async function save() {
     if (!fileName.trim() || !content) { setError(t("resource.domains.dnsValueRequired")); return; }
-    setBusy(true); setError(undefined);
+    setBusy(true); setError(undefined); setUploaded(false);
     try {
-      await service.upsert(rootDomainId, { fileName: fileName.trim(), content });
-      close();
-    } catch (cause) {
-      setError(errorText(cause, t));
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    setBusy(true); setError(undefined);
-    try {
-      await service.remove(rootDomainId);
-      close();
-    } catch (cause) {
-      setError(errorText(cause, t));
-      setBusy(false);
-      setConfirmingDelete(false);
-    }
-  }
-
-  async function runCheck() {
-    setBusy(true); setError(undefined); setCheckResult(undefined);
-    try {
-      setCheckResult(await service.check(rootDomainId));
+      // 同名文件是替换而不是新增:平台换发文件后重新保存一次即可。替换后旧的
+      // 自检结论不再代表线上内容,整组清掉。
+      await service.create(rootDomainId, { platform, fileName: fileName.trim(), content });
+      setFileName("");
+      setContent("");
+      setChecks({});
+      setUploaded(true);
+      await load();
     } catch (cause) {
       setError(errorText(cause, t));
     } finally {
@@ -1535,84 +1571,162 @@ function WechatVerifyFileDialog({
     }
   }
 
-  const verdict = checkResult === undefined ? undefined
-    : checkResult.matched ? t("resource.domains.wechatVerifyMatched")
-    : checkResult.reachable ? t("resource.domains.wechatVerifyReachableMismatch")
-    : t("resource.domains.wechatVerifyUnreachable");
+  async function remove(file: DomainVerificationFileResponse) {
+    setBusy(true); setError(undefined);
+    try {
+      await service.remove(rootDomainId, file.id);
+      setDeleteTarget(undefined);
+      setChecks({});
+      await load();
+    } catch (cause) {
+      setError(errorText(cause, t));
+      setDeleteTarget(undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runCheck(file: DomainVerificationFileResponse) {
+    setBusy(true); setError(undefined);
+    try {
+      const result = await service.check(rootDomainId, file.id);
+      setChecks((current) => ({ ...current, [file.id]: result }));
+    } catch (cause) {
+      setError(errorText(cause, t));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <DialogBackdrop close={close}>
       <div aria-modal="true" className="dialog delivery-dialog" role="dialog">
         <header>
-          <h2>{t("resource.domains.wechatVerifyTitle")}</h2>
+          <h2>{t("resource.domains.verificationFileTitle")}</h2>
           <DialogCloseButton close={close} label={t("resource.domains.cancel")} />
         </header>
-        {loading ? (
+        <p className="form-hint">{t("resource.domains.verificationFileHint")}</p>
+        {files === undefined ? (
           <p className="form-hint">{t("resource.domains.loading")}</p>
+        ) : files.length === 0 ? (
+          <p className="form-hint">{t("resource.domains.verificationFileEmpty")}</p>
         ) : (
-          <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-            <p className="form-hint">{t("resource.domains.wechatVerifyHint")}</p>
-            {existing && updatedAt ? <p className="form-hint">{formatInstant(updatedAt, locale)}</p> : null}
-            <div className="form-grid single-column">
-              <label>
-                <span>{t("resource.domains.wechatVerifyFileName")}</span>
-                <input
-                  autoComplete="off"
-                  autoFocus
-                  onChange={(event) => setFileName(event.target.value)}
-                  placeholder="MP_verify_xxxxxxxxxx.txt"
-                  required
-                  type="text"
-                  value={fileName}
-                />
-              </label>
-              <label>
-                <span>{t("resource.domains.wechatVerifyContent")}</span>
-                <textarea
-                  autoComplete="off"
-                  onChange={(event) => setContent(event.target.value)}
-                  required
-                  rows={4}
-                  value={content}
-                />
-              </label>
-            </div>
-            {verdict ? (
-              <div className={checkResult?.matched ? "verification-success" : "verification-pending"}>
-                <BadgeCheck size={19} />
-                <span>
-                  {verdict}
-                  {checkResult?.detail ? ` ${checkResult.detail}` : ""}
-                  {checkResult?.scheme ? ` (${checkResult.scheme.toUpperCase()})` : ""}
-                </span>
-              </div>
-            ) : null}
-            {error ? (
-              <div className="error-banner" role="alert">
-                {error}
-              </div>
-            ) : null}
-            <footer className="dialog-footer">
-              {existing ? (
-                confirmingDelete ? (
-                  <button className="danger-button" disabled={busy} onClick={() => void remove()} type="button">
-                    {t("resource.domains.wechatVerifyDeleteConfirm")}
-                  </button>
-                ) : (
-                  <button className="danger-button" disabled={busy} onClick={() => setConfirmingDelete(true)} type="button">
-                    {t("resource.domains.wechatVerifyDelete")}
-                  </button>
-                )
-              ) : null}
-              <button className="secondary-button" disabled={busy || !existing} onClick={() => void runCheck()} type="button">
-                {t("resource.domains.wechatVerifyCheck")}
-              </button>
-              <button className="command-button" disabled={busy} type="submit">
-                {t("resource.domains.dnsSaveRecord")}
-              </button>
-            </footer>
-          </form>
+          <div className="form-grid single-column">
+            {files.map((file) => {
+              const check = checks[file.id];
+              const verdict = check === undefined ? undefined
+                : check.matched ? t("resource.domains.verificationFileMatched")
+                : check.reachable ? t("resource.domains.verificationFileReachableMismatch")
+                : t("resource.domains.verificationFileUnreachable");
+              return (
+                <div key={file.id}>
+                  <p><strong>{file.fileName}</strong></p>
+                  <p className="form-hint">
+                    {verificationPlatformLabel(t, file.platform)}
+                    {file.updatedAt ? ` · ${formatInstant(file.updatedAt, locale)}` : ""}
+                  </p>
+                  {verdict ? (
+                    <div className={check?.matched ? "verification-success" : "verification-pending"}>
+                      <BadgeCheck size={19} />
+                      <span>
+                        {verdict}
+                        {check?.detail ? ` ${check.detail}` : ""}
+                        {check?.scheme ? ` (${check.scheme.toUpperCase()})` : ""}
+                      </span>
+                    </div>
+                  ) : null}
+                  <footer className="dialog-footer">
+                    <button className="secondary-button" disabled={busy} onClick={() => void runCheck(file)} type="button">
+                      {t("resource.domains.verificationFileCheck")}
+                    </button>
+                    <button className="danger-button" disabled={busy} onClick={() => setDeleteTarget(file)} type="button">
+                      {t("resource.domains.verificationFileDelete")}
+                    </button>
+                  </footer>
+                </div>
+              );
+            })}
+          </div>
         )}
+        <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
+          <div className="form-grid single-column">
+            <label>
+              <span>{t("resource.domains.verificationFilePlatform")}</span>
+              <select onChange={(event) => setPlatform(event.target.value as VerificationPlatform)} value={platform}>
+                {VERIFICATION_PLATFORMS.map((value) => (
+                  <option key={value} value={value}>{t(VERIFICATION_PLATFORM_LABELS[value])}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{t("resource.domains.verificationFilePick")}</span>
+              <input
+                accept=".txt,.html,.xml"
+                autoComplete="off"
+                onChange={(event) => { void pickFile(event); }}
+                type="file"
+              />
+            </label>
+            <label>
+              <span>{t("resource.domains.verificationFileName")}</span>
+              <input
+                autoComplete="off"
+                autoFocus
+                onChange={(event) => setFileName(event.target.value)}
+                placeholder="MP_verify_xxxxxxxxxx.txt / google123.html"
+                required
+                type="text"
+                value={fileName}
+              />
+            </label>
+            <label>
+              <span>{t("resource.domains.verificationFileContent")}</span>
+              <textarea
+                autoComplete="off"
+                onChange={(event) => setContent(event.target.value)}
+                required
+                rows={4}
+                value={content}
+              />
+            </label>
+          </div>
+          {uploaded ? (
+            <p className="form-hint" role="status">{t("resource.domains.verificationFileUploaded")}</p>
+          ) : null}
+          {error ? (
+            <div className="error-banner" role="alert">
+              {error}
+            </div>
+          ) : null}
+          <footer className="dialog-footer">
+            <button className="command-button" disabled={busy} type="submit">
+              {t("resource.domains.verificationFileAdd")}
+            </button>
+          </footer>
+        </form>
+        {deleteTarget ? (
+          <DialogBackdrop close={() => setDeleteTarget(undefined)}>
+            <div aria-modal="true" className="dialog delivery-dialog" role="dialog">
+              <header>
+                <h2>{t("resource.domains.verificationFileDelete")}</h2>
+              </header>
+              <p>{t("resource.domains.verificationFileDeleteConfirm")}</p>
+              {error ? (
+                <div className="error-banner" role="alert">
+                  {error}
+                </div>
+              ) : null}
+              <footer className="dialog-footer">
+                <button className="secondary-button" disabled={busy} onClick={() => setDeleteTarget(undefined)} type="button">
+                  {t("resource.domains.cancel")}
+                </button>
+                <button className="danger-button" disabled={busy} onClick={() => void remove(deleteTarget)} type="button">
+                  {t("resource.domains.verificationFileDelete")}
+                </button>
+              </footer>
+            </div>
+          </DialogBackdrop>
+        ) : null}
       </div>
     </DialogBackdrop>
   );

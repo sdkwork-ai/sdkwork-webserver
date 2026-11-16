@@ -14,7 +14,7 @@ pub mod runtime_assignment_ops;
 pub mod source_import;
 pub mod tls_material_distribution;
 pub mod tunnel_machines;
-pub mod wechat_verification;
+pub mod verification_file;
 
 pub use cluster_ops::{ClusterMachineCredential, ClusterSweepReport};
 pub use domain_verification::{
@@ -38,6 +38,10 @@ pub use source_import::{
     ApplicationSourceImporter, GitSourceImportRequest, ImportedApplicationSource,
 };
 pub use tls_material_distribution::TlsMaterialDistributionConfig;
+pub use verification_file::{
+    VerificationFileRecord, MAX_VERIFICATION_FILES_PER_ZONE, VERIFICATION_FILE_EXTENSIONS,
+    VERIFICATION_PLATFORMS,
+};
 
 use std::sync::Arc;
 

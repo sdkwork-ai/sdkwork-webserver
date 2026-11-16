@@ -21,7 +21,7 @@ ALTER TABLE webserver_site ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_deployment ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_domain ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_domain_dns_record ALTER COLUMN tenant_id DROP DEFAULT;
-ALTER TABLE webserver_domain_wechat_verification ALTER COLUMN tenant_id DROP DEFAULT;
+ALTER TABLE webserver_domain_verification_file ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_env_variable ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_health_check ALTER COLUMN tenant_id DROP DEFAULT;
 ALTER TABLE webserver_nginx_config ALTER COLUMN tenant_id DROP DEFAULT;
@@ -78,10 +78,10 @@ ALTER TABLE webserver_health_check
     ADD CONSTRAINT fk_webserver_health_check_site
     FOREIGN KEY (tenant_id, site_id) REFERENCES webserver_site (tenant_id, id);
 
-ALTER TABLE webserver_domain_wechat_verification
-    DROP CONSTRAINT IF EXISTS fk_webserver_domain_wechat_verification_root;
-ALTER TABLE webserver_domain_wechat_verification
-    ADD CONSTRAINT fk_webserver_domain_wechat_verification_root
+ALTER TABLE webserver_domain_verification_file
+    DROP CONSTRAINT IF EXISTS fk_webserver_domain_verification_file_root;
+ALTER TABLE webserver_domain_verification_file
+    ADD CONSTRAINT fk_webserver_domain_verification_file_root
     FOREIGN KEY (tenant_id, root_domain_id)
     REFERENCES webserver_root_domain (tenant_id, id);
 
