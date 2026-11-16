@@ -330,7 +330,10 @@ services:
       test:
         [
           "CMD-SHELL",
-          "f=/tmp/sdkwork-certificate-worker-heartbeat; [ -f \"$f\" ] && [ $(( $(date +%s) - $(stat -c %Y \"$f\") )) -lt 600 ]",
+          # $$ escapes compose interpolation: a bare $f would be substituted to
+          # an empty string at compose-render time, making the check
+          # `[ -f "" ]` — always false, so the worker could never go healthy.
+          "f=/tmp/sdkwork-certificate-worker-heartbeat; [ -f \"$$f\" ] && [ $$(($$(date +%s) - $$(stat -c %Y \"$$f\"))) -lt 600 ]",
         ]
       interval: 60s
       timeout: 5s
