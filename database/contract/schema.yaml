@@ -1407,6 +1407,3 @@ tables:
   - name: webserver_domain_verification_file
     lifecycle_status: active
     owner: web-platform
-  - name: IF
-    lifecycle_status: active
-    owner: web-platform
