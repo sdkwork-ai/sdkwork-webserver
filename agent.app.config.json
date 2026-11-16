@@ -235,16 +235,22 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.11",
+    "currentVersion": "0.1.12",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.11"
+      "BETA": "0.1.12"
     },
     "notes": [
       {
-        "version": "0.1.11",
+        "version": "0.1.12",
         "channel": "BETA",
         "current": true,
+        "summary": "Completes the 0.1.11 management bootstrap fix: the packaged IAM registry ships skills/mcp/sandbox alongside web, so all four federated consumer manifests now yield when the IAM app root packages the module (sandbox duplicated after the web fix landed). This changelog describes 0.1.12 only."
+      },
+      {
+        "version": "0.1.11",
+        "channel": "BETA",
+        "current": false,
         "summary": "Management bootstrap fix: the 0.1.10 packaging ships the web IAM module inside the packaged IAM registry (iam/modules/web/), and the gateway's unconditional web federation crashed management bootstrap with 'additional module manifest duplicates moduleId web'. The federation now yields to the packaged module when the IAM app root ships it. This changelog describes 0.1.11 only."
       },
       {

@@ -16,18 +16,20 @@ const SANDBOX_IAM_MODULE_MANIFEST: &str = "specs/iam.module.manifest.json";
 /// duplicates `moduleId` and crashes bootstrap with `additional module
 /// manifest duplicates moduleId skills`.
 pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, String> {
-    let enabled = iam_registry_enabled_modules();
     let mut manifests = Vec::with_capacity(4);
     // Web always federates from its own manifest — except when the packaged
-    // IAM registry ships the web module itself (the 0.1.10 packaging added
-    // `iam/modules/web/` under the IAM app root). Registry discovery then
-    // materializes `web` already, and the additional manifest would duplicate
-    // the moduleId and crash management bootstrap with
-    // `additional module manifest duplicates moduleId web`.
-    if !iam_app_root_packages_module("web") {
+    // IAM registry ships the module itself. The 0.1.10 packaging added
+    // `iam/modules/{web,skills,mcp,sandbox}/` under the IAM app root, so
+    // registry discovery materializes those moduleIds already and an
+    // additional manifest duplicates the moduleId and crashes management
+    // bootstrap with `additional module manifest duplicates moduleId <id>`.
+    // The enabledModules check alone is not sufficient: the packaged module
+    // directories are discovered regardless of that list.
+    let enabled = iam_registry_enabled_modules();
+    if !enabled.contains("web") && !iam_app_root_packages_module("web") {
         manifests.push(web_iam_module_manifest_path()?);
     }
-    if !enabled.contains("skills") {
+    if !enabled.contains("skills") && !iam_app_root_packages_module("skills") {
         if let Some(path) = optional_module_manifest_path(
             "skills",
             &[
@@ -39,7 +41,7 @@ pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, Stri
             manifests.push(path);
         }
     }
-    if !enabled.contains("mcp") {
+    if !enabled.contains("mcp") && !iam_app_root_packages_module("mcp") {
         if let Some(path) = optional_module_manifest_path(
             "mcp",
             &[
@@ -51,7 +53,7 @@ pub(crate) fn federated_iam_module_manifest_paths() -> Result<Vec<PathBuf>, Stri
             manifests.push(path);
         }
     }
-    if !enabled.contains("sandbox") {
+    if !enabled.contains("sandbox") && !iam_app_root_packages_module("sandbox") {
         if let Some(path) = optional_module_manifest_path(
             "sandbox",
             &[
