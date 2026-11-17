@@ -1,4 +1,7 @@
 use sdkwork_utils_rust::service_base_url::registry_base_url_or;
+// identity:service - the node pulls its runtime assignment with the declared machine
+// identity (ingress token + IAM application access token); this is background work.
+
 use sdkwork_utils_rust::service_identity::{
     missing_service_credentials, ServiceCredentials, ServiceTokenKind,
 };
@@ -252,7 +255,8 @@ mod tests {
         method: String,
         path: String,
         query: Option<String>,
-        api_key: Option<String>,
+        ingress_token: Option<String>,
+        access_token: Option<String>,
         idempotency_key: Option<String>,
         content_type: Option<String>,
         body: Value,
@@ -275,6 +279,7 @@ mod tests {
         let source = CloudRuntimeAssignmentSource::new(
             base_url,
             "node-token-7".to_owned(),
+            "node-access-token-7".to_owned(),
             NODE_UUID.to_owned(),
             "production".to_owned(),
             "1.2.3".to_owned(),
@@ -307,7 +312,8 @@ mod tests {
             pull.path,
             "/internal/v3/api/web/runtime_assignments/current"
         );
-        assert_eq!(pull.api_key.as_deref(), Some("node-token-7"));
+        assert_eq!(pull.ingress_token.as_deref(), Some("node-token-7"));
+        assert_eq!(pull.access_token.as_deref(), Some("node-access-token-7"));
         assert_eq!(
             query_parameters(pull.query.as_deref().unwrap()),
             BTreeMap::from([
@@ -323,7 +329,11 @@ mod tests {
             observation.path,
             "/internal/v3/api/web/runtime_assignments/snapshot-7/observations"
         );
-        assert_eq!(observation.api_key.as_deref(), Some("node-token-7"));
+        assert_eq!(observation.ingress_token.as_deref(), Some("node-token-7"));
+        assert_eq!(
+            observation.access_token.as_deref(),
+            Some("node-access-token-7")
+        );
         assert!(observation.idempotency_key.as_deref().is_some_and(is_uuid));
         assert_eq!(
             observation.content_type.as_deref(),
@@ -348,6 +358,7 @@ mod tests {
         let source = CloudRuntimeAssignmentSource::new(
             base_url,
             "node-token-7".to_owned(),
+            "node-access-token-7".to_owned(),
             NODE_UUID.to_owned(),
             "production".to_owned(),
             "1.2.3".to_owned(),
@@ -387,7 +398,8 @@ mod tests {
         let method = request.method().as_str().to_owned();
         let path = request.uri().path().to_owned();
         let query = request.uri().query().map(str::to_owned);
-        let api_key = header_value(&request, "x-api-key");
+        let ingress_token = header_value(&request, "x-sdkwork-ingress-token");
+        let access_token = header_value(&request, "access-token");
         let idempotency_key = header_value(&request, "idempotency-key");
         let content_type = header_value(&request, "content-type");
         let body_bytes = request.into_body().collect().await.unwrap().to_bytes();
@@ -400,7 +412,8 @@ mod tests {
             method: method.clone(),
             path,
             query,
-            api_key,
+            ingress_token,
+            access_token,
             idempotency_key,
             content_type,
             body,

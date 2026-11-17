@@ -1538,11 +1538,14 @@ TLSBLOCK
     log "materialized product Adaptive Web edge -> ${dest} (production TLS over ${domains}, upstream 127.0.0.1:${mgmt_port}, acme webroot ${acme_webroot})"
   else
     # Non-production: the console serves over plain HTTP, and additionally over
-    # TLS for every brand domain whose certificate inventory already carries
-    # material (operator/ACME/bootstrap seed). Brands without material keep the
-    # plain listener so the ACME http-01 challenge stays reachable on :80 for
-    # later issuance — mirroring the production per-brand grouping.
-    local lets_root host hostdom domain_names tls_domains="" plain_domains="" plain_names
+    # TLS for every brand domain once certificate material is in the inventory.
+    # The product edge materializes BEFORE the imported-sidecar certificate
+    # bootstrap, so each brand domain provisions its bootstrap pair here first
+    # (idempotent: operator/ACME material is kept, incomplete self-signed pairs
+    # are regenerated with every aggregated server name in the SAN list).
+    # Brands that still end up without material keep the plain listener so the
+    # ACME http-01 challenge stays reachable on :80 for later issuance.
+    local lets_root host hostdom domain_names="" domain_host_list tls_domains="" plain_domains="" plain_names domains=""
     lets_root="$(posix_path "$(lets_encrypt_certs_root)")"
     domains=""
     for host in ${server_names}; do
@@ -1553,6 +1556,13 @@ TLSBLOCK
       esac
     done
     for hostdom in ${domains}; do
+      domain_host_list=""
+      for host in ${server_names}; do
+        if [ "${host#*.}" = "${hostdom}" ]; then
+          domain_host_list="${domain_host_list:+${domain_host_list},}${host}"
+        fi
+      done
+      ensure_domain_certificate "${hostdom}" "${domain_host_list}"
       if [ -s "${lets_root}/${hostdom}/fullchain.pem" ] && [ -s "${lets_root}/${hostdom}/privkey.pem" ]; then
         tls_domains="${tls_domains:+${tls_domains} }${hostdom}"
       else

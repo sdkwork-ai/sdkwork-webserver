@@ -51,7 +51,12 @@ test('node daemon persists desired before apply and observed only after real rel
   assert.match(source, /MAX_NGINX_CONFIGS_PER_SYNC: usize = 2_048/u);
   assert.match(source, /SdkworkBackendClient/u);
   assert.match(source, /config\.max_response_body_bytes = maximum_response_bytes/u);
-  assert.match(source, /client\.set_agent_token/u);
+  // The agent profile authenticates with the service-identity pair: the node
+  // token on X-SDKWork-Agent-Token plus the IAM application Access-Token.
+  assert.match(source, /service_identity/u);
+  assert.match(source, /ServiceTokenKind::Agent/u);
+  assert.match(source, /AGENT_ACCESS_TOKEN_FILE_ENV/u);
+  assert.doesNotMatch(source, /client\.set_api_key/u);
   assert.match(source, /\.heartbeat\(&heartbeat\)\.await/u);
   assert.match(source, /\.retrieve\(local_state\.observed_sync_version\(\)\)/u);
   assert.doesNotMatch(source, /reqwest::/u);
