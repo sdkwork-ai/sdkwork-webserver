@@ -5353,6 +5353,7 @@ dependencies = [
  "chrono",
  "idna",
  "psl",
+ "reqwest 0.13.1",
  "sdkwork-database-id",
  "sdkwork-deploy-certificate-material",
  "sdkwork-deploy-cloud-account-port",
@@ -5367,6 +5368,7 @@ dependencies = [
  "sdkwork-utils-rust",
  "sdkwork-webserver-acme-service",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
