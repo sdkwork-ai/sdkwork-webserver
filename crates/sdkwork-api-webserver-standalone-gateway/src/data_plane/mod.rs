@@ -22,6 +22,8 @@ mod handshake_timeout;
 mod http1_wire;
 mod http2_chunk;
 mod http2_wire;
+
+pub(crate) use handler::server_header_middleware;
 mod io_timeout;
 mod keep_alive_timeout;
 mod limit_conn;

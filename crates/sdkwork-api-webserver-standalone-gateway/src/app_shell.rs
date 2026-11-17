@@ -217,7 +217,7 @@ impl AdaptiveAppShellConfig {
         router
             .fallback_service(handler)
             .layer(axum::middleware::from_fn(
-                crate::data_plane::handler::server_header_middleware,
+                crate::data_plane::server_header_middleware,
             ))
     }
 }
