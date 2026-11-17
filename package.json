@@ -203,7 +203,8 @@
     "import:status": "node scripts/webserver-import-profile.mjs status",
     "build:pc:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture pc --environment demo",
     "build:h5:demo": "node ../sdkwork-specs/tools/build-browser-client.mjs --root . --architecture h5 --environment demo",
-    "deploy:reapply:demo": "bash bin/docker-deploy.sh install --environment demo"
+    "deploy:reapply:demo": "bash bin/docker-deploy.sh install --environment demo",
+    "check:release-access-token:require-anchor": "node ../sdkwork-specs/tools/check-release-access-token-env.mjs --root . --require-anchor"
   },
   "exports": {
     ".": {
