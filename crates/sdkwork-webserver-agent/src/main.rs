@@ -12,6 +12,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sdkwork_utils_rust::service_base_url::registry_base_url_or;
+use sdkwork_utils_rust::service_identity::{
+    missing_service_credentials, ServiceCredentials, ServiceTokenKind,
+};
 use sdkwork_webserver_backend_sdk::{
     AgentCertificateObservation as SdkAgentCertificateObservation,
     AgentHeartbeatRequest as SdkAgentHeartbeatRequest,
@@ -33,6 +36,12 @@ use state::{resolve_state_path, NodeDaemonLock, NodeDaemonState};
 use tracing::{debug, info, warn};
 
 const NODE_DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// IAM application access token file required by the backend-agent profile.
+///
+/// Agent routes authenticate `X-SDKWork-Agent-Token` **plus** an `Access-Token`
+/// carrying the IAM application/tenant scope (`APP_SDK_INTEGRATION_SPEC.md`
+/// §5.2.1); the node token alone fails `missing-access-token`.
+const AGENT_ACCESS_TOKEN_FILE_ENV: &str = "SDKWORK_WEBSERVER_AGENT_ACCESS_TOKEN_FILE";
 const DEFAULT_SYNC_INTERVAL_SECS: u64 = 30;
 const MIN_SYNC_INTERVAL_SECS: u64 = 1;
 const MAX_SYNC_INTERVAL_SECS: u64 = 3_600;
@@ -45,6 +54,8 @@ const MAX_CERTIFICATES_PER_SYNC: usize = 2_048;
 struct NodeDaemonRuntimeConfig {
     control_plane: String,
     node_token: String,
+    /// IAM application access token that scopes this node's agent identity.
+    access_token: String,
     interval_secs: u64,
 }
 
@@ -73,7 +84,21 @@ fn build_backend_sdk_client(
     config.timeout_ms = HTTP_TIMEOUT_SECS * 1_000;
     config.max_response_body_bytes = maximum_response_bytes;
     let client = SdkworkBackendClient::new(config)?;
-    client.set_agent_token(runtime.node_token.clone());
+    // identity:service - the node daemon is a machine surface with a declared
+    // identity: the node token proves the agent, the access token carries the
+    // application/tenant scope the backend-agent profile requires.
+    let credentials =
+        ServiceCredentials::new(runtime.node_token.clone(), runtime.access_token.clone());
+    if !credentials.is_complete() {
+        anyhow::bail!(missing_service_credentials(
+            "sdkwork-webserver backend-agent (node daemon sync)",
+            "SDKWORK_WEBSERVER_NODE_TOKEN",
+            AGENT_ACCESS_TOKEN_FILE_ENV,
+        ));
+    }
+    for (name, value) in credentials.wire_headers(ServiceTokenKind::Agent) {
+        client.set_header(name, value);
+    }
     Ok(client)
 }
 
@@ -88,6 +113,9 @@ impl NodeDaemonRuntimeConfig {
             "SDKWORK_WEBSERVER_AGENT_TOKEN",
         )?;
         validate_node_token(&node_token)?;
+        let access_token_file = std::env::var(AGENT_ACCESS_TOKEN_FILE_ENV)
+            .map_err(|_| anyhow::anyhow!("{AGENT_ACCESS_TOKEN_FILE_ENV} is required"))?;
+        let access_token = read_access_token_file(access_token_file)?;
         let interval_secs = read_env_alias(
             "SDKWORK_WEBSERVER_NODE_SYNC_INTERVAL_SECS",
             "SDKWORK_WEBSERVER_AGENT_SYNC_INTERVAL_SECS",
@@ -98,6 +126,7 @@ impl NodeDaemonRuntimeConfig {
         Ok(Self {
             control_plane,
             node_token,
+            access_token,
             interval_secs,
         })
     }
@@ -787,6 +816,16 @@ fn parse_control_plane_url(value: &str) -> anyhow::Result<String> {
     Ok(url.to_string())
 }
 
+fn read_access_token_file(path: String) -> anyhow::Result<String> {
+    let value = std::fs::read_to_string(path.trim())?;
+    let value = value.trim();
+    if value.len() < 16 || value.len() > 4_096 || value.bytes().any(|byte| byte.is_ascii_control())
+    {
+        anyhow::bail!("{AGENT_ACCESS_TOKEN_FILE_ENV} must contain 16..=4096 non-control bytes");
+    }
+    Ok(value.to_owned())
+}
+
 fn validate_node_token(value: &str) -> anyhow::Result<()> {
     if !(16..=4_096).contains(&value.len()) || value.bytes().any(|byte| byte.is_ascii_control()) {
         anyhow::bail!("SDKWORK_WEBSERVER_NODE_TOKEN must contain 16..=4096 non-control bytes");
@@ -900,6 +939,7 @@ mod tests {
         let runtime = NodeDaemonRuntimeConfig {
             control_plane,
             node_token: "0123456789abcdef".to_string(),
+            access_token: "fedcba9876543210".to_string(),
             interval_secs: 30,
         };
         let client = build_backend_sdk_client(&runtime, MAX_HEARTBEAT_RESPONSE_BYTES)
@@ -915,11 +955,18 @@ mod tests {
         assert!(request
             .to_ascii_lowercase()
             .contains("x-sdkwork-agent-token: 0123456789abcdef"));
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("access-token: fedcba9876543210"),
+            "the agent profile requires the Access-Token scope alongside the node token"
+        );
 
         let (control_plane, _) = serve_once("200 OK", MAX_HEARTBEAT_RESPONSE_BYTES + 1, b"").await;
         let runtime = NodeDaemonRuntimeConfig {
             control_plane,
             node_token: "0123456789abcdef".to_string(),
+            access_token: "fedcba9876543210".to_string(),
             interval_secs: 30,
         };
         let client = build_backend_sdk_client(&runtime, MAX_HEARTBEAT_RESPONSE_BYTES)
@@ -932,6 +979,24 @@ mod tests {
         assert!(error
             .to_string()
             .contains("response body exceeds 65536 bytes"));
+    }
+
+    #[test]
+    fn a_missing_access_token_fails_closed_with_the_required_setting() {
+        let runtime = NodeDaemonRuntimeConfig {
+            control_plane: "http://127.0.0.1:1".to_owned(),
+            node_token: "0123456789abcdef".to_string(),
+            access_token: String::new(),
+            interval_secs: 30,
+        };
+        let error = build_backend_sdk_client(&runtime, MAX_HEARTBEAT_RESPONSE_BYTES)
+            .err()
+            .expect("an incomplete machine identity must not build a client");
+        let message = error.to_string();
+        assert!(
+            message.contains(AGENT_ACCESS_TOKEN_FILE_ENV),
+            "the diagnostic names the missing setting: {message}"
+        );
     }
 
     #[test]
