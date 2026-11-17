@@ -1079,6 +1079,7 @@ class CreateApplicationRequest {
   final String? slug;
   final String? description;
   final String? appKind;
+  final String? deployApplicationId;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
@@ -1087,6 +1088,7 @@ class CreateApplicationRequest {
     this.slug,
     this.description,
     this.appKind,
+    this.deployApplicationId,
     this.runtimeConfig,
     this.storeListing
   });
@@ -1097,6 +1099,7 @@ class CreateApplicationRequest {
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
       appKind: json['appKind']?.toString(),
+      deployApplicationId: json['deployApplicationId']?.toString(),
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
       storeListing: (() {
         final map = _sdkworkAsMap(json['storeListing']);
@@ -1111,6 +1114,7 @@ class CreateApplicationRequest {
       'slug': slug,
       'description': description,
       'appKind': appKind,
+      'deployApplicationId': deployApplicationId,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
     };
@@ -1158,6 +1162,7 @@ class ApplicationResponse {
   final String? slug;
   final String? description;
   final String? appKind;
+  final String? deployApplicationId;
   final int? siteType;
   final int? status;
   final bool? hasSourceVersion;
@@ -1172,6 +1177,7 @@ class ApplicationResponse {
     this.slug,
     this.description,
     this.appKind,
+    this.deployApplicationId,
     this.siteType,
     this.status,
     this.hasSourceVersion,
@@ -1188,6 +1194,7 @@ class ApplicationResponse {
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
       appKind: json['appKind']?.toString(),
+      deployApplicationId: json['deployApplicationId']?.toString(),
       siteType: json['siteType'] is int ? json['siteType'] : null,
       status: json['status'] is int ? json['status'] : null,
       hasSourceVersion: json['hasSourceVersion'] is bool ? json['hasSourceVersion'] : null,
@@ -1208,6 +1215,7 @@ class ApplicationResponse {
       'slug': slug,
       'description': description,
       'appKind': appKind,
+      'deployApplicationId': deployApplicationId,
       'siteType': siteType,
       'status': status,
       'hasSourceVersion': hasSourceVersion,

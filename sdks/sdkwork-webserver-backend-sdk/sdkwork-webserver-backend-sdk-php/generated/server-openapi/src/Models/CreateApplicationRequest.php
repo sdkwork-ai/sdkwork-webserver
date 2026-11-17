@@ -16,6 +16,18 @@ final class CreateApplicationRequest
 
     public ?string $appKind = null;
 
+    /** The `deploy_app.id` of the sdkwork-deployments application this
+carrier record carries.
+
+Required. Deploy is the single application identity and publishing
+authority; a webserver application exists only to carry a site,
+domain, certificate, and reverse-proxy configuration for a Deploy
+application, and the link is 1:1 (unique per live carrier row). The
+service rejects a missing value with a validation error that names
+this field - the webserver never mints an application identity of
+its own. */
+    public ?string $deployApplicationId = null;
+
     public array $runtimeConfig = [];
 
     public ?ApplicationStoreListing $storeListing = null;
@@ -33,6 +45,9 @@ final class CreateApplicationRequest
             : null;
         $this->appKind = array_key_exists('appKind', $data)
             ? $data['appKind']
+            : null;
+        $this->deployApplicationId = array_key_exists('deployApplicationId', $data)
+            ? $data['deployApplicationId']
             : null;
         $this->runtimeConfig = array_key_exists('runtimeConfig', $data)
             ? is_array($data['runtimeConfig']) ? $data['runtimeConfig'] : []
@@ -54,6 +69,7 @@ final class CreateApplicationRequest
             'slug' => $this->slug,
             'description' => $this->description,
             'appKind' => $this->appKind,
+            'deployApplicationId' => $this->deployApplicationId,
             'runtimeConfig' => $this->runtimeConfig,
             'storeListing' => $this->storeListing instanceof ApplicationStoreListing ? $this->storeListing->toArray() : $this->storeListing,
         ];

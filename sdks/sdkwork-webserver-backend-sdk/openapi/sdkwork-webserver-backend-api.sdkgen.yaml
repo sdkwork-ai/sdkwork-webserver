@@ -10068,7 +10068,7 @@
             "format": "int64",
             "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true,
-            "description": "The `deploy_app.id` of the sdkwork-deployments application this\ncarrier record carries.\n\nRequired. Deploy is the single application identity and publishing\nauthority; a webserver application exists only to carry a site,\ndomain, certificate, and reverse-proxy configuration for a Deploy\napplication, and the link is 1:1 (unique per live carrier row). The\nservice rejects a missing value with a validation error that names\nthis field — the webserver never mints an application identity of\nits own.\n"
+            "description": "The `deploy_app.id` of the sdkwork-deployments application this\ncarrier record carries.\n\nRequired. Deploy is the single application identity and publishing\nauthority; a webserver application exists only to carry a site,\ndomain, certificate, and reverse-proxy configuration for a Deploy\napplication, and the link is 1:1 (unique per live carrier row). The\nservice rejects a missing value with a validation error that names\nthis field - the webserver never mints an application identity of\nits own.\n"
           },
           "runtimeConfig": {
             "type": "object",

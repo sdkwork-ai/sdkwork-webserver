@@ -6084,7 +6084,7 @@ components:
             domain, certificate, and reverse-proxy configuration for a Deploy
             application, and the link is 1:1 (unique per live carrier row). The
             service rejects a missing value with a validation error that names
-            this field — the webserver never mints an application identity of
+            this field - the webserver never mints an application identity of
             its own.
         runtimeConfig:
           type: object

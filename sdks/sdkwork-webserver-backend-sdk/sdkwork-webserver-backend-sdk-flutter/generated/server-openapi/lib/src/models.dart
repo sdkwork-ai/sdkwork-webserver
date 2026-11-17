@@ -1427,6 +1427,7 @@ class CreateApplicationRequest {
   final String? slug;
   final String? description;
   final String appKind;
+  final String deployApplicationId;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
@@ -1435,6 +1436,7 @@ class CreateApplicationRequest {
     this.slug,
     this.description,
     required this.appKind,
+    required this.deployApplicationId,
     this.runtimeConfig,
     this.storeListing
   });
@@ -1457,6 +1459,13 @@ class CreateApplicationRequest {
         }
         return value;
       })(),
+      deployApplicationId: (() {
+        final value = json['deployApplicationId']?.toString();
+        if (value == null) {
+          throw FormatException('CreateApplicationRequest.deployApplicationId is required');
+        }
+        return value;
+      })(),
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
       storeListing: (() {
         final map = _sdkworkAsMap(json['storeListing']);
@@ -1471,6 +1480,7 @@ class CreateApplicationRequest {
       'slug': slug,
       'description': description,
       'appKind': appKind,
+      'deployApplicationId': deployApplicationId,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
     };
@@ -1518,6 +1528,7 @@ class ApplicationResponse {
   final String slug;
   final String? description;
   final String? appKind;
+  final String? deployApplicationId;
   final int siteType;
   final int status;
   final bool? hasSourceVersion;
@@ -1532,6 +1543,7 @@ class ApplicationResponse {
     required this.slug,
     this.description,
     this.appKind,
+    this.deployApplicationId,
     required this.siteType,
     required this.status,
     this.hasSourceVersion,
@@ -1566,6 +1578,7 @@ class ApplicationResponse {
       })(),
       description: json['description']?.toString(),
       appKind: json['appKind']?.toString(),
+      deployApplicationId: json['deployApplicationId']?.toString(),
       siteType: (() {
         final value = json['siteType'];
         if (value is! int) {
@@ -1610,6 +1623,7 @@ class ApplicationResponse {
       'slug': slug,
       'description': description,
       'appKind': appKind,
+      'deployApplicationId': deployApplicationId,
       'siteType': siteType,
       'status': status,
       'hasSourceVersion': hasSourceVersion,

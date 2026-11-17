@@ -7,6 +7,7 @@ public class CreateApplicationRequest {
     private String slug;
     private String description;
     private String appKind;
+    private String deployApplicationId;
     private Map<String, Object> runtimeConfig;
     private ApplicationStoreListing storeListing;
 
@@ -40,6 +41,14 @@ public class CreateApplicationRequest {
 
     public void setAppKind(String appKind) {
         this.appKind = appKind;
+    }
+
+    public String getDeployApplicationId() {
+        return this.deployApplicationId;
+    }
+
+    public void setDeployApplicationId(String deployApplicationId) {
+        this.deployApplicationId = deployApplicationId;
     }
 
     public Map<String, Object> getRuntimeConfig() {

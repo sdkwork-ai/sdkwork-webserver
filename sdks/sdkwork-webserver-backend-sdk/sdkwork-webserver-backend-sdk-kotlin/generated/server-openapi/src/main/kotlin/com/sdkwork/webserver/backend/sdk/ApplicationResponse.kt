@@ -6,6 +6,7 @@ data class ApplicationResponse(
     val slug: String? = null,
     val description: String? = null,
     val appKind: String? = null,
+    val deployApplicationId: String? = null,
     val siteType: Int? = null,
     val status: Int? = null,
     val hasSourceVersion: Boolean? = null,

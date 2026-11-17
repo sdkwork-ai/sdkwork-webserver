@@ -5,6 +5,7 @@ data class CreateApplicationRequest(
     val slug: String? = null,
     val description: String? = null,
     val appKind: String? = null,
+    val deployApplicationId: String? = null,
     val runtimeConfig: Map<String, Any>? = null,
     val storeListing: ApplicationStoreListing? = null
 )

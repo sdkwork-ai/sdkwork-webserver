@@ -17,6 +17,7 @@ class ApplicationResponse:
     updated_at: str
     description: Optional[str] = None
     app_kind: Optional[str] = None
+    deploy_application_id: Optional[str] = None
     has_source_version: Optional[bool] = None
     runtime_config: Optional[Dict[str, Any]] = None
     store_listing: Optional[ApplicationStoreListing] = None

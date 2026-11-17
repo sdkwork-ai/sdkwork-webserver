@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 class CreateApplicationRequest:
     name: str
     app_kind: str
+    deploy_application_id: str
     slug: Optional[str] = None
     description: Optional[str] = None
     runtime_config: Optional[Dict[str, Any]] = None

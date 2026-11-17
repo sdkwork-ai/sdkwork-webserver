@@ -440,15 +440,17 @@ public struct CreateApplicationRequest: Codable {
     public let slug: String?
     public let description: String?
     public let appKind: String?
+    public let deployApplicationId: String?
     public let runtimeConfig: [String: Any]?
     public let storeListing: ApplicationStoreListing?
 
 
-    public init(name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil) {
+    public init(name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, deployApplicationId: String? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil) {
         self.name = name
         self.slug = slug
         self.description = description
         self.appKind = appKind
+        self.deployApplicationId = deployApplicationId
         self.runtimeConfig = runtimeConfig
         self.storeListing = storeListing
     }
@@ -475,6 +477,7 @@ public struct ApplicationResponse: Codable {
     public let slug: String?
     public let description: String?
     public let appKind: String?
+    public let deployApplicationId: String?
     public let siteType: Int?
     public let status: Int?
     public let hasSourceVersion: Bool?
@@ -484,12 +487,13 @@ public struct ApplicationResponse: Codable {
     public let updatedAt: String?
 
 
-    public init(id: String? = nil, name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, siteType: Int? = nil, status: Int? = nil, hasSourceVersion: Bool? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
+    public init(id: String? = nil, name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, deployApplicationId: String? = nil, siteType: Int? = nil, status: Int? = nil, hasSourceVersion: Bool? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil, createdAt: String? = nil, updatedAt: String? = nil) {
         self.id = id
         self.name = name
         self.slug = slug
         self.description = description
         self.appKind = appKind
+        self.deployApplicationId = deployApplicationId
         self.siteType = siteType
         self.status = status
         self.hasSourceVersion = hasSourceVersion

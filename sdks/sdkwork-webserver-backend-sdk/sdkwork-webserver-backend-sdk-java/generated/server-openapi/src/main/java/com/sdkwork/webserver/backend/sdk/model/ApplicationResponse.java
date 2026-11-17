@@ -8,6 +8,7 @@ public class ApplicationResponse {
     private String slug;
     private String description;
     private String appKind;
+    private String deployApplicationId;
     private Integer siteType;
     private Integer status;
     private Boolean hasSourceVersion;
@@ -54,6 +55,14 @@ public class ApplicationResponse {
 
     public void setAppKind(String appKind) {
         this.appKind = appKind;
+    }
+
+    public String getDeployApplicationId() {
+        return this.deployApplicationId;
+    }
+
+    public void setDeployApplicationId(String deployApplicationId) {
+        this.deployApplicationId = deployApplicationId;
     }
 
     public Integer getSiteType() {

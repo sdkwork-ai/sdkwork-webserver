@@ -7,6 +7,7 @@ type ApplicationResponse struct {
 	Slug string `json:"slug"`
 	Description string `json:"description"`
 	AppKind AppKind `json:"appKind"`
+	DeployApplicationId string `json:"deployApplicationId"`
 	SiteType int `json:"siteType"`
 	Status int `json:"status"`
 	HasSourceVersion bool `json:"hasSourceVersion"`
