@@ -239,6 +239,19 @@ const PACKAGE_ASSETS = [
     target: 'database/seeds/common/001_bootstrap.sql',
   },
 ];
+// Post-GA migrations ship alongside the consolidated baseline: existing
+// databases upgrade through them (the baseline only applies on fresh
+// installs), so the staging set cannot be a fixed list — every migration
+// file and its metadata sidecar currently in the tree are staged dynamically.
+for (const entry of existsSync(path.join(REPO_ROOT, 'database', 'migrations', 'postgres'))
+  ? readdirSync(path.join(REPO_ROOT, 'database', 'migrations', 'postgres'))
+  : []) {
+  if (entry === 'README.md') continue;
+  PACKAGE_ASSETS.push({
+    source: `database/migrations/postgres/${entry}`,
+    target: `database/migrations/postgres/${entry}`,
+  });
+}
 const EXPECTED_FIXED_CONTENT_PATHS = [
   ...BINARIES.map((binary) => `bin/${binary}`),
   ...PACKAGE_ASSETS.map((asset) => asset.target),
