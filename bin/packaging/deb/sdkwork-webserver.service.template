@@ -35,7 +35,10 @@ MemoryMax=4G
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/sdkwork/webserver /run/sdkwork/webserver
+# The deploy sandbox (drive App API local-projects volume) materializes
+# under /opt/deploy (SDKWORK_DEPLOY_SANDBOX_ROOT default), mirroring the
+# container deployment's rw overlay on the same tree.
+ReadWritePaths=/var/lib/sdkwork/webserver /run/sdkwork/webserver /opt/deploy
 PrivateTmp=true
 
 [Install]
