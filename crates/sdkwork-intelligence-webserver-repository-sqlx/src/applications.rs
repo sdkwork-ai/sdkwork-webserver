@@ -185,13 +185,14 @@ impl WebRepository {
         if slug.is_empty() {
             return Err(WebServiceError::validation("slug cannot be empty"));
         }
-        // The app kind is the business type; the site carrier rows derive
-        // their technical type from it (AppKind::carrier_site_type /
-        // carrier_application_type).
-        let app_kind = sdkwork_webserver_contract::AppKind::parse(&request.app_kind)
-            .ok_or_else(|| WebServiceError::validation("appKind is not a supported app kind"))?;
-        let carrier_site_type = app_kind.carrier_site_type();
-        let carrier_application_type = app_kind.carrier_application_type();
+        // The carrier row takes no application kind from the client: its identity
+        // is `deploy_application_id`, so the kind is the server-owned default
+        // (`CARRIER_APP_KIND`, `MIG-2026-0071` deletion-list item 6). The site
+        // carrier type is derived from that default exactly as it used to be
+        // derived from the request, so the site rows stay identical.
+        let carrier_app_kind = sdkwork_webserver_contract::CARRIER_APP_KIND;
+        let carrier_site_type = carrier_app_kind.carrier_site_type();
+        let carrier_application_type = carrier_app_kind.carrier_application_type();
         let now = now_rfc3339();
         let runtime_config = request
             .runtime_config
@@ -289,7 +290,7 @@ impl WebRepository {
         .bind(&request.name)
         .bind(&slug)
         .bind(&request.description)
-        .bind(&request.app_kind)
+        .bind(carrier_app_kind.as_str())
         .bind(site_id)
         .bind(deploy_application_id)
         .bind(&now)

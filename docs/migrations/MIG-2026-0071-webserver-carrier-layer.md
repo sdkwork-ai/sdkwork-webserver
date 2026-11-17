@@ -88,6 +88,12 @@ Breaking, pre-launch (no compatibility window):
   deletion list.
 - Reads of the historical `webserver_source_version` / `webserver_deployment`
   rows are unchanged.
+- The carrier create contract no longer accepts `appKind` (2026-11-17, deletion
+  list item 6 part 1): `CreateApplicationRequest` has no such member and the
+  schema is `additionalProperties: false`, so a client that still sends it fails
+  deserialization. The carrier row is written with the server default
+  `STATIC_WEB`, which derives `site_type = 1` and the site carrier application
+  type `WEB` — the values the carrier console used to request explicitly.
 
 ## Forward Fix
 
@@ -124,3 +130,21 @@ first prove no live caller remains.
 | 8 | `application_registry.rs` module (derive helpers, retired writer, summary) + the startup hook call | `crates/sdkwork-api-webserver-standalone-gateway/src/{application_registry,main,lib}.rs` | The Deploy-side reconciliation adopts `derive_applications`/`application_from_import` |
 | 9 | Operator backfill script | `database/backfill/postgres/0031_webserver_application_deploy_application_id.sql` | A follow-up migration makes `deploy_application_id` `NOT NULL` |
 | 10 | Cross-module existence check for `deployApplicationId` | `crates/sdkwork-intelligence-webserver-repository-sqlx/src/applications.rs` | Deploy exposes an app-id lookup the create path can call (no cross-module FK is expressible) |
+
+## Deletion Progress
+
+An item is checked only when the whole capability it names is gone; a capability
+that is only partly removed stays unchecked and records the slice that is done.
+
+- [x] **Item 6, part 1/2 — the client-authored `appKind` on the carrier row
+  (2026-11-17).** `CreateApplicationRequest` no longer carries `appKind`, so the
+  regenerated SDKs cannot send it; the repository writes the documented server
+  default `CARRIER_APP_KIND` (`STATIC_WEB` → `webserver_site.site_type = 1`,
+  `application_type = 'WEB'`, exactly what the carrier page used to request), and
+  the page's constant is gone. No migration is needed: the DB column keeps its
+  `NOT NULL` DDL default and is still written explicitly, so existing rows and
+  the `appKind` response projection are unchanged.
+- [ ] **Item 6, part 2/2 — the stored identity duplicates.** Drop
+  `webserver_application.application_kind` (only once `ApplicationResponse` no
+  longer projects `appKind`), `default_environment`, and the
+  `metadata->storeListing` copy, and read them through `deploy_application_id`.

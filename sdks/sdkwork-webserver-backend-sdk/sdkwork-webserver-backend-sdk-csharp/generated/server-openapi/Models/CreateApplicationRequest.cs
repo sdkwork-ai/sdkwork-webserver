@@ -9,7 +9,6 @@ namespace SDKWork.WebserverBackendSdk.Models
         public string Name { get; set; }
         public string? Slug { get; set; }
         public string? Description { get; set; }
-        public string AppKind { get; set; }
         public string DeployApplicationId { get; set; }
         public Dictionary<string, object>? RuntimeConfig { get; set; }
         public ApplicationStoreListing? StoreListing { get; set; }

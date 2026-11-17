@@ -16,6 +16,10 @@ final class ApplicationResponse
 
     public ?string $description = null;
 
+    /** Business application kind: the user-facing app type of a Deploy
+application. Not the identity of a carrier row — `webserver_application`
+identifies itself only through `deployApplicationId` and records a
+server-owned default kind. */
     public ?string $appKind = null;
 
     /** The `deploy_app.id` this carrier record carries. Absent only on a

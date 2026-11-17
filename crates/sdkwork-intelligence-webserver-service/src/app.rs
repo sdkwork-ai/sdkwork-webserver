@@ -962,7 +962,10 @@ impl WebAppApi for WebService {
     ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
-        Self::validate_app_kind(&request.app_kind)?;
+        // No app-kind validation: the create contract no longer carries `appKind`.
+        // A carrier row's identity is `deployApplicationId` and its kind is the
+        // server-owned default applied by the repository (`CARRIER_APP_KIND`,
+        // `MIG-2026-0071` deletion-list item 6).
         // `deploy_app` (sdkwork-deployments) is the single application identity
         // and publishing authority. A webserver application only exists to carry
         // a site for one Deploy application, so the link is a hard precondition:

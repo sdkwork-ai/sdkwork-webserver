@@ -104,8 +104,15 @@ pub struct ApplicationStoreListing {
     pub official_website_url: Option<String>,
 }
 
-/// Business application kind: the user-facing app type. The internal site
-/// carrier row derives its technical type from this value.
+/// Business application kind: the user-facing app type of a Deploy application.
+///
+/// It is **not** the identity of a carrier row. `webserver_application` is only a
+/// site carrier and its identity is `deployApplicationId`; since
+/// `MIG-2026-0071` the create contract no longer accepts an `appKind` and every
+/// carrier row is written with [`CARRIER_APP_KIND`]. The enum is retained because
+/// the internal site carrier type is still derived from the stored column value,
+/// and because the response projection returns it until deletion-list item 6
+/// removes the column.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AppKind {
@@ -165,6 +172,21 @@ impl AppKind {
         }
     }
 }
+
+/// The application kind every carrier row is created with.
+///
+/// A `webserver_application` row carries a site for one Deploy application
+/// (`deployApplicationId` is its identity) and that site is a web site, so the
+/// kind is a server-owned default rather than a value the client declares. This
+/// is what the carrier console used to send explicitly: `STATIC_WEB` maps to
+/// `webserver_site.site_type = 1` and `webserver_site.application_type = 'WEB'`,
+/// so the derived site row is unchanged.
+///
+/// It is deliberately not the DDL default (`'WEB'`): `WEB` is a legacy
+/// site-carrier application type that the `AppKind` wire enum never contained, so
+/// a row created with it would project an `appKind` the generated SDKs cannot
+/// decode.
+pub const CARRIER_APP_KIND: AppKind = AppKind::StaticWeb;
 
 /// Target deployment platform of an application platform target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -330,6 +352,12 @@ pub struct ApplicationResponse {
     pub deploy_application_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// The carrier row's application kind.
+    ///
+    /// Read-only projection of `webserver_application.application_kind`, kept
+    /// until `MIG-2026-0071` deletion-list item 6 removes the column. New rows
+    /// always carry [`CARRIER_APP_KIND`]; the create contract no longer accepts
+    /// the member, so this is never client-authored identity.
     #[serde(rename = "appKind")]
     pub app_kind: String,
     #[serde(rename = "siteType", skip_serializing_if = "Option::is_none")]
@@ -361,15 +389,21 @@ pub struct ApplicationPage {
     pub page_size: i32,
 }
 
+/// Create input for a carrier row.
+///
+/// There is no `appKind` member: a carrier row's identity is
+/// [`CreateApplicationRequest::deploy_application_id`], and its application kind
+/// is the server-owned default [`CARRIER_APP_KIND`]. The member was removed
+/// rather than made optional so no caller can re-declare a second application
+/// identity on the carrier row (`MIG-2026-0071` deletion-list item 6).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateApplicationRequest {
     pub name: String,
     #[serde(default)]
     pub slug: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(rename = "appKind")]
-    pub app_kind: String,
     /// Deploy application this carrier record carries (`deploy_app.id`, sent as
     /// a decimal string per the int64 wire contract).
     ///
@@ -2192,6 +2226,28 @@ mod tests {
         let json = r#"{"items":[],"total":"not-a-number","page":1,"pageSize":20}"#;
         let result: Result<ApplicationPage, _> = serde_json::from_str(json);
         assert!(result.is_err());
+    }
+
+    /// The carrier create contract dropped `appKind` (`MIG-2026-0071` deletion
+    /// list item 6, part 1). A client that still sends the retired member is
+    /// refused, not silently ignored: the OpenAPI schema says
+    /// `additionalProperties: false`, and this boundary has to say the same.
+    #[test]
+    fn create_application_request_refuses_the_retired_app_kind() {
+        let error = serde_json::from_str::<CreateApplicationRequest>(
+            r#"{"name":"Storefront","deployApplicationId":"1845123456789012345","appKind":"STATIC_WEB"}"#,
+        )
+        .expect_err("appKind is no longer a member of the carrier create contract");
+        assert!(
+            error.to_string().contains("appKind"),
+            "the refusal must name the retired member: {error}"
+        );
+        // Without it, the same body is accepted: the refusal is about the member,
+        // not about the request.
+        assert!(serde_json::from_str::<CreateApplicationRequest>(
+            r#"{"name":"Storefront","deployApplicationId":"1845123456789012345"}"#
+        )
+        .is_ok());
     }
 
     /// A request that only names the required fields has to be acceptable: the

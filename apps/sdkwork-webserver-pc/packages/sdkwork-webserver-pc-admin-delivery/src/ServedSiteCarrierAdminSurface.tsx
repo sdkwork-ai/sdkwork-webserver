@@ -39,10 +39,10 @@ import {
  *
  * - requires `deployApplicationId` and says so by name when it is missing,
  *   instead of letting the request reach the service and come back as a 422;
- * - never treats `appKind` as an identity. The wire still requires the member
- *   because the carrier row has not been contracted out of it yet
- *   (`MIG-2026-0071` deletion list item 6), so the page sends one documented
- *   constant rather than asking the operator to choose a second identity;
+ * - sends no `appKind`. `CreateApplicationRequest` no longer carries the member
+ *   (`MIG-2026-0071` deletion list item 6): the carrier row's identity is the
+ *   Deploy application, and the application kind is a server-owned default. The
+ *   page therefore never declares a second identity next to Deploy's;
  * - offers no publish, release, source-version, or template entry. Those belong
  *   to Deploy, and the page says so. `applications.activate` is not offered
  *   either: it requires a successful `webserver_deployment`, which the retired
@@ -57,19 +57,6 @@ import {
 
 /** Page size the carrier list requests; the wire has no total, only `hasMore`. */
 const PAGE_SIZE = 20;
-
-/**
- * The one `appKind` a carrier row is created with.
- *
- * `CreateApplicationRequest.appKind` is still a required member on the wire and
- * the service validates it, but on a carrier row it is a leftover of the local
- * identity model (`MIG-2026-0071` deletion list item 6: `application_kind`,
- * `default_environment`, `storeListing`). Asking the operator to pick one would
- * be asking them to declare a second identity next to Deploy's, which is the
- * exact duplication this migration removes. A carrier serves a site, so
- * `STATIC_WEB` is the neutral value the retired identity plane used for one.
- */
-const CARRIER_APP_KIND = "STATIC_WEB";
 
 /**
  * Carrier status is the site row's own lifecycle, not the Deploy app status:
@@ -381,7 +368,8 @@ function SiteCarrierLedger({
  *
  * The two modes differ in exactly the places the contract differs: the Deploy
  * link is chosen on create and read-only afterwards (`UpdateApplicationRequest`
- * has no `deployApplicationId`), and `appKind` is sent on create only. Validation
+ * has no `deployApplicationId`), and neither request carries an `appKind` — the
+ * carrier row's kind is the server-owned default. Validation
  * runs here, before the request, because the failure the operator would otherwise
  * see is the server's 422 — this form is what turns that into a sentence naming
  * the field while the operator is still looking at it.
@@ -462,7 +450,6 @@ function CarrierFormDialog({
         return;
       }
       const body: CreateApplicationRequest = {
-        appKind: CARRIER_APP_KIND,
         deployApplicationId: id,
         name: trimmedName,
       };

@@ -1078,7 +1078,6 @@ class CreateApplicationRequest {
   final String? name;
   final String? slug;
   final String? description;
-  final String? appKind;
   final String? deployApplicationId;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
@@ -1087,7 +1086,6 @@ class CreateApplicationRequest {
     this.name,
     this.slug,
     this.description,
-    this.appKind,
     this.deployApplicationId,
     this.runtimeConfig,
     this.storeListing
@@ -1098,7 +1096,6 @@ class CreateApplicationRequest {
       name: json['name']?.toString(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
-      appKind: json['appKind']?.toString(),
       deployApplicationId: json['deployApplicationId']?.toString(),
       runtimeConfig: _sdkworkAsMap(json['runtimeConfig']),
       storeListing: (() {
@@ -1113,7 +1110,6 @@ class CreateApplicationRequest {
       'name': name,
       'slug': slug,
       'description': description,
-      'appKind': appKind,
       'deployApplicationId': deployApplicationId,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),

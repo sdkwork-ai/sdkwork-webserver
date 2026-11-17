@@ -20,9 +20,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  *    `2^53`.
  * 2. A missing or malformed Deploy link is refused in the form, by name, before
  *    any request is made. The service's 422 is the fallback, not the UX.
- * 3. A submit that passes validation carries `deployApplicationId` (and the
- *    documented `appKind` constant) on `applications.create`; an edit carries
- *    only what changed, because `UpdateApplicationRequest` has no link member.
+ * 3. A submit that passes validation carries `deployApplicationId` (and *no*
+ *    `appKind`: the member was removed from `CreateApplicationRequest`, because a
+ *    carrier row's identity is the Deploy application and its kind is a
+ *    server-owned default) on `applications.create`; an edit carries only what
+ *    changed, because `UpdateApplicationRequest` has no link member.
  * 4. Publishing and lifecycle are Deploy's: the page offers no publish/template
  *    entry, activation is not offered at all (it requires a successful
  *    `webserver_deployment` the retired publishing writes can no longer create),
@@ -208,7 +210,7 @@ describe("site carrier ledger", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("sends deployApplicationId, the carrier appKind, and the parsed runtime config on create", async () => {
+  it("sends deployApplicationId and the parsed runtime config on create, with no appKind", async () => {
     const { client, create } = createClient([]);
     renderSurface(client);
     await screen.findByText(/No carrier rows yet/);
@@ -221,11 +223,11 @@ describe("site carrier ledger", () => {
     fireEvent.click(submitButton(screen.getByRole("dialog")));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    // Exact object equality: an `appKind` in the body would fail this assertion.
+    // The member is gone from `CreateApplicationRequest` — the carrier row's kind
+    // is a server-owned default, not an identity the page declares.
     expect(create).toHaveBeenCalledWith(
       {
-        // The one appKind a carrier row is created with: the wire still requires
-        // the member, but it is not an identity the operator chooses.
-        appKind: "STATIC_WEB",
         deployApplicationId: DEPLOY_APP_ID,
         name: "Storefront",
         runtimeConfig: { sso: true },

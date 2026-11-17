@@ -6,6 +6,16 @@ namespace SDKWork\Webserver\BackendSdk\Models;
 
 use SDKWork\Webserver\BackendSdk\Models\ApplicationStoreListing;
 
+/**
+ * Create input for a carrier row.
+
+There is no `appKind` member: a carrier row's identity is
+`deployApplicationId`, and its application kind is a server-owned default
+(`STATIC_WEB`, which derives `siteType = 1` and the site carrier
+application type `WEB`). The member was removed rather than made optional
+so no caller can re-declare a second application identity on the carrier
+row (`MIG-2026-0071` deletion-list item 6).
+ */
 final class CreateApplicationRequest
 {
     public ?string $name = null;
@@ -13,8 +23,6 @@ final class CreateApplicationRequest
     public ?string $slug = null;
 
     public ?string $description = null;
-
-    public ?string $appKind = null;
 
     /** The `deploy_app.id` of the sdkwork-deployments application this
 carrier record carries.
@@ -43,9 +51,6 @@ its own. */
         $this->description = array_key_exists('description', $data)
             ? $data['description']
             : null;
-        $this->appKind = array_key_exists('appKind', $data)
-            ? $data['appKind']
-            : null;
         $this->deployApplicationId = array_key_exists('deployApplicationId', $data)
             ? $data['deployApplicationId']
             : null;
@@ -68,7 +73,6 @@ its own. */
             'name' => $this->name,
             'slug' => $this->slug,
             'description' => $this->description,
-            'appKind' => $this->appKind,
             'deployApplicationId' => $this->deployApplicationId,
             'runtimeConfig' => $this->runtimeConfig,
             'storeListing' => $this->storeListing instanceof ApplicationStoreListing ? $this->storeListing->toArray() : $this->storeListing,

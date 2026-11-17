@@ -13,6 +13,10 @@ pub struct ApplicationResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
+    /// Business application kind: the user-facing app type of a Deploy
+    /// application. Not the identity of a carrier row — `webserver_application`
+    /// identifies itself only through `deployApplicationId` and records a
+    /// server-owned default kind.
     #[serde(rename = "appKind")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_kind: Option<String>,

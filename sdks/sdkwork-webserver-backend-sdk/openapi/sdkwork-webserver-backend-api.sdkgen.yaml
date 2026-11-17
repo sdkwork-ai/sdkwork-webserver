@@ -9827,6 +9827,7 @@
       },
       "AppKind": {
         "type": "string",
+        "description": "Business application kind: the user-facing app type of a Deploy\napplication. Not the identity of a carrier row — `webserver_application`\nidentifies itself only through `deployApplicationId` and records a\nserver-owned default kind.\n",
         "enum": [
           "STATIC_WEB",
           "SPA_WEB",
@@ -10039,9 +10040,9 @@
       "CreateApplicationRequest": {
         "type": "object",
         "additionalProperties": false,
+        "description": "Create input for a carrier row.\n\nThere is no `appKind` member: a carrier row's identity is\n`deployApplicationId`, and its application kind is a server-owned default\n(`STATIC_WEB`, which derives `siteType = 1` and the site carrier\napplication type `WEB`). The member was removed rather than made optional\nso no caller can re-declare a second application identity on the carrier\nrow (`MIG-2026-0071` deletion-list item 6).\n",
         "required": [
           "name",
-          "appKind",
           "deployApplicationId"
         ],
         "properties": {
@@ -10059,9 +10060,6 @@
           "description": {
             "type": "string",
             "maxLength": 500
-          },
-          "appKind": {
-            "$ref": "#/components/schemas/AppKind"
           },
           "deployApplicationId": {
             "type": "string",

@@ -439,17 +439,15 @@ public struct CreateApplicationRequest: Codable {
     public let name: String?
     public let slug: String?
     public let description: String?
-    public let appKind: String?
     public let deployApplicationId: String?
     public let runtimeConfig: [String: Any]?
     public let storeListing: ApplicationStoreListing?
 
 
-    public init(name: String? = nil, slug: String? = nil, description: String? = nil, appKind: String? = nil, deployApplicationId: String? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil) {
+    public init(name: String? = nil, slug: String? = nil, description: String? = nil, deployApplicationId: String? = nil, runtimeConfig: [String: Any]? = nil, storeListing: ApplicationStoreListing? = nil) {
         self.name = name
         self.slug = slug
         self.description = description
-        self.appKind = appKind
         self.deployApplicationId = deployApplicationId
         self.runtimeConfig = runtimeConfig
         self.storeListing = storeListing

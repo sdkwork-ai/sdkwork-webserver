@@ -325,7 +325,6 @@ async fn verify_certificate_revocation_ari_and_tls_projection(context: &TestCont
                 name: "Parity Revocation Site".to_string(),
                 slug: Some("parity-revocation".to_string()),
                 description: None,
-                app_kind: "STATIC_WEB".to_string(),
                 deploy_application_id: Some(910_000_000_000_000_001),
                 runtime_config: None,
                 store_listing: None,
@@ -658,7 +657,6 @@ async fn verify_certificate_activation_compensation(context: &TestContext) {
                 name: "Certificate Compensation Site".to_string(),
                 slug: Some("certificate-compensation".to_string()),
                 description: None,
-                app_kind: "STATIC_WEB".to_string(),
                 deploy_application_id: Some(910_000_000_000_000_002),
                 runtime_config: None,
                 store_listing: None,
@@ -833,7 +831,6 @@ async fn verify_repository_contract(context: &TestContext) {
                         name: format!("Alpha Site {index}"),
                         slug: Some(format!("alpha-{index}")),
                         description: None,
-                        app_kind: "STATIC_WEB".to_owned(),
                         deploy_application_id: Some(910_000_000_000_000_100 + index as i64),
                         runtime_config: None,
                         store_listing: None,
@@ -853,7 +850,6 @@ async fn verify_repository_contract(context: &TestContext) {
                 name: "Alpha API".to_owned(),
                 slug: Some("alpha-api".to_owned()),
                 description: None,
-                app_kind: "API_SERVICE".to_owned(),
                 deploy_application_id: Some(910_000_000_000_000_004),
                 runtime_config: None,
                 store_listing: None,
@@ -861,7 +857,25 @@ async fn verify_repository_contract(context: &TestContext) {
         )
         .await
         .expect("create API application");
-    assert_eq!(api_application.app_kind, "API_SERVICE");
+    // The create contract no longer carries an application kind, so a carrier row
+    // is always written with the server-owned default and its derived site type —
+    // the client cannot declare an identity on it any more.
+    assert_eq!(api_application.app_kind, "STATIC_WEB");
+    assert_eq!(api_application.site_type, Some(1));
+    // A row created before the member was retired can still carry the internal
+    // API carrier type. The retained filter must keep separating those legacy
+    // rows, so synthesize one directly: no current create path can produce it.
+    sqlx::query(
+        "UPDATE webserver_site SET application_type = 'API', site_type = 6
+         WHERE tenant_id = $1
+           AND id = (SELECT site_id FROM webserver_application
+                     WHERE tenant_id = $1 AND uuid = $2)",
+    )
+    .bind(TENANT_A)
+    .bind(&api_application.id)
+    .execute(&context.pool)
+    .await
+    .expect("mark a legacy API carrier row");
     let api_page = repository
         .list_applications(
             TENANT_A,
@@ -930,7 +944,6 @@ async fn verify_repository_contract(context: &TestContext) {
                 name: "Tenant B".to_owned(),
                 slug: Some("alpha-0".to_owned()),
                 description: None,
-                app_kind: "STATIC_WEB".to_owned(),
                 deploy_application_id: Some(910_000_000_000_000_005),
                 runtime_config: None,
                 store_listing: None,
@@ -950,7 +963,6 @@ async fn verify_repository_contract(context: &TestContext) {
                 name: "Duplicate".to_owned(),
                 slug: Some("alpha-0".to_owned()),
                 description: None,
-                app_kind: "STATIC_WEB".to_owned(),
                 deploy_application_id: Some(910_000_000_000_000_006),
                 runtime_config: None,
                 store_listing: None,
@@ -2714,7 +2726,6 @@ async fn verify_certificate_keyset_pagination(context: &TestContext) {
                 name: "keyset-certificates".to_string(),
                 slug: Some("keyset-certificates".to_string()),
                 description: None,
-                app_kind: "STATIC_WEB".to_string(),
                 deploy_application_id: Some(910_000_000_000_000_007),
                 runtime_config: None,
                 store_listing: None,
