@@ -1426,7 +1426,7 @@ class CreateApplicationRequest {
   final String name;
   final String? slug;
   final String? description;
-  final String appKind;
+  final String deployApplicationId;
   final Map<String, dynamic>? runtimeConfig;
   final ApplicationStoreListing? storeListing;
 
@@ -1434,7 +1434,7 @@ class CreateApplicationRequest {
     required this.name,
     this.slug,
     this.description,
-    required this.appKind,
+    required this.deployApplicationId,
     this.runtimeConfig,
     this.storeListing
   });
@@ -1450,10 +1450,10 @@ class CreateApplicationRequest {
       })(),
       slug: json['slug']?.toString(),
       description: json['description']?.toString(),
-      appKind: (() {
-        final value = json['appKind']?.toString();
+      deployApplicationId: (() {
+        final value = json['deployApplicationId']?.toString();
         if (value == null) {
-          throw FormatException('CreateApplicationRequest.appKind is required');
+          throw FormatException('CreateApplicationRequest.deployApplicationId is required');
         }
         return value;
       })(),
@@ -1470,7 +1470,7 @@ class CreateApplicationRequest {
       'name': name,
       'slug': slug,
       'description': description,
-      'appKind': appKind,
+      'deployApplicationId': deployApplicationId,
       'runtimeConfig': runtimeConfig,
       'storeListing': storeListing?.toJson(),
     };
@@ -1518,6 +1518,7 @@ class ApplicationResponse {
   final String slug;
   final String? description;
   final String? appKind;
+  final String? deployApplicationId;
   final int siteType;
   final int status;
   final bool? hasSourceVersion;
@@ -1532,6 +1533,7 @@ class ApplicationResponse {
     required this.slug,
     this.description,
     this.appKind,
+    this.deployApplicationId,
     required this.siteType,
     required this.status,
     this.hasSourceVersion,
@@ -1566,6 +1568,7 @@ class ApplicationResponse {
       })(),
       description: json['description']?.toString(),
       appKind: json['appKind']?.toString(),
+      deployApplicationId: json['deployApplicationId']?.toString(),
       siteType: (() {
         final value = json['siteType'];
         if (value is! int) {
@@ -1610,6 +1613,7 @@ class ApplicationResponse {
       'slug': slug,
       'description': description,
       'appKind': appKind,
+      'deployApplicationId': deployApplicationId,
       'siteType': siteType,
       'status': status,
       'hasSourceVersion': hasSourceVersion,

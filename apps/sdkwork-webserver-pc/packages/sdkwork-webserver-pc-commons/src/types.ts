@@ -31,6 +31,14 @@ export type WebserverPcSurface = "app-console" | "backend-admin";
  */
 export type WebserverResourceKey =
   | "apps"
+  // Site carriers are the Web Server's own row (`webserver_application`): a
+  // carrier that binds one SDKWork Deploy application to a site, its domains,
+  // certificates, and reverse-proxy configuration. Distinct from `apps`, which
+  // bridges the Deploy publishing ledger itself — that page creates Deploy
+  // applications, this one carries them. Authored on the operations surface only,
+  // because carrier rows are tenant-level and a tenant console has no business
+  // minting one.
+  | "site-carriers"
   | "official-accounts"
   | "domains"
   | "certificates"

@@ -11,7 +11,7 @@ use sdkwork_webserver_contract::{
 };
 use std::collections::HashSet;
 
-use crate::{AuditLogWrite, GitSourceImportRequest, WebService};
+use crate::{AuditLogWrite, WebService};
 
 const MAX_DEPLOYMENT_ARTIFACT_BYTES: i64 = 64 * 1024 * 1024;
 const MAX_ENV_VARIABLE_VALUE_BYTES: usize = 64 * 1024;
@@ -19,8 +19,6 @@ const MAX_ICON_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_STORE_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_STORE_PREVIEWS: usize = 8;
 const MAX_CERTIFICATE_IDENTIFIERS: usize = 8;
-const DEFAULT_SOURCE_VERSION_RETENTION_LIMIT: i32 = 5;
-const MAX_SOURCE_VERSION_RETENTION_LIMIT: i32 = 50;
 /// Per-tenant application capacity (PRD section 8.3 quota). Env-tunable so a
 /// deployment can raise it for a paying tenant; the count is advisory under
 /// concurrency (see the repository count query) but bounds unattended growth.
@@ -32,6 +30,26 @@ fn max_applications_per_tenant() -> i64 {
         .and_then(|value| value.trim().parse::<i64>().ok())
         .filter(|value| *value > 0)
         .unwrap_or(DEFAULT_MAX_APPLICATIONS_PER_TENANT)
+}
+
+/// Refusal returned by every webserver publishing command that this module
+/// retired.
+///
+/// Application identity and publishing are owned by `sdkwork-deployments`
+/// (`deploy_app`). The webserver endpoints that used to write
+/// `webserver_source_version`, `webserver_deployment` and
+/// `webserver_app_platform_target` rows stay routable only so a caller written
+/// against the old contract gets a deterministic refusal that names the new
+/// authority, instead of silently producing a second, divergent release record
+/// that Deploy never sees. Reads of the historical rows (list/retrieve, and the
+/// deployment history the console no longer consumes) are untouched.
+fn publishing_retired(command: &str) -> WebServiceError {
+    WebServiceError::conflict(format!(
+        "{command} is retired in sdkwork-webserver: application identity and publishing are \
+         owned by sdkwork-deployments (deploy_app). Publish source versions, deployments and \
+         release channels through the Deploy app publish API. This module keeps only the site, \
+         domain, certificate and reverse-proxy configuration that carries the application."
+    ))
 }
 
 impl WebService {
@@ -359,27 +377,6 @@ impl WebService {
             ));
         }
         validate_sha256("artifactHash", &request.artifact_hash)
-    }
-
-    fn source_version_retention_limit(
-        runtime_config: Option<&serde_json::Value>,
-    ) -> WebServiceResult<i32> {
-        let Some(value) =
-            runtime_config.and_then(|config| config.get("sourceVersionRetentionLimit"))
-        else {
-            return Ok(DEFAULT_SOURCE_VERSION_RETENTION_LIMIT);
-        };
-        let limit = value.as_i64().ok_or_else(|| {
-            sdkwork_webserver_contract::WebServiceError::validation(
-                "sourceVersionRetentionLimit must be an integer",
-            )
-        })?;
-        if !(1..=i64::from(MAX_SOURCE_VERSION_RETENTION_LIMIT)).contains(&limit) {
-            return Err(sdkwork_webserver_contract::WebServiceError::validation(
-                "sourceVersionRetentionLimit must be between 1 and 50",
-            ));
-        }
-        Ok(limit as i32)
     }
 
     pub(crate) fn validate_health_check_request(
@@ -965,7 +962,28 @@ impl WebAppApi for WebService {
     ) -> WebServiceResult<sdkwork_webserver_contract::ApplicationResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let owner_id = Self::owner_filter(context)?;
-        Self::validate_app_kind(&request.app_kind)?;
+        // No app-kind validation: the create contract no longer carries `appKind`.
+        // A carrier row's identity is `deployApplicationId` and its kind is the
+        // server-owned default applied by the repository (`CARRIER_APP_KIND`,
+        // `MIG-2026-0071` deletion-list item 6).
+        // `deploy_app` (sdkwork-deployments) is the single application identity
+        // and publishing authority. A webserver application only exists to carry
+        // a site for one Deploy application, so the link is a hard precondition:
+        // a missing value names the field instead of quietly minting a local
+        // identity that Deploy would never know about.
+        let deploy_application_id = request.deploy_application_id.ok_or_else(|| {
+            WebServiceError::validation(
+                "deployApplicationId is required: a webserver application carries a \
+                 sdkwork-deployments application (deploy_app) and must reference it. Create the \
+                 application in Deploy first, then pass its id here — webserver never generates \
+                 an application identity of its own.",
+            )
+        })?;
+        if deploy_application_id <= 0 {
+            return Err(WebServiceError::validation(
+                "deployApplicationId must be a positive deploy_app.id",
+            ));
+        }
         Self::validate_store_listing(request.store_listing.as_ref(), false)?;
         let capacity = max_applications_per_tenant();
         // Fast path: the same quota conflict the store would raise, returned
@@ -1041,6 +1059,14 @@ impl WebAppApi for WebService {
         Ok(())
     }
 
+    /// Activation keeps its historical precondition — at least one successful
+    /// `webserver_deployment` row — even though this module no longer writes
+    /// such rows (publishing belongs to sdkwork-deployments). For an application
+    /// created after MIG-2026-0071 the precondition can therefore never be met:
+    /// activating an application is a Deploy lifecycle action, and this command
+    /// is on the migration's deletion list. It is deliberately left unchanged
+    /// instead of switching to a Deploy-owned precondition, because that switch
+    /// is a design decision this change does not take.
     async fn activate_application(
         &self,
         context: &WebAppRequestContext,
@@ -1200,36 +1226,30 @@ impl WebAppApi for WebService {
             .await
     }
 
+    /// RETIRED. `webserver_source_version` is the webserver's own release-version
+    /// record, a second source of truth next to the Deploy application's
+    /// revisions. sdkwork-deployments owns application publishing, so this
+    /// command no longer writes a row: it validates the request exactly as
+    /// before, then refuses and names the authority. Listing and retrieving the
+    /// historical rows still works for callers that need the old history.
     async fn create_source_version(
         &self,
-        context: &WebAppRequestContext,
-        application_id: &str,
+        _context: &WebAppRequestContext,
+        _application_id: &str,
         request: &CreateSourceVersionRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::SourceVersionResponse> {
         Self::validate_source_version_request(request)?;
-        let (tenant_id, site_id) = self
-            .require_application_access(context, application_id)
-            .await?;
-        let site = self
-            .repository
-            .retrieve_application(tenant_id, None, application_id)
-            .await?;
-        let retention_limit = Self::source_version_retention_limit(site.runtime_config.as_ref())?;
-        self.repository
-            .create_source_version(
-                tenant_id,
-                &site_id,
-                context.actor_id,
-                retention_limit,
-                request,
-            )
-            .await
+        Err(publishing_retired("applications.sourceVersions.create"))
     }
 
+    /// RETIRED. Git import wrote a `webserver_source_version` row from an
+    /// artifact the webserver pulled itself. The Deploy application owns its
+    /// source revisions; the request keeps its input validation and then gets
+    /// the same refusal as every other retired publishing command.
     async fn import_git_source_version(
         &self,
-        context: &WebAppRequestContext,
-        application_id: &str,
+        _context: &WebAppRequestContext,
+        _application_id: &str,
         request: &ImportGitSourceVersionRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::SourceVersionResponse> {
         validate_required_text("versionTag", &request.version_tag, 100)?;
@@ -1245,44 +1265,9 @@ impl WebAppApi for WebService {
                 ));
             }
         }
-        let (tenant_id, site_id) = self
-            .require_application_access(context, application_id)
-            .await?;
-        let site = self
-            .repository
-            .retrieve_application(tenant_id, None, application_id)
-            .await?;
-        let imported = self
-            .source_importer
-            .import_git(&GitSourceImportRequest {
-                tenant_id,
-                organization_id: context.organization_id,
-                actor_id: context.actor_id,
-                application_id: site_id.to_string(),
-                version_tag: request.version_tag.clone(),
-                repository_url: request.repository_url.clone(),
-                git_ref: request.git_ref.clone(),
-            })
-            .await?;
-        let retention_limit = Self::source_version_retention_limit(site.runtime_config.as_ref())?;
-        self.repository
-            .create_source_version(
-                tenant_id,
-                &site_id,
-                context.actor_id,
-                retention_limit,
-                &CreateSourceVersionRequest {
-                    version_tag: request.version_tag.clone(),
-                    source_type: "GIT".to_string(),
-                    source_ref: Some(request.repository_url.clone()),
-                    commit_hash: Some(imported.commit_hash),
-                    artifact_drive_uri: imported.artifact_drive_uri,
-                    artifact_size: imported.artifact_size,
-                    artifact_hash: imported.artifact_hash,
-                    config_snapshot: imported.config_snapshot,
-                },
-            )
-            .await
+        Err(publishing_retired(
+            "applications.sourceVersions.gitImport.create",
+        ))
     }
 
     async fn retrieve_source_version(
@@ -1321,10 +1306,14 @@ impl WebAppApi for WebService {
             .await
     }
 
+    /// RETIRED. `webserver_deployment` was the webserver's own release record.
+    /// Deploy owns deployments; this command validates the request (including
+    /// the caller's idempotency key) and then refuses with the named authority
+    /// instead of writing a deployment the Deploy control plane cannot see.
     async fn create_deployment(
         &self,
         context: &WebAppRequestContext,
-        application_id: &str,
+        _application_id: &str,
         request: &CreateDeploymentRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
         let mut request = request.clone();
@@ -1332,41 +1321,7 @@ impl WebAppApi for WebService {
             request.idempotency_key = Some(idempotency_key.clone());
         }
         Self::validate_deployment_request(&request)?;
-        let (tenant_id, site_id) = self
-            .require_application_access(context, application_id)
-            .await?;
-        let site = self
-            .repository
-            .retrieve_application(tenant_id, None, application_id)
-            .await?;
-        Self::validate_store_listing(site.store_listing.as_ref(), true)?;
-        if let Some(source_version_id) = request.source_version_id.as_deref() {
-            let source_version = self
-                .repository
-                .retrieve_source_version(tenant_id, &site_id, source_version_id)
-                .await?;
-            if source_version.status != 1 || !source_version.retained {
-                return Err(sdkwork_webserver_contract::WebServiceError::conflict(
-                    "source version is not ready or is outside the retained release window",
-                ));
-            }
-            request.deploy_type = if source_version.source_type == "GIT" {
-                2
-            } else {
-                1
-            };
-            request.version_tag = request
-                .version_tag
-                .or_else(|| Some(source_version.version_tag.clone()));
-            request.commit_hash = source_version.commit_hash;
-            request.source_ref = source_version.source_ref;
-            request.artifact_drive_uri = Some(source_version.artifact_drive_uri);
-            request.artifact_size = Some(source_version.artifact_size);
-            request.artifact_hash = Some(source_version.artifact_hash);
-        }
-        self.repository
-            .create_deployment(tenant_id, &site_id, context.actor_id, &request)
-            .await
+        Err(publishing_retired("applications.deployments.create"))
     }
 
     async fn retrieve_deployment(
@@ -1383,25 +1338,17 @@ impl WebAppApi for WebService {
             .await
     }
 
+    /// RETIRED. A rollback is a release action on the Deploy application, not a
+    /// new `webserver_deployment` row. The historical rows stay readable; the
+    /// command that created new ones refuses.
     async fn rollback_deployment(
         &self,
         context: &WebAppRequestContext,
-        application_id: &str,
-        deployment_id: &str,
+        _application_id: &str,
+        _deployment_id: &str,
     ) -> WebServiceResult<sdkwork_webserver_contract::DeploymentResponse> {
         validate_idempotency_key(context.idempotency_key.as_deref())?;
-        let (tenant_id, site_id) = self
-            .require_application_access(context, application_id)
-            .await?;
-        self.repository
-            .rollback_deployment(
-                tenant_id,
-                &site_id,
-                deployment_id,
-                context.actor_id,
-                context.idempotency_key.as_deref(),
-            )
-            .await
+        Err(publishing_retired("applications.deployments.rollback"))
     }
 
     async fn list_env_variables(
@@ -1601,20 +1548,18 @@ impl WebAppApi for WebService {
             .await
     }
 
+    /// RETIRED. Platform distribution targets (bundle ids, package names,
+    /// release channels) are part of the application's release identity, which
+    /// belongs to `deploy_app`. The request is still validated so a migrating
+    /// caller keeps its input errors, and then the command refuses.
     async fn create_platform_target(
         &self,
-        context: &WebAppRequestContext,
-        application_id: &str,
+        _context: &WebAppRequestContext,
+        _application_id: &str,
         request: &CreatePlatformTargetRequest,
     ) -> WebServiceResult<sdkwork_webserver_contract::PlatformTargetResponse> {
-        let tenant_id = self
-            .require_application_access(context, application_id)
-            .await?
-            .0;
         Self::validate_platform_target_request(request)?;
-        self.repository
-            .create_platform_target(tenant_id, application_id, request)
-            .await
+        Err(publishing_retired("applications.platformTargets.create"))
     }
 
     async fn list_platform_targets(

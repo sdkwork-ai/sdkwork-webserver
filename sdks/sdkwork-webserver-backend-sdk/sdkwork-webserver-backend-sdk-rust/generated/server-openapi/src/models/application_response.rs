@@ -13,9 +13,20 @@ pub struct ApplicationResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
+    /// Business application kind: the user-facing app type of a Deploy
+    /// application. Not the identity of a carrier row — `webserver_application`
+    /// identifies itself only through `deployApplicationId` and records a
+    /// server-owned default kind.
     #[serde(rename = "appKind")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_kind: Option<String>,
+
+    /// The `deploy_app.id` this carrier record carries. Absent only on a
+    /// row created before the link existed; those rows are backfilled by an
+    /// operator from the Deploy inventory (migration `0031`).
+    #[serde(rename = "deployApplicationId")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deploy_application_id: Option<String>,
 
     #[serde(rename = "siteType")]
     pub site_type: i64,

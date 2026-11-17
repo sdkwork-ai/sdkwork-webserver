@@ -56,6 +56,17 @@ pub struct WebService {
     pub(crate) repository: Arc<dyn WebRepositoryPort>,
     pub(crate) certificate_issuer: Arc<CertificateIssuer>,
     pub(crate) edge_runtime: Arc<EdgeRuntime>,
+    /// Git source importer assembled by the host.
+    ///
+    /// No longer read: `import_git_source_version` is retired because source
+    /// versions are Deploy's, so nothing in this service pulls an archive any
+    /// more. The field (and the `new_with_source_importer` /
+    /// `new_with_dependencies` parameters that supply it) stay wired so the host
+    /// assembly keeps compiling; remove the field, the port, and the
+    /// `sdkwork-webserver-source-provider` importer together with the retired
+    /// command — deletion list item 5 of
+    /// `docs/migrations/MIG-2026-0071-webserver-carrier-layer.md`.
+    #[allow(dead_code)]
     pub(crate) source_importer: Arc<dyn ApplicationSourceImporter>,
     pub(crate) domain_ownership_verifier: Arc<dyn DomainOwnershipVerifier>,
     /// Read model for aggregated traffic usage. The facts live in the Deploy

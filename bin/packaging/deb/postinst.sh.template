@@ -113,19 +113,34 @@ for secret_name in encryption-key deploy-encryption-key; do
   fi
 done
 
-# 5b1. Keyset cursor HMAC key (0600, sdkwork-owned). The repository runtime
-#      signs list keyset cursors with SDKWORK_WEBSERVER_CURSOR_HMAC_KEY and
-#      fails closed in production-like environments when it is absent; the
-#      systemd units carry it through the 0600 runtime.env EnvironmentFile.
+# 5b1. Production-like fail-closed secret set (0600, sdkwork-owned). The
+#      repository and deploy runtimes refuse to start in production-like
+#      environments when these are absent; the systemd units carry them
+#      through the 0600 runtime.env EnvironmentFile. runtime.env is
+#      regenerated on every postinst run; the underlying secret files persist.
 CURSOR_KEY_FILE="${CONFIG_ROOT}/secrets/cursor-hmac-key"
+CERT_MASTER_KEY_FILE="${CONFIG_ROOT}/secrets/deploy-certificate-master-key"
 RUNTIME_ENV_FILE="${CONFIG_ROOT}/secrets/runtime.env"
-if [ ! -s "${CURSOR_KEY_FILE}" ]; then
-  printf '%s' "$(openssl rand -hex 32)" > "${CURSOR_KEY_FILE}"
-  chown sdkwork:sdkwork "${CURSOR_KEY_FILE}"
-  chmod 0600 "${CURSOR_KEY_FILE}"
+for secret_file in "${CURSOR_KEY_FILE}" "${CERT_MASTER_KEY_FILE}"; do
+  if [ ! -s "${secret_file}" ]; then
+    printf '%s' "$(openssl rand -hex 32)" > "${secret_file}"
+    chown sdkwork:sdkwork "${secret_file}"
+    chmod 0600 "${secret_file}"
+  fi
+done
+DEPLOY_ENCRYPTION_KEY_FILE="${CONFIG_ROOT}/secrets/deploy-env-encryption-key"
+if [ ! -s "${DEPLOY_ENCRYPTION_KEY_FILE}" ]; then
+  printf '%s' "$(openssl rand -hex 32)" > "${DEPLOY_ENCRYPTION_KEY_FILE}"
+  chown sdkwork:sdkwork "${DEPLOY_ENCRYPTION_KEY_FILE}"
+  chmod 0600 "${DEPLOY_ENCRYPTION_KEY_FILE}"
 fi
 install -o root -g root -m 0640 /dev/null "${RUNTIME_ENV_FILE}"
-printf 'SDKWORK_WEBSERVER_CURSOR_HMAC_KEY=%s\n' "$(cat "${CURSOR_KEY_FILE}")" > "${RUNTIME_ENV_FILE}"
+{
+  printf 'SDKWORK_WEBSERVER_CURSOR_HMAC_KEY=%s\n' "$(cat "${CURSOR_KEY_FILE}")"
+  printf 'SDKWORK_DEPLOY_SECRET_ENCRYPTION_KEY=%s\n' "$(cat "${DEPLOY_ENCRYPTION_KEY_FILE}")"
+  printf 'SDKWORK_DEPLOY_CERTIFICATE_MASTER_KEY_FILE=%s\n' "${CERT_MASTER_KEY_FILE}"
+  printf 'SDKWORK_DEPLOY_RUNTIME_ASSIGNMENT_WORKER_ID=deploy-worker-0\n'
+} > "${RUNTIME_ENV_FILE}"
 
 # 5b2. Credential-entry bootstrap Access-Token (0600, sdkwork-owned) for the
 #      PC login page. The test environment uses a locally generated unsigned

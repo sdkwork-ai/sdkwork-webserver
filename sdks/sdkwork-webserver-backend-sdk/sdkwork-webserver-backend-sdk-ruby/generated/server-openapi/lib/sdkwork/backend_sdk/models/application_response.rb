@@ -2,7 +2,7 @@ module Sdkwork
   module BackendSdk
     module Models
       class ApplicationResponse
-              attr_accessor :id, :name, :slug, :description, :app_kind, :site_type, :status, :has_source_version, :runtime_config, :store_listing, :created_at, :updated_at
+              attr_accessor :id, :name, :slug, :description, :app_kind, :deploy_application_id, :site_type, :status, :has_source_version, :runtime_config, :store_listing, :created_at, :updated_at
 
               def initialize(attributes = {})
                 attributes = (attributes || {}).transform_keys(&:to_s)
@@ -11,6 +11,7 @@ module Sdkwork
                 @slug = attributes['slug']
                 @description = attributes['description']
                 @app_kind = attributes['appKind']
+                @deploy_application_id = attributes['deployApplicationId']
                 @site_type = attributes['siteType']
                 @status = attributes['status']
                 @has_source_version = attributes['hasSourceVersion']
@@ -33,6 +34,7 @@ module Sdkwork
                   'slug' => @slug,
                   'description' => @description,
                   'appKind' => @app_kind,
+                  'deployApplicationId' => @deploy_application_id,
                   'siteType' => @site_type,
                   'status' => @status,
                   'hasSourceVersion' => @has_source_version,

@@ -16,7 +16,16 @@ final class ApplicationResponse
 
     public ?string $description = null;
 
+    /** Business application kind: the user-facing app type of a Deploy
+application. Not the identity of a carrier row — `webserver_application`
+identifies itself only through `deployApplicationId` and records a
+server-owned default kind. */
     public ?string $appKind = null;
+
+    /** The `deploy_app.id` this carrier record carries. Absent only on a
+row created before the link existed; those rows are backfilled by an
+operator from the Deploy inventory (migration `0031`). */
+    public ?string $deployApplicationId = null;
 
     public ?int $siteType = null;
 
@@ -52,6 +61,9 @@ list and detail projections derive it in a single `EXISTS` query over
             : null;
         $this->appKind = array_key_exists('appKind', $data)
             ? $data['appKind']
+            : null;
+        $this->deployApplicationId = array_key_exists('deployApplicationId', $data)
+            ? $data['deployApplicationId']
             : null;
         $this->siteType = array_key_exists('siteType', $data)
             ? $data['siteType']
@@ -89,6 +101,7 @@ list and detail projections derive it in a single `EXISTS` query over
             'slug' => $this->slug,
             'description' => $this->description,
             'appKind' => $this->appKind,
+            'deployApplicationId' => $this->deployApplicationId,
             'siteType' => $this->siteType,
             'status' => $this->status,
             'hasSourceVersion' => $this->hasSourceVersion,

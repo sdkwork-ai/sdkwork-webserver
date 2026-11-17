@@ -1894,6 +1894,14 @@ paths:
     post:
       operationId: applications.sourceVersions.create
       summary: Register an immutable Drive-backed application source version
+      deprecated: true
+      description: |
+        RETIRED. Application publishing and release-version records are owned by
+        sdkwork-deployments (`deploy_app`). This operation no longer writes a
+        `webserver_source_version` row: it validates the request, then returns
+        the retirement conflict naming Deploy as the authority. Publish through
+        the Deploy app API instead. The list/retrieve operations stay available
+        for the historical rows.
       tags:
       - applicationSourceVersion
       security:
@@ -1943,6 +1951,13 @@ paths:
     post:
       operationId: applications.sourceVersions.gitImport.create
       summary: Import an immutable application source version from a public Git repository
+      deprecated: true
+      description: |
+        RETIRED. Application publishing and release-version records are owned by
+        sdkwork-deployments (`deploy_app`). This operation no longer pulls a
+        source archive or writes a `webserver_source_version` row: it validates
+        the request, then returns the retirement conflict naming Deploy as the
+        authority. Import the source through the Deploy app API instead.
       tags:
       - applicationSourceVersion
       security:
@@ -5876,6 +5891,11 @@ components:
           additionalProperties: true
     AppKind:
       type: string
+      description: |
+        Business application kind: the user-facing app type of a Deploy
+        application. Not the identity of a carrier row — `webserver_application`
+        identifies itself only through `deployApplicationId` and records a
+        server-owned default kind.
       enum:
       - STATIC_WEB
       - SPA_WEB
@@ -6036,9 +6056,18 @@ components:
     CreateApplicationRequest:
       type: object
       additionalProperties: false
+      description: |
+        Create input for a carrier row.
+
+        There is no `appKind` member: a carrier row's identity is
+        `deployApplicationId`, and its application kind is a server-owned default
+        (`STATIC_WEB`, which derives `siteType = 1` and the site carrier
+        application type `WEB`). The member was removed rather than made optional
+        so no caller can re-declare a second application identity on the carrier
+        row (`MIG-2026-0071` deletion-list item 6).
       required:
       - name
-      - appKind
+      - deployApplicationId
       properties:
         name:
           type: string
@@ -6052,8 +6081,22 @@ components:
         description:
           type: string
           maxLength: 500
-        appKind:
-          $ref: '#/components/schemas/AppKind'
+        deployApplicationId:
+          type: string
+          format: int64
+          pattern: '^-?[0-9]+$'
+          x-sdkwork-int64-string: true
+          description: |
+            The `deploy_app.id` of the sdkwork-deployments application this
+            carrier record carries.
+
+            Required. Deploy is the single application identity and publishing
+            authority; a webserver application exists only to carry a site,
+            domain, certificate, and reverse-proxy configuration for a Deploy
+            application, and the link is 1:1 (unique per live carrier row). The
+            service rejects a missing value with a validation error that names
+            this field - the webserver never mints an application identity of
+            its own.
         runtimeConfig:
           type: object
           additionalProperties: true
@@ -6099,6 +6142,15 @@ components:
           type: string
         appKind:
           $ref: '#/components/schemas/AppKind'
+        deployApplicationId:
+          type: string
+          format: int64
+          pattern: '^-?[0-9]+$'
+          x-sdkwork-int64-string: true
+          description: |
+            The `deploy_app.id` this carrier record carries. Absent only on a
+            row created before the link existed; those rows are backfilled by an
+            operator from the Deploy inventory (migration `0031`).
         siteType:
           type: integer
           minimum: 1

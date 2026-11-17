@@ -6,7 +6,7 @@ import { webserverModule as auditModule } from "@sdkwork/webserver-pc-admin-audi
 import { CloudAccountAdminSurface, webserverModule as cloudAccountAdminModule } from "@sdkwork/webserver-pc-admin-cloud-account";
 import { DashboardAdminSurface, TrafficStatisticsAdminSurface, webserverModule as dataStatisticsAdminModule } from "@sdkwork/webserver-pc-admin-data-statistics";
 import { ClusterOverviewSurface, webserverModule as clusterModule } from "@sdkwork/webserver-pc-admin-cluster";
-import { ServedCertificateAdminSurface, ServedDomainAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
+import { ServedCertificateAdminSurface, ServedDomainAdminSurface, ServedSiteCarrierAdminSurface, webserverModule as deliveryAdminModule } from "@sdkwork/webserver-pc-admin-delivery";
 import { IamAdminSurface, webserverModule as iamAdminModule, type IamAdminResource } from "@sdkwork/webserver-pc-admin-iam";
 import { webserverModule as mcpAdminModule, McpAdminSurface, type McpAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-mcp";
 import { webserverModule as pluginsAdminModule, PluginsAdminSurface, type PluginsAdminSurfaceProps } from "@sdkwork/webserver-pc-admin-plugins";
@@ -323,6 +323,12 @@ function WebserverAuthorizedWorkspaceSurface({ locale, runtime }: { locale: Webs
     // The Domains page additionally takes the cloud-account labels, because the
     // accounts it may bind a root domain to are an IAM-owned resource and IAM's
     // clients are this host's to drive, not a capability package's.
+    // The carrier ledger is the Web Server's own row, so it is authored here
+    // rather than bridged from Deployments: one `webserver_application` per
+    // `deploy_app`, with the Deploy link required on create. It takes the
+    // caller's scope because its write controls are gated on
+    // `web.applications.write` while the menu entry is gated on the read code.
+    "site-carriers": <ServedSiteCarrierAdminSurface locale={locale} permissionScope={permissionScope} resource="site-carriers" />,
     domains: <ServedDomainAdminSurface cloudAccounts={cloudAccountOptions} locale={locale} resource="domains" />,
     certificates: <ServedCertificateAdminSurface locale={locale} resource="certificates" />,
     // Cloud accounts are one IAM-owned resource with one route set, so the admin

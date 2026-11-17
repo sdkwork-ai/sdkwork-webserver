@@ -3783,3 +3783,32 @@ CREATE TABLE IF NOT EXISTS webserver_nginx_config_revision (
 
 CREATE INDEX IF NOT EXISTS idx_webserver_nginx_config_revision_lookup
     ON webserver_nginx_config_revision (tenant_id, config_id, version_no DESC);
+
+-- folded migration: migrations/postgres/0031_webserver_application_deploy_application_id.up.sql
+-- sdkwork:migration
+-- id: 0031_webserver_application_deploy_application_id
+-- engine: postgres
+-- module: webserver
+-- description: Links the webserver carrier record to the Deploy application it
+--   carries. `deploy_app` (sdkwork-deployments) is the single application
+--   identity and publishing authority; `webserver_application` is downgraded to
+--   a site-carrier record and MUST NOT exist without a deploy application. The
+--   column stays nullable only because pre-existing rows have no mapping yet;
+--   an operator backfills them from the Deploy inventory (see
+--   database/backfill/postgres/0031_webserver_application_deploy_application_id.sql).
+-- reversible: true
+-- rollback: down-migration
+-- transactional: true
+-- lock: access-exclusive
+-- lock_timeout: 5s
+-- statement_timeout: 120s
+
+ALTER TABLE webserver_application
+    ADD COLUMN IF NOT EXISTS deploy_application_id BIGINT;
+
+COMMENT ON COLUMN webserver_application.deploy_application_id IS
+    'Deploy application identity (deploy_app.id). 1:1 with this carrier row; NULL only on legacy rows awaiting the operator backfill';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_webserver_application_deploy_application_id
+    ON webserver_application (deploy_application_id)
+    WHERE deploy_application_id IS NOT NULL AND deleted_at IS NULL;

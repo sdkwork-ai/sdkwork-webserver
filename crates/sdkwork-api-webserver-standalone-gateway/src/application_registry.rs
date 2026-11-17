@@ -1,57 +1,41 @@
-//! Application surface registry reconciliation: the imported-module
-//! applications this edge actually materializes, folded into the tenant-facing
-//! `webserver_application` / `webserver_application_host` inventory.
+//! Application surface registry: the imported-module surfaces this edge
+//! materializes, once folded into the tenant-facing `webserver_application` /
+//! `webserver_application_host` inventory.
 //!
-//! Every module import the edge materializes is one application — a PC desktop
-//! surface, an H5 mobile browser surface, or both (`SDKWORK_WEBSERVER_SPEC.md`
-//! §17.3.2 universal import plane). Nothing else in the system derives that
-//! inventory: before this module existed, the imported module edges answered
-//! for dozens of hostnames without a single `webserver_application` row
-//! recording which application, on which server block, answers for which
-//! hostname in which lifecycle environment.
+//! **RETIRED WRITER.** The derivation below is still the accurate reading of
+//! which application surfaces an edge materializes, but the module no longer
+//! writes the inventory. `webserver_application` was downgraded to a
+//! site-carrier record that must reference the Deploy application it carries
+//! (`deploy_application_id`, unique per live row, migration `0031`);
+//! `sdkwork-deployments` owns application identity and publishing. An imported
+//! module configuration cannot know that reference, so the startup hook reports
+//! the retirement instead of creating rows, and
+//! [`reconcile_application_registry`] refuses. The `webserver_application_host`
+//! inventory moves with it: its rows hang off the carrier row.
 //!
-//! The module follows the three rules `served_domains` established, because
-//! both reconcile the same authority:
-//!
-//! * **The edge config is the authority, not a source of suggestions.** Every
-//!   row written here corresponds to an import the configuration materializes
-//!   and a `server_name` one of its server blocks declares. The module never
-//!   invents an application or a hostname.
-//! * **Reconcile, not append.** Rows this module created in a previous run —
-//!   keyed by `metadata.source = "served-config"`, `metadata.importId` and the
-//!   deterministic `imported-<importId>` slug — are retired when the
-//!   configuration stops declaring them. Rows anybody else created are
-//!   structurally out of reach: every upsert adopts an existing row only when
-//!   it carries this module's `metadata.source`, and a foreign row is reported
-//!   through the summary instead of being silently taken over.
-//! * **An incomplete observation never writes.** One unreadable import aborts
-//!   the whole pass (the merged data plane the edge would serve is built from
-//!   the same imports, so a partial observation is not a truth the inventory
-//!   may record), and an empty derived set leaves everything untouched — the
-//!   same "must never be recorded as nothing is served" rule as
-//!   `served_domains`.
-//!
-//! `admin_reset.rs` and `served_domains.rs` set the precedent this module
-//! follows: an operator/startup provisioning concern in the gateway crate
-//! writes its own statements, because it is not part of any tenant-facing API
-//! surface.
+//! What remains here is the pure observation helpers
+//! ([`derive_applications`], [`application_from_import`]) that turn a
+//! materialized import into the facts an inventory would record. They are
+//! exported and tested so the Deploy-side reconciliation can adopt the same
+//! reading of an import instead of re-deriving it.
 
 use std::collections::BTreeMap;
 
-use sdkwork_database_id::{uuid_v4, SnowflakeIdGenerator};
+use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_utils_rust::slugify;
 use sdkwork_webserver_core::{
-    configured_module_imports, is_nginx_conf_path, load_module_import_app_config,
-    normalize_tls_server_name, resolve_import_environment, resolve_import_profile,
-    sidecar_profile_environment, ResourceConfig, WebServerAppConfig, WebserverModuleImport,
+    is_nginx_conf_path, load_module_import_app_config, normalize_tls_server_name,
+    resolve_import_environment, resolve_import_profile, sidecar_profile_environment,
+    ResourceConfig, WebServerAppConfig, WebserverModuleImport,
 };
 use sqlx::PgPool;
 
-use crate::reconcile_support::SERVED_CONFIG_METADATA_SOURCE;
-
-/// Opt-out switch. Reconciliation is on by default: an edge that materializes
-/// module imports but has no application inventory is the defect this module
-/// exists to remove.
+/// Opt-out switch for the (retired) reconciliation pass.
+///
+/// It still gates whether the startup hook logs its retirement notice; the pass
+/// itself writes nothing either way. Kept so an operator's existing
+/// `SDKWORK_WEBSERVER_APPLICATION_REGISTRY_RECONCILE=disabled` setting keeps
+/// behaving as a mute switch.
 pub const APPLICATION_REGISTRY_RECONCILE_ENV: &str =
     "SDKWORK_WEBSERVER_APPLICATION_REGISTRY_RECONCILE";
 
@@ -106,6 +90,10 @@ pub struct ObservedApplication {
 /// What one reconciliation pass did. Created and already-present counts are
 /// separate so a repeated startup is visibly a no-op rather than an assumed
 /// one, mirroring [`crate::served_domains::ServedDomainsSummary`].
+///
+/// RETIRED writer: the summary type survives because it is part of the exported
+/// surface of [`reconcile_application_registry`], which now always refuses. No
+/// caller observes non-zero counts any more.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ApplicationRegistrySummary {
     pub observed_imports: usize,
@@ -121,26 +109,6 @@ pub struct ApplicationRegistrySummary {
     /// Reported rather than adopted silently: taking over somebody else's row
     /// would be indistinguishable from a config bug.
     pub rows_skipped_foreign_owner: usize,
-}
-
-/// `metadata` document for a reconciled application row.
-fn application_metadata(import_id: &str, profile: &str, environment: &str) -> String {
-    serde_json::json!({
-        "source": SERVED_CONFIG_METADATA_SOURCE,
-        "importId": import_id,
-        "profile": profile,
-        "environment": environment,
-    })
-    .to_string()
-}
-
-/// `metadata` document for a reconciled application-host row.
-fn host_metadata(import_id: &str) -> String {
-    serde_json::json!({
-        "source": SERVED_CONFIG_METADATA_SOURCE,
-        "importId": import_id,
-    })
-    .to_string()
 }
 
 /// The access surfaces and application kind of one import, read off its
@@ -288,265 +256,53 @@ pub fn derive_applications(
     Ok(applications)
 }
 
-fn next_id(generator: &SnowflakeIdGenerator) -> Result<i64, String> {
-    generator
-        .generate()
-        .map_err(|error| format!("snowflake id generation failed: {error}"))
-}
+/// Refusal text returned by the retired inventory writer.
+///
+/// Kept as a constant so the startup hook and any out-of-tree caller report the
+/// same sentence, and so the retirement is greppable from the log alone.
+pub const APPLICATION_REGISTRY_RETIRED: &str = "the webserver application surface registry no longer writes webserver_application rows: application identity and publishing are owned by sdkwork-deployments (deploy_app)";
 
-/// Reconcile the observed imports into `webserver_application` /
-/// `webserver_application_host` for one tenant, in one transaction.
+/// RETIRED: reconcile the observed imports into `webserver_application` /
+/// `webserver_application_host` for one tenant.
 ///
-/// # Why the empty case returns instead of writing
+/// `webserver_application` is downgraded to a site-carrier record that MUST
+/// reference the Deploy application it carries (`deploy_application_id`,
+/// migration `0031`). An edge that derives its inventory from imported module
+/// configuration has no way to know that reference, so it must not create
+/// carrier rows at all — doing so is exactly the "webserver owns an application
+/// identity" defect this retirement removes. The imported-surface inventory now
+/// belongs to the Deploy application bindings (`deploy_app_binding`), which the
+/// data plane already resolves per request in `deploy_fallback`.
 ///
-/// The retirement steps are only reachable with a non-empty observed set. An
-/// edge that derived no applications at all would otherwise retire every row
-/// it ever created — and since a missing runtime config file also derives as
-/// "no imports", empty must mean "leave everything alone", never "serve
-/// nothing" (the same rule as `served_domains`).
+/// The function is kept — and refuses — instead of being deleted so a caller
+/// compiled against the previous behaviour gets a named error instead of
+/// silently writing orphaned rows. Every write statement it used to run is gone.
 pub async fn reconcile_application_registry(
-    pool: &PgPool,
-    id_generator: &SnowflakeIdGenerator,
-    tenant_id: i64,
-    applications: &[ObservedApplication],
+    _pool: &PgPool,
+    _id_generator: &SnowflakeIdGenerator,
+    _tenant_id: i64,
+    _applications: &[ObservedApplication],
 ) -> Result<ApplicationRegistrySummary, String> {
-    let mut summary = ApplicationRegistrySummary {
-        observed_imports: applications.len(),
-        observed_hosts: applications.iter().map(|app| app.hosts.len()).sum(),
-        ..ApplicationRegistrySummary::default()
-    };
-    if applications.is_empty() {
-        return Ok(summary);
-    }
-
-    let observed_slugs = applications
-        .iter()
-        .map(|application| application.slug.clone())
-        .collect::<Vec<_>>();
-
-    let mut transaction = pool
-        .begin()
-        .await
-        .map_err(|error| format!("begin application registry reconciliation: {error}"))?;
-
-    for application in applications {
-        let metadata = application_metadata(
-            &application.import_id,
-            &application.profile,
-            &application.environment,
-        );
-        // The slug is the deterministic ownership key (`uk_webserver_application_slug`),
-        // so the upsert resurrects a row the reconciler itself soft-deleted in a
-        // previous pass — the same config-round-trip rule the host uniqueness
-        // comment documents. The `WHERE` predicate on the update refuses to
-        // adopt a row this module did not create.
-        let application_row: Option<(i64, bool)> = sqlx::query_as(
-            "INSERT INTO webserver_application (
-                 id, uuid, tenant_id, organization_id, data_scope, user_id,
-                 name, slug, description, application_kind, status, site_id,
-                 default_environment, access_surfaces, metadata,
-                 created_at, updated_at, version
-             ) VALUES ($1, $2, $3, 0, 1, NULL,
-                 $4, $5, $6, $7, 1, NULL,
-                 $8, $9::jsonb, $10::jsonb,
-                 NOW(), NOW(), 0)
-             ON CONFLICT (tenant_id, slug) DO UPDATE SET
-                 application_kind = EXCLUDED.application_kind,
-                 default_environment = EXCLUDED.default_environment,
-                 access_surfaces = EXCLUDED.access_surfaces,
-                 metadata = EXCLUDED.metadata,
-                 status = 1,
-                 deleted_at = NULL,
-                 deleted_by = NULL,
-                 updated_at = NOW(),
-                 version = webserver_application.version + 1
-                 WHERE webserver_application.metadata->>'source' = $11
-             RETURNING id, (xmax = 0) AS inserted",
-        )
-        .bind(next_id(id_generator)?)
-        .bind(uuid_v4())
-        .bind(tenant_id)
-        .bind(&application.name)
-        .bind(&application.slug)
-        .bind(format!(
-            "Reconciled from the served edge import `{}` ({}.{}).",
-            application.import_id, application.profile, application.environment
-        ))
-        .bind(application.application_kind)
-        .bind(&application.environment)
-        .bind(
-            serde_json::to_value(&application.access_surfaces)
-                .map_err(|error| format!("encode access surfaces: {error}"))?,
-        )
-        .bind(metadata)
-        .bind(SERVED_CONFIG_METADATA_SOURCE)
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|error| {
-            format!(
-                "upsert reconciled application {}: {error}",
-                application.import_id
-            )
-        })?;
-
-        let Some((application_id, application_inserted)) = application_row else {
-            summary.rows_skipped_foreign_owner += 1;
-            tracing::warn!(
-                tenant_id,
-                import_id = %application.import_id,
-                slug = %application.slug,
-                "a live application row with this slug was not created by the reconciler; leaving it and skipping its host inventory"
-            );
-            continue;
-        };
-        if application_inserted {
-            summary.applications_created += 1;
-        } else {
-            summary.applications_existing += 1;
-        }
-
-        let observed_environments = vec![application.environment.clone(); application.hosts.len()];
-        let observed_hostnames = application
-            .hosts
-            .iter()
-            .map(|host| host.hostname.clone())
-            .collect::<Vec<_>>();
-        let host_metadata = host_metadata(&application.import_id);
-
-        for host in &application.hosts {
-            // One live host row per (application, environment, hostname);
-            // the partial unique index releases the name on soft delete so a
-            // hostname can return after a config round-trip. The `WHERE`
-            // predicate refuses to adopt a foreign row.
-            let host_row: Option<(i64, bool)> = sqlx::query_as(
-                "INSERT INTO webserver_application_host (
-                     id, uuid, tenant_id, organization_id, data_scope, user_id,
-                     app_id, hostname, hostname_type, environment,
-                     vhost_id, path_prefix, status, metadata,
-                     created_at, updated_at, version
-                 ) VALUES ($1, $2, $3, 0, 1, NULL,
-                     $4, $5, $6, $7,
-                     $8, '/', 1, $9::jsonb,
-                     NOW(), NOW(), 0)
-                 ON CONFLICT (tenant_id, app_id, environment, hostname) WHERE deleted_at IS NULL
-                 DO UPDATE SET
-                     vhost_id = EXCLUDED.vhost_id,
-                     hostname_type = EXCLUDED.hostname_type,
-                     status = 1,
-                     metadata = EXCLUDED.metadata,
-                     updated_at = NOW(),
-                     version = webserver_application_host.version + 1
-                     WHERE webserver_application_host.metadata->>'source' = $10
-                 RETURNING id, (xmax = 0) AS inserted",
-            )
-            .bind(next_id(id_generator)?)
-            .bind(uuid_v4())
-            .bind(tenant_id)
-            .bind(application_id)
-            .bind(&host.hostname)
-            .bind(host.hostname_type)
-            .bind(&application.environment)
-            .bind(&host.vhost_id)
-            .bind(host_metadata.as_str())
-            .bind(SERVED_CONFIG_METADATA_SOURCE)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| {
-                format!(
-                    "upsert reconciled application host {} for {}: {error}",
-                    host.hostname, application.import_id
-                )
-            })?;
-            match host_row {
-                Some((_, true)) => summary.hosts_created += 1,
-                Some((_, false)) => summary.hosts_existing += 1,
-                None => summary.rows_skipped_foreign_owner += 1,
-            }
-        }
-
-        // Retire this application's reconciled host rows whose (environment,
-        // hostname) is no longer observed: removing a `server_name` removes
-        // its host row, and never a row somebody else created.
-        summary.hosts_retired += sqlx::query(
-            "UPDATE webserver_application_host host
-             SET deleted_at = NOW(), updated_at = NOW(), version = host.version + 1
-             WHERE host.tenant_id = $1
-               AND host.app_id = $2
-               AND host.deleted_at IS NULL
-               AND host.metadata->>'source' = $3
-               AND NOT EXISTS (
-                   SELECT 1
-                   FROM unnest($4::text[], $5::text[]) AS observed(environment, hostname)
-                   WHERE observed.environment = host.environment
-                     AND observed.hostname = host.hostname
-               )",
-        )
-        .bind(tenant_id)
-        .bind(application_id)
-        .bind(SERVED_CONFIG_METADATA_SOURCE)
-        .bind(&observed_environments)
-        .bind(&observed_hostnames)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| format!("retire stale reconciled hosts: {error}"))?
-        .rows_affected() as usize;
-    }
-
-    // Retire reconciled applications whose import is no longer materialized,
-    // then their remaining host rows (a soft delete does not cascade).
-    let retired_application_ids = sqlx::query_scalar::<_, i64>(
-        "UPDATE webserver_application app
-         SET deleted_at = NOW(), updated_at = NOW(), version = app.version + 1
-         WHERE app.tenant_id = $1
-           AND app.deleted_at IS NULL
-           AND app.metadata->>'source' = $2
-           AND NOT (app.slug = ANY($3))
-         RETURNING app.id",
-    )
-    .bind(tenant_id)
-    .bind(SERVED_CONFIG_METADATA_SOURCE)
-    .bind(&observed_slugs)
-    .fetch_all(&mut *transaction)
-    .await
-    .map_err(|error| format!("retire stale reconciled applications: {error}"))?;
-    summary.applications_retired = retired_application_ids.len();
-
-    if !retired_application_ids.is_empty() {
-        summary.hosts_retired += sqlx::query(
-            "UPDATE webserver_application_host host
-             SET deleted_at = NOW(), updated_at = NOW(), version = host.version + 1
-             WHERE host.tenant_id = $1
-               AND host.deleted_at IS NULL
-               AND host.metadata->>'source' = $2
-               AND host.app_id = ANY($3)",
-        )
-        .bind(tenant_id)
-        .bind(SERVED_CONFIG_METADATA_SOURCE)
-        .bind(&retired_application_ids)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| format!("retire hosts of stale reconciled applications: {error}"))?
-        .rows_affected() as usize;
-    }
-
-    transaction
-        .commit()
-        .await
-        .map_err(|error| format!("commit application registry reconciliation: {error}"))?;
-    Ok(summary)
+    Err(APPLICATION_REGISTRY_RETIRED.to_owned())
 }
 
 fn reconcile_enabled() -> bool {
     crate::reconcile_support::reconcile_enabled_for(APPLICATION_REGISTRY_RECONCILE_ENV)
 }
 
-/// Startup hook: derive the imported-application inventory from the effective
-/// module-import configuration and reconcile it.
+/// Startup hook: report that the imported-application inventory is no longer
+/// written by this edge.
 ///
-/// Never fails the process, for the same reason `served_domains` does not: an
-/// edge whose application inventory cannot be reconciled must still serve.
-/// Every outcome is logged with its counts, so an inventory that stayed empty
-/// is diagnosable from the log alone.
+/// The previous implementation derived one `webserver_application` row (plus its
+/// `webserver_application_host` rows) per materialized module import. That is an
+/// application identity minted by the edge, which the module no longer owns:
+/// every carrier row must reference its Deploy application
+/// (`deploy_application_id`), and an imported module configuration cannot supply
+/// that reference. Writing the rows would either invent an identity or write an
+/// orphan, so the hook is a no-op that says where the inventory moved.
+///
+/// Never fails the process: an edge that cannot reconcile an inventory must
+/// still serve, and this pass now touches no data at all.
 #[cfg(feature = "management")]
 pub async fn reconcile_application_registry_at_startup() {
     if !reconcile_enabled() {
@@ -556,69 +312,13 @@ pub async fn reconcile_application_registry_at_startup() {
         );
         return;
     }
-    let Some(context) =
-        crate::reconcile_support::startup_reconcile_context("the application surface registry")
-            .await
-    else {
-        return;
-    };
-
-    let imports = match configured_module_imports() {
-        Ok(imports) => imports,
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "application registry reconciliation could not enumerate the module imports; the inventory was left untouched"
-            );
-            return;
-        }
-    };
-    let applications = match derive_applications(&imports) {
-        Ok(applications) => applications,
-        Err(error) => {
-            tracing::warn!(
-                error = %error,
-                "application registry reconciliation could not materialize every import; the inventory was left untouched"
-            );
-            return;
-        }
-    };
-    if applications.is_empty() {
-        // Explicitly not a wipe: no materialized imports is either the truth
-        // or a configuration-resolution miss, and the latter must never be
-        // recorded as "nothing is served".
-        tracing::info!(
-            "no module imports are materialized; the application surface registry was left untouched"
-        );
-        return;
-    }
-
-    match reconcile_application_registry(
-        &context.pool,
-        &context.id_generator,
-        context.tenant_id,
-        &applications,
-    )
-    .await
-    {
-        Ok(summary) => tracing::info!(
-            tenant_id = context.tenant_id,
-            observed_imports = summary.observed_imports,
-            observed_hosts = summary.observed_hosts,
-            applications_created = summary.applications_created,
-            applications_existing = summary.applications_existing,
-            applications_retired = summary.applications_retired,
-            hosts_created = summary.hosts_created,
-            hosts_existing = summary.hosts_existing,
-            hosts_retired = summary.hosts_retired,
-            rows_skipped_foreign_owner = summary.rows_skipped_foreign_owner,
-            "reconciled the application surface registry"
-        ),
-        Err(error) => tracing::warn!(
-            error = %error,
-            "application registry reconciliation failed; the edge keeps serving with the previous inventory"
-        ),
-    }
+    tracing::warn!(
+        env = APPLICATION_REGISTRY_RECONCILE_ENV,
+        reason = APPLICATION_REGISTRY_RETIRED,
+        "application surface registry reconciliation is retired; nothing was written. \
+         Application identity and publishing belong to sdkwork-deployments (deploy_app); \
+         reconcile imported surfaces against deploy_app_binding there"
+    );
 }
 
 #[cfg(test)]

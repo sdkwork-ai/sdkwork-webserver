@@ -10,11 +10,13 @@ import { describe, expect, it } from "vitest";
  * a dangling section heading.
  */
 describe("workspace menu sections", () => {
-  it("declares the delivery section over applications, domains, and certificates", () => {
+  it("declares the delivery section over site carriers, applications, domains, and certificates", () => {
     const section = MENU_SECTIONS.find((candidate) => candidate.id === "delivery");
 
     expect(section?.labelKey).toBe("menuSection.delivery");
-    // Applications (bridged from sdkwork-deployments) plus the two domain menus:
+    // The carrier ledger leads the group: it is the Web Server's own row, and the
+    // domain and certificate menus below it hang off a carrier. Applications
+    // (bridged from sdkwork-deployments) come next, then the two domain menus:
     // the per-user pair the console bridges from the Deployments plane and the
     // tenant-level pair the operations surface reads off the Web Server's own
     // planes. They need a section rather than relying on `order` because `order`
@@ -22,8 +24,8 @@ describe("workspace menu sections", () => {
     // entry of its module, so on the operations surface it sorts below every
     // first entry and would render after Audit — several entries away from the
     // `domains` inventory it belongs to. A surface supplying only some of the
-    // three renders just what it has; the grouping drops the rest.
-    expect(section?.resources).toEqual(["apps", "domains", "certificates"]);
+    // four renders just what it has; the grouping drops the rest.
+    expect(section?.resources).toEqual(["site-carriers", "apps", "domains", "certificates"]);
   });
 
   it("declares the AI ecosystem section over plugins, plugin categories, skills, mcp, and sandbox instances", () => {

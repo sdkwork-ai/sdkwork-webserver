@@ -11,6 +11,7 @@ namespace SDKWork.WebserverBackendSdk.Models
         public string Slug { get; set; }
         public string? Description { get; set; }
         public string? AppKind { get; set; }
+        public string? DeployApplicationId { get; set; }
         public int SiteType { get; set; }
         public int Status { get; set; }
         public bool? HasSourceVersion { get; set; }

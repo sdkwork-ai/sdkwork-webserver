@@ -7,6 +7,11 @@ export interface ApplicationResponse {
   slug: string;
   description?: string;
   appKind?: AppKind;
+  /** The `deploy_app.id` this carrier record carries. Absent only on a
+row created before the link existed; those rows are backfilled by an
+operator from the Deploy inventory (migration `0031`).
+ */
+  deployApplicationId?: string;
   siteType: number;
   status: number;
   /** Whether the application already has a source version. The application

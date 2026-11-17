@@ -258,6 +258,9 @@ function ResourceIcon({ resource }: { resource: WebserverResourceKey }): ReactNo
       return <Shapes {...iconProps} />;
     case "app-template-versions":
       return <Boxes {...iconProps} />;
+    case "site-carriers":
+      // The carrier ledger: one row per Deploy application this edge carries.
+      return <Layers3 {...iconProps} />;
     case "domains":
       return <Globe2 {...iconProps} />;
     case "certificates":
