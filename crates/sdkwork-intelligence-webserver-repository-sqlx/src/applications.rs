@@ -8,14 +8,15 @@ use sdkwork_webserver_contract::{
 use sqlx::Row;
 
 use super::support::{
-    bool_from_row, instant_from_row, instant_write_expression, json_from_row,
+    bool_from_row, instant_from_row, instant_write_expression, is_unique_violation, json_from_row,
     json_write_expression, like_contains_pattern, new_uuid, next_id, now_rfc3339, pagination,
     resolve_site_internal_id, store_error,
 };
 
 /// SELECT projection joining the application resource row with its backing
-/// site carrier row. The application owns the resource identity (name/slug);
-/// the site owns the technical runtime state (type, status, runtime config).
+/// site carrier row. The application owns the resource identity (name/slug) and
+/// the 1:1 reference to the Deploy application it carries; the site owns the
+/// technical runtime state (type, status, runtime config).
 ///
 /// `has_source_version` is derived in the same statement rather than by a
 /// follow-up query per row: the console renders a source badge for every
@@ -24,6 +25,7 @@ use super::support::{
 /// The predicate mirrors that endpoint's filter exactly — any row in
 /// `webserver_source_version` for the backing site counts.
 const APPLICATION_SELECT: &str = "SELECT a.uuid AS application_id, a.name AS name, a.slug AS slug,
+                    a.deploy_application_id AS deploy_application_id,
                     a.description AS description, a.application_kind AS app_kind,
                     s.uuid AS site_id, s.application_type, s.site_type, s.status,
                     EXISTS (SELECT 1 FROM webserver_source_version v
@@ -135,6 +137,13 @@ impl WebRepository {
     /// Creates the application resource together with its backing site
     /// carrier row in one transaction, then links `webserver_application.site_id`.
     ///
+    /// `deploy_application_id` is mandatory: `deploy_app` (sdkwork-deployments)
+    /// is the single application identity and publishing authority, and this
+    /// row only carries a site for it. The repository rejects a missing value
+    /// rather than writing a carrier row with no Deploy application behind it —
+    /// the storage boundary enforces the same rule the service states, so no
+    /// caller can create an orphan by addressing the port directly.
+    ///
     /// `capacity` is the per-tenant application quota (PRD section 8.3). The
     /// capacity decision is made inside the transaction under a per-tenant
     /// advisory lock, so two concurrent creates cannot both observe room: the
@@ -150,6 +159,18 @@ impl WebRepository {
         capacity: i64,
         request: &CreateApplicationRequest,
     ) -> WebServiceResult<ApplicationResponse> {
+        let deploy_application_id = request.deploy_application_id.ok_or_else(|| {
+            WebServiceError::validation(
+                "deployApplicationId is required: a webserver application is only a site-carrier \
+                 record for a sdkwork-deployments application (deploy_app); application identity \
+                 and publishing are owned by Deploy",
+            )
+        })?;
+        if deploy_application_id <= 0 {
+            return Err(WebServiceError::validation(
+                "deployApplicationId must be a positive deploy_app.id",
+            ));
+        }
         let site_id = next_id(self.id_generator())?;
         let site_uuid = new_uuid();
         let application_id = next_id(self.id_generator())?;
@@ -248,13 +269,14 @@ impl WebRepository {
             .await
             .map_err(|error| store_error("insert webserver_site for application", error))?;
 
-        let application_now_expression = instant_write_expression("$12");
-        sqlx::query(audited_sql(&format!(
+        let application_now_expression = instant_write_expression("$13");
+        let insert_application = sqlx::query(audited_sql(&format!(
             "INSERT INTO webserver_application (
                 id, uuid, tenant_id, organization_id, data_scope, user_id, name, slug, description,
-                application_kind, status, site_id, default_environment, created_at, updated_at, version
+                application_kind, status, site_id, deploy_application_id, default_environment,
+                created_at, updated_at, version
              ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, 'production',
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12, 'production',
                 {application_now_expression}, {application_now_expression}, 0
              )"
         )))
@@ -269,10 +291,24 @@ impl WebRepository {
         .bind(&request.description)
         .bind(&request.app_kind)
         .bind(site_id)
+        .bind(deploy_application_id)
         .bind(&now)
         .execute(&mut *tx)
-        .await
-        .map_err(|error| store_error("insert webserver_application", error))?;
+        .await;
+
+        if let Err(error) = insert_application {
+            // `uk_webserver_application_deploy_application_id` is the 1:1
+            // guarantee: one live carrier row per Deploy application. A second
+            // carrier row for the same `deploy_app.id` is a client conflict, not
+            // an internal failure, so it is reported with the rule it broke.
+            if is_unique_violation(&error) {
+                return Err(WebServiceError::conflict(format!(
+                    "deployApplicationId {deploy_application_id} is already carried by another \
+                     webserver application; the link is 1:1"
+                )));
+            }
+            return Err(store_error("insert webserver_application", error));
+        }
 
         tx.commit()
             .await
@@ -745,6 +781,7 @@ fn map_application_row(row: &EngineRow) -> Result<ApplicationResponse, sqlx::Err
     Ok(ApplicationResponse {
         id: row.try_get("application_id")?,
         site_id: row.try_get("site_id")?,
+        deploy_application_id: row.try_get("deploy_application_id")?,
         name: row.try_get("name")?,
         slug: row.try_get("slug")?,
         description: row.try_get("description")?,

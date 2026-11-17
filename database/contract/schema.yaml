@@ -953,6 +953,7 @@ tables:
       status: { type: int32, required: true }
       site_id: { type: int64, required: false }
       default_environment: { type: string, required: true }
+      deploy_application_id: { type: int64, required: false }
       access_surfaces: { type: json, required: true }
       metadata: { type: json, required: true }
       created_at: { type: instant, required: true }
@@ -973,6 +974,7 @@ tables:
       - { name: chk_webserver_application_access_surfaces, type: check }
     indexes:
       - { name: uk_webserver_application_slug, columns: [tenant_id, slug], unique: true, predicate: "deleted_at IS NULL" }
+      - { name: uk_webserver_application_deploy_application_id, columns: [deploy_application_id], unique: true, predicate: "deploy_application_id IS NOT NULL AND deleted_at IS NULL" }
       - { name: idx_webserver_application_tenant_status_updated, columns: [tenant_id, status, updated_at] }
       - { name: idx_webserver_application_user_updated, columns: [user_id, updated_at], predicate: "user_id IS NOT NULL" }
       - { name: idx_webserver_application_tenant_updated_id, columns: [tenant_id, updated_at, id], predicate: "deleted_at IS NULL" }

@@ -622,6 +622,9 @@ pub trait WebRepositoryPort: Send + Sync {
         application_id: &str,
     ) -> WebServiceResult<String>;
 
+    /// DEPRECATED — no production caller since release identity moved to
+    /// Deploy. See the deletion list in
+    /// `docs/migrations/MIG-2026-0071-webserver-carrier-layer.md`.
     async fn create_platform_target(
         &self,
         tenant_id: i64,
@@ -972,6 +975,13 @@ pub trait WebRepositoryPort: Send + Sync {
         cursor: Option<&str>,
     ) -> WebServiceResult<SourceVersionPage>;
 
+    /// DEPRECATED — no production caller since publishing moved to Deploy.
+    ///
+    /// The service no longer calls this write (see
+    /// `WebService::create_source_version`, which refuses). It stays declared so
+    /// the historical-row read paths and the repository parity suite keep
+    /// compiling; it is on the deletion list in
+    /// `docs/migrations/MIG-2026-0071-webserver-carrier-layer.md`.
     async fn create_source_version(
         &self,
         tenant_id: i64,
@@ -998,6 +1008,9 @@ pub trait WebRepositoryPort: Send + Sync {
         cursor: Option<&str>,
     ) -> WebServiceResult<DeploymentPage>;
 
+    /// DEPRECATED — no production caller since publishing moved to Deploy.
+    /// See the deletion list in
+    /// `docs/migrations/MIG-2026-0071-webserver-carrier-layer.md`.
     async fn create_deployment(
         &self,
         tenant_id: i64,
@@ -1013,6 +1026,9 @@ pub trait WebRepositoryPort: Send + Sync {
         deployment_id: &str,
     ) -> WebServiceResult<DeploymentResponse>;
 
+    /// DEPRECATED — no production caller since publishing moved to Deploy.
+    /// See the deletion list in
+    /// `docs/migrations/MIG-2026-0071-webserver-carrier-layer.md`.
     async fn rollback_deployment(
         &self,
         tenant_id: i64,

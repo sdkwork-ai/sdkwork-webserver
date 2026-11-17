@@ -314,6 +314,20 @@ pub struct ApplicationResponse {
     pub slug: String,
     #[serde(rename = "siteId", skip_serializing_if = "Option::is_none")]
     pub site_id: Option<String>,
+    /// Deploy application this carrier record carries (`deploy_app.id`).
+    ///
+    /// `deploy_app` (sdkwork-deployments) is the single application identity and
+    /// publishing authority. `webserver_application` is only the site-carrier
+    /// record, so this reference is the 1:1 link back to the authority. `None`
+    /// means the row predates the link and is still waiting for the operator
+    /// backfill described in migration `0031`.
+    #[serde(
+        rename = "deployApplicationId",
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "sdkwork_utils_rust::serde_int64::option"
+    )]
+    pub deploy_application_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(rename = "appKind")]
@@ -356,6 +370,22 @@ pub struct CreateApplicationRequest {
     pub description: Option<String>,
     #[serde(rename = "appKind")]
     pub app_kind: String,
+    /// Deploy application this carrier record carries (`deploy_app.id`, sent as
+    /// a decimal string per the int64 wire contract).
+    ///
+    /// Required. `deploy_app` (sdkwork-deployments) is the single application
+    /// identity and publishing authority: a `webserver_application` row exists
+    /// only to carry a site, domain, certificate, and reverse-proxy
+    /// configuration for a Deploy application. The field is modeled as
+    /// `Option` only so the service can reject a missing value with a named
+    /// validation error instead of a generic deserialization failure — there is
+    /// no default and no identity is ever generated on the caller's behalf.
+    #[serde(
+        rename = "deployApplicationId",
+        default,
+        with = "sdkwork_utils_rust::serde_int64::option"
+    )]
+    pub deploy_application_id: Option<i64>,
     #[serde(rename = "runtimeConfig", default)]
     pub runtime_config: Option<Value>,
     #[serde(rename = "storeListing", default)]
