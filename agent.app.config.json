@@ -235,10 +235,10 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.16",
+    "currentVersion": "0.1.17",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.16"
+      "BETA": "0.1.17"
     },
     "notes": [
       {
