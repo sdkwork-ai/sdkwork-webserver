@@ -3359,6 +3359,29 @@ fn append_userid_headers(
 /// that declares any `add_header` replaces the inherited host array (nginx
 /// inheritance), so the route list wins when present and the host's
 /// `securityHeaders.customHeaders` is used only when it is empty.
+/// Product identity emitted as the `Server` response header on every
+/// data-plane response. nginx's core header filter sets this field on every
+/// response (hiding the upstream value, which the proxy response policy here
+/// also hides); the runtime mirrors that presence with its own product name.
+/// The value deliberately carries no version component — the configured
+/// `server_tokens off` semantics apply to the runtime's own banner too, so
+/// the field identifies the product without aiding fingerprinting.
+pub(crate) const SERVER_RESPONSE_HEADER_VALUE: &str = "sdkwork-webserver";
+
+/// Emit the product `Server` header at the response choke point, replacing
+/// whatever value earlier layers left behind (nginx's core header filter has
+/// the final word on this field for static, proxied, `return` and error
+/// responses alike).
+fn emit_server_response_header(mut response: Response<Body>) -> Response<Body> {
+    if let Ok(value) = axum::http::HeaderValue::from_str(SERVER_RESPONSE_HEADER_VALUE) {
+        response.headers_mut().insert(
+            axum::http::header::SERVER,
+            value,
+        );
+    }
+    response
+}
+
 fn effective_response_headers<'a>(
     selected: &'a SelectedRoute<'_>,
 ) -> Option<&'a [CustomHeaderConfig]> {
@@ -3458,6 +3481,7 @@ pub(crate) fn finalize_response_headers(
         None => response,
     };
     let response = apply_nginx_response_headers(response, policy, variables, uri, query);
+    let response = emit_server_response_header(response);
     append_userid_headers(response, variables.userid)
 }
 
@@ -4846,6 +4870,49 @@ mod tests {
             !should_relay_to_sibling(false, true),
             "the marker never invents a relay for an unserved host"
         );
+    }
+
+    #[test]
+    fn server_header_identifies_the_product_on_every_response() {
+        // nginx's core header filter stamps its `Server` field on every
+        // response (static, proxied, `return`, error); the runtime mirrors
+        // that presence with its own product identity, without a version
+        // component (`server_tokens off` semantics for its own banner).
+        for status in [200_u16, 204, 301, 404, 500, 502] {
+            let response = emit_server_response_header(response_with_status(status));
+            assert_eq!(
+                response
+                    .headers()
+                    .get(axum::http::header::SERVER)
+                    .and_then(|value| value.to_str().ok()),
+                Some(SERVER_RESPONSE_HEADER_VALUE),
+                "status {status} must carry the product Server identity"
+            );
+        }
+    }
+
+    #[test]
+    fn server_header_replaces_any_earlier_value() {
+        // The core header filter has the final word: an earlier layer's
+        // `Server` field (an upstream leftover, a mapped `add_header`) is
+        // replaced, never duplicated.
+        let mut response = response_with_status(200);
+        response.headers_mut().insert(
+            axum::http::header::SERVER,
+            axum::http::HeaderValue::from_static("upstream/1.0"),
+        );
+        response.headers_mut().append(
+            axum::http::header::SERVER,
+            axum::http::HeaderValue::from_static("another/2.0"),
+        );
+        let response = emit_server_response_header(response);
+        let values: Vec<&str> = response
+            .headers()
+            .get_all(axum::http::header::SERVER)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .collect();
+        assert_eq!(values, vec![SERVER_RESPONSE_HEADER_VALUE]);
     }
 }
 
