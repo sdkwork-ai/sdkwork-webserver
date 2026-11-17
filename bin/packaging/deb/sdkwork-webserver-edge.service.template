@@ -17,6 +17,10 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 # The nginx-compat configuration materializes once at start (multi-file
 # configs have no single-file revision watch); a TLS material swap is applied
 # with `systemctl restart sdkwork-webserver-edge` after `active` is relinked.
+# Environment-only secrets (the keyset cursor HMAC key is read from the
+# process environment by the repository runtime) are carried by the 0600
+# runtime.env file the installer provisions next to the other secrets.
+EnvironmentFile=/etc/sdkwork/webserver/secrets/runtime.env
 ExecStart=/usr/lib/sdkwork/webserver/bin/sdkwork-api-webserver-standalone-gateway serve-nginx /etc/sdkwork/webserver/nginx.production.conf
 Restart=on-failure
 RestartSec=5s
