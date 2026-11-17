@@ -1,5 +1,9 @@
 //! Provider transport selection for the website data plane.
 //!
+//! identity:service - the split data plane calls its sibling Internal APIs with the
+//! node's declared machine identity (ingress token + IAM application access token);
+//! there is no end-user request at this boundary to borrow caller tokens from.
+//!
 //! MODULE_SPEC.md §4.2 makes the in-process transport the default: the Web
 //! Server reaches Drive and Knowledgebase through their own service/repository
 //! ports on the shared PostgreSQL pool. A **deliberate split deployment** (the
@@ -61,28 +65,27 @@ pub fn drive_http_client(
         SdkworkConfig as DriveSdkworkConfig, SdkworkCustomClient as DriveSdkworkCustomClient,
     };
 
-    let mut sdk_config = DriveSdkworkConfig::new(sdkwork_utils_rust::service_base_url::registry_base_url_or(
-        "sdkwork-drive",
-        base_url,
-    ));
+    let mut sdk_config = DriveSdkworkConfig::new(
+        sdkwork_utils_rust::service_base_url::registry_base_url_or("sdkwork-drive", base_url),
+    );
     sdk_config.timeout_ms = PROVIDER_HTTP_TIMEOUT_MS;
     sdk_config.max_response_body_bytes = usize::try_from(maximum_content_bytes)
         .map_err(|_| "Drive provider content ceiling does not fit usize".to_owned())?;
     let client = DriveSdkworkCustomClient::new(sdk_config)
         .map_err(|_| "generated Drive Internal SDK client construction failed".to_owned())?;
-    let credentials = sdkwork_utils_rust::service_identity::ServiceCredentials::new(
-        ingress_token,
-        access_token,
-    );
+    let credentials =
+        sdkwork_utils_rust::service_identity::ServiceCredentials::new(ingress_token, access_token);
     if !credentials.is_complete() {
-        return Err(sdkwork_utils_rust::service_identity::missing_service_credentials(
-            "sdkwork-drive internal-api (website data plane)",
-            DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
-            DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
-        ));
+        return Err(
+            sdkwork_utils_rust::service_identity::missing_service_credentials(
+                "sdkwork-drive internal-api (website data plane)",
+                DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+                DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
+            ),
+        );
     }
-    for (name, value) in credentials
-        .wire_headers(sdkwork_utils_rust::service_identity::ServiceTokenKind::Ingress)
+    for (name, value) in
+        credentials.wire_headers(sdkwork_utils_rust::service_identity::ServiceTokenKind::Ingress)
     {
         client.set_header(name, value);
     }
@@ -105,29 +108,30 @@ pub fn knowledgebase_http_client(
         SdkworkCustomClient as KnowledgebaseSdkworkCustomClient,
     };
 
-    let mut sdk_config =
-        KnowledgebaseSdkworkConfig::new(sdkwork_utils_rust::service_base_url::registry_base_url_or(
+    let mut sdk_config = KnowledgebaseSdkworkConfig::new(
+        sdkwork_utils_rust::service_base_url::registry_base_url_or(
             "sdkwork-knowledgebase",
             base_url,
-        ));
+        ),
+    );
     sdk_config.timeout_ms = PROVIDER_HTTP_TIMEOUT_MS;
     sdk_config.max_response_body_bytes = maximum_response_body_bytes;
     let client = KnowledgebaseSdkworkCustomClient::new(sdk_config).map_err(|_| {
         "generated Knowledgebase Internal SDK client construction failed".to_owned()
     })?;
-    let credentials = sdkwork_utils_rust::service_identity::ServiceCredentials::new(
-        ingress_token,
-        access_token,
-    );
+    let credentials =
+        sdkwork_utils_rust::service_identity::ServiceCredentials::new(ingress_token, access_token);
     if !credentials.is_complete() {
-        return Err(sdkwork_utils_rust::service_identity::missing_service_credentials(
-            "sdkwork-knowledgebase internal-api (website data plane)",
-            KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
-            KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
-        ));
+        return Err(
+            sdkwork_utils_rust::service_identity::missing_service_credentials(
+                "sdkwork-knowledgebase internal-api (website data plane)",
+                KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+                KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
+            ),
+        );
     }
-    for (name, value) in credentials
-        .wire_headers(sdkwork_utils_rust::service_identity::ServiceTokenKind::Ingress)
+    for (name, value) in
+        credentials.wire_headers(sdkwork_utils_rust::service_identity::ServiceTokenKind::Ingress)
     {
         client.set_header(name, value);
     }
@@ -139,20 +143,18 @@ pub fn knowledgebase_http_client(
 /// Unset defaults to in-process. `in_process` is accepted explicitly so a
 /// deployment can pin the default; every other value is a startup error — a typo
 /// must never silently pick a transport.
-pub fn provider_transport(
-    mode_key: &'static str,
-) -> Result<WebsiteProviderTransport, String> {
+pub fn provider_transport(mode_key: &'static str) -> Result<WebsiteProviderTransport, String> {
     match std::env::var(mode_key) {
         Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
             "" | "in_process" | "in-process" | "embedded" => {
                 Ok(WebsiteProviderTransport::InProcess)
             }
             "http" => Ok(WebsiteProviderTransport::Http),
-            other => Err(format!("{mode_key} must be in_process or http (got {other})")),
+            other => Err(format!(
+                "{mode_key} must be in_process or http (got {other})"
+            )),
         },
         Err(std::env::VarError::NotPresent) => Ok(WebsiteProviderTransport::InProcess),
-        Err(std::env::VarError::NotUnicode(_)) => {
-            Err(format!("{mode_key} must be UTF-8"))
-        }
+        Err(std::env::VarError::NotUnicode(_)) => Err(format!("{mode_key} must be UTF-8")),
     }
 }
