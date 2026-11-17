@@ -66,6 +66,21 @@ describe("workspace delivery surfaces", () => {
     expect(renderers).toMatch(/certificates:\s*<ServedCertificateAdminSurface\b/);
   });
 
+  it("mounts the carrier ledger on the operations surface only, gated on the application read code", () => {
+    // The carrier row is the Web Server's own (`webserver_application`), so its
+    // page is authored here and mounted on the operations surface. The tenant
+    // console bridges Deploy's pages instead and must never mint a carrier.
+    const renderers = rendererBlock("adminResourceRenderers");
+
+    expect(renderers).toMatch(/"site-carriers":\s*<ServedSiteCarrierAdminSurface\b/);
+    expect(rendererBlock("resourceRenderers")).not.toContain("ServedSiteCarrierAdminSurface");
+
+    // The menu entry keeps the read gate the Domains ledger uses; the page hides
+    // its own write controls unless the caller also holds the write code.
+    expect(source("packages/sdkwork-webserver-pc-admin-delivery/src/module.ts"))
+      .toMatch(/resource: "site-carriers"[\s\S]*?permission: "web\.applications\.read"/);
+  });
+
   it("keeps the single-node menus and their pages off the operations surface", () => {
     const admin = moduleList("adminModules");
 

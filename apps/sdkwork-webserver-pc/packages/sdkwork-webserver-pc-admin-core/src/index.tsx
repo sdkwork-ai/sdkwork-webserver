@@ -18,6 +18,13 @@ export { createDriveAppClient };
 // (frontend composition feature-package import rule).
 export type {
   ApplicationDomainResponse,
+  // The carrier row (`webserver_application`) and its two request shapes. The
+  // Site Carriers page in the delivery capability package renders and submits
+  // them, and the frontend composition rule lets a feature package take wire
+  // types only through this core export — never from the generated SDK itself.
+  ApplicationResponse,
+  CreateApplicationRequest,
+  UpdateApplicationRequest,
   CertificateResponse,
   ClusterEventResponse,
   ClusterHostResponse,
