@@ -3372,7 +3372,7 @@ pub(crate) const SERVER_RESPONSE_HEADER_VALUE: &str = "sdkwork-webserver";
 /// whatever value earlier layers left behind (nginx's core header filter has
 /// the final word on this field for static, proxied, `return` and error
 /// responses alike).
-fn emit_server_response_header(mut response: Response<Body>) -> Response<Body> {
+pub(crate) fn emit_server_response_header(mut response: Response<Body>) -> Response<Body> {
     if let Ok(value) = axum::http::HeaderValue::from_str(SERVER_RESPONSE_HEADER_VALUE) {
         response.headers_mut().insert(
             axum::http::header::SERVER,
@@ -3380,6 +3380,16 @@ fn emit_server_response_header(mut response: Response<Body>) -> Response<Body> {
         );
     }
     response
+}
+
+/// Axum middleware form of the product `Server` identity for routers that do
+/// not flow through the data-plane response choke point (the Adaptive Web
+/// shell served by the management process).
+pub(crate) async fn server_header_middleware(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response<Body> {
+    emit_server_response_header(next.run(request).await)
 }
 
 fn effective_response_headers<'a>(
