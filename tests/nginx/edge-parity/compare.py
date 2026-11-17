@@ -74,7 +74,9 @@ import sys
 # Fields where the runtime edge is allowed to differ from the stock-nginx
 # oracle, each tied to its normative authority. Keys are lowercase headers.
 KNOWN_HEADER_ALLOWANCES: dict[str, str] = {
-    "server": "nginx-compatible edge never sends an implementation banner",
+    "server": "identity parity with value difference: stock nginx sends its own "
+              "banner, the runtime edge identifies itself as sdkwork-webserver "
+              "(product banner, never an nginx version)",
     "cache-control": "static delivery declares public, no-cache (ENVIRONMENT_SPEC §13)",
     "accept-ch": "adaptive ingress advertises Sec-CH-UA-Mobile (APP_RUNTIME_TOPOLOGY_SPEC)",
     "x-content-type-options": "secure-response baseline adds nosniff (SECURITY_SPEC)",

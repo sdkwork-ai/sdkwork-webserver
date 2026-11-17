@@ -103,10 +103,14 @@ def generated_error_page(record) -> bool:
 
 def known_header_reason(case, name, expected, actual, expected_record, actual_record):
     if name == "server":
-        if isinstance(expected, str) and expected.startswith("nginx/") and actual is None:
+        if isinstance(expected, str) and expected.startswith("nginx/") and (
+            actual is None or actual == "sdkwork-webserver"
+        ):
             return (
-                "the runtime never advertises an implementation banner; the reference "
-                "build always appends its nginx version (recorded as the identity witness)"
+                "identity witness difference: the reference build appends its nginx "
+                "version; the runtime either stays banner-free (older captures) or "
+                "identifies itself as sdkwork-webserver — its own product banner, "
+                "never an nginx version"
             )
         return None
     if name == "cache-control":
