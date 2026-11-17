@@ -94,6 +94,8 @@ spec:
                   key: node-uuid
             - name: SDKWORK_WEBSERVER_NODE_TOKEN_FILE
               value: /run/secrets/sdkwork-webserver-node/node-token
+            - name: SDKWORK_WEBSERVER_NODE_ACCESS_TOKEN_FILE
+              value: /run/secrets/sdkwork-webserver-node/node-app-access-token
             - name: SDKWORK_WEBSERVER_WEBSITE_RUNTIME_ENVIRONMENT
               value: production
             - name: SDKWORK_WEBSERVER_WEBSITE_RUNTIME_SET_RECOVERY_DIRECTORY
@@ -125,10 +127,14 @@ spec:
               value: https://drive-internal.sdkwork.com
             - name: SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE
               value: /run/secrets/sdkwork-webserver-node/drive-ingress-token
+            - name: SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE
+              value: /run/secrets/sdkwork-webserver-node/drive-app-access-token
             - name: SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_BASE_URL
               value: https://knowledgebase.sdkwork.com
             - name: SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE
               value: /run/secrets/sdkwork-webserver-node/knowledgebase-ingress-token
+            - name: SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE
+              value: /run/secrets/sdkwork-webserver-node/knowledgebase-app-access-token
             - name: SDKWORK_WEBSERVER_DATA_PLANE_OPERATIONS_BIND
               value: 127.0.0.1:3901
           startupProbe:

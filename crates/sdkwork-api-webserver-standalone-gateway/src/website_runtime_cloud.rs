@@ -1,4 +1,7 @@
 use sdkwork_utils_rust::service_base_url::registry_base_url_or;
+use sdkwork_utils_rust::service_identity::{
+    missing_service_credentials, ServiceCredentials, ServiceTokenKind,
+};
 use sdkwork_utils_rust::uuid;
 use sdkwork_webserver_contract::RuntimeObservationState;
 use sdkwork_webserver_core::website_runtime::MAX_WEBSITE_RUNTIME_SET_BYTES;
@@ -42,12 +45,15 @@ pub(crate) enum CloudRuntimeAssignmentError {
     Request,
     #[error("Web runtime assignment response violated its contract")]
     Response,
+    #[error("{0}")]
+    Configuration(String),
 }
 
 impl CloudRuntimeAssignmentSource {
     pub(crate) fn new(
         base_url: String,
         node_token: String,
+        access_token: String,
         node_uuid: String,
         environment: String,
         node_version: String,
@@ -59,7 +65,19 @@ impl CloudRuntimeAssignmentSource {
         config.max_response_body_bytes = MAX_WEBSITE_RUNTIME_SET_BYTES + RESPONSE_ENVELOPE_BYTES;
         let client =
             SdkworkCustomClient::new(config).map_err(|_| CloudRuntimeAssignmentError::Client)?;
-        client.set_api_key(node_token);
+        let credentials = ServiceCredentials::new(node_token, access_token);
+        if !credentials.is_complete() {
+            return Err(CloudRuntimeAssignmentError::Configuration(
+                missing_service_credentials(
+                    "sdkwork-webserver internal-api (website runtime pull)",
+                    "SDKWORK_WEBSERVER_NODE_TOKEN_FILE",
+                    "SDKWORK_WEBSERVER_NODE_ACCESS_TOKEN_FILE",
+                ),
+            ));
+        }
+        for (name, value) in credentials.wire_headers(ServiceTokenKind::Ingress) {
+            client.set_header(name, value);
+        }
         Ok(Self {
             api: client.runtime(),
             node_uuid,

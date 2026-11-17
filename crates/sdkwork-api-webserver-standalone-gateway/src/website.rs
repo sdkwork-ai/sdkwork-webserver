@@ -62,6 +62,8 @@ pub const WEBSITE_RUNTIME_ASSIGNMENT_SOURCE_ENV: &str =
     "SDKWORK_WEBSERVER_RUNTIME_ASSIGNMENT_SOURCE";
 pub const WEB_INTERNAL_API_BASE_URL_ENV: &str = "SDKWORK_WEBSERVER_INTERNAL_API_BASE_URL";
 pub const WEB_NODE_TOKEN_FILE_ENV: &str = "SDKWORK_WEBSERVER_NODE_TOKEN_FILE";
+/// IAM application access token file for the internal runtime-assignment pull.
+pub const WEB_NODE_ACCESS_TOKEN_FILE_ENV: &str = "SDKWORK_WEBSERVER_NODE_ACCESS_TOKEN_FILE";
 pub const WEBSITE_NODE_UUID_ENV: &str = "SDKWORK_WEBSERVER_NODE_UUID";
 pub const WEBSITE_RUNTIME_ENVIRONMENT_ENV: &str = "SDKWORK_WEBSERVER_WEBSITE_RUNTIME_ENVIRONMENT";
 pub const WEBSITE_NODE_VERSION_ENV: &str = "SDKWORK_WEBSERVER_NODE_VERSION";
@@ -85,8 +87,9 @@ pub const WEBSITE_PROVIDER_EVENT_CONFIG_FILE_ENV: &str =
 pub const WEBSITE_TENANT_ID_ENV: &str = "SDKWORK_WEBSERVER_TENANT_ID";
 pub const WEBSITE_ORGANIZATION_ID_ENV: &str = "SDKWORK_WEBSERVER_ORGANIZATION_ID";
 pub use crate::website_provider_http_adapter::{
-    DRIVE_INTERNAL_API_BASE_URL_ENV, DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
-    DRIVE_PROVIDER_MODE_ENV, KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV,
+    DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV, DRIVE_INTERNAL_API_BASE_URL_ENV,
+    DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV, DRIVE_PROVIDER_MODE_ENV,
+    KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV, KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV,
     KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV, KNOWLEDGEBASE_PROVIDER_MODE_ENV,
 };
 pub const TLS_RUNTIME_SOURCE_ENV: &str = "SDKWORK_WEBSERVER_TLS_RUNTIME_SOURCE";
@@ -619,6 +622,11 @@ fn configured_runtime_set_source(
             validate_opaque_config_id(&node_uuid, 64, WEBSITE_NODE_UUID_ENV)?;
             let token_file = required_env(WEB_NODE_TOKEN_FILE_ENV)?;
             let node_token = read_ingress_token(Path::new(&token_file), WEB_NODE_TOKEN_FILE_ENV)?;
+            let access_token_file = required_env(WEB_NODE_ACCESS_TOKEN_FILE_ENV)?;
+            let access_token = read_ingress_token(
+                Path::new(&access_token_file),
+                WEB_NODE_ACCESS_TOKEN_FILE_ENV,
+            )?;
             let node_version = optional_env(WEBSITE_NODE_VERSION_ENV)?
                 .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
             validate_bounded_config_text(&node_version, 64, WEBSITE_NODE_VERSION_ENV)?;
@@ -626,6 +634,7 @@ fn configured_runtime_set_source(
                 source: Arc::new(CloudRuntimeAssignmentSource::new(
                     base_url,
                     node_token,
+                    access_token,
                     node_uuid,
                     environment,
                     node_version,
@@ -979,6 +988,7 @@ async fn build_knowledgebase_provider(
                 WebsiteProviderType::Knowledgebase,
                 KNOWLEDGEBASE_INTERNAL_API_BASE_URL_ENV,
                 KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+                KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
             )?;
             let Some(config) = config else {
                 return Ok(None);
@@ -986,9 +996,10 @@ async fn build_knowledgebase_provider(
             knowledgebase_http_client(
                 &config.base_url,
                 config.ingress_token,
+                config.access_token,
                 MAXIMUM_KNOWLEDGEBASE_RESPONSE_BYTES,
             )
-            .map_err(|_| WebsiteDataPlaneBootstrapError::KnowledgebaseSdkClient)?
+            .map_err(WebsiteDataPlaneBootstrapError::ProviderConfig)?
         }
         WebsiteProviderTransport::InProcess => {
             if !required {
@@ -1021,6 +1032,7 @@ async fn build_drive_provider(
                 WebsiteProviderType::Drive,
                 DRIVE_INTERNAL_API_BASE_URL_ENV,
                 DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+                DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
             )?;
             let Some(config) = config else {
                 return Ok(None);
@@ -1028,9 +1040,10 @@ async fn build_drive_provider(
             drive_http_client(
                 &config.base_url,
                 config.ingress_token,
+                config.access_token,
                 MAXIMUM_DRIVE_CONTENT_BYTES,
             )
-            .map_err(|_| WebsiteDataPlaneBootstrapError::DriveSdkClient)?
+            .map_err(WebsiteDataPlaneBootstrapError::ProviderConfig)?
         }
         WebsiteProviderTransport::InProcess => {
             if !required {
@@ -1271,6 +1284,8 @@ fn app_config_runtime_environment(
 struct ProviderSdkConfig {
     base_url: String,
     ingress_token: String,
+    /// IAM application access token scoping this machine caller.
+    access_token: String,
 }
 
 impl ProviderSdkConfig {
@@ -1280,6 +1295,7 @@ impl ProviderSdkConfig {
         provider_type: WebsiteProviderType,
         base_url_key: &'static str,
         token_file_key: &'static str,
+        access_token_file_key: &'static str,
     ) -> Result<Option<Self>, WebsiteDataPlaneBootstrapError> {
         let base_url = env::var(base_url_key).ok();
         let token_file = env::var(token_file_key).ok();
@@ -1288,10 +1304,20 @@ impl ProviderSdkConfig {
             (None, None) => {
                 Err(WebsiteDataPlaneBootstrapError::ProviderUnavailable { provider_type })
             }
-            (Some(base_url), Some(token_file)) => Ok(Some(Self {
-                base_url: validate_base_url(&base_url, environment, base_url_key)?,
-                ingress_token: read_ingress_token(Path::new(token_file.trim()), token_file_key)?,
-            })),
+            (Some(base_url), Some(token_file)) => {
+                let access_token_file = required_env(access_token_file_key)?;
+                Ok(Some(Self {
+                    base_url: validate_base_url(&base_url, environment, base_url_key)?,
+                    ingress_token: read_ingress_token(
+                        Path::new(token_file.trim()),
+                        token_file_key,
+                    )?,
+                    access_token: read_ingress_token(
+                        Path::new(access_token_file.trim()),
+                        access_token_file_key,
+                    )?,
+                }))
+            }
             _ => Err(WebsiteDataPlaneBootstrapError::ProviderConfig(format!(
                 "{base_url_key} and {token_file_key} must be configured together"
             ))),
@@ -2306,6 +2332,7 @@ mod tests {
         let source = CloudRuntimeAssignmentSource::new(
             format!("http://{address}"),
             "node-token-7".to_owned(),
+            "node-access-token-7".to_owned(),
             "node-0001".to_owned(),
             "production".to_owned(),
             "1.2.3".to_owned(),
@@ -2395,6 +2422,7 @@ mod tests {
         let source = CloudRuntimeAssignmentSource::new(
             format!("http://{address}"),
             "node-token-7".to_owned(),
+            "node-access-token-7".to_owned(),
             "node-0001".to_owned(),
             "production".to_owned(),
             "1.2.3".to_owned(),

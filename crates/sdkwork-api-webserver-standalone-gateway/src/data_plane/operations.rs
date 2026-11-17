@@ -436,6 +436,12 @@ pub(crate) async fn serve_operations_listener(
     .layer(TimeoutLayer::with_status_code(
         StatusCode::REQUEST_TIMEOUT,
         OPERATIONS_REQUEST_TIMEOUT,
+    ))
+    // The operations surface (health probes, diagnostics, metrics) carries the
+    // same product `Server` identity as the data plane and the management
+    // ingress.
+    .layer(axum::middleware::from_fn(
+        super::server_header_middleware,
     ));
     tracing::info!(
         address = %prepared.address,
