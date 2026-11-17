@@ -104,10 +104,16 @@ pub async fn build_router() -> Result<Router, String> {
         "assembled Web Server standalone API profile"
     );
     let router = hosted.router;
-    Ok(match app_shell {
+    let router = match app_shell {
         Some(config) => config.mount(router),
         None => router,
-    })
+    };
+    // Outermost layer: every management-ingress response (the composed API
+    // routes and the Adaptive Web shell alike) carries the product `Server`
+    // identity, mirroring the data-plane response choke point.
+    Ok(router.layer(axum::middleware::from_fn(
+        crate::data_plane::server_header_middleware,
+    )))
 }
 
 pub async fn run_database_migrate_only() -> Result<(), String> {

@@ -211,14 +211,7 @@ impl AdaptiveAppShellConfig {
             },
             config,
         );
-        // Outermost layer: every shell response (explicit API routes and the
-        // SPA fallback alike) carries the product `Server` identity, matching
-        // the data-plane response choke point.
-        router
-            .fallback_service(handler)
-            .layer(axum::middleware::from_fn(
-                crate::data_plane::server_header_middleware,
-            ))
+        router.fallback_service(handler)
     }
 }
 
