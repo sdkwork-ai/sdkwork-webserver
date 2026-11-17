@@ -20,6 +20,15 @@ pub const KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV: &str =
 pub const DRIVE_INTERNAL_API_BASE_URL_ENV: &str = "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_BASE_URL";
 pub const DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV: &str =
     "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE";
+/// IAM application access token file required alongside the ingress token.
+///
+/// The Internal API credential profile wants `X-SDKWork-Ingress-Token` plus an
+/// `Access-Token` that resolves to an application/tenant scope
+/// (`APP_SDK_INTEGRATION_SPEC.md` §5.2.1).
+pub const DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV: &str =
+    "SDKWORK_WEBSERVER_DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE";
+pub const KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV: &str =
+    "SDKWORK_WEBSERVER_KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE";
 
 /// `in_process` (default) or `http` (explicit split deployment).
 pub const DRIVE_PROVIDER_MODE_ENV: &str = "SDKWORK_WEBSERVER_DRIVE_PROVIDER_MODE";
@@ -45,6 +54,7 @@ pub const PROVIDER_HTTP_TIMEOUT_MS: u64 = 30_000;
 pub fn drive_http_client(
     base_url: &str,
     ingress_token: String,
+    access_token: String,
     maximum_content_bytes: u64,
 ) -> Result<std::sync::Arc<dyn sdkwork_webserver_drive_provider::DriveWebsiteSdkClient>, String> {
     use sdkwork_drive_internal_sdk::{
@@ -60,7 +70,22 @@ pub fn drive_http_client(
         .map_err(|_| "Drive provider content ceiling does not fit usize".to_owned())?;
     let client = DriveSdkworkCustomClient::new(sdk_config)
         .map_err(|_| "generated Drive Internal SDK client construction failed".to_owned())?;
-    client.set_api_key(ingress_token);
+    let credentials = sdkwork_utils_rust::service_identity::ServiceCredentials::new(
+        ingress_token,
+        access_token,
+    );
+    if !credentials.is_complete() {
+        return Err(sdkwork_utils_rust::service_identity::missing_service_credentials(
+            "sdkwork-drive internal-api (website data plane)",
+            DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+            DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
+        ));
+    }
+    for (name, value) in credentials
+        .wire_headers(sdkwork_utils_rust::service_identity::ServiceTokenKind::Ingress)
+    {
+        client.set_header(name, value);
+    }
     Ok(std::sync::Arc::new(client.drive_internal_publishing()))
 }
 
@@ -69,6 +94,7 @@ pub fn drive_http_client(
 pub fn knowledgebase_http_client(
     base_url: &str,
     ingress_token: String,
+    access_token: String,
     maximum_response_body_bytes: usize,
 ) -> Result<
     std::sync::Arc<dyn sdkwork_webserver_knowledgebase_provider::KnowledgebaseWikiSdkClient>,
@@ -89,7 +115,22 @@ pub fn knowledgebase_http_client(
     let client = KnowledgebaseSdkworkCustomClient::new(sdk_config).map_err(|_| {
         "generated Knowledgebase Internal SDK client construction failed".to_owned()
     })?;
-    client.set_api_key(ingress_token);
+    let credentials = sdkwork_utils_rust::service_identity::ServiceCredentials::new(
+        ingress_token,
+        access_token,
+    );
+    if !credentials.is_complete() {
+        return Err(sdkwork_utils_rust::service_identity::missing_service_credentials(
+            "sdkwork-knowledgebase internal-api (website data plane)",
+            KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+            KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
+        ));
+    }
+    for (name, value) in credentials
+        .wire_headers(sdkwork_utils_rust::service_identity::ServiceTokenKind::Ingress)
+    {
+        client.set_header(name, value);
+    }
     Ok(std::sync::Arc::new(client.knowledgebase_internal_wiki()))
 }
 
