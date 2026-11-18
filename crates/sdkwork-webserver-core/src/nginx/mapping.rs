@@ -8906,10 +8906,12 @@ fn parse_listen_address(address: &str, spec: &str) -> Result<(String, u16), Stri
         let (host, port) = rest
             .split_once(']')
             .ok_or_else(|| format!("invalid listen address `{spec}`"))?;
+        // The port parse is shared with the gateways (listen-bind resolution is
+        // owned by sdkwork_utils_rust::service_base_url, APP_SDK_INTEGRATION_SPEC
+        // §5.2) so standalone and cloud cannot drift.
         let port = match port.strip_prefix(':') {
-            Some(port_text) => port_text
-                .parse::<u16>()
-                .map_err(|_| format!("invalid listen port in `{spec}`"))?,
+            Some(_) => sdkwork_utils_rust::service_base_url::bind_port(address)
+                .ok_or_else(|| format!("invalid listen port in `{spec}`"))?,
             None => 80,
         };
         return Ok((host.to_owned(), port));
@@ -8917,10 +8919,9 @@ fn parse_listen_address(address: &str, spec: &str) -> Result<(String, u16), Stri
     if address == "::" {
         return Ok(("::".to_owned(), 80));
     }
-    if let Some((host, port_text)) = address.rsplit_once(':') {
-        let port = port_text
-            .parse::<u16>()
-            .map_err(|_| format!("invalid listen port in `{spec}`"))?;
+    if let Some((host, _port)) = address.rsplit_once(':') {
+        let port = sdkwork_utils_rust::service_base_url::bind_port(address)
+            .ok_or_else(|| format!("invalid listen port in `{spec}`"))?;
         let normalized = match host {
             "" | "0.0.0.0" | "*" => "0.0.0.0".to_owned(),
             other => other.to_owned(),
@@ -9970,14 +9971,13 @@ fn parse_mail_listen_address(address: &str, spec: &str) -> Result<(String, u16),
         let (host, port) = rest
             .split_once(']')
             .ok_or_else(|| format!("invalid mail listen address `{spec}`"))?;
-        let Some(port_text) = port.strip_prefix(':') else {
+        let Some(_port_text) = port.strip_prefix(':') else {
             return Err(format!(
                 "mail listen `{spec}` requires an explicit port; nginx binds an ephemeral port when it is omitted, which the runtime listener model does not support"
             ));
         };
-        let port = port_text
-            .parse::<u16>()
-            .map_err(|_| format!("invalid mail listen port in `{spec}`"))?;
+        let port = sdkwork_utils_rust::service_base_url::bind_port(address)
+            .ok_or_else(|| format!("invalid mail listen port in `{spec}`"))?;
         return Ok((host.to_owned(), port));
     }
     if address == "::" {
@@ -9985,10 +9985,9 @@ fn parse_mail_listen_address(address: &str, spec: &str) -> Result<(String, u16),
             "mail listen `{spec}` requires an explicit port; nginx binds an ephemeral port when it is omitted, which the runtime listener model does not support"
         ));
     }
-    if let Some((host, port_text)) = address.rsplit_once(':') {
-        let port = port_text
-            .parse::<u16>()
-            .map_err(|_| format!("invalid mail listen port in `{spec}`"))?;
+    if let Some((host, _port)) = address.rsplit_once(':') {
+        let port = sdkwork_utils_rust::service_base_url::bind_port(address)
+            .ok_or_else(|| format!("invalid mail listen port in `{spec}`"))?;
         let normalized = match host {
             "" | "0.0.0.0" | "*" => "0.0.0.0".to_owned(),
             other => other.to_owned(),
