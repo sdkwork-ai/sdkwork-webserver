@@ -47,6 +47,12 @@ const DOCUMENT_ROOT_ALLOWLIST = '/opt/vuesource';
 // it the same way it passes the document-root allowlist. Without it the
 // validator fail-closes on the deliberate worker/serving-root mismatch.
 const ACME_WEBROOT = '/var/www/html';
+// A contract gate must validate the fixture alone. On a host that also runs
+// an installed webserver, the canonical /etc/sdkwork/webserver/config.toml is
+// discovered at startup and its materialization OVERWRITES the process env
+// (including the ACME webroot above), so the gate redirects the discovery to
+// an empty runtime config for the duration of this one validation.
+const EMPTY_RUNTIME_CONFIG = path.join(root, 'tmp', 'nginx-real-world-empty-config.toml');
 
 const log = (message) => process.stderr.write(`[nginx-real-world] ${message}\n`);
 
@@ -65,6 +71,9 @@ for (const [label, target] of [
   }
 }
 
+fs.mkdirSync(path.dirname(EMPTY_RUNTIME_CONFIG), { recursive: true });
+fs.writeFileSync(EMPTY_RUNTIME_CONFIG, '', { mode: 0o644 });
+
 const result = spawnSync(
   BINARY,
   ['validate-nginx', FIXTURE],
@@ -73,6 +82,7 @@ const result = spawnSync(
     encoding: 'utf8',
     env: {
       ...process.env,
+      SDKWORK_WEBSERVER_CONFIG_FILE: EMPTY_RUNTIME_CONFIG,
       SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST: DOCUMENT_ROOT_ALLOWLIST,
       SDKWORK_WEBSERVER_ACME_WEBROOT: ACME_WEBROOT,
     },
