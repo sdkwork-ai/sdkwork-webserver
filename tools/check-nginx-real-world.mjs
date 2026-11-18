@@ -40,6 +40,13 @@ const BINARY = process.env.SDKWORK_WEBSERVER_GATEWAY_BIN
     'sdkwork-api-webserver-standalone-gateway',
   );
 const DOCUMENT_ROOT_ALLOWLIST = '/opt/vuesource';
+// The operator tree serves /.well-known/acme-challenge/ from /var/www/html
+// (certbot webroot, sites-enabled/sdkwork/sdkwork-api-cloud-gateway.conf).
+// The nginx grammar carries the serving side; which directory the certificate
+// worker WRITES tokens to is an operator runtime setting, so the gate passes
+// it the same way it passes the document-root allowlist. Without it the
+// validator fail-closes on the deliberate worker/serving-root mismatch.
+const ACME_WEBROOT = '/var/www/html';
 
 const log = (message) => process.stderr.write(`[nginx-real-world] ${message}\n`);
 
@@ -67,6 +74,7 @@ const result = spawnSync(
     env: {
       ...process.env,
       SDKWORK_WEBSERVER_DOCUMENT_ROOT_ALLOWLIST: DOCUMENT_ROOT_ALLOWLIST,
+      SDKWORK_WEBSERVER_ACME_WEBROOT: ACME_WEBROOT,
     },
     timeout: 180_000,
   },
