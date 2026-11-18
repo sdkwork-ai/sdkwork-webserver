@@ -29,6 +29,11 @@ server {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
+    # HTTP/2 on the TLS edge (nginx 1.25+ directive form; the runtime maps the
+    # server-level flag to the listener h2 protocol and the TLS policy ALPN).
+    # Both :443 listen lines must keep the same protocol set: the runtime fails
+    # closed when one shared port carries mixed protocols.
+    http2 on;
     server_name __EDGE_DOMAIN__;
 
     # Canonical ACME live layout (W25): the certificate worker exports every

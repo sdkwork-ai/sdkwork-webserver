@@ -4,6 +4,9 @@ environment = "production"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.sdkwork.com", "server-app.sdkwork.com", "server-admin.sdkwork.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -12,6 +15,9 @@ cert = "sdkwork.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.birdcoder.com", "server-app.birdcoder.com", "server-admin.birdcoder.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -20,6 +26,9 @@ cert = "birdcoder.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.dtupay.com", "server-app.dtupay.com", "server-admin.dtupay.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -28,6 +37,9 @@ cert = "dtupay.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.sdkwork.cn", "server-app.sdkwork.cn", "server-admin.sdkwork.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -36,6 +48,9 @@ cert = "sdkwork.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.birdcoder.cn", "server-app.birdcoder.cn", "server-admin.birdcoder.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -44,6 +59,9 @@ cert = "birdcoder.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.dtupay.cn", "server-app.dtupay.cn", "server-admin.dtupay.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -52,6 +70,9 @@ cert = "dtupay.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.skubc.com", "server-app.skubc.com", "server-admin.skubc.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -60,6 +81,9 @@ cert = "skubc.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.skubc.cn", "server-app.skubc.cn", "server-admin.skubc.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -68,6 +92,9 @@ cert = "skubc.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.zowalk.com", "server-app.zowalk.com", "server-admin.zowalk.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -76,6 +103,9 @@ cert = "zowalk.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.zowalk.cn", "server-app.zowalk.cn", "server-admin.zowalk.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -84,6 +114,9 @@ cert = "zowalk.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.offer86.com", "server-app.offer86.com", "server-admin.offer86.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -92,6 +125,9 @@ cert = "offer86.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.offer86.cn", "server-app.offer86.cn", "server-admin.offer86.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -100,6 +136,9 @@ cert = "offer86.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.86offer.com", "server-app.86offer.com", "server-admin.86offer.com"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -108,6 +147,9 @@ cert = "86offer.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
+# HTTP/2 on the TLS edge; every server sharing :443 must declare the same
+# protocol set (the runtime fails closed on mixed protocols per port).
+http2 = true
 serverName = ["server.86offer.cn", "server-app.86offer.cn", "server-admin.86offer.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
