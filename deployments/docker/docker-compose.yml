@@ -38,6 +38,11 @@ x-webserver-common: &webserver-common
       condition: service_healthy
   environment:
     SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS: ${SDKWORK_WEBSERVER_IMPORT_LISTENER_PORTS:-}
+    # Bootstrap IAM operator passwords (console login for admin/manager/
+    # operator). Empty by default: the seed skips cleanly when unset.
+    SDKWORK_IAM_SUPER_ADMIN_PASSWORD: ${SDKWORK_IAM_SUPER_ADMIN_PASSWORD:-}
+    SDKWORK_IAM_MANAGER_PASSWORD: ${SDKWORK_IAM_MANAGER_PASSWORD:-}
+    SDKWORK_IAM_OPERATOR_PASSWORD: ${SDKWORK_IAM_OPERATOR_PASSWORD:-}
     # Universal import plane (ENVIRONMENT_SPEC §6.2.2): comma-separated
     # lifecycle environments one instance imports for every module. Empty
     # keeps the instance's own SDKWORK_WEBSERVER_ENVIRONMENT only; set e.g.
