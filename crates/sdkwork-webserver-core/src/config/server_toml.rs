@@ -1898,7 +1898,14 @@ impl<'a> Materializer<'a> {
             return Err(materialize_error(
                 path,
                 format!(
-                    "port {port} is shared by servers with different TLS version/ALPN policies; use one certificate policy per listener port"
+                    "port {port} is shared by servers with different HTTP/2 declarations (listener protocols {:?} vs server http2={http2}); every server sharing a port must declare the same protocol set",
+                    self.listeners
+                        .iter()
+                        .find(|listener| listener["id"] == existing_id)
+                        .and_then(|listener| listener.get("protocols"))
+                        .and_then(Value::as_array)
+                        .map(|protocols| protocols.clone())
+                        .unwrap_or_default(),
                 ),
             ));
         }
@@ -1921,7 +1928,9 @@ impl<'a> Materializer<'a> {
                 return Err(materialize_error(
                     path,
                     format!(
-                        "port {port} is shared by servers with different TLS version/ALPN policies; use one certificate policy per listener port"
+                        "port {port} is shared by TLS policies `{existing_id}` ({key}: {} vs `{incoming_id}`: {}); use one certificate policy per listener port",
+                        existing.get(key).map(Value::to_string).unwrap_or_else(|| "<unset>".to_owned()),
+                        incoming.get(key).map(Value::to_string).unwrap_or_else(|| "<unset>".to_owned()),
                     ),
                 ));
             }
