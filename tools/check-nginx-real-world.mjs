@@ -27,7 +27,18 @@ import { staleness, stalenessMessage } from './gateway-binary-freshness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIXTURE = path.join(root, 'tests', 'nginx', 'real-world', 'production-api-birdcoder', 'nginx.conf');
-const BINARY = path.join(root, 'target', 'debug', 'sdkwork-api-webserver-standalone-gateway');
+// The shared target/debug tree is locked while an operator server runs out of
+// it, so an operator may build into a private CARGO_TARGET_DIR copy and point
+// this gate at it (the same override the differential gates accept). The
+// freshness check still guards whatever binary is selected.
+const BINARY = process.env.SDKWORK_WEBSERVER_GATEWAY_BIN
+  ?? path.join(
+    process.env.CARGO_TARGET_DIR
+      ? path.resolve(root, process.env.CARGO_TARGET_DIR)
+      : path.join(root, 'target'),
+    'debug',
+    'sdkwork-api-webserver-standalone-gateway',
+  );
 const DOCUMENT_ROOT_ALLOWLIST = '/opt/vuesource';
 
 const log = (message) => process.stderr.write(`[nginx-real-world] ${message}\n`);
