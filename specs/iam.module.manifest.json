@@ -224,18 +224,20 @@
       {
         "roleCode": "app_user",
         "patterns": [
-          "web.certificates.*",
-          "web.sandbox.*",
-          "web.traffic.read",
-          "web.plugins.*",
-          "deploy.apps.read",
-          "deploy.domainZones.read",
-          "deploy.certificates.read",
-          "deploy.marketplaceTemplates.read",
           "deploy.appTemplates.read",
-          "skills.marketplace.read",
+          "deploy.apps.read",
+          "deploy.certificates.read",
+          "deploy.domainZones.read",
+          "deploy.marketplaceTemplates.read",
+          "iam.provider_accounts.read",
           "mcp.marketplace.read",
-          "iam.provider_accounts.read"
+          "oauth.phoneBindingSessions.create",
+          "oauth.phoneBindingSessions.verificationCodeRequests.create",
+          "skills.marketplace.read",
+          "web.certificates.*",
+          "web.plugins.*",
+          "web.sandbox.*",
+          "web.traffic.read"
         ]
       },
       {
