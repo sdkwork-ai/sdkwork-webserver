@@ -2771,10 +2771,15 @@ impl<'a> Materializer<'a> {
             .filter_map(Value::as_str)
             .map(str::to_owned)
             .collect();
+        // nginx 1.25.1+ parity: a TLS listener serves HTTP/2 by default; an
+        // explicit `http2 = false` (or the deprecated listen parameter's
+        // absence is irrelevant here — the typed key is the only declaration)
+        // keeps it HTTP/1-only. Plaintext listeners are unaffected: every
+        // consumer of this flag gates h2 on `ssl`.
         let http2 = server
             .get("http2")
             .and_then(Value::as_bool)
-            .unwrap_or(false);
+            .unwrap_or(true);
         let tls_table = server.get("tls").and_then(Value::as_object);
         let tls_window = tls_window_from_protocols(tls_table, &format!("{path}.tls"))?;
         let client_auth = if let Some(tls) = tls_table {

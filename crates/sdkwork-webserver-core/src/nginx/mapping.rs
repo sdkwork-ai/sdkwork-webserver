@@ -2968,7 +2968,12 @@ impl<'a> Mapper<'a> {
         let acme_webroot = self.take_acme_challenge_webroot(&mut locations)?;
         let primary_name = server_names[0].clone();
         // nginx inheritance: server-level `http2` overrides the http level.
-        let http2_on = server_http2.or(self.http_http2).unwrap_or(false);
+        // nginx 1.25.1+ enables HTTP/2 on every TLS listener by default and
+        // deprecates the `listen … http2` parameter, so the runtime default
+        // follows: an explicit `http2 off;` (server or http level) is the only
+        // way to keep a TLS listener HTTP/1-only. Cleartext listeners never
+        // gain h2 from this default — the protocols condition stays ssl-gated.
+        let http2_on = server_http2.or(self.http_http2).unwrap_or(true);
         let first_port = listen_specs.first().map(|spec| spec.port).unwrap_or(0);
         // The virtual host id is the default-server target on every listener
         // this server owns (nginx: the first server for a listen address is
