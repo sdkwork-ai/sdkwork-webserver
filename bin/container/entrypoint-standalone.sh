@@ -232,7 +232,10 @@ ensure_imported_sidecar_certificates() {
   # single apex wildcard cannot. Only syntactically plain names are kept
   # (regex/~ prefixed and nginx placeholder names are skipped).
   pairs="$(mktemp)"
-  for aggregator in "${imports_root}/import.conf.standalone" "${imports_root}/import.conf.cloud"; do
+  # The product edge is part of the active import set but not listed in the
+  # per-profile aggregators; scan it here too so its TLS brand domains
+  # (server-* hosts) participate in the aggregated SAN bootstrap.
+  for aggregator in "${imports_root}/import.conf.standalone" "${imports_root}/import.conf.cloud" "${imports_root}/product-edge-nginx.conf"; do
     [ -f "${aggregator}" ] || continue
     while IFS= read -r line; do
       case "${line}" in
@@ -1545,7 +1548,7 @@ TLSBLOCK
     # are regenerated with every aggregated server name in the SAN list).
     # Brands that still end up without material keep the plain listener so the
     # ACME http-01 challenge stays reachable on :80 for later issuance.
-    local lets_root host hostdom domain_names="" domain_host_list tls_domains="" plain_domains="" plain_names domains=""
+    local lets_root host hostdom domain_names tls_domains="" plain_domains="" plain_names domains=""
     lets_root="$(posix_path "$(lets_encrypt_certs_root)")"
     domains=""
     for host in ${server_names}; do
@@ -1554,20 +1557,6 @@ TLSBLOCK
         *" ${hostdom} "*) ;;
         *) domains="${domains:+${domains} }${hostdom}" ;;
       esac
-    done
-    for hostdom in ${domains}; do
-      domain_host_list=""
-      for host in ${server_names}; do
-        if [ "${host#*.}" = "${hostdom}" ]; then
-          domain_host_list="${domain_host_list:+${domain_host_list},}${host}"
-        fi
-      done
-      ensure_domain_certificate "${hostdom}" "${domain_host_list}"
-      if [ -s "${lets_root}/${hostdom}/fullchain.pem" ] && [ -s "${lets_root}/${hostdom}/privkey.pem" ]; then
-        tls_domains="${tls_domains:+${tls_domains} }${hostdom}"
-      else
-        plain_domains="${plain_domains:+${plain_domains} }${hostdom}"
-      fi
     done
     {
       cat <<PLAINHEAD
