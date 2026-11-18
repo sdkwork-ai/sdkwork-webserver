@@ -1882,32 +1882,44 @@ impl<'a> Materializer<'a> {
         http2: bool,
         path: &str,
     ) -> Result<(), WebServerConfigError> {
-        let listener_http2 = self
+        let existing_listener = self
             .listeners
-            .iter()
-            .find(|listener| listener["id"] == existing_id)
+            .iter_mut()
+            .find(|listener| listener["id"] == existing_id);
+        let declared_protocols = existing_listener
+            .as_ref()
             .and_then(|listener| listener.get("protocols"))
             .and_then(Value::as_array)
-            .map(|protocols| {
-                protocols
+            .cloned();
+        match declared_protocols {
+            None => {
+                // A listener materialized before the protocol set was tracked
+                // carries no `protocols` field. The incoming server's
+                // declaration is the best available truth: adopt it instead
+                // of failing a comparison that has nothing to compare.
+                if let Some(listener) = existing_listener {
+                    listener["protocols"] = Value::Array(vec![Value::String("http1".to_owned())]);
+                    if http2 {
+                        listener["protocols"] = Value::Array(vec![
+                            Value::String("http1".to_owned()),
+                            Value::String("http2".to_owned()),
+                        ]);
+                    }
+                }
+            }
+            Some(protocols) => {
+                let listener_http2 = protocols
                     .iter()
-                    .any(|protocol| protocol.as_str() == Some("http2"))
-            })
-            .unwrap_or(false);
-        if listener_http2 != http2 {
-            return Err(materialize_error(
-                path,
-                format!(
-                    "port {port} is shared by servers with different HTTP/2 declarations (listener protocols {:?} vs server http2={http2}); every server sharing a port must declare the same protocol set",
-                    self.listeners
-                        .iter()
-                        .find(|listener| listener["id"] == existing_id)
-                        .and_then(|listener| listener.get("protocols"))
-                        .and_then(Value::as_array)
-                        .map(|protocols| protocols.clone())
-                        .unwrap_or_default(),
-                ),
-            ));
+                    .any(|protocol| protocol.as_str() == Some("http2"));
+                if listener_http2 != http2 {
+                    return Err(materialize_error(
+                        path,
+                        format!(
+                            "port {port} is shared by servers with different HTTP/2 declarations (listener protocols {protocols:?} vs server http2={http2}); every server sharing a port must declare the same protocol set",
+                        ),
+                    ));
+                }
+            }
         }
         let existing = self
             .tls_policies
