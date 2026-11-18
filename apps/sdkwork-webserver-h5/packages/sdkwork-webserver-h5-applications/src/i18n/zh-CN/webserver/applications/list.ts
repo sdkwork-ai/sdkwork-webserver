@@ -26,6 +26,8 @@ export const webserverApplicationsListZhCn = {
   "applications.list.status.failed": "失败",
   "applications.list.kind.static-web": "静态站点",
   "applications.list.kind.spa-web": "单页应用",
+  "applications.list.kind.h5-web": "H5 应用",
+  "applications.list.kind.pc-web": "PC 应用",
   "applications.list.kind.api-service": "API 服务",
   "applications.list.kind.wechat-miniprogram": "微信小程序",
   "applications.list.kind.douyin-miniprogram": "抖音小程序",
@@ -33,4 +35,5 @@ export const webserverApplicationsListZhCn = {
   "applications.list.kind.android-app": "Android 应用",
   "applications.list.kind.desktop-app": "桌面应用",
   "applications.list.kind.harmonyos-app": "鸿蒙应用",
+  "applications.list.kind.flutter-app": "Flutter 应用",
 } as const;

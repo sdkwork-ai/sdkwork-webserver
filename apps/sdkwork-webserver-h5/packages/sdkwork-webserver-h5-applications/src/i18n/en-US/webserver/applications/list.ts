@@ -26,6 +26,8 @@ export const webserverApplicationsListEnUs = {
   "applications.list.status.failed": "Failed",
   "applications.list.kind.static-web": "Static site",
   "applications.list.kind.spa-web": "Single-page app",
+  "applications.list.kind.h5-web": "H5 app",
+  "applications.list.kind.pc-web": "PC app",
   "applications.list.kind.api-service": "API service",
   "applications.list.kind.wechat-miniprogram": "WeChat mini program",
   "applications.list.kind.douyin-miniprogram": "Douyin mini program",
@@ -33,4 +35,5 @@ export const webserverApplicationsListEnUs = {
   "applications.list.kind.android-app": "Android app",
   "applications.list.kind.desktop-app": "Desktop app",
   "applications.list.kind.harmonyos-app": "HarmonyOS app",
+  "applications.list.kind.flutter-app": "Flutter app",
 } as const;
