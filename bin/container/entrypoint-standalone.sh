@@ -1511,7 +1511,7 @@ http {
     # omission (`add_header X "";` sends no field) keeps :80 clean. The shell
     # and the imported static snippets already stamp nosniff on the documents
     # they serve, so this block adds only the fields nothing else owns.
-    map $scheme $sdkwork_product_edge_hsts {
+    map \$scheme \$sdkwork_product_edge_hsts {
         default "";
         https "max-age=31536000; includeSubDomains";
     }
@@ -1540,7 +1540,7 @@ HEAD
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_prefer_server_ciphers on;
         ssl_session_cache shared:SSL:10m;
-        add_header Strict-Transport-Security $sdkwork_product_edge_hsts always;
+        add_header Strict-Transport-Security \$sdkwork_product_edge_hsts always;
         add_header X-Frame-Options DENY always;
         add_header Referrer-Policy strict-origin-when-cross-origin always;
 TLSBLOCK
