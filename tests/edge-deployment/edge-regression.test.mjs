@@ -232,6 +232,32 @@ test('every response class carries the product Server header (404 and console as
   assert.equal(consoleAsset.headers.server, SERVER_HEADER);
 });
 
+test('response headers follow the field-standards baseline (Vary/HSTS/nosniff)', async () => {
+  // RFC 9110 §12.5.5: a Vary field-value is a comma list of field NAMES — a
+  // duplicated selector inside one value (or a repeated field) breaks cache
+  // keyed-by parsing, so each field name appears at most once.
+  const homepage = await rawRequest({ pathname: '/' });
+  const varyNames = (homepage.headers.vary ?? '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  assert.ok(varyNames.length > 0, 'the adaptive console must declare its representation selectors');
+  assert.equal(
+    new Set(varyNames).size,
+    varyNames.length,
+    `Vary must not repeat a field name, got ${homepage.headers.vary}`,
+  );
+  // RFC 6797 §6.1: every TLS response class carries the HSTS policy.
+  assert.match(
+    homepage.headers['strict-transport-security'] ?? '',
+    /max-age=\d+/,
+    'TLS responses must carry strict-transport-security',
+  );
+  // SECURITY_SPEC secure-response baseline on delivered documents.
+  assert.equal(homepage.headers['x-content-type-options'], 'nosniff');
+  assert.ok(homepage.headers['x-frame-options'], 'frame framing must be explicitly governed');
+});
+
 test('HEAD returns headers without a body', async () => {
   const response = await rawRequest({ pathname: '/', method: 'HEAD' });
   assert.equal(response.status, 200);

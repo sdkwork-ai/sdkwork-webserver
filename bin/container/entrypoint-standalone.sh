@@ -1505,6 +1505,16 @@ http {
     client_max_body_size 1100m;
     server_tokens off;
     gzip on;
+    # Secure-response baseline (SECURITY_SPEC): HSTS is scheme-gated through a
+    # map because the server block serves both listeners — a plain add_header
+    # would leak the field onto plaintext responses, and the empty-value
+    # omission (`add_header X "";` sends no field) keeps :80 clean. The shell
+    # and the imported static snippets already stamp nosniff on the documents
+    # they serve, so this block adds only the fields nothing else owns.
+    map $scheme $sdkwork_product_edge_hsts {
+        default "";
+        https "max-age=31536000; includeSubDomains";
+    }
     upstream webserver_adaptive_shell {
         least_conn;
         keepalive 32;
@@ -1530,6 +1540,9 @@ HEAD
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_prefer_server_ciphers on;
         ssl_session_cache shared:SSL:10m;
+        add_header Strict-Transport-Security $sdkwork_product_edge_hsts always;
+        add_header X-Frame-Options DENY always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
 TLSBLOCK
         product_edge_acme_challenge_location "${acme_webroot}"
         product_edge_proxy_locations

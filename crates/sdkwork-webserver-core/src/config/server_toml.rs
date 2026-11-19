@@ -2744,6 +2744,7 @@ impl<'a> Materializer<'a> {
                 "tls",
                 "proxySetHeader",
                 "addHeader",
+                "securityHeaders",
                 "location",
                 "userid",
                 "browser",
@@ -2946,6 +2947,31 @@ impl<'a> Materializer<'a> {
             if !custom_headers.is_empty() {
                 virtual_host["securityHeaders"] = json!({ "customHeaders": custom_headers });
             }
+        }
+        // Typed `securityHeaders` table (camelCase, validated by the runtime
+        // model's `deny_unknown_fields` deserializer): the secure-response
+        // baseline a product edge declares natively — `strictTransportSecurity`
+        // is emitted only over HTTPS by the response policy, unlike a raw
+        // `add_header` which would leak the field onto plaintext responses.
+        // A declared table wins over a plain `addHeader` array and keeps its
+        // custom headers beside the typed fields.
+        if let Some(security_headers) = server.get("securityHeaders").and_then(Value::as_object) {
+            let mut merged = security_headers.clone();
+            if let Some(add_header) = server.get("addHeader").and_then(Value::as_array) {
+                let custom_headers: Vec<Value> = add_header
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter_map(|entry| entry.split_once(' '))
+                    .map(|(name, value)| json!({ "name": name, "value": value }))
+                    .collect();
+                if !custom_headers.is_empty() {
+                    merged.insert(
+                        "customHeaders".to_owned(),
+                        Value::Array(custom_headers),
+                    );
+                }
+            }
+            virtual_host["securityHeaders"] = Value::Object(merged);
         }
         // The userid and browser tables carry nginx-parallel module settings;
         // copying them verbatim lets the typed model deserializer validate

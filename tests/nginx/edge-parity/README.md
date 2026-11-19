@@ -42,6 +42,19 @@ python3 tests/nginx/edge-parity/battery.py \
     --out /tmp/webserver-edge.json
 ```
 
+## Oracle provenance (v2 re-capture)
+
+The committed oracle carries the `stock-nginx-edge` provenance label and was
+re-captured on 2026-11-20 from the retired convenience edge recreated from its
+pinned image (`nginx@sha256:332d0bee…`, 1.31.7) with the same bind mounts
+(config snippets, certs, `/srv/mall` content) on alternate ports
+`:8080`/`:8443` — only the `listen` directives were rewritten, upstreams and
+served content are untouched. The re-capture exists because `3faee914`
+upgraded the battery (chunk decoding, handoff/trace normalization) after the
+original capture, which left the v1 oracle body hashes incomparable with v2
+candidate captures for every injected or chunked body. Both sides of the
+comparison are therefore recorded by the same battery version.
+
 ## Compare
 
 ```bash

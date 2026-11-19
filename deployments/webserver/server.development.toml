@@ -7,3 +7,18 @@ listen = ["80"]
 serverName = ["server-dev.sdkwork.com", "server-dev.birdcoder.com", "server-dev.dtupay.com", "server-dev.sdkwork.cn", "server-dev.birdcoder.cn", "server-dev.dtupay.cn", "server-dev.skubc.com", "server-dev.skubc.cn", "server-dev.zowalk.com", "server-dev.zowalk.cn", "server-dev.offer86.com", "server-dev.offer86.cn", "server-dev.86offer.com", "server-dev.86offer.cn", "server-app-dev.sdkwork.com", "server-app-dev.birdcoder.com", "server-app-dev.dtupay.com", "server-app-dev.sdkwork.cn", "server-app-dev.birdcoder.cn", "server-app-dev.dtupay.cn", "server-app-dev.skubc.com", "server-app-dev.skubc.cn", "server-app-dev.zowalk.com", "server-app-dev.zowalk.cn", "server-app-dev.offer86.com", "server-app-dev.offer86.cn", "server-app-dev.86offer.com", "server-app-dev.86offer.cn", "server-admin-dev.sdkwork.com", "server-admin-dev.birdcoder.com", "server-admin-dev.dtupay.com", "server-admin-dev.sdkwork.cn", "server-admin-dev.birdcoder.cn", "server-admin-dev.dtupay.cn", "server-admin-dev.skubc.com", "server-admin-dev.skubc.cn", "server-admin-dev.zowalk.com", "server-admin-dev.zowalk.cn", "server-admin-dev.offer86.com", "server-admin-dev.offer86.cn", "server-admin-dev.86offer.com", "server-admin-dev.86offer.cn"]
 include = ["snippets/gateway-locations.nonproduction.conf"]
 
+
+# Secure-response baseline for the product console family (SECURITY_SPEC
+# secure-response-headers; the proxied API plane carries the gateway's own
+# baseline). HSTS is a typed field so the response policy emits it only over
+# HTTPS; a raw add_header would leak the field onto plaintext responses. CSP
+# stays unset here: the console shell injects its credential-entry bootstrap
+# script and loads bundled assets, so the policy needs the shell's actual
+# resource inventory rather than a guessed default.
+[http.server.securityHeaders]
+xFrameOptions = "DENY"
+referrerPolicy = "strict-origin-when-cross-origin"
+
+[http.server.securityHeaders.strictTransportSecurity]
+maxAgeSeconds = 31536000
+includeSubDomains = true
