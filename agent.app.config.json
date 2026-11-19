@@ -169,7 +169,7 @@
             "domain": "server.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "bb4f90484a9b72d3935a1c0adf101688218da52cf3885b556b2af9b60a232218"
+          "checksum": "1b521170d336fadc4148e49c6a664145e3320c82d8dc7365fd03617a7470ad1f"
         },
         {
           "id": "linux-ubuntu-x64-standalone-test-server-deb",
@@ -189,7 +189,7 @@
             "domain": "server-test.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "3d9b1b32d93dae4ce70f18e62294e86f7e2ab3ed194dc95065a63aec58dc49fa"
+          "checksum": "1c0ce308621f5e8fd7497c50b15d615527376b70ea5e7aaf7fb6971eac7e597a"
         },
         {
           "id": "linux-rhel-x64-standalone-server-rpm",
