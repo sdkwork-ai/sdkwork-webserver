@@ -1274,7 +1274,7 @@ auto_migrate = true
 [acme]
 profile = "staging"
 directory_url = "https://acme-staging-v02.api.letsencrypt.org/directory"
-contact_email = "admin@localhost"
+contact_email = "admin@sdkwork.com"
 webroot = "/var/lib/sdkwork/webserver/acme-webroot"
 account_root = "/var/lib/sdkwork/webserver/acme-accounts"
 worker_id = "certificate-worker-0"

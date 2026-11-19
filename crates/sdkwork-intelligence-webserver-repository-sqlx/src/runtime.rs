@@ -126,7 +126,7 @@ fn certificate_issuer_from_env(
         });
     let contact_email = match std::env::var("SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL") {
         Ok(value) => value,
-        Err(_) if !production_like => "admin@localhost".to_string(),
+        Err(_) if !production_like => "admin@sdkwork.com".to_string(),
         Err(_) => {
             return Err(
                 "SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL is required in production-like environments"

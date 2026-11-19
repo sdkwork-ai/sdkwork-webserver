@@ -14,8 +14,22 @@ const MAX_RENEWAL_SCHEDULE_INTERVAL_SECS: u64 = 86_400;
 /// Watchdog ceiling for one certificate operation cycle. A cycle that hangs
 /// (for example a stalled ACME or database call without its own deadline)
 /// must not block renewal scheduling or graceful shutdown forever.
+///
+/// The floor is deliberately *above* the issuer's own operation budget: the
+/// engine already bounds an ACME order at `SDKWORK_WEBSERVER_ACME_OPERATION_TIMEOUT_MS`
+/// (180s by default) and reports a provider failure when it expires. A cycle
+/// watchdog shorter than that cancels a healthy, still-validating order
+/// mid-flight; the operation then stays `RUNNING` until its 30-minute lease
+/// expires, so every slow order costs half an hour of retry latency. The
+/// watchdog therefore covers the operation budget plus finalization and
+/// distribution headroom, and only fires when the engine itself has stopped
+/// making progress.
 const MIN_CYCLE_TIMEOUT_SECS: u64 = 60;
-const MAX_CYCLE_TIMEOUT_SECS: u64 = 600;
+const MAX_CYCLE_TIMEOUT_SECS: u64 = 900;
+/// Finalization (version insert, TLS material publication, audit) runs after
+/// the issuer returns, so the cycle budget keeps this much room beyond the
+/// issuer's own timeout.
+const CYCLE_FINALIZE_HEADROOM_SECS: u64 = 120;
 
 /// Domain-ownership challenges checked per cycle.
 ///
@@ -95,9 +109,9 @@ async fn main() -> anyhow::Result<()> {
 
     let mut consecutive_failures: u32 = 0;
     // Watchdog: a cycle that outlives this bound is cancelled so renewal
-    // scheduling and graceful shutdown always make progress.
-    let cycle_timeout_secs = (poll_interval_secs.saturating_mul(12))
-        .clamp(MIN_CYCLE_TIMEOUT_SECS, MAX_CYCLE_TIMEOUT_SECS);
+    // scheduling and graceful shutdown always make progress. The bound covers
+    // the issuer's own operation timeout (see `cycle_timeout`).
+    let cycle_timeout_secs = cycle_timeout_secs(poll_interval_secs);
     loop {
         let schedule_renewals = Instant::now() >= next_renewal_schedule;
         let cycle_report = tokio::select! {
@@ -250,6 +264,27 @@ fn jitter_millis(max_ms: u64) -> u64 {
     state % max_ms
 }
 
+/// Cycle watchdog budget for the given poll interval.
+///
+/// Reads the same ACME operation timeout the engine honours so the two bounds
+/// cannot drift apart: the cycle must outlive the issuer's own deadline plus
+/// finalization headroom.
+fn cycle_timeout_secs(poll_interval_secs: u64) -> u64 {
+    let operation_timeout_ms = std::env::var("SDKWORK_WEBSERVER_ACME_OPERATION_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(sdkwork_webserver_acme_service::DEFAULT_ACME_OPERATION_TIMEOUT_MS);
+    cycle_timeout(poll_interval_secs, operation_timeout_ms)
+}
+
+fn cycle_timeout(poll_interval_secs: u64, operation_timeout_ms: u64) -> u64 {
+    let operation_timeout_secs = operation_timeout_ms.div_ceil(1_000);
+    poll_interval_secs
+        .saturating_mul(12)
+        .max(operation_timeout_secs.saturating_add(CYCLE_FINALIZE_HEADROOM_SECS))
+        .clamp(MIN_CYCLE_TIMEOUT_SECS, MAX_CYCLE_TIMEOUT_SECS)
+}
+
 fn parse_bounded_interval(
     key: &str,
     value: Option<&str>,
@@ -311,7 +346,22 @@ async fn shutdown_signal() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_bounded_interval, resolve_worker_id, DEFAULT_OPERATION_POLL_INTERVAL_SECS};
+    use super::{
+        cycle_timeout, parse_bounded_interval, resolve_worker_id,
+        DEFAULT_OPERATION_POLL_INTERVAL_SECS,
+    };
+
+    /// Regression: with the default 5s poll the watchdog was 60s, shorter than
+    /// the engine's 180s ACME order budget. A slow but healthy order was
+    /// cancelled mid-flight and its 30-minute lease then blocked every retry.
+    #[test]
+    fn cycle_watchdog_outlives_the_issuer_operation_budget() {
+        assert_eq!(cycle_timeout(5, 180_000), 300);
+        assert_eq!(cycle_timeout(30, 180_000), 360);
+        assert_eq!(cycle_timeout(5, 600_000), 720);
+        assert_eq!(cycle_timeout(60, 10_000), 720);
+        assert_eq!(cycle_timeout(1, 10_000), 130);
+    }
 
     #[test]
     fn operation_interval_defaults_and_accepts_bounded_values() {

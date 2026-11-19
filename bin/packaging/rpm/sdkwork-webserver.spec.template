@@ -308,7 +308,7 @@ ${CREDENTIAL_ENTRY_BOOTSTRAP_FIELD}
 [acme]
 profile = "__ACME_PROFILE__"
 directory_url = "__ACME_DIRECTORY_URL__"
-contact_email = "admin@localhost"
+contact_email = "admin@sdkwork.com"
 webroot = "${DATA_ROOT}/acme-webroot"
 account_root = "${DATA_ROOT}/acme-accounts"
 renew_before_days = 30

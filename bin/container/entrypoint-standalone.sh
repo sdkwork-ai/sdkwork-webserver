@@ -2032,7 +2032,7 @@ ${credential_entry_bootstrap_field}
 [acme]
 profile = "${SDKWORK_WEBSERVER_ACME_PROFILE:-staging}"
 directory_url = "${SDKWORK_WEBSERVER_ACME_DIRECTORY_URL:-https://acme-staging-v02.api.letsencrypt.org/directory}"
-contact_email = "${SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL:-admin@localhost}"
+contact_email = "${SDKWORK_WEBSERVER_ACME_CONTACT_EMAIL:-admin@sdkwork.com}"
 webroot = "$(posix_path "${SDKWORK_WEBSERVER_ACME_WEBROOT:-/var/lib/sdkwork/webserver/acme-webroot}")"
 account_root = "$(posix_path "${SDKWORK_WEBSERVER_ACME_ACCOUNT_ROOT:-/var/lib/sdkwork/webserver/acme-accounts}")"
 cert_live_root = "${acme_live_root}"
