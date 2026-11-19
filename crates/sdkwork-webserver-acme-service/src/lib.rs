@@ -64,3 +64,21 @@ pub use revoke::CertificateRevocationReason;
 
 /// Certificate identifier ceiling, shared by the engine and its callers.
 pub use issue::MAX_CERTIFICATE_IDENTIFIERS;
+
+/// Installs the workspace's rustls crypto backend as the process default.
+///
+/// The final binary links more than one rustls backend: the workspace selects
+/// `aws-lc-rs`, while SQLx and reqwest pull `ring` in transitively. When both
+/// features are present rustls refuses to infer a provider from crate features
+/// and `CryptoProvider::get_default_or_install_from_crate_features` panics at
+/// the first default-built TLS client. That panic used to hit the certificate
+/// worker inside `issue_lets_encrypt` on the ACME directory request, killing the
+/// operation task and leaving the durable operation RUNNING until its lease
+/// expired.
+///
+/// Every process that performs TLS through rustls must therefore make the
+/// choice explicitly, exactly once. Installation is idempotent (an already
+/// installed provider is left in place), so any entry point may call this.
+pub fn install_rustls_crypto_provider() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}

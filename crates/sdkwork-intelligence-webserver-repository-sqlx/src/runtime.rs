@@ -321,6 +321,11 @@ where
 
 /// Bootstrap database lifecycle, repository, and service from environment variables.
 pub async fn bootstrap_web_runtime_from_env() -> Result<WebRuntime, String> {
+    // The certificate worker is the process that issues through rustls, and it
+    // reaches the ACME directory before any other TLS surface in this binary.
+    // Select the workspace crypto backend once here so the first issuance does
+    // not panic inside rustls (the binary carries both `aws-lc-rs` and `ring`).
+    sdkwork_webserver_acme_service::install_rustls_crypto_provider();
     enable_process_shared_database_pool();
     let lifecycle_host = bootstrap_web_database_from_env().await?;
     let id_generator = node_generator_from_env().await?;
@@ -352,4 +357,25 @@ pub async fn bootstrap_web_runtime_from_env() -> Result<WebRuntime, String> {
         )
         .map_err(|error| format!("web service bootstrap failed: {error}"))?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use sdkwork_webserver_acme_service::{AcmeHttpClientFactory, PlatformVerifierClientFactory};
+
+    /// Regression for the certificate-worker panic this bootstrap fixes.
+    ///
+    /// This test binary links both rustls backends — the workspace's
+    /// `aws-lc-rs` plus the `ring` feature SQLx and reqwest pull in — so before
+    /// [`super::bootstrap_web_runtime_from_env`] installed the provider, the
+    /// first default-built ACME TLS client aborted the process with
+    /// "Could not automatically determine the process-level CryptoProvider".
+    #[test]
+    fn platform_acme_client_builds_in_a_binary_with_both_rustls_backends() {
+        assert!(
+            PlatformVerifierClientFactory.build().is_ok(),
+            "the platform-verified ACME client must select a crypto provider even when \
+             both rustls backends are linked"
+        );
+    }
 }

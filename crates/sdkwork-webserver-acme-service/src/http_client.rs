@@ -68,6 +68,11 @@ pub(crate) struct BoundedAcmeHttpClient {
 
 impl BoundedAcmeHttpClient {
     pub(crate) fn new() -> AcmeServiceResult<Self> {
+        // The platform verifier is built through the *default* rustls provider,
+        // and this crate graph enables both `aws-lc-rs` and `ring`, so the
+        // choice has to be made here rather than inferred (see
+        // [`crate::install_rustls_crypto_provider`]).
+        crate::install_rustls_crypto_provider();
         let connector = HttpsConnectorBuilder::new()
             .try_with_platform_verifier()
             .map_err(|error| {
@@ -251,5 +256,18 @@ mod tests {
 
         let mut rejected = BoundedResponseBody::new(Full::new(Bytes::from(vec![1_u8; 17])), 16);
         assert!(rejected.into_bytes().await.is_err());
+    }
+
+    /// Regression: the platform-verified client used to build through
+    /// `CryptoProvider::get_default_or_install_from_crate_features`, which
+    /// panics in any binary that links both rustls backends (this workspace's
+    /// `aws-lc-rs` plus the `ring` feature SQLx and reqwest pull in). Building
+    /// the client must select the workspace provider itself.
+    #[test]
+    fn platform_client_selects_the_workspace_crypto_provider() {
+        assert!(
+            BoundedAcmeHttpClient::new().is_ok(),
+            "the platform-verified ACME client must not depend on an already installed process provider"
+        );
     }
 }

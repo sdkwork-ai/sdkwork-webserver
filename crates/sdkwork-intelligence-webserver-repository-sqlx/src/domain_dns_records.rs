@@ -304,7 +304,11 @@ impl WebRepository {
         let id = next_id(self.id_generator())?;
         let uuid = new_uuid();
         let now = now_rfc3339();
-        let now_expression = instant_write_expression("$16");
+        // The timestamp placeholder numbers the *bind* position (the 15th bound
+        // value), not the column-list position: PostgreSQL resolves parameters
+        // by bind order, so a gap between referenced numbers and the bind count
+        // fails the whole statement.
+        let now_expression = instant_write_expression("$15");
         let sql = format!(
             "INSERT INTO webserver_domain_dns_record (
                 id, uuid, tenant_id, root_domain_id, domain_id,
@@ -352,15 +356,18 @@ impl WebRepository {
             .resolve_root_domain_internal_id(tenant_id, root_domain_id)
             .await?;
         let now = now_rfc3339();
-        let now_expression = instant_write_expression("$12");
+        // Placeholders follow the *bind* order below, not the column order of
+        // the INSERT this statement was derived from: every referenced number
+        // must be covered by exactly the values bound here.
+        let now_expression = instant_write_expression("$11");
         // `record_status` is deliberately absent: an edit does not touch the
         // provider-side pause state, which only the status operation flips.
         let sql = format!(
             "UPDATE webserver_domain_dns_record
-             SET record_name = $6, record_type = $7, record_value = $8,
-                 ttl_seconds = $9, priority = $10, record_line = $11,
-                 domain_id = $5, dns_provider = $13, cloud_account_id = $14,
-                 provider_record_ref = $15,
+             SET record_name = $5, record_type = $6, record_value = $7,
+                 ttl_seconds = $8, priority = $9, record_line = $10,
+                 domain_id = $4, dns_provider = $12, cloud_account_id = $13,
+                 provider_record_ref = $14,
                  updated_at = {now_expression}, version = version + 1
              WHERE tenant_id = $1 AND root_domain_id = $2 AND uuid = $3
                AND deleted_at IS NULL"

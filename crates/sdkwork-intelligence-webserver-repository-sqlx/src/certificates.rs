@@ -161,7 +161,7 @@ impl WebRepository {
         let row = sqlx::query(
             "SELECT COALESCE(MIN(EXTRACT(EPOCH FROM (v.not_after - NOW())))::BIGINT, -1)
                     AS min_seconds,
-                    COUNT(*) FILTER (WHERE v.not_after < NOW() + ($2 * INTERVAL '1 day'))
+                    COUNT(*) FILTER (WHERE v.not_after < NOW() + ($1 * INTERVAL '1 day'))
                     AS expiring_soon
              FROM webserver_certificate_version v
              WHERE v.status = 'ACTIVE'
