@@ -71,6 +71,15 @@ services:
       SDKWORK_API_CLOUD_GATEWAY_PROVISION_PAYMENT_CREDENTIAL_KEY: true
       SDKWORK_API_CLOUD_GATEWAY_RUNTIME_TARGET: container
       SDKWORK_API_CLOUD_GATEWAY_WEB_REDIS_URL: redis://${SDKWORK_WEBSERVER_REDIS_HOST:-redis}:${SDKWORK_WEBSERVER_REDIS_PORT:-6379}/2
+      # In-process memory grounding: sdkwork-memory refuses the historical
+      # implicit environment default (it disables authorization, tenant
+      # isolation, rate limiting and deadlines), and the local filesystem
+      # drive export needs a writable object-store root on gateway-data.
+      SDKWORK_MEMORY_ENVIRONMENT: ${SDKWORK_WEBSERVER_ENVIRONMENT:?required}
+      SDKWORK_MEMORY_DRIVE_OBJECT_STORE_ROOT: /var/lib/sdkwork/api-gateway/memory-drive-object-store
+      # IAM provider credential sealing (encrypted secret_ref envelope key);
+      # the deployed env file carries the operator value.
+      SDKWORK_IAM_PROVIDER_CREDENTIAL_MASTER_SECRET: ${SDKWORK_IAM_PROVIDER_CREDENTIAL_MASTER_SECRET:-}
       # BirdCoder server runtime requires its environment to be explicit
       # (fail-fast at startup); derive it from the deployed webserver env.
       SDKWORK_BIRDCODER_DEPLOYMENT_PROFILE: standalone
