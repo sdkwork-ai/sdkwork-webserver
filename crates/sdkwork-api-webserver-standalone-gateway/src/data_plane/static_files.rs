@@ -78,10 +78,10 @@ pub async fn serve_static(
             )
             .await
             {
-                return with_adaptive_vary_if_spa(response, spa_fallback);
+                return with_adaptive_vary_if_spa(response, spa_fallback, route);
             }
             let response = serve_static_representation(root, file, request, route, delivery).await;
-            with_adaptive_vary_if_spa(response, spa_fallback)
+            with_adaptive_vary_if_spa(response, spa_fallback, route)
         }
         StaticPathTarget::RedirectToDirectory => {
             let Some(location) = append_request_path_slash(request.uri()) else {
@@ -302,10 +302,25 @@ pub(crate) const MAX_BOOTSTRAP_FILE_BYTES: u64 = 4 * 1024 * 1024;
 fn with_adaptive_vary_if_spa(
     mut response: Response<Body>,
     spa_fallback: Option<&str>,
+    route: &RouteConfig,
 ) -> Response<Body> {
     if spa_fallback.is_some() && !response.headers().contains_key(header::VARY) {
-        if let Ok(value) = HeaderValue::from_str(ADAPTIVE_VARY_VALUE) {
-            response.headers_mut().insert(header::VARY, value);
+        // An adaptive-web conf (named `@pc`/`@h5` locations) declares its own
+        // `add_header Vary "User-Agent, Sec-CH-UA-Mobile" always`; the location
+        // policy is stamped at finalize time. Pre-inserting the same selector
+        // here would answer with the field value twice, which stock nginx never
+        // does after a `try_files` named-location hop (the target location owns
+        // the header policy). The pre-insert stays for static locations whose
+        // conf carries no Vary: those still need the runtime's adaptive
+        // selectors on the wire.
+        let conf_declares_adaptive_vary = route.response_headers.iter().any(|header| {
+            header.name.eq_ignore_ascii_case("vary")
+                && header.value.to_ascii_lowercase().contains("user-agent")
+        });
+        if !conf_declares_adaptive_vary {
+            if let Ok(value) = HeaderValue::from_str(ADAPTIVE_VARY_VALUE) {
+                response.headers_mut().insert(header::VARY, value);
+            }
         }
     }
     response
