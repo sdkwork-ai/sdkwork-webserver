@@ -37,6 +37,13 @@ const DOMAIN = process.env.SDKWORK_EDGE_DOMAIN ?? '';
 const HOST = process.env.SDKWORK_EDGE_HOST ?? '';
 const HTTP_PORT = Number(process.env.SDKWORK_EDGE_HTTP_PORT ?? 80);
 const HTTPS_PORT = Number(process.env.SDKWORK_EDGE_HTTPS_PORT ?? 443);
+// `production` (installer / cloud-style edge) terminates :80 with the ACME
+// webroot route plus a canonical 301 to https. `development` (docker bundle
+// dev) serves the console over plaintext :80 by design — no redirect, no
+// webroot. The TLS, proxy, header, homepage, method, keep-alive and load
+// assertions apply to both.
+const EDGE_MODE = (process.env.SDKWORK_EDGE_MODE ?? 'production').toLowerCase();
+const PRODUCTION_EDGE = EDGE_MODE === 'production';
 const SERVER_HEADER = 'sdkwork-webserver';
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -134,7 +141,7 @@ function tlsAlpnProbe(alpnProtocols) {
   });
 }
 
-test(':80 answers the ACME http-01 webroot route without redirecting it', async () => {
+test(':80 answers the ACME http-01 webroot route without redirecting it', { skip: !PRODUCTION_EDGE }, async () => {
   const response = await rawHttpRequest({ pathname: '/.well-known/acme-challenge/edge-regression-probe' });
   assert.notEqual(
     response.status,
@@ -144,11 +151,18 @@ test(':80 answers the ACME http-01 webroot route without redirecting it', async 
   assert.ok([200, 404].includes(response.status), `unexpected ACME route status ${response.status}`);
 });
 
-test(':80 redirects every other request to https preserving host and uri', async () => {
+test(':80 redirects every other request to https preserving host and uri', { skip: !PRODUCTION_EDGE }, async () => {
   const response = await rawHttpRequest({ pathname: '/edge-regression/redirect-target?kept=1' });
   assert.equal(response.status, 301);
   assert.equal(response.headers.location, `https://${DOMAIN}/edge-regression/redirect-target?kept=1`);
   assert.equal(response.headers.server, SERVER_HEADER, 'nginx core header filter stamps Server on return responses too');
+});
+
+test('development :80 serves the console over plaintext without redirect', { skip: PRODUCTION_EDGE }, async () => {
+  const response = await rawHttpRequest({ pathname: '/' });
+  assert.equal(response.status, 200, 'the dev edge serves the console on :80 by design');
+  assert.notEqual(response.status, 301, 'the dev edge must not force-redirect plaintext');
+  assert.equal(response.headers.server, SERVER_HEADER);
 });
 
 test(':443 terminates TLS 1.2+ and negotiates h2 first with http/1.1 fallback', async () => {
