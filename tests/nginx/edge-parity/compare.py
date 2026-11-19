@@ -80,6 +80,10 @@ KNOWN_HEADER_ALLOWANCES: dict[str, str] = {
     "cache-control": "static delivery declares public, no-cache (ENVIRONMENT_SPEC §13)",
     "accept-ch": "adaptive ingress advertises Sec-CH-UA-Mobile (APP_RUNTIME_TOPOLOGY_SPEC)",
     "x-content-type-options": "secure-response baseline adds nosniff (SECURITY_SPEC)",
+    "referrer-policy": "secure-response baseline declares strict-origin-when-cross-origin "
+                       "(SECURITY_SPEC secure-response-headers baseline; the convenience "
+                       "edge only set it on the static documents it authored, the runtime "
+                       "edge enforces it on every response class)",
     "vary": "adaptive runtime declares UA/Sec-CH-UA-Mobile selectors",
     # Request-scoped trace propagation: the gateway generates a fresh trace id
     # per request, so these fields differ between two captures by construction

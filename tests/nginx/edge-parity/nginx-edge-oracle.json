@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-16T16:42:37Z",
+  "capturedAt": "2026-11-19T20:03:16Z",
   "caseCount": 27,
   "caseFloor": 24,
   "cases": {
@@ -13,6 +13,7 @@
         "content-type": "text/html",
         "server": "nginx"
       },
+      "nginxErrorPage": true,
       "status": 404
     },
     "api-dev-birdcoder-http-metrics": {
@@ -25,12 +26,13 @@
         "content-type": "text/html",
         "server": "nginx"
       },
+      "nginxErrorPage": true,
       "status": 404
     },
     "api-dev-birdcoder-http-root": {
       "bodyBytes": 375,
-      "bodyPrefix": "{\"type\":\"https://docs.sdkwork.com/problems/40101\",\"title\":\"Authentication required\",\"status\":401,\"detail\":\"requests on unclassified API surfaces require explicit public_path registration\",\"instance\":\"GET /\",\"code\":40101,\"traceId\":\"a1affc51-",
-      "bodySha256": "e260a823e50392176281ee0c201ff036e8b57429a2709a2c20d5979efa812df3",
+      "bodyPrefix": "{\"type\":\"https://docs.sdkwork.com/problems/40101\",\"title\":\"Authentication required\",\"status\":401,\"detail\":\"requests on unclassified API surfaces require explicit public_path registration\",\"instance\":\"GET /\",\"code\":40101,\"traceId\":\"5c2b468b-",
+      "bodySha256": "a85ea7c90a85b7bdb1bdda77ce110f2b7bf67089e860af8c535e064d55c8c27a",
       "dropped": false,
       "headers": {
         "access-control-allow-credentials": "true",
@@ -44,7 +46,7 @@
         "referrer-policy": "no-referrer",
         "server": "nginx",
         "strict-transport-security": "max-age=31536000; includeSubDomains",
-        "traceparent": "00-a1affc51c261426e855861c5d6e188b3-b8215b43468939f6-01",
+        "traceparent": "00-5c2b468b127b440693f20af5ff4178e4-72f6b80b4edee18e-01",
         "vary": "origin",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
@@ -52,14 +54,14 @@
         "x-ratelimit-limit": "10000",
         "x-ratelimit-remaining": "9999",
         "x-ratelimit-reset": "0",
-        "x-sdkwork-trace-id": "a1affc51c261426e855861c5d6e188b3"
+        "x-sdkwork-trace-id": "5c2b468b127b440693f20af5ff4178e4"
       },
       "status": 401
     },
     "api-dev-sdkwork-http-root": {
       "bodyBytes": 375,
-      "bodyPrefix": "{\"type\":\"https://docs.sdkwork.com/problems/40101\",\"title\":\"Authentication required\",\"status\":401,\"detail\":\"requests on unclassified API surfaces require explicit public_path registration\",\"instance\":\"GET /\",\"code\":40101,\"traceId\":\"944406ea-",
-      "bodySha256": "3521901731b8b9591f6411352eb04e8c8c5778d26bfef70f053e00f62cb2c1db",
+      "bodyPrefix": "{\"type\":\"https://docs.sdkwork.com/problems/40101\",\"title\":\"Authentication required\",\"status\":401,\"detail\":\"requests on unclassified API surfaces require explicit public_path registration\",\"instance\":\"GET /\",\"code\":40101,\"traceId\":\"52fe9bdc-",
+      "bodySha256": "a85ea7c90a85b7bdb1bdda77ce110f2b7bf67089e860af8c535e064d55c8c27a",
       "dropped": false,
       "headers": {
         "access-control-allow-credentials": "true",
@@ -73,7 +75,7 @@
         "referrer-policy": "no-referrer",
         "server": "nginx",
         "strict-transport-security": "max-age=31536000; includeSubDomains",
-        "traceparent": "00-944406ea242147c1aca01a104f20f380-0b43a1c7dd78b23f-01",
+        "traceparent": "00-52fe9bdcf5624e96bb5716f448a848e6-313a964c336f2a85-01",
         "vary": "origin",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
@@ -81,14 +83,14 @@
         "x-ratelimit-limit": "10000",
         "x-ratelimit-remaining": "9999",
         "x-ratelimit-reset": "0",
-        "x-sdkwork-trace-id": "944406ea242147c1aca01a104f20f380"
+        "x-sdkwork-trace-id": "52fe9bdcf5624e96bb5716f448a848e6"
       },
       "status": 401
     },
     "mall-assets-dir": {
-      "bodyBytes": 1343,
-      "bodyPrefix": "533\r\n<html>\r\n<head><title>404 Not Found</title><script>globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"eyJhbGciOiJub25lIiwia2lkIjoicHVibGljLWFwcC10b2tlbiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJzZGt3b3JrLW1hbGwtcGMiLCJhdWQiOiJzZGt3",
-      "bodySha256": "7579ceb4ebd3032a5a85437e143b8c553aa349184f9549fbed8af5cfdb9769ba",
+      "bodyBytes": 1331,
+      "bodyPrefix": "<html>\r\n<head><title>404 Not Found</title><script>globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"eyJhbGciOiJub25lIiwia2lkIjoicHVibGljLWFwcC10b2tlbiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJzZGt3b3JrLW1hbGwtcGMiLCJhdWQiOiJzZGt3b3JrL",
+      "bodySha256": "dca53dd5baa056608b1e14db2d5927056007bd6acfd4ce37351f5eed888f26c1",
       "bootstrapAppId": "sdkwork-mall-pc",
       "dropped": false,
       "headers": {
@@ -96,13 +98,14 @@
         "content-type": "text/html",
         "server": "nginx"
       },
+      "nginxErrorPage": true,
       "status": 404,
       "surface": "pc"
     },
     "mall-client-hint-h5": {
-      "bodyBytes": 2900,
-      "bodyPrefix": "b48\r\n<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\" />\n    <meta name=\"description\" content=\"SDKWork \u5546\u57ce\u79fb\u52a8\u7aef\uff1a",
-      "bodySha256": "83e9cb55e347389688b1373720adc7d0e6365e50ca389836b92237e8d87a02ec",
+      "bodyBytes": 2888,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\" />\n    <meta name=\"description\" content=\"SDKWork \u5546\u57ce\u79fb\u52a8\u7aef\uff1a\u5546\ufffd",
+      "bodySha256": "52fb2892069496634eb0f0e5a6eec427d5f088a7af735980d97fdc9aa4e9ae59",
       "bootstrapAppId": "sdkwork-mall-h5",
       "dropped": false,
       "headers": {
@@ -115,9 +118,9 @@
       "surface": "h5"
     },
     "mall-desktop-index": {
-      "bodyBytes": 2384,
-      "bodyPrefix": "944\r\n<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"descri",
-      "bodySha256": "3be139c40495124934d53b8043fa2d139762cc53fbab308f22f4e0eeee00534e",
+      "bodyBytes": 2372,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"description",
+      "bodySha256": "395f2988fe5f05c2669c7ba7e331daac40bdc50b5e8848e3c421ab18e4b143ae",
       "bootstrapAppId": "sdkwork-mall-pc",
       "dropped": false,
       "headers": {
@@ -143,9 +146,9 @@
       "status": 200
     },
     "mall-ipad-stays-pc": {
-      "bodyBytes": 2384,
-      "bodyPrefix": "944\r\n<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"descri",
-      "bodySha256": "3be139c40495124934d53b8043fa2d139762cc53fbab308f22f4e0eeee00534e",
+      "bodyBytes": 2372,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"description",
+      "bodySha256": "395f2988fe5f05c2669c7ba7e331daac40bdc50b5e8848e3c421ab18e4b143ae",
       "bootstrapAppId": "sdkwork-mall-pc",
       "dropped": false,
       "headers": {
@@ -158,9 +161,9 @@
       "surface": "pc"
     },
     "mall-missing-asset": {
-      "bodyBytes": 1343,
-      "bodyPrefix": "533\r\n<html>\r\n<head><title>404 Not Found</title><script>globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"eyJhbGciOiJub25lIiwia2lkIjoicHVibGljLWFwcC10b2tlbiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJzZGt3b3JrLW1hbGwtcGMiLCJhdWQiOiJzZGt3",
-      "bodySha256": "7579ceb4ebd3032a5a85437e143b8c553aa349184f9549fbed8af5cfdb9769ba",
+      "bodyBytes": 1331,
+      "bodyPrefix": "<html>\r\n<head><title>404 Not Found</title><script>globalThis.__SDKWORK_CREDENTIAL_ENTRY_BOOTSTRAP_ACCESS_TOKEN__=\"eyJhbGciOiJub25lIiwia2lkIjoicHVibGljLWFwcC10b2tlbiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiJzZGt3b3JrLW1hbGwtcGMiLCJhdWQiOiJzZGt3b3JrL",
+      "bodySha256": "dca53dd5baa056608b1e14db2d5927056007bd6acfd4ce37351f5eed888f26c1",
       "bootstrapAppId": "sdkwork-mall-pc",
       "dropped": false,
       "headers": {
@@ -168,13 +171,14 @@
         "content-type": "text/html",
         "server": "nginx"
       },
+      "nginxErrorPage": true,
       "status": 404,
       "surface": "pc"
     },
     "mall-mobile-ua-index": {
-      "bodyBytes": 2900,
-      "bodyPrefix": "b48\r\n<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\" />\n    <meta name=\"description\" content=\"SDKWork \u5546\u57ce\u79fb\u52a8\u7aef\uff1a",
-      "bodySha256": "83e9cb55e347389688b1373720adc7d0e6365e50ca389836b92237e8d87a02ec",
+      "bodyBytes": 2888,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover\" />\n    <meta name=\"description\" content=\"SDKWork \u5546\u57ce\u79fb\u52a8\u7aef\uff1a\u5546\ufffd",
+      "bodySha256": "52fb2892069496634eb0f0e5a6eec427d5f088a7af735980d97fdc9aa4e9ae59",
       "bootstrapAppId": "sdkwork-mall-h5",
       "dropped": false,
       "headers": {
@@ -203,9 +207,9 @@
       "status": 200
     },
     "mall-spa-fallback": {
-      "bodyBytes": 2384,
-      "bodyPrefix": "944\r\n<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"descri",
-      "bodySha256": "3be139c40495124934d53b8043fa2d139762cc53fbab308f22f4e0eeee00534e",
+      "bodyBytes": 2372,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"description",
+      "bodySha256": "395f2988fe5f05c2669c7ba7e331daac40bdc50b5e8848e3c421ab18e4b143ae",
       "bootstrapAppId": "sdkwork-mall-pc",
       "dropped": false,
       "headers": {
@@ -227,12 +231,13 @@
         "content-type": "text/html",
         "server": "nginx"
       },
+      "nginxErrorPage": true,
       "status": 400
     },
     "platform-desktop-index": {
-      "bodyBytes": 6651,
-      "bodyPrefix": "19ee\r\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta nam",
-      "bodySha256": "95f5ff2f321fb5203d8da82d077705235939604f3af09ff783317c962d31ae76",
+      "bodyBytes": 6638,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"des",
+      "bodySha256": "ab9437d93a5c2f341d440f7a39533c0e57784b9ee7f991677a555c1808322239",
       "bootstrapAppId": "sdkwork-cloudrouter-pc",
       "dropped": false,
       "headers": {
@@ -245,9 +250,9 @@
       "surface": "pc"
     },
     "platform-mobile-ua-index": {
-      "bodyBytes": 1994,
-      "bodyPrefix": "7be\r\n<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=c",
-      "bodySha256": "d949ba18cb2a231a0dbfc352082cf0ce44f4fd8e940d9c65511c1ee3e5a3ba09",
+      "bodyBytes": 1982,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, viewport-fit=cover,",
+      "bodySha256": "f00484fa3dc78647d47f8bc2ecd1bd8b860c172fec81585f329f1e2889a3d877",
       "bootstrapAppId": "sdkwork-cloudrouter-h5",
       "dropped": false,
       "headers": {
@@ -260,9 +265,9 @@
       "surface": "h5"
     },
     "platform-random-path": {
-      "bodyBytes": 6651,
-      "bodyPrefix": "19ee\r\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta nam",
-      "bodySha256": "95f5ff2f321fb5203d8da82d077705235939604f3af09ff783317c962d31ae76",
+      "bodyBytes": 6638,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"des",
+      "bodySha256": "ab9437d93a5c2f341d440f7a39533c0e57784b9ee7f991677a555c1808322239",
       "bootstrapAppId": "sdkwork-cloudrouter-pc",
       "dropped": false,
       "headers": {
@@ -308,9 +313,9 @@
       "status": 200
     },
     "platform-spa-fallback": {
-      "bodyBytes": 6651,
-      "bodyPrefix": "19ee\r\n<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta nam",
-      "bodySha256": "95f5ff2f321fb5203d8da82d077705235939604f3af09ff783317c962d31ae76",
+      "bodyBytes": 6638,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"des",
+      "bodySha256": "ab9437d93a5c2f341d440f7a39533c0e57784b9ee7f991677a555c1808322239",
       "bootstrapAppId": "sdkwork-cloudrouter-pc",
       "dropped": false,
       "headers": {
@@ -323,10 +328,35 @@
       "surface": "pc"
     },
     "tls-api-dev.birdcoder.com-root": {
-      "dropPhase": "response",
-      "dropped": true,
+      "bodyBytes": 375,
+      "bodyPrefix": "{\"type\":\"https://docs.sdkwork.com/problems/40101\",\"title\":\"Authentication required\",\"status\":401,\"detail\":\"requests on unclassified API surfaces require explicit public_path registration\",\"instance\":\"GET /\",\"code\":40101,\"traceId\":\"139d66a2-",
+      "bodySha256": "a85ea7c90a85b7bdb1bdda77ce110f2b7bf67089e860af8c535e064d55c8c27a",
+      "dropped": false,
+      "headers": {
+        "access-control-allow-credentials": "true",
+        "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "content-length": "375",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "application/problem+json",
+        "permissions-policy": "geolocation=(), microphone=(), camera=()",
+        "ratelimit": "limit=10000, remaining=9999, reset=0",
+        "ratelimit-policy": "instance-host-total; limit=10000; window=1; algorithm=\"token-bucket\"",
+        "referrer-policy": "no-referrer",
+        "server": "nginx",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "traceparent": "00-139d66a24b4e43ee9293caeedf946538-1edf6b86723d35dd-01",
+        "vary": "origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-permitted-cross-domain-policies": "none",
+        "x-ratelimit-limit": "10000",
+        "x-ratelimit-remaining": "9999",
+        "x-ratelimit-reset": "0",
+        "x-sdkwork-trace-id": "139d66a24b4e43ee9293caeedf946538"
+      },
+      "status": 401,
       "tls": {
-        "alpn": "h2",
+        "alpn": "http/1.1",
         "certSanSha256": "e9626d43a77e06676c3c3bc5343aa08f624e668ab6c124b0df7b080ebfcc33e2",
         "certSubjectSha256": "38a3332ebccee029e7ac2c71cc3eb9cb625a05480b8ee8b656a30949a0aad2fa",
         "cipher": "TLS_AES_256_GCM_SHA384",
@@ -335,10 +365,35 @@
       }
     },
     "tls-api-dev.sdkwork.com-root": {
-      "dropPhase": "response",
-      "dropped": true,
+      "bodyBytes": 375,
+      "bodyPrefix": "{\"type\":\"https://docs.sdkwork.com/problems/40101\",\"title\":\"Authentication required\",\"status\":401,\"detail\":\"requests on unclassified API surfaces require explicit public_path registration\",\"instance\":\"GET /\",\"code\":40101,\"traceId\":\"56726b4f-",
+      "bodySha256": "a85ea7c90a85b7bdb1bdda77ce110f2b7bf67089e860af8c535e064d55c8c27a",
+      "dropped": false,
+      "headers": {
+        "access-control-allow-credentials": "true",
+        "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+        "content-length": "375",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "application/problem+json",
+        "permissions-policy": "geolocation=(), microphone=(), camera=()",
+        "ratelimit": "limit=10000, remaining=9999, reset=0",
+        "ratelimit-policy": "instance-host-total; limit=10000; window=1; algorithm=\"token-bucket\"",
+        "referrer-policy": "no-referrer",
+        "server": "nginx",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "traceparent": "00-56726b4fa80041a59ba41e223f8d1737-0e765d374fc39280-01",
+        "vary": "origin",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-permitted-cross-domain-policies": "none",
+        "x-ratelimit-limit": "10000",
+        "x-ratelimit-remaining": "9999",
+        "x-ratelimit-reset": "0",
+        "x-sdkwork-trace-id": "56726b4fa80041a59ba41e223f8d1737"
+      },
+      "status": 401,
       "tls": {
-        "alpn": "h2",
+        "alpn": "http/1.1",
         "certSanSha256": "e9626d43a77e06676c3c3bc5343aa08f624e668ab6c124b0df7b080ebfcc33e2",
         "certSubjectSha256": "38a3332ebccee029e7ac2c71cc3eb9cb625a05480b8ee8b656a30949a0aad2fa",
         "cipher": "TLS_AES_256_GCM_SHA384",
@@ -347,10 +402,21 @@
       }
     },
     "tls-mall-dev.birdcoder.com-root": {
-      "dropPhase": "response",
-      "dropped": true,
+      "bodyBytes": 2372,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"sdkwork-app-key\" content=\"sdkwork-mall-pc\" />\n    <meta name=\"description",
+      "bodySha256": "395f2988fe5f05c2669c7ba7e331daac40bdc50b5e8848e3c421ab18e4b143ae",
+      "bootstrapAppId": "sdkwork-mall-pc",
+      "dropped": false,
+      "headers": {
+        "content-type": "text/html",
+        "server": "nginx",
+        "vary": "User-Agent, Sec-CH-UA-Mobile",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 200,
+      "surface": "pc",
       "tls": {
-        "alpn": "h2",
+        "alpn": "http/1.1",
         "certSanSha256": "e9626d43a77e06676c3c3bc5343aa08f624e668ab6c124b0df7b080ebfcc33e2",
         "certSubjectSha256": "38a3332ebccee029e7ac2c71cc3eb9cb625a05480b8ee8b656a30949a0aad2fa",
         "cipher": "TLS_AES_256_GCM_SHA384",
@@ -368,6 +434,7 @@
         "content-type": "text/html",
         "server": "nginx"
       },
+      "nginxErrorPage": true,
       "status": 400,
       "tls": {
         "alpn": "http/1.1",
@@ -379,10 +446,21 @@
       }
     },
     "tls-platform-dev.birdcoder.com-root": {
-      "dropPhase": "response",
-      "dropped": true,
+      "bodyBytes": 6638,
+      "bodyPrefix": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <script src=\"/credential-entry-bootstrap-fe10bc237971.js\"></script>\n\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"des",
+      "bodySha256": "ab9437d93a5c2f341d440f7a39533c0e57784b9ee7f991677a555c1808322239",
+      "bootstrapAppId": "sdkwork-cloudrouter-pc",
+      "dropped": false,
+      "headers": {
+        "content-type": "text/html",
+        "server": "nginx",
+        "vary": "User-Agent, Sec-CH-UA-Mobile",
+        "x-content-type-options": "nosniff"
+      },
+      "status": 200,
+      "surface": "pc",
       "tls": {
-        "alpn": "h2",
+        "alpn": "http/1.1",
         "certSanSha256": "e9626d43a77e06676c3c3bc5343aa08f624e668ab6c124b0df7b080ebfcc33e2",
         "certSubjectSha256": "38a3332ebccee029e7ac2c71cc3eb9cb625a05480b8ee8b656a30949a0aad2fa",
         "cipher": "TLS_AES_256_GCM_SHA384",
@@ -407,13 +485,13 @@
       "dropped": true
     }
   },
-  "durationSeconds": 193.17,
+  "durationSeconds": 0.64,
   "dynamicAssetProbes": 0,
   "kind": "sdkwork-edge-parity-capture",
   "label": "stock-nginx-edge",
   "schema": 1,
   "target": {
-    "http": "127.0.0.1:80",
-    "tls": "127.0.0.1:443"
+    "http": "127.0.0.1:8080",
+    "tls": "127.0.0.1:8443"
   }
 }
