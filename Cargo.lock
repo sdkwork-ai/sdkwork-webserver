@@ -6394,6 +6394,7 @@ dependencies = [
  "sdkwork-database-sqlx",
  "sdkwork-intelligence-webserver-repository-sqlx",
  "sdkwork-intelligence-webserver-service",
+ "sdkwork-webserver-acme-service",
  "sdkwork-webserver-core",
  "tokio",
  "tracing",

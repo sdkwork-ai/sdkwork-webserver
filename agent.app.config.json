@@ -189,7 +189,7 @@
             "domain": "server-test.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "e5c017e90c579488b7d324bfab65e42249b899f71a17084373ba711677b52959"
+          "checksum": "3d9b1b32d93dae4ce70f18e62294e86f7e2ab3ed194dc95065a63aec58dc49fa"
         },
         {
           "id": "linux-rhel-x64-standalone-server-rpm",
