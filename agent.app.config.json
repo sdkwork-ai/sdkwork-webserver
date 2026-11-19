@@ -169,7 +169,7 @@
             "domain": "server.sdkwork.com"
           },
           "checksumAlgorithm": "sha256",
-          "checksum": "0475535905496dcbbdafc90c527ae8d397418ec377e8526b6f89d52482cdd02b"
+          "checksum": "52b8117b74bc2b23123393d549fa17e567f96a1106d16a2f3442078ed06dc5de"
         },
         {
           "id": "linux-ubuntu-x64-standalone-test-server-deb",
