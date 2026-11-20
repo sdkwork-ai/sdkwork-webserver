@@ -549,7 +549,24 @@ impl CertificateIssuer {
                 )
                 .await
             }
-            3 => issue_self_signed(hostnames, cert_name, &self.cert_root, key_algorithm),
+            3 => {
+                let material = issue_self_signed(hostnames, cert_name, &self.cert_root, key_algorithm)?;
+                // Same on-disk contract as the Let's Encrypt path above: the
+                // declared `cert_path`/`key_path` must be true on disk, or a
+                // single-host edge reading the canonical paths serves nothing.
+                // A failed export is logged and does not fail the issuance
+                // (the material is durable in the database).
+                if let Err(export_error) =
+                    crate::material_export::export_material_to_disk(&material).await
+                {
+                    tracing::warn!(
+                        cert_name = %material.cert_name,
+                        error = %export_error,
+                        "issued self-signed material disk export failed; the canonical certificate paths are stale"
+                    );
+                }
+                Ok(material)
+            }
             other => Err(AcmeServiceError::validation(format!(
                 "unsupported certType {other}; supported: 1 (Let's Encrypt), 3 (self-signed)"
             ))),
@@ -845,6 +862,46 @@ mod tests {
             })
             .expect("register account");
         Arc::new(registry)
+    }
+
+    /// A self-signed issuance must leave the declared `cert_path`/`key_path`
+    /// real on disk: single-host edges (deb/rpm) terminate TLS directly from
+    /// those canonical paths, the same contract the Let's Encrypt path honors.
+    #[tokio::test]
+    async fn self_signed_issue_exports_material_to_the_declared_paths() {
+        let root = tempfile::tempdir().expect("cert root");
+        let config = AcmeConfig::new(
+            "https://acme-staging-v02.api.letsencrypt.org/directory".to_string(),
+            "admin@example.com".to_string(),
+            30,
+            Some("/var/www/acme".to_string()),
+            false,
+        )
+        .expect("config");
+        let issuer =
+            CertificateIssuer::new(config, root.path().to_string_lossy().into_owned())
+                .expect("issuer");
+        let material = issuer
+            .issue_with_challenge(
+                3,
+                &["dev.localhost".to_string()],
+                "dev-localhost",
+                "ECDSA",
+                None,
+            )
+            .await
+            .expect("self-signed issuance");
+        let cert = std::fs::read(&material.cert_path).expect("cert file on disk");
+        let key = std::fs::read(&material.key_path).expect("key file on disk");
+        assert_eq!(cert, material.cert_pem.as_bytes());
+        assert_eq!(key, material.private_key_pem.as_bytes());
+        // No staging residue next to the canonical files.
+        let residue: Vec<_> = std::fs::read_dir(root.path().join("dev-localhost"))
+            .expect("certificate directory")
+            .flatten()
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp-"))
+            .collect();
+        assert!(residue.is_empty(), "staging files must be renamed away");
     }
 
     /// The product default on the real issuer, not only on the pure function:

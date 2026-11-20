@@ -6,7 +6,7 @@ use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_database_sqlx::create_pool_from_config;
 use sdkwork_intelligence_webserver_repository_sqlx::PostgresWebRepository;
 use sdkwork_intelligence_webserver_service::{
-    AuditLogWrite, DomainVerificationChallenge, DomainVerificationObservation,
+    AuditLogWrite, DomainDnsRecordUpsert, DomainVerificationChallenge, DomainVerificationObservation,
     RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
@@ -195,6 +195,7 @@ async fn postgres_repository_transactions_tenants_idempotency_and_pagination_are
     .await;
 
     verify_repository_contract(&context).await;
+    verify_root_domain_dns_record_write_and_expiry_summary(&context).await;
     verify_plugin_catalog(&context).await;
     verify_certificate_activation_compensation(&context).await;
     verify_certificate_revocation_ari_and_tls_projection(&context).await;
@@ -1097,6 +1098,110 @@ async fn verify_repository_contract(context: &TestContext) {
     verify_root_domain_zone_contract(context, &site_ids[0]).await;
     verify_bounded_config_collections(context, &site_ids[2], &site_ids[3]).await;
     verify_public_repository_surface(context, &sites[0].id, &site_ids[0]).await;
+}
+
+/// Regression for the DNS-record write-through binding and the certificate
+/// expiry summary aggregate. All three statements used to fail to prepare:
+/// the record INSERT referenced `$16` while binding 15 values, the record
+/// UPDATE numbered its SET clause by column position instead of bind order,
+/// and the expiry summary referenced `$2` while binding one value. The write
+/// asserts every editable field through the read-back projection so a
+/// mis-numbered SET clause cannot silently swap columns.
+async fn verify_root_domain_dns_record_write_and_expiry_summary(context: &TestContext) {
+    let repository = &context.repository;
+    let root_domain = repository
+        .create_root_domain(
+            TENANT_A,
+            &CreateRootDomainRequest {
+                hostname: "dns-record-contract.example".to_string(),
+                cloud_account_id: None,
+            },
+        )
+        .await
+        .expect("create root domain for DNS record write-through");
+
+    let record = DomainDnsRecordUpsert {
+        record_name: "api.dns-record-contract.example".to_string(),
+        record_type: "A".to_string(),
+        record_value: "203.0.113.7".to_string(),
+        ttl_seconds: Some(600),
+        priority: None,
+        record_line: Some("default".to_string()),
+        domain_id: None,
+        dns_provider: "CLOUDFLARE".to_string(),
+        cloud_account_id: "cloud-account-01".to_string(),
+        provider_record_ref: Some("rec-7".to_string()),
+    };
+    let created = repository
+        .insert_root_domain_dns_record(TENANT_A, &root_domain.id, &record)
+        .await
+        .expect("insert root-domain DNS record");
+    assert_eq!(created.record_name, record.record_name);
+    assert_eq!(created.host, "api");
+    assert_eq!(created.record_type, record.record_type);
+    assert_eq!(created.record_value, record.record_value);
+    assert_eq!(created.ttl_seconds, record.ttl_seconds);
+    assert_eq!(created.record_line, record.record_line);
+    assert_eq!(created.dns_provider, record.dns_provider);
+    assert_eq!(created.cloud_account_id, record.cloud_account_id);
+    assert_eq!(created.provider_record_ref, record.provider_record_ref);
+    assert_eq!(created.record_status, "ENABLED");
+    assert!(created.domain_id.is_none());
+
+    let edit = DomainDnsRecordUpsert {
+        record_name: "telemetry.dns-record-contract.example".to_string(),
+        record_type: "AAAA".to_string(),
+        record_value: "2001:db8::7".to_string(),
+        ttl_seconds: Some(300),
+        priority: None,
+        record_line: Some("telemetry".to_string()),
+        domain_id: None,
+        dns_provider: "DNSPOD".to_string(),
+        cloud_account_id: "cloud-account-02".to_string(),
+        provider_record_ref: Some("rec-8".to_string()),
+    };
+    let updated = repository
+        .update_root_domain_dns_record(TENANT_A, &root_domain.id, &created.id, &edit)
+        .await
+        .expect("update root-domain DNS record");
+    assert_eq!(updated.id, created.id);
+    assert_eq!(updated.record_name, edit.record_name);
+    assert_eq!(updated.host, "telemetry");
+    assert_eq!(updated.record_type, edit.record_type);
+    assert_eq!(updated.record_value, edit.record_value);
+    assert_eq!(updated.ttl_seconds, edit.ttl_seconds);
+    assert_eq!(updated.record_line, edit.record_line);
+    assert_eq!(updated.dns_provider, edit.dns_provider);
+    assert_eq!(updated.cloud_account_id, edit.cloud_account_id);
+    assert_eq!(updated.provider_record_ref, edit.provider_record_ref);
+    // An edit never touches the provider-side pause state.
+    assert_eq!(updated.record_status, "ENABLED");
+
+    // The summary is a node-level aggregate, so its exact values depend on
+    // what earlier verifies created. Assert the binding regression (the call
+    // must not fail to prepare) and stay consistent with a direct formulation
+    // of the same aggregate over the same window.
+    let (min_seconds, expiring_soon) = repository
+        .certificate_expiry_summary(30)
+        .await
+        .expect("certificate expiry summary");
+    let served_versions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM webserver_certificate_version v \
+         WHERE v.status = 'ACTIVE' AND EXISTS (\
+             SELECT 1 FROM webserver_certificate c \
+             WHERE c.id = v.certificate_id AND c.current_version_id = v.id \
+               AND c.deleted_at IS NULL AND c.status = 1)",
+    )
+    .fetch_one(&context.pool)
+    .await
+    .expect("count served certificate versions");
+    if served_versions == 0 {
+        assert_eq!(min_seconds, -1);
+        assert_eq!(expiring_soon, 0);
+    } else {
+        assert_ne!(min_seconds, -1);
+        assert!(expiring_soon >= 0 && expiring_soon <= served_versions);
+    }
 }
 
 async fn verify_root_domain_zone_contract(context: &TestContext, site_id: &str) {
