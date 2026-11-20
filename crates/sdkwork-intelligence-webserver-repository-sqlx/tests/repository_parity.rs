@@ -6,8 +6,9 @@ use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_database_sqlx::create_pool_from_config;
 use sdkwork_intelligence_webserver_repository_sqlx::PostgresWebRepository;
 use sdkwork_intelligence_webserver_service::{
-    AuditLogWrite, DomainDnsRecordUpsert, DomainVerificationChallenge, DomainVerificationObservation,
-    RuntimeAssignmentTarget, RuntimeAssignmentWrite, RuntimeObservationWrite, WebRepositoryPort,
+    AuditLogWrite, DomainDnsRecordUpsert, DomainVerificationChallenge,
+    DomainVerificationObservation, RuntimeAssignmentTarget, RuntimeAssignmentWrite,
+    RuntimeObservationWrite, WebRepositoryPort,
 };
 use sdkwork_webserver_contract::{
     AgentCertificateObservation, AgentHeartbeatRequest, ApplicationStoreListing,

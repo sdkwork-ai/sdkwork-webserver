@@ -137,32 +137,19 @@ impl DnsRecordChangeFields for UpdateDomainDnsRecordRequest {
 
 /// The provider family a write was answered by, read off the issuer's own
 /// configured registry rather than restated by the caller.
-fn issuer_provider_name(issuer: &sdkwork_webserver_acme_service::CertificateIssuer) -> String {
-    issuer
-        .dns_accounts()
-        .first()
-        .map(|account| account.provider.clone())
-        .unwrap_or_else(|| "UNKNOWN".to_owned())
-}
-
-/// The account a write answered through: the Zone's pin when one is set.
-/// The registry-backed issuer resolves per operation exactly like this, so
-/// the snapshot metadata repeats the decision rather than inventing one.
-fn issuer_account_id(
+/// The account identity a DNS CRUD write answered through, as stored-row
+/// metadata. The issuer resolves the pinned account or the covering zone
+/// exactly like the provider call that just succeeded, so the stored row
+/// repeats the write's actual decision; the fallback placeholders only guard
+/// a resolution that changed between the two calls.
+fn issuer_dns_record_identity(
     issuer: &sdkwork_webserver_acme_service::CertificateIssuer,
     target: &RootDomainDnsSyncTarget,
-) -> String {
-    target
-        .cloud_account_id
-        .clone()
-        .or_else(|| {
-            issuer
-                .dns_accounts()
-                .iter()
-                .find(|account| account.zone_apex.eq_ignore_ascii_case(&target.hostname))
-                .map(|account| account.account_id.clone())
-        })
-        .unwrap_or_else(|| "resolved".to_owned())
+) -> (String, String) {
+    issuer
+        .resolve_dns_account_identity(target.cloud_account_id.as_deref(), &target.hostname)
+        .map(|identity| (identity.provider, identity.account_id))
+        .unwrap_or_else(|_| ("UNKNOWN".to_owned(), "resolved".to_owned()))
 }
 
 /// Maps an inventory read's failure to the error an operator can act on.
@@ -725,6 +712,8 @@ impl WebBackendApi for WebService {
             .repository
             .list_root_domain_hostname_assets(tenant_id, root_domain_id)
             .await?;
+        let (dns_provider, cloud_account_id) =
+            issuer_dns_record_identity(&self.certificate_issuer, &target);
         let stored = self
             .repository
             .insert_root_domain_dns_record(
@@ -740,8 +729,8 @@ impl WebBackendApi for WebService {
                     priority: record.priority.and_then(|value| i32::try_from(value).ok()),
                     record_line: record.record_line.clone(),
                     domain_id: domain_asset_for_record(&hostname_assets, &record.record_name),
-                    dns_provider: issuer_provider_name(&self.certificate_issuer),
-                    cloud_account_id: issuer_account_id(&self.certificate_issuer, &target),
+                    dns_provider,
+                    cloud_account_id,
                     provider_record_ref: record.provider_record_ref.clone(),
                 },
             )
@@ -793,6 +782,8 @@ impl WebBackendApi for WebService {
             .repository
             .list_root_domain_hostname_assets(tenant_id, root_domain_id)
             .await?;
+        let (dns_provider, cloud_account_id) =
+            issuer_dns_record_identity(&self.certificate_issuer, &target);
         let stored = self
             .repository
             .update_root_domain_dns_record(
@@ -809,8 +800,8 @@ impl WebBackendApi for WebService {
                     priority: record.priority.and_then(|value| i32::try_from(value).ok()),
                     record_line: record.record_line.clone(),
                     domain_id: domain_asset_for_record(&hostname_assets, &record.record_name),
-                    dns_provider: issuer_provider_name(&self.certificate_issuer),
-                    cloud_account_id: issuer_account_id(&self.certificate_issuer, &target),
+                    dns_provider,
+                    cloud_account_id,
                     provider_record_ref: record.provider_record_ref.clone(),
                 },
             )

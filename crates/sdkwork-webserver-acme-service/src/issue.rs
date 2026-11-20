@@ -211,6 +211,25 @@ impl CertificateIssuer {
             .unwrap_or_default()
     }
 
+    /// The DNS account identity a CRUD write for `hostname` answers through:
+    /// the pinned account when `account_id` is set, else the covering account —
+    /// exactly the resolution [`Self::create_dns_record`] and every other
+    /// write perform. The control plane stamps this identity on the stored
+    /// row so the console and the audit trail repeat the write's actual
+    /// decision instead of guessing one from the account list.
+    pub fn resolve_dns_account_identity(
+        &self,
+        account_id: Option<&str>,
+        hostname: &str,
+    ) -> AcmeServiceResult<crate::DnsAccountDescriptor> {
+        let account = self.resolve_dns_account(account_id, hostname)?;
+        Ok(crate::DnsAccountDescriptor {
+            account_id: account.account_id.clone(),
+            provider: account.provider.as_str().to_owned(),
+            zone_apex: account.zone_apex.clone(),
+        })
+    }
+
     /// Reads one cloud account's zone record inventory.
     ///
     /// `account_id` pins the account; `None` resolves the covering account by
@@ -550,7 +569,8 @@ impl CertificateIssuer {
                 .await
             }
             3 => {
-                let material = issue_self_signed(hostnames, cert_name, &self.cert_root, key_algorithm)?;
+                let material =
+                    issue_self_signed(hostnames, cert_name, &self.cert_root, key_algorithm)?;
                 // Same on-disk contract as the Let's Encrypt path above: the
                 // declared `cert_path`/`key_path` must be true on disk, or a
                 // single-host edge reading the canonical paths serves nothing.
@@ -864,6 +884,67 @@ mod tests {
         Arc::new(registry)
     }
 
+    fn registry_with_two_accounts() -> Arc<crate::dns_account::DnsCloudAccountRegistry> {
+        let mut registry = crate::dns_account::DnsCloudAccountRegistry::empty();
+        for (account_id, zone_apex, provider) in [
+            (
+                "first-cloudflare",
+                "example.com",
+                crate::dns::DnsProviderKind::Cloudflare,
+            ),
+            (
+                "second-dnspod",
+                "eu.example.com",
+                crate::dns::DnsProviderKind::Dnspod,
+            ),
+        ] {
+            registry
+                .register(crate::dns_account::DnsCloudAccount {
+                    account_id: account_id.to_string(),
+                    zone_apex: zone_apex.to_string(),
+                    provider,
+                    presenter: Arc::new(crate::dns::InMemoryDns01Presenter::default()),
+                })
+                .expect("register account");
+        }
+        Arc::new(registry)
+    }
+
+    /// The identity a DNS CRUD write answers through must come from the
+    /// covering account (longest zone suffix, then the pin) — never from the
+    /// first account in the registry. A multi-account edge writes a record
+    /// through the account that owns its zone, and the stored-row metadata
+    /// has to name that same account.
+    #[test]
+    fn dns_account_identity_resolves_the_covering_account_not_the_first_one() {
+        let issuer = issuer_with_webroot(Some("/var/www/acme"));
+        let mut issuer = issuer;
+        issuer.attach_dns_accounts(registry_with_two_accounts());
+
+        // `api.eu.example.com` is covered by the SECOND account's zone.
+        let identity = issuer
+            .resolve_dns_account_identity(None, "api.eu.example.com")
+            .expect("covering identity");
+        assert_eq!(identity.account_id, "second-dnspod");
+        assert_eq!(identity.provider, "DNSPOD");
+        assert_eq!(identity.zone_apex, "eu.example.com");
+
+        // A pin overrides the coverage resolution.
+        let pinned = issuer
+            .resolve_dns_account_identity(Some("first-cloudflare"), "api.eu.example.com")
+            .expect("pinned identity");
+        assert_eq!(pinned.account_id, "first-cloudflare");
+        assert_eq!(pinned.provider, "CLOUDFLARE");
+
+        // An unknown pin and an uncovered hostname both fail closed.
+        assert!(issuer
+            .resolve_dns_account_identity(Some("missing"), "api.eu.example.com")
+            .is_err());
+        assert!(issuer
+            .resolve_dns_account_identity(None, "other.example.net")
+            .is_err());
+    }
+
     /// A self-signed issuance must leave the declared `cert_path`/`key_path`
     /// real on disk: single-host edges (deb/rpm) terminate TLS directly from
     /// those canonical paths, the same contract the Let's Encrypt path honors.
@@ -878,9 +959,8 @@ mod tests {
             false,
         )
         .expect("config");
-        let issuer =
-            CertificateIssuer::new(config, root.path().to_string_lossy().into_owned())
-                .expect("issuer");
+        let issuer = CertificateIssuer::new(config, root.path().to_string_lossy().into_owned())
+            .expect("issuer");
         let material = issuer
             .issue_with_challenge(
                 3,
