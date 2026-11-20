@@ -79,3 +79,40 @@ python3 tests/nginx/edge-parity/battery.py \
     --label pre-cutover-webserver \
     --out /tmp/pre-cutover.json
 ```
+
+## Deployment channel regression
+
+`deployment-regression.py` verifies the *deployment channels* themselves, on
+the edge host, after (re)deployment:
+
+- `--mode installer` — the native installer channel
+  (`docs/guides/operator/deb-install.md`): package integrity, systemd units,
+  the production edge takeover of host :80/:443, ACME HTTP-01 webroot,
+  HTTP→HTTPS redirect, TLS/ALPN h2 semantics, edge domain certificate
+  identity, gateway behind the edge, direct gateway health, edge config
+  self-validation, and the host-level absence of stock nginx
+  (SDKWORK_WEBSERVER_SPEC §0.1).
+- `--mode full-edge` — the multi-vhost development edge: the full battery
+  capture compared against the committed oracle with zero behavioural
+  differences, plus derived assertions (drop semantics, identity banner,
+  bootstrap handoff presence).
+
+```bash
+# Installer channel (after `bin/apps-deploy.sh server` / apt install)
+python3 tests/nginx/edge-parity/deployment-regression.py --mode installer \
+    --environment production --domain server.sdkwork.com
+
+# Container channel (after `bin/docker-deploy.sh install --environment development`)
+python3 tests/nginx/edge-parity/deployment-regression.py --mode full-edge
+```
+
+`run-remote-regression.mjs` runs the same regression from a workstation over
+SSH against the pulled checkout on the edge host and propagates the remote
+exit code:
+
+```bash
+node tests/nginx/edge-parity/run-remote-regression.mjs \
+    --host api-dev.birdcoder.com --mode full-edge \
+    [--json-out target/evidence/full-edge-verdict.json]
+```
+
