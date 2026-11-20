@@ -4915,6 +4915,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-deploy-identity-lifecycle-port"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest 0.13.1",
+ "sdkwork-deploy-identity-provisioning-port",
+ "sdkwork-iam-web-adapter",
+ "sdkwork-utils-rust",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "sdkwork-deploy-identity-provisioning-port"
 version = "0.1.0"
 dependencies = [
@@ -4955,6 +4970,7 @@ dependencies = [
  "sdkwork-deploy-core",
  "sdkwork-deploy-database-host",
  "sdkwork-deploy-drive-port",
+ "sdkwork-deploy-identity-lifecycle-port",
  "sdkwork-deploy-identity-provisioning-port",
  "sdkwork-deploy-web-port",
  "sdkwork-intelligence-deploy-repository-sqlx",
@@ -5362,6 +5378,7 @@ dependencies = [
  "sdkwork-deploy-core",
  "sdkwork-deploy-drive-port",
  "sdkwork-deploy-feed",
+ "sdkwork-deploy-identity-lifecycle-port",
  "sdkwork-deploy-identity-provisioning-port",
  "sdkwork-deploy-runtime-compiler",
  "sdkwork-deploy-web-port",
