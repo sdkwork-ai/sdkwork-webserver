@@ -62,23 +62,23 @@ async fn postgres_baseline_seed_and_drift_are_clean() {
         .plan_migrations()
         .await
         .expect("plan PostgreSQL migrations");
-    // DATABASE_FRAMEWORK_SPEC §7.5: a fresh install applies the immutable
-    // baseline followed by every ordered post-baseline migration. `init()`
-    // records only the installation state, so the committed migration set is
-    // pending here by design; it is load-bearing (and idempotent), not debt.
+    // DATABASE_FRAMEWORK_SPEC §7.5: the consolidated baseline is the
+    // fresh-install bootstrap, and `init()` records the module's migration
+    // history as baseline coverage, so nothing is pending here — the committed
+    // migration files stay the checksum-covered upgrade path for databases
+    // provisioned before the baseline.
     assert!(
-        !pending.is_empty(),
-        "the committed post-baseline migrations must be the upgrade path"
+        pending.is_empty(),
+        "baseline coverage must reconcile the consolidated migration history"
     );
-    let expected_migrations = pending.len();
 
     let migrated = orchestrator
         .migrate()
         .await
         .expect("apply PostgreSQL migrations");
     assert_eq!(
-        migrated, expected_migrations,
-        "every pending migration must be applied exactly once"
+        migrated, 0,
+        "baseline coverage must leave no post-baseline migration pending"
     );
 
     let pending_after = orchestrator
