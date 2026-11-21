@@ -114,91 +114,6 @@ on:
         default: false
         type: boolean
 
-      sdkwork_appbase_ref:
-        description: 'SDKWORK_APPBASE_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_core_ref:
-        description: 'SDKWORK_CORE_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_ui_ref:
-        description: 'SDKWORK_UI_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_webserver_framework_ref:
-        description: 'SDKWORK_WEBSERVER_FRAMEWORK_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_iam_ref:
-        description: 'SDKWORK_IAM_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_database_ref:
-        description: 'SDKWORK_DATABASE_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_sdk_commons_ref:
-        description: 'SDKWORK_SDK_COMMONS_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_utils_ref:
-        description: 'SDKWORK_UTILS_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_specs_ref:
-        description: 'SDKWORK_SPECS_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_app_topology_ref:
-        description: 'SDKWORK_APP_TOPOLOGY_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_deployments_ref:
-        description: 'SDKWORK_DEPLOYMENTS_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_knowledgebase_ref:
-        description: 'SDKWORK_KNOWLEDGEBASE_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_id_ref:
-        description: 'SDKWORK_ID_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_drive_ref:
-        description: 'SDKWORK_DRIVE_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_mcp_ref:
-        description: 'SDKWORK_MCP_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_skills_ref:
-        description: 'SDKWORK_SKILLS_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_order_ref:
-        description: 'SDKWORK_ORDER_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_sandbox_ref:
-        description: 'SDKWORK_SANDBOX_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_cloudrouter_ref:
-        description: 'SDKWORK_CLOUDROUTER_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_discovery_ref:
-        description: 'SDKWORK_DISCOVERY_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-      sdkwork_kernel_ref:
-        description: 'SDKWORK_KERNEL_REF dependency ref; blank falls back to the repository variable.'
-        required: false
-        default: ''
-
 permissions:
   contents: write
   actions: read
@@ -208,7 +123,7 @@ permissions:
 
 jobs:
   package:
-    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@35f903c1c5e779192e3a4d511c83ca4ac4f7ce4e
+    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@3ff4ab7924c6dda4f42cc8f34aa48867224b9ab0
     with:
       config_path: agent.workflow.json
       tag: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}
@@ -224,29 +139,29 @@ jobs:
       upload_artifact: true
       deploy: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'release' }}
       retention_days: 30
-      framework_ref: 35f903c1c5e779192e3a4d511c83ca4ac4f7ce4e
+      framework_ref: 3ff4ab7924c6dda4f42cc8f34aa48867224b9ab0
       dependency_refs_json: >-
         {
-                    "SDKWORK_APPBASE_REF": "${{ github.event.inputs.sdkwork_appbase_ref || vars.SDKWORK_APPBASE_REF }}",
-                    "SDKWORK_CORE_REF": "${{ github.event.inputs.sdkwork_core_ref || vars.SDKWORK_CORE_REF }}",
-                    "SDKWORK_UI_REF": "${{ github.event.inputs.sdkwork_ui_ref || vars.SDKWORK_UI_REF }}",
-                    "SDKWORK_WEBSERVER_FRAMEWORK_REF": "${{ github.event.inputs.sdkwork_webserver_framework_ref || vars.SDKWORK_WEBSERVER_FRAMEWORK_REF }}",
-                    "SDKWORK_IAM_REF": "${{ github.event.inputs.sdkwork_iam_ref || vars.SDKWORK_IAM_REF }}",
-                    "SDKWORK_DATABASE_REF": "${{ github.event.inputs.sdkwork_database_ref || vars.SDKWORK_DATABASE_REF }}",
-                    "SDKWORK_SDK_COMMONS_REF": "${{ github.event.inputs.sdkwork_sdk_commons_ref || vars.SDKWORK_SDK_COMMONS_REF }}",
-                    "SDKWORK_UTILS_REF": "${{ github.event.inputs.sdkwork_utils_ref || vars.SDKWORK_UTILS_REF }}",
-                    "SDKWORK_SPECS_REF": "${{ github.event.inputs.sdkwork_specs_ref || vars.SDKWORK_SPECS_REF }}",
-                    "SDKWORK_APP_TOPOLOGY_REF": "${{ github.event.inputs.sdkwork_app_topology_ref || vars.SDKWORK_APP_TOPOLOGY_REF }}",
-                    "SDKWORK_DEPLOYMENTS_REF": "${{ github.event.inputs.sdkwork_deployments_ref || vars.SDKWORK_DEPLOYMENTS_REF }}",
-                    "SDKWORK_KNOWLEDGEBASE_REF": "${{ github.event.inputs.sdkwork_knowledgebase_ref || vars.SDKWORK_KNOWLEDGEBASE_REF }}",
-                    "SDKWORK_ID_REF": "${{ github.event.inputs.sdkwork_id_ref || vars.SDKWORK_ID_REF }}",
-                    "SDKWORK_DRIVE_REF": "${{ github.event.inputs.sdkwork_drive_ref || vars.SDKWORK_DRIVE_REF }}",
-                    "SDKWORK_MCP_REF": "${{ github.event.inputs.sdkwork_mcp_ref || vars.SDKWORK_MCP_REF }}",
-                    "SDKWORK_SKILLS_REF": "${{ github.event.inputs.sdkwork_skills_ref || vars.SDKWORK_SKILLS_REF }}",
-                    "SDKWORK_ORDER_REF": "${{ github.event.inputs.sdkwork_order_ref || vars.SDKWORK_ORDER_REF }}",
-                    "SDKWORK_SANDBOX_REF": "${{ github.event.inputs.sdkwork_sandbox_ref || vars.SDKWORK_SANDBOX_REF }}",
-                    "SDKWORK_CLOUDROUTER_REF": "${{ github.event.inputs.sdkwork_cloudrouter_ref || vars.SDKWORK_CLOUDROUTER_REF }}",
-                    "SDKWORK_DISCOVERY_REF": "${{ github.event.inputs.sdkwork_discovery_ref || vars.SDKWORK_DISCOVERY_REF }}",
-                    "SDKWORK_KERNEL_REF": "${{ github.event.inputs.sdkwork_kernel_ref || vars.SDKWORK_KERNEL_REF }}"
+                    "SDKWORK_APPBASE_REF": "${{ vars.SDKWORK_APPBASE_REF }}",
+                    "SDKWORK_CORE_REF": "${{ vars.SDKWORK_CORE_REF }}",
+                    "SDKWORK_UI_REF": "${{ vars.SDKWORK_UI_REF }}",
+                    "SDKWORK_WEBSERVER_FRAMEWORK_REF": "${{ vars.SDKWORK_WEBSERVER_FRAMEWORK_REF }}",
+                    "SDKWORK_IAM_REF": "${{ vars.SDKWORK_IAM_REF }}",
+                    "SDKWORK_DATABASE_REF": "${{ vars.SDKWORK_DATABASE_REF }}",
+                    "SDKWORK_SDK_COMMONS_REF": "${{ vars.SDKWORK_SDK_COMMONS_REF }}",
+                    "SDKWORK_UTILS_REF": "${{ vars.SDKWORK_UTILS_REF }}",
+                    "SDKWORK_SPECS_REF": "${{ vars.SDKWORK_SPECS_REF }}",
+                    "SDKWORK_APP_TOPOLOGY_REF": "${{ vars.SDKWORK_APP_TOPOLOGY_REF }}",
+                    "SDKWORK_DEPLOYMENTS_REF": "${{ vars.SDKWORK_DEPLOYMENTS_REF }}",
+                    "SDKWORK_KNOWLEDGEBASE_REF": "${{ vars.SDKWORK_KNOWLEDGEBASE_REF }}",
+                    "SDKWORK_ID_REF": "${{ vars.SDKWORK_ID_REF }}",
+                    "SDKWORK_DRIVE_REF": "${{ vars.SDKWORK_DRIVE_REF }}",
+                    "SDKWORK_MCP_REF": "${{ vars.SDKWORK_MCP_REF }}",
+                    "SDKWORK_SKILLS_REF": "${{ vars.SDKWORK_SKILLS_REF }}",
+                    "SDKWORK_ORDER_REF": "${{ vars.SDKWORK_ORDER_REF }}",
+                    "SDKWORK_SANDBOX_REF": "${{ vars.SDKWORK_SANDBOX_REF }}",
+                    "SDKWORK_CLOUDROUTER_REF": "${{ vars.SDKWORK_CLOUDROUTER_REF }}",
+                    "SDKWORK_DISCOVERY_REF": "${{ vars.SDKWORK_DISCOVERY_REF }}",
+                    "SDKWORK_KERNEL_REF": "${{ vars.SDKWORK_KERNEL_REF }}"
         }
     secrets: inherit
