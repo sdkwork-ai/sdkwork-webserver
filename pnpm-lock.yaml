@@ -322,9 +322,6 @@ importers:
 
   ../sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-core:
     dependencies:
-      '@sdkwork/deployments-app-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
       '@sdkwork/deployments-backend-sdk':
         specifier: workspace:*
         version: link:../../../../sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript
@@ -360,7 +357,7 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
       react-router-dom:
-        specifier: ^7.18.4
+        specifier: ^7.15.0
         version: 7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
     devDependencies:
       '@types/react':
@@ -413,7 +410,7 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1
       react-router-dom:
-        specifier: ^7.18.4
+        specifier: ^7.15.0
         version: 7.18.4(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
     devDependencies:
       '@types/react':
