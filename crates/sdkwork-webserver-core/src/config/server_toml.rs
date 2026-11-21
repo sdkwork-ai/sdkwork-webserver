@@ -2798,10 +2798,7 @@ impl<'a> Materializer<'a> {
         // absence is irrelevant here — the typed key is the only declaration)
         // keeps it HTTP/1-only. Plaintext listeners are unaffected: every
         // consumer of this flag gates h2 on `ssl`.
-        let http2 = server
-            .get("http2")
-            .and_then(Value::as_bool)
-            .unwrap_or(true);
+        let http2 = server.get("http2").and_then(Value::as_bool).unwrap_or(true);
         let tls_table = server.get("tls").and_then(Value::as_object);
         let tls_window = tls_window_from_protocols(tls_table, &format!("{path}.tls"))?;
         let client_auth = if let Some(tls) = tls_table {
@@ -2965,10 +2962,7 @@ impl<'a> Materializer<'a> {
                     .map(|(name, value)| json!({ "name": name, "value": value }))
                     .collect();
                 if !custom_headers.is_empty() {
-                    merged.insert(
-                        "customHeaders".to_owned(),
-                        Value::Array(custom_headers),
-                    );
+                    merged.insert("customHeaders".to_owned(), Value::Array(custom_headers));
                 }
             }
             virtual_host["securityHeaders"] = Value::Object(merged);

@@ -156,11 +156,7 @@ pub fn merge_nginx_apps(
     }
     for map in right.stream_maps {
         let result = map.result.clone();
-        if let Some(existing) = left
-            .stream_maps
-            .iter()
-            .position(|map| map.result == result)
-        {
+        if let Some(existing) = left.stream_maps.iter().position(|map| map.result == result) {
             left.stream_maps[existing] = map;
         } else {
             left.stream_maps.push(map);

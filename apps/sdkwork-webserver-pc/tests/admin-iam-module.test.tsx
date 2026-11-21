@@ -155,7 +155,7 @@ describe("backend-admin iam sidebar (rendered)", () => {
     "iam.users.read",
     "iam.organizations.read",
     "iam.tenants.read",
-    "iam.tenant_applications.update",
+    "iam.installations.update",
     "iam.roles.read",
     "iam.permissions.read",
     "iam.policies.read",

@@ -3374,10 +3374,9 @@ pub(crate) const SERVER_RESPONSE_HEADER_VALUE: &str = "sdkwork-webserver";
 /// responses alike).
 pub(crate) fn emit_server_response_header(mut response: Response<Body>) -> Response<Body> {
     if let Ok(value) = axum::http::HeaderValue::from_str(SERVER_RESPONSE_HEADER_VALUE) {
-        response.headers_mut().insert(
-            axum::http::header::SERVER,
-            value,
-        );
+        response
+            .headers_mut()
+            .insert(axum::http::header::SERVER, value);
     }
     response
 }

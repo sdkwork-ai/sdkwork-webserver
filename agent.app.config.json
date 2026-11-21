@@ -56,7 +56,7 @@
       "iam.users.read",
       "iam.organizations.read",
       "iam.tenants.read",
-      "iam.tenant_applications.update",
+      "iam.installations.update",
       "iam.roles.read",
       "iam.permissions.read",
       "iam.policies.read",
@@ -235,12 +235,18 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.19",
+    "currentVersion": "0.1.20",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.19"
+      "BETA": "0.1.20"
     },
     "notes": [
+      {
+        "version": "0.1.20",
+        "channel": "BETA",
+        "current": true,
+        "summary": "TLS edge and release-channel repair release. The nginx-compatible data plane defaults every TLS listener to HTTP/2 like nginx 1.25+ and serves HTTP/2 on the packaged production TLS edge; shared-port policy merges now adopt the incoming protocol set when a shared listener predates protocol tracking and name the conflicting policies when a merge fails; the product console edge stamps the secure-response baseline and stops double-stamping the adaptive Vary on conf-declared dispatches. ACME repairs: the issuer selects the rustls provider and repairs the domain SQL binds, the certificate worker watchdog keeps its budget above the issuer budget with a usable default contact, self-signed material is exported to the canonical live path and the certificate database gaps are closed, and DNS record metadata is stamped with the identity the write answered through. Container and deployment repairs: the product-edge heredocs escape the nginx variables they interpolate and the docker runtime passes the memory runtime environment to the module gateway. Release channel repair: the thin verify/package entrypoints pinned a workflow-framework ref that predates the reusable CI workflow, so every push failed before any job started; both entrypoints now pin the current framework main, and the framework planner normalizes a raw tag name (vX.Y.Z) into the semantic package version so tag-push releases carry pure semver artifacts. Rust sources are formatted with the CI-pinned 1.98.0 rustfmt so the fmt gate passes on every platform. This changelog describes 0.1.20 only."
+      },
       {
         "version": "0.1.12",
         "channel": "BETA",
@@ -263,15 +269,7 @@
         "version": "0.1.9",
         "channel": "BETA",
         "current": false,
-        "summary": "First published release off this baseline. No GitHub release existed before this one, so nothing here supersedes an earlier published artifact set. Three defects were fixed to get a packaging run to produce artifacts for every platform target. (1) The packaging pipeline could not compile its dependency closure: the generated Rust SDK under sdkwork-drive declared 91 model modules in models/mod.rs with no corresponding source file (rustc E0583), so every platform job died in the shared cargo build and no artifact was ever produced. sdkwork-drive main now carries the committed generated sources, and the workspace compiles clean from a cold target directory. (2) The standalone gateway test suite raced its own data-plane startup in three separate places. spawn_data_plane returns once the runtime task is scheduled while the listener socket is bound inside that task, so a test that connected immediately reported ConnectionRefused as a data-plane defect; under the parallel packaging load on a hosted runner that race turned all six platform targets red in the shared verify stage. In data_plane_integration every raw socket connect now routes through one connect_raw helper that retries inside the same five second budget the request-based waits already used (58 tests, previously 11 failing). In stream_proxy three tests had no readiness wait at all; they now retry their real connection instead, because a separate probe would be forwarded to the upstream and would inflate both the accepted-connection counter and the captured first line those tests assert on. cluster_routing replaced a fixed 300ms sleep with a retried connect on the same reasoning. The local windows run is green across the whole crate: 330 lib tests, 58 data plane tests, 6 stream proxy tests and 5 cluster routing tests. (3) The external dependency contract is explicit: agent.workflow.json pins all 17 sibling repositories to their main branch, with the local checkout resolved by relative path and the release build resolved by git repository ref, so a packaging run is reproducible from the dependency repositories main instead of from whatever a runner happened to have cached. Installer configuration stays operator-owned at install time: /etc/sdkwork/webserver/config.toml carries the ingress bind and port, the PostgreSQL host, port, name, schema and user, and the optional Redis resolver-cache layer, and no credential is ever baked into the package -- database and encryption secrets are generated on first install into 0600 files under /etc/sdkwork/webserver/secrets and referenced by path only. Ubuntu and RHEL installers ship for both the test and production environments, alongside the x64 and arm64 server archives. This changelog describes 0.1.9 only.",
-        "packageIds": [
-          "linux-x64-standalone-server-tar-gz",
-          "linux-arm64-standalone-server-tar-gz",
-          "linux-ubuntu-x64-standalone-server-deb",
-          "linux-ubuntu-x64-standalone-server-test-deb",
-          "linux-rhel-x64-standalone-server-rpm",
-          "linux-rhel-x64-standalone-server-test-rpm"
-        ]
+        "summary": "First published release off this baseline. No GitHub release existed before this one, so nothing here supersedes an earlier published artifact set. Three defects were fixed to get a packaging run to produce artifacts for every platform target. (1) The packaging pipeline could not compile its dependency closure: the generated Rust SDK under sdkwork-drive declared 91 model modules in models/mod.rs with no corresponding source file (rustc E0583), so every platform job died in the shared cargo build and no artifact was ever produced. sdkwork-drive main now carries the committed generated sources, and the workspace compiles clean from a cold target directory. (2) The standalone gateway test suite raced its own data-plane startup in three separate places. spawn_data_plane returns once the runtime task is scheduled while the listener socket is bound inside that task, so a test that connected immediately reported ConnectionRefused as a data-plane defect; under the parallel packaging load on a hosted runner that race turned all six platform targets red in the shared verify stage. In data_plane_integration every raw socket connect now routes through one connect_raw helper that retries inside the same five second budget the request-based waits already used (58 tests, previously 11 failing). In stream_proxy three tests had no readiness wait at all; they now retry their real connection instead, because a separate probe would be forwarded to the upstream and would inflate both the accepted-connection counter and the captured first line those tests assert on. cluster_routing replaced a fixed 300ms sleep with a retried connect on the same reasoning. The local windows run is green across the whole crate: 330 lib tests, 58 data plane tests, 6 stream proxy tests and 5 cluster routing tests. (3) The external dependency contract is explicit: agent.workflow.json pins all 17 sibling repositories to their main branch, with the local checkout resolved by relative path and the release build resolved by git repository ref, so a packaging run is reproducible from the dependency repositories main instead of from whatever a runner happened to have cached. Installer configuration stays operator-owned at install time: /etc/sdkwork/webserver/config.toml carries the ingress bind and port, the PostgreSQL host, port, name, schema and user, and the optional Redis resolver-cache layer, and no credential is ever baked into the package -- database and encryption secrets are generated on first install into 0600 files under /etc/sdkwork/webserver/secrets and referenced by path only. Ubuntu and RHEL installers ship for both the test and production environments, alongside the x64 and arm64 server archives. This changelog describes 0.1.9 only."
       }
     ]
   },

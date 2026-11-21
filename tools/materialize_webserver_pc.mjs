@@ -254,7 +254,7 @@ const packages = [
       ["iam-users", "Users", "Identity accounts and their lifecycle", "iam.users.read", "iam/users"],
       ["iam-organizations", "Organizations", "Organization, department, and position structure", "iam.organizations.read", "iam/organizations"],
       ["iam-tenants", "Tenants", "Tenants and their membership", "iam.tenants.read", "iam/tenants"],
-      ["iam-applications", "Applications", "Applications and endpoints registered for the tenant", "iam.tenant_applications.update", "iam/applications"],
+      ["iam-applications", "Applications", "Applications and endpoints registered for the tenant", "iam.installations.update", "iam/applications"],
       ["iam-roles", "Roles", "Role catalog and role permission bindings", "iam.roles.read", "iam/roles"],
       ["iam-permissions", "Permissions", "Backend operation permission catalog", "iam.permissions.read", "iam/permissions"],
       ["iam-policies", "Policies", "Authorization policy management", "iam.policies.read", "iam/policies"],

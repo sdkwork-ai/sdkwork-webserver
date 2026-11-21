@@ -440,9 +440,7 @@ pub(crate) async fn serve_operations_listener(
     // The operations surface (health probes, diagnostics, metrics) carries the
     // same product `Server` identity as the data plane and the management
     // ingress.
-    .layer(axum::middleware::from_fn(
-        super::server_header_middleware,
-    ));
+    .layer(axum::middleware::from_fn(super::server_header_middleware));
     tracing::info!(
         address = %prepared.address,
         "loopback data-plane operations listener started"

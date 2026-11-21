@@ -18,9 +18,7 @@ use sdkwork_knowledgebase_internal_sdk::{
     SdkworkError,
 };
 
-use crate::sdk::{
-    KnowledgebaseWikiSdkClient, OpenedWikiContentStream, WikiContentChunkStream,
-};
+use crate::sdk::{KnowledgebaseWikiSdkClient, OpenedWikiContentStream, WikiContentChunkStream};
 
 /// Adapter that forwards the generated SDK's `BinaryResponseStream` chunk by
 /// chunk, preserving its byte budget enforcement.

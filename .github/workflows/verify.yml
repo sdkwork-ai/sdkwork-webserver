@@ -17,12 +17,12 @@ permissions:
 
 jobs:
   verify:
-    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-ci.yml@bfe420b79d3c584d246f9691c8374b24534c3365
+    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-ci.yml@c48701fcd41448800ee5d1de0bb12da4f2b83a2c
     with:
       config_path: agent.workflow.json
       scripts: verify
       install_command: pnpm install --frozen-lockfile
       os_matrix: '["ubuntu-24.04"]'
-      framework_ref: bfe420b79d3c584d246f9691c8374b24534c3365
+      framework_ref: c48701fcd41448800ee5d1de0bb12da4f2b83a2c
     secrets:
       SDKWORK_RELEASE_TOKEN: ${{ secrets.SDKWORK_RELEASE_TOKEN }}

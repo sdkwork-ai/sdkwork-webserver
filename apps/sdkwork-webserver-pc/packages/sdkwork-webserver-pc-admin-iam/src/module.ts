@@ -15,7 +15,7 @@ export const webserverModule = {
     { resource: "iam-users", label: "Users", description: "Identity accounts and their lifecycle", permission: "iam.users.read", order: 1, path: "iam/users" },
     { resource: "iam-organizations", label: "Organizations", description: "Organization, department, and position structure", permission: "iam.organizations.read", order: 2, path: "iam/organizations" },
     { resource: "iam-tenants", label: "Tenants", description: "Tenants and their membership", permission: "iam.tenants.read", order: 3, path: "iam/tenants" },
-    { resource: "iam-applications", label: "Applications", description: "Applications and endpoints registered for the tenant", permission: "iam.tenant_applications.update", order: 4, path: "iam/applications" },
+    { resource: "iam-applications", label: "Applications", description: "Applications and endpoints registered for the tenant", permission: "iam.installations.update", order: 4, path: "iam/applications" },
     { resource: "iam-roles", label: "Roles", description: "Role catalog and role permission bindings", permission: "iam.roles.read", order: 5, path: "iam/roles" },
     { resource: "iam-permissions", label: "Permissions", description: "Backend operation permission catalog", permission: "iam.permissions.read", order: 6, path: "iam/permissions" },
     { resource: "iam-policies", label: "Policies", description: "Authorization policy management", permission: "iam.policies.read", order: 7, path: "iam/policies" },

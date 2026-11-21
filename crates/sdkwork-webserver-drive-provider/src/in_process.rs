@@ -115,7 +115,10 @@ impl InProcessDriveWebsiteSdkClient {
             )
             .await?;
         if resource.node_version_id != node_version_id {
-            return Err(http_status(404, "root-qualified Drive node version was not found"));
+            return Err(http_status(
+                404,
+                "root-qualified Drive node version was not found",
+            ));
         }
         let content_length = u64::try_from(resource.content_length)
             .map_err(|_| http_status(500, "resolved Drive resource content length is invalid"))?;
@@ -124,27 +127,23 @@ impl InProcessDriveWebsiteSdkClient {
             .ok_or_else(|| http_status(500, "resolved Drive resource timestamp is invalid"))?;
 
         evaluate_preconditions(if_match, if_unmodified_since, &etag, last_modified)?;
-        if is_not_modified(
-            if_none_match,
-            if_modified_since,
-            &etag,
-            last_modified,
-        ) {
+        if is_not_modified(if_none_match, if_modified_since, &etag, last_modified) {
             return Err(SdkworkError::HttpStatus {
                 status: 304,
                 body: String::new(),
             });
         }
 
-        let range_allowed =
-            range.is_some() && if_range_allows(if_range, &etag, last_modified);
+        let range_allowed = range.is_some() && if_range_allows(if_range, &etag, last_modified);
         let selected_range = if range_allowed {
             match parse_single_range(range.unwrap_or_default(), content_length) {
                 Some(range) => Some(range),
                 None => {
                     return Err(http_status(
                         416,
-                        format!("requested byte range is not satisfiable for {content_length} bytes"),
+                        format!(
+                            "requested byte range is not satisfiable for {content_length} bytes"
+                        ),
                     ))
                 }
             }
@@ -291,7 +290,12 @@ impl DriveWebsiteSdkClient for InProcessDriveWebsiteSdkClient {
             )
             .await?;
         let mut bytes = Vec::new();
-        while let Some(chunk) = opened.stream.next_chunk().await.map_err(map_object_store_error)? {
+        while let Some(chunk) = opened
+            .stream
+            .next_chunk()
+            .await
+            .map_err(map_object_store_error)?
+        {
             bytes.extend_from_slice(&chunk);
         }
         Ok(bytes)
@@ -347,7 +351,12 @@ impl DriveContentChunkStream for BoundedObjectChunkStream {
         if self.remaining == 0 {
             return Ok(None);
         }
-        match self.source.next_chunk().await.map_err(map_object_store_error)? {
+        match self
+            .source
+            .next_chunk()
+            .await
+            .map_err(map_object_store_error)?
+        {
             Some(chunk) => {
                 let length = chunk.len() as u64;
                 if length > self.remaining {
@@ -375,9 +384,14 @@ impl DriveObjectChunkStream for EmptyChunkStream {
     }
 }
 
-fn map_resolution(resolved: &ResolvedDriveResource) -> Result<DriveResourceResolution, SdkworkError> {
+fn map_resolution(
+    resolved: &ResolvedDriveResource,
+) -> Result<DriveResourceResolution, SdkworkError> {
     if !resolved.checksum_sha256_hex.starts_with("sha256:") {
-        return Err(http_status(500, "resolved Drive resource checksum is invalid"));
+        return Err(http_status(
+            500,
+            "resolved Drive resource checksum is invalid",
+        ));
     }
     Ok(DriveResourceResolution {
         scope_type: resolved.scope_kind.as_str().to_owned(),
@@ -411,9 +425,9 @@ fn parse_scope_kind(value: &str) -> Result<DriveResourceScopeKind, SdkworkError>
 }
 
 fn parse_positive_i64(value: &str) -> Result<i64, SdkworkError> {
-    let parsed = value.parse::<i64>().map_err(|_| {
-        http_status(400, "pinnedGeneration must be a positive int64 string")
-    })?;
+    let parsed = value
+        .parse::<i64>()
+        .map_err(|_| http_status(400, "pinnedGeneration must be a positive int64 string"))?;
     if parsed < 1 || parsed.to_string() != value {
         return Err(http_status(
             400,
@@ -453,7 +467,10 @@ fn evaluate_preconditions(
     } else if let Some(value) = if_unmodified_since {
         if let Ok(date) = httpdate::parse_http_date(value) {
             if last_modified.timestamp() > epoch_seconds(date) {
-                return Err(http_status(412, "resource changed after If-Unmodified-Since"));
+                return Err(http_status(
+                    412,
+                    "resource changed after If-Unmodified-Since",
+                ));
             }
         }
     }

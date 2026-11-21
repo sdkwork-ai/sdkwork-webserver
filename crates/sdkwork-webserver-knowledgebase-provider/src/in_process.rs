@@ -172,15 +172,14 @@ impl KnowledgebaseWikiSdkClient for InProcessKnowledgebaseWikiSdkClient {
         publication_uuid: &str,
         content_handle: &str,
     ) -> Result<OpenedWikiContentStream, SdkworkError> {
-        let bytes = self.retrieve_content(publication_uuid, content_handle).await?;
+        let bytes = self
+            .retrieve_content(publication_uuid, content_handle)
+            .await?;
         let content_length = u64::try_from(bytes.len())
             .map_err(|_| http_status(502, "Wiki content length is invalid"))?;
         Ok(OpenedWikiContentStream {
             content_length: Some(content_length),
-            stream: Box::new(VecChunkStream {
-                bytes,
-                offset: 0,
-            }),
+            stream: Box::new(VecChunkStream { bytes, offset: 0 }),
         })
     }
 
@@ -298,12 +297,14 @@ fn map_provider_error(error: KnowledgeWikiPublicProviderError) -> SdkworkError {
         KnowledgeWikiPublicProviderError::NotFoundOrNotPublic => {
             http_status(404, "The requested Wiki resource was not found.")
         }
-        KnowledgeWikiPublicProviderError::ContentUnavailable => {
-            http_status(503, "The requested Wiki representation is temporarily unavailable.")
-        }
-        KnowledgeWikiPublicProviderError::IntegrityFailed => {
-            http_status(502, "The Wiki content provider failed integrity validation.")
-        }
+        KnowledgeWikiPublicProviderError::ContentUnavailable => http_status(
+            503,
+            "The requested Wiki representation is temporarily unavailable.",
+        ),
+        KnowledgeWikiPublicProviderError::IntegrityFailed => http_status(
+            502,
+            "The Wiki content provider failed integrity validation.",
+        ),
         KnowledgeWikiPublicProviderError::TemporarilyUnavailable => {
             http_status(503, "The Wiki provider is temporarily unavailable.")
         }

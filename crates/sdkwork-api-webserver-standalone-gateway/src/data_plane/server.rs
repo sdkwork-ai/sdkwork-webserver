@@ -295,13 +295,8 @@ impl ListenerSupervisor {
                 let requested = listener_address(&listener.bind, listener.port, &listener.id)?;
                 let inherited = self.claim_inherited_tcp(requested, &listener.id).await?;
                 Ok(PendingSocket::Http(Box::new(
-                    prepare_listener(
-                        candidate,
-                        listener,
-                        self.tls_runtime.as_deref(),
-                        inherited,
-                    )
-                    .await?,
+                    prepare_listener(candidate, listener, self.tls_runtime.as_deref(), inherited)
+                        .await?,
                 )))
             }
             SocketKind::StreamTcp => {
