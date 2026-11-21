@@ -235,16 +235,22 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.20",
+    "currentVersion": "0.1.21",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.20"
+      "BETA": "0.1.21"
     },
     "notes": [
       {
-        "version": "0.1.20",
+        "version": "0.1.21",
         "channel": "BETA",
         "current": true,
+        "summary": "Packaging pipeline repair release: this version exists to make the release itself shippable from CI. The thin verify/package entrypoints previously failed before any job started for two independent reasons, both fixed at their source. (1) The pinned workflow-framework ref carried a stale release access-token preflight that compared the committed deploy-anchor placeholder tokens against manifest app ids, so verification failed every release profile of every client surface; the framework standalone gate now vendors the sdkwork-specs anchor-aware behavior (per-surface anchor resolution, needs-materialization classification, --require-anchor fail-closed mode), and both entrypoints pin it. (2) The renderer-owned package entrypoint declared 31 workflow_dispatch inputs while GitHub parses a workflow file only when the event declares at most 25, so every push, tag, and dispatch of the package pipeline failed in zero seconds with a workflow file issue; the renderer now keeps per-ref dispatch inputs inside the budget and resolves refs beyond it from repository variables, which matches the standing rule that external dependencies build from each sibling repository main with the local checkout resolved by relative path. The pnpm lockfile was regenerated against the current sibling main (react-router-dom ^7.15.0, admin-core no longer linking deployments-app-sdk) so the frozen-lockfile install passes, and the Verify Application lane is green for the first time on this pipeline. This changelog describes 0.1.21 only."
+      },
+      {
+        "version": "0.1.20",
+        "channel": "BETA",
+        "current": false,
         "summary": "TLS edge and release-channel repair release. The nginx-compatible data plane defaults every TLS listener to HTTP/2 like nginx 1.25+ and serves HTTP/2 on the packaged production TLS edge; shared-port policy merges now adopt the incoming protocol set when a shared listener predates protocol tracking and name the conflicting policies when a merge fails; the product console edge stamps the secure-response baseline and stops double-stamping the adaptive Vary on conf-declared dispatches. ACME repairs: the issuer selects the rustls provider and repairs the domain SQL binds, the certificate worker watchdog keeps its budget above the issuer budget with a usable default contact, self-signed material is exported to the canonical live path and the certificate database gaps are closed, and DNS record metadata is stamped with the identity the write answered through. Container and deployment repairs: the product-edge heredocs escape the nginx variables they interpolate and the docker runtime passes the memory runtime environment to the module gateway. Release channel repair: the thin verify/package entrypoints pinned a workflow-framework ref that predates the reusable CI workflow, so every push failed before any job started; both entrypoints now pin the current framework main, and the framework planner normalizes a raw tag name (vX.Y.Z) into the semantic package version so tag-push releases carry pure semver artifacts. Rust sources are formatted with the CI-pinned 1.98.0 rustfmt so the fmt gate passes on every platform. This changelog describes 0.1.20 only."
       },
       {
