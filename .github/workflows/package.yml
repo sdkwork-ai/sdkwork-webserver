@@ -208,7 +208,7 @@ permissions:
 
 jobs:
   package:
-    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@c48701fcd41448800ee5d1de0bb12da4f2b83a2c
+    uses: sdkwork-ai/sdkwork-github-workflow/.github/workflows/sdkwork-package.yml@35f903c1c5e779192e3a4d511c83ca4ac4f7ce4e
     with:
       config_path: agent.workflow.json
       tag: ${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}
@@ -224,7 +224,7 @@ jobs:
       upload_artifact: true
       deploy: ${{ github.event.inputs.deploy == 'true' || github.event_name == 'release' }}
       retention_days: 30
-      framework_ref: c48701fcd41448800ee5d1de0bb12da4f2b83a2c
+      framework_ref: 35f903c1c5e779192e3a4d511c83ca4ac4f7ce4e
       dependency_refs_json: >-
         {
                     "SDKWORK_APPBASE_REF": "${{ github.event.inputs.sdkwork_appbase_ref || vars.SDKWORK_APPBASE_REF }}",
