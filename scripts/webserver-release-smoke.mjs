@@ -45,7 +45,7 @@ const PROCESS_OUTPUT_TAIL_BYTES = MAX_PROCESS_OUTPUT_BYTES - PROCESS_OUTPUT_HEAD
 // unbounded stream — while leaving room for the full document.
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const COMMAND_TIMEOUT_MS = 30 * 1000;
-const START_TIMEOUT_MS = 120 * 1000;
+const START_TIMEOUT_MS = 180 * 1000;
 const STOP_TIMEOUT_MS = 10 * 1000;
 const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);
 const STANDALONE_PC_ROOT = 'share/sdkwork/webserver-pc';
@@ -586,7 +586,8 @@ async function waitForManagementIngress(port, child, readOutput) {
     await delay(100);
   }
   throw new Error(
-    `standalone application ingress did not become ready: ${lastError?.message ?? 'unknown'}`,
+    `standalone application ingress did not become ready: ${lastError?.message ?? 'unknown'}`
+      + `\n--- gateway output at readiness timeout ---\n${readOutput()}`,
   );
 }
 

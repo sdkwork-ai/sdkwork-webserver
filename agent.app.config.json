@@ -235,16 +235,22 @@
     }
   },
   "release": {
-    "currentVersion": "0.1.22",
+    "currentVersion": "0.1.23",
     "defaultChannel": "BETA",
     "latest": {
-      "BETA": "0.1.22"
+      "BETA": "0.1.23"
     },
     "notes": [
       {
-        "version": "0.1.22",
+        "version": "0.1.23",
         "channel": "BETA",
         "current": true,
+        "summary": "Fresh-install database repair release: the 0.1.22 packaging run failed its release smoke on every target because no baseline-plus-migrations module could pass a fresh-install readiness gate. Root cause: applying a consolidated baseline recorded no migration history, so the readiness drift gate reported the whole consolidated chain as pending and demanded a replay that is unachievable — the migration files are checksum-immutable and the chains carry rename history whose replay fails against its own consolidated end state. The database lifecycle now records the module's migration versions as baseline coverage when it applies a consolidated baseline, so migrate plans only post-consolidation migrations and the readiness gate reflects real schema state; pre-baseline databases are unaffected because their guards skip the baseline. Three consolidated baselines were genuinely incomplete and are repaired by folding: the deploy baseline now carries the deploy_app_source table (0011), and the IAM baseline carries the user persona tables (0021) and the wechat component operator platform tables (0046) that the contract tracks and the seeds seed. The release smoke boots the packaged gateway with the production database lifecycle instead of forcing auto-migrate, prints the gateway output at a readiness timeout, and gives the cold bootstrap a 180 second budget. Verified locally end to end: the full release package builds for every stage and the release smoke passes the same-origin adaptive serving, HTTP and HTTPS health, and the whole database lifecycle on a freshly provisioned disposable PostgreSQL. This changelog describes 0.1.23 only."
+      },
+      {
+        "version": "0.1.22",
+        "channel": "BETA",
+        "current": false,
         "summary": "Sibling-bridge repair release: the 0.1.21 packaging run failed in the PC browser typecheck before any artifact was produced, so this version re-cuts the release off the repaired tree. The current sdkwork-deployments and sdkwork-iam main branches renamed three surfaces this host bridges: the deployments registry resource keys became scaffoldCategories/scaffolds/scaffoldVersions, the deployments console exports MyScaffoldsPage instead of MyTemplatesPage, and the IAM tenant workspace became SdkworkIamInstallationsAdminWorkspace (the installations identity the host permissions already gate with iam.installations.*). The host bridge now follows the renamed sibling surfaces while keeping its own route ids, menu entries, permission codes, and i18n keys, so no navigation or access surface changed. Verified locally: the PC and H5 app typechecks are clean, both production browser builds pass, and the host marketplace and menu tests (20) pass. This changelog describes 0.1.22 only."
       },
       {
