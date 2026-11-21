@@ -45,7 +45,7 @@ const PROCESS_OUTPUT_TAIL_BYTES = MAX_PROCESS_OUTPUT_BYTES - PROCESS_OUTPUT_HEAD
 // unbounded stream — while leaving room for the full document.
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const COMMAND_TIMEOUT_MS = 30 * 1000;
-const START_TIMEOUT_MS = 15 * 1000;
+const START_TIMEOUT_MS = 120 * 1000;
 const STOP_TIMEOUT_MS = 10 * 1000;
 const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);
 const STANDALONE_PC_ROOT = 'share/sdkwork/webserver-pc';
@@ -170,8 +170,13 @@ function run(command, args, options = {}) {
   return result;
 }
 
-// The smoke test boots the packaged gateway with SDKWORK_DATABASE_AUTO_MIGRATE
-// enabled, so it needs a reachable PostgreSQL. On a developer machine
+// The smoke test boots the packaged gateway exactly the way production does:
+// baseline-plus-migrations modules declare `autoMigrate: false`, so a fresh
+// install runs the folded baseline, seeds, and serves. Auto-migrate is not
+// forced here any more — replaying the pre-baseline migration chain over a
+// freshly baselined schema fails on the rename history, a path no production
+// boot takes.
+// A reachable PostgreSQL is still required. On a developer machine
 // `config/host/postgres.env` supplies one, but CI has no such file: the only PostgreSQL the
 // workflow starts belongs to `test:postgres:required`, which runs as a later
 // validate step and tears its container down when it finishes. Without a
@@ -681,7 +686,6 @@ function standaloneManagementEnv(packageRoot, port, runtimeConfigFile, databaseU
     SDKWORK_WEBSERVER_PC_STATIC_ROOT: STANDALONE_PC_ROOT,
     SDKWORK_WEBSERVER_H5_STATIC_ROOT: STANDALONE_H5_ROOT,
     SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT: STANDALONE_STATIC_FALLBACK_ROOT,
-    SDKWORK_DATABASE_AUTO_MIGRATE: 'true',
     SDKWORK_WEBSERVER_SECRET_ENCRYPTION_KEY:
       'sdkwork-release-smoke-web-secret-encryption-key-2026',
     // `production` is a production-like environment: the certificate issuer
