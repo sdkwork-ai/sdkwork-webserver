@@ -1,5 +1,5 @@
 import { createDeploymentsConsoleClients } from "@sdkwork/deployments-pc-console-core";
-import { MarketplacePage, MyTemplatesPage } from "@sdkwork/deployments-pc-console-marketplace";
+import { MarketplacePage, MyScaffoldsPage } from "@sdkwork/deployments-pc-console-marketplace";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { useMemo } from "react";
@@ -49,7 +49,7 @@ export function MarketplaceConsoleSurface({
       {resource === "marketplace" ? (
         <MarketplacePage deployClient={clients.deploy} locale={locale} orderClient={clients.order} />
       ) : (
-        <MyTemplatesPage deployClient={clients.deploy} locale={locale} />
+        <MyScaffoldsPage deployClient={clients.deploy} locale={locale} />
       )}
     </div>
   );

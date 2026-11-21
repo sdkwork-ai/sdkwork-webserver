@@ -141,19 +141,22 @@ const LazyIamTenantsAdmin = lazy(async () => {
 });
 
 const LazyIamApplicationsAdmin = lazy(async () => {
-  const { createSdkworkIamTenantController, SdkworkIamTenantApplicationsAdminWorkspace } =
+  // The sibling renamed the tenant applications workspace to installations
+  // (APPLICATION_IDENTITY_SPEC vocabulary); the host keeps its `iam-applications`
+  // route id and bridges the same controller into the renamed workspace.
+  const { createSdkworkIamTenantController, SdkworkIamInstallationsAdminWorkspace } =
     await import("@sdkwork/iam-pc-admin-tenant");
   return {
     default: function IamApplicationsAdminContent({ permissionScope, tenantId }: IamAdminContentProps) {
       const service = useIamAdminService();
-      // The applications page targets the operator's current tenant; the
+      // The installations page targets the operator's current tenant; the
       // session-scoped tenant id seeds the controller's initial selection so
       // no tenant picker is rendered.
       const controller = useMemo(
         () => createSdkworkIamTenantController({ permissionScope, selectedTenantId: tenantId, service }),
         [permissionScope, service, tenantId],
       );
-      return <SdkworkIamTenantApplicationsAdminWorkspace controller={controller} />;
+      return <SdkworkIamInstallationsAdminWorkspace controller={controller} />;
     } satisfies ComponentType<IamAdminContentProps>,
   };
 });

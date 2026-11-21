@@ -32,19 +32,19 @@ const DEPLOYMENTS_ENTRIES: Readonly<
   Record<AppTemplatesAdminResource, DeploymentsModuleEntry>
 > = {
   "template-categories": {
-    resource: "templateCategories",
+    resource: "scaffoldCategories",
     label: "Template Categories",
     description: "Marketplace taxonomy for app templates",
     order: 1,
   },
   "app-templates": {
-    resource: "appTemplates",
+    resource: "scaffolds",
     label: "App Templates",
     description: "Author-published listings and moderation",
     order: 2,
   },
   "app-template-versions": {
-    resource: "appTemplateVersions",
+    resource: "scaffoldVersions",
     label: "Template Versions",
     description: "Published version snapshots of one listing",
     order: 3,
