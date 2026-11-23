@@ -32,6 +32,16 @@ import {
   type Translator,
 } from "./AdminSurfaceAtoms.tsx";
 import type { CloudAccountOption } from "./cloudAccounts.ts";
+import {
+  isServableVerificationFileName,
+  platformAcceptsExtension,
+  suggestVerificationFileName,
+  verificationFileExtension,
+  verificationFilePublicUrl,
+  VERIFICATION_PLATFORMS,
+  verificationPlatform,
+  type DomainVerificationFilePlatform,
+} from "./verificationPlatforms.ts";
 
 /**
  * The served-domain inventory: which root domains this edge answers for, and
@@ -673,6 +683,7 @@ function RootDomainLedger({
         <VerificationFileDialog
           close={() => setVerifyFileRoot(undefined)}
           locale={locale}
+          apex={verifyFileRoot.hostname}
           rootDomainId={verifyFileRoot.id}
           service={{
             check: (id, fileId) => client.domain.rootDomains.verificationFiles.check(id, fileId),
@@ -1384,6 +1395,7 @@ function RootDomainHostnames({ locale }: { locale: WebserverLocale }) {
         <VerificationFileDialog
           close={() => setVerifyFileHostname(undefined)}
           locale={locale}
+          apex={root?.hostname}
           rootDomainId={rootDomainId}
           service={{
             check: (id, fileId) => client.domain.rootDomains.verificationFiles.check(id, fileId),
@@ -1459,42 +1471,24 @@ function DnsRecordFormValues_from(record: DomainDnsRecordResponse): DnsRecordFor
  * 登记多份;边缘数据面对该根域名及其子域名按请求主机名原样提供;自检按平台
  * 爬虫的视角取回比对,失败也只陈述事实。
  */
-type VerificationPlatform =
-  | "WECHAT_OFFICIAL_ACCOUNT"
-  | "WECHAT_MINI_PROGRAM"
-  | "ALIPAY"
-  | "BYTEDANCE"
-  | "APPLE"
-  | "GOOGLE"
-  | "CUSTOM";
-
-const VERIFICATION_PLATFORM_LABELS: Record<VerificationPlatform, MessageKey> = {
-  WECHAT_OFFICIAL_ACCOUNT: "resource.domains.verificationFilePlatformWECHAT_OFFICIAL_ACCOUNT",
-  WECHAT_MINI_PROGRAM: "resource.domains.verificationFilePlatformWECHAT_MINI_PROGRAM",
-  ALIPAY: "resource.domains.verificationFilePlatformALIPAY",
-  BYTEDANCE: "resource.domains.verificationFilePlatformBYTEDANCE",
-  APPLE: "resource.domains.verificationFilePlatformAPPLE",
-  GOOGLE: "resource.domains.verificationFilePlatformGOOGLE",
-  CUSTOM: "resource.domains.verificationFilePlatformCUSTOM",
-};
-
-const VERIFICATION_PLATFORMS = Object.keys(VERIFICATION_PLATFORM_LABELS) as VerificationPlatform[];
-
 /** 服务端的内容上限(字节);超过它的文件在读入前就被拒绝。 */
 const VERIFICATION_CONTENT_LIMIT = 4096;
 
+/** 平台码到文案的映射由 `verificationPlatforms` 的目录提供,不再本地维护一份。 */
 function verificationPlatformLabel(t: Translator, platform: string): string {
-  const key = VERIFICATION_PLATFORM_LABELS[platform as VerificationPlatform];
-  return t(key ?? "resource.domains.verificationFilePlatformCUSTOM");
+  return t((verificationPlatform(platform)?.labelKey
+    ?? "resource.domains.verificationFilePlatformCUSTOM") as MessageKey);
 }
 
 function VerificationFileDialog({
+  apex,
   close,
   locale,
   rootDomainId,
   service,
   t,
 }: {
+  apex?: string;
   close(): void;
   locale: WebserverLocale;
   rootDomainId: string;
@@ -1507,7 +1501,7 @@ function VerificationFileDialog({
   t: Translator;
 }) {
   const [files, setFiles] = useState<readonly DomainVerificationFileResponse[]>();
-  const [platform, setPlatform] = useState<VerificationPlatform>("WECHAT_OFFICIAL_ACCOUNT");
+  const [platform, setPlatform] = useState<DomainVerificationFilePlatform>("WECHAT_OFFICIAL_ACCOUNT");
   const [fileName, setFileName] = useState("");
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1515,6 +1509,8 @@ function VerificationFileDialog({
   const [uploaded, setUploaded] = useState(false);
   const [checks, setChecks] = useState<Record<string, DomainVerificationFileCheckResponse>>({});
   const [deleteTarget, setDeleteTarget] = useState<DomainVerificationFileResponse>();
+  const [copiedId, setCopiedId] = useState<string>();
+  const spec = verificationPlatform(platform);
 
   const load = useCallback(async () => {
     setFiles(await service.list(rootDomainId));
@@ -1548,12 +1544,44 @@ function VerificationFileDialog({
       setError(t("resource.domains.verificationFileTooLarge"));
       return;
     }
+    // 平台只会来取它自己签发的形态;选错平台/选错文件在这里就说清楚,而不是
+    // 存下来之后让平台侧的校验永远不过。
+    if (!isServableVerificationFileName(file.name)
+      || !platformAcceptsExtension(platform, verificationFileExtension(file.name))) {
+      setError(t("resource.domains.verificationFilePlatformExtension", { extension: spec?.extension ?? "txt" }));
+      return;
+    }
     setFileName(file.name);
     setContent(await file.text());
   }
 
+  /** 由粘贴的 token 带出平台真正会来取的文件名(微信 MP_verify_<token>.txt、Google <token>.html、Apple 固定名)。 */
+  function deriveName() {
+    const suggested = suggestVerificationFileName(platform, content || fileName);
+    if (suggested) {
+      setFileName(suggested);
+      setError(undefined);
+    }
+  }
+
+  async function copyUrl(file: DomainVerificationFileResponse) {
+    if (!apex) return;
+    try {
+      await navigator.clipboard.writeText(verificationFilePublicUrl(apex, file.fileName));
+      setCopiedId(file.id);
+      window.setTimeout(() => setCopiedId((current) => (current === file.id ? undefined : current)), 2000);
+    } catch {
+      // 剪贴板被拒绝不值得一条错误横幅:地址本身就显示在行里。
+    }
+  }
+
   async function save() {
     if (!fileName.trim() || !content) { setError(t("resource.domains.dnsValueRequired")); return; }
+    if (!isServableVerificationFileName(fileName)
+      || !platformAcceptsExtension(platform, verificationFileExtension(fileName))) {
+      setError(t("resource.domains.verificationFilePlatformExtension", { extension: spec?.extension ?? "txt" }));
+      return;
+    }
     setBusy(true); setError(undefined); setUploaded(false);
     try {
       // 同名文件是替换而不是新增:平台换发文件后重新保存一次即可。替换后旧的
@@ -1625,6 +1653,17 @@ function VerificationFileDialog({
                     {verificationPlatformLabel(t, file.platform)}
                     {file.updatedAt ? ` · ${formatInstant(file.updatedAt, locale)}` : ""}
                   </p>
+                  {apex ? (
+                    <p className="form-hint">
+                      {t("resource.domains.verificationFilePublicUrl")}: {verificationFilePublicUrl(apex, file.fileName)}
+                      {" "}
+                      <button className="secondary-button" disabled={busy} onClick={() => void copyUrl(file)} type="button">
+                        {copiedId === file.id
+                          ? t("resource.domains.verificationFileCopied")
+                          : t("resource.domains.verificationFileCopyUrl")}
+                      </button>
+                    </p>
+                  ) : null}
                   {verdict ? (
                     <div className={check?.matched ? "verification-success" : "verification-pending"}>
                       <BadgeCheck size={19} />
@@ -1652,11 +1691,12 @@ function VerificationFileDialog({
           <div className="form-grid single-column">
             <label>
               <span>{t("resource.domains.verificationFilePlatform")}</span>
-              <select onChange={(event) => setPlatform(event.target.value as VerificationPlatform)} value={platform}>
+              <select onChange={(event) => setPlatform(event.target.value as DomainVerificationFilePlatform)} value={platform}>
                 {VERIFICATION_PLATFORMS.map((value) => (
-                  <option key={value} value={value}>{t(VERIFICATION_PLATFORM_LABELS[value])}</option>
+                  <option key={value.platform} value={value.platform}>{t(value.labelKey as MessageKey)}</option>
                 ))}
               </select>
+              {spec ? <span className="form-hint">{spec.fileNameHint} · {t(spec.issuedByKey as MessageKey)}</span> : null}
             </label>
             <label>
               <span>{t("resource.domains.verificationFilePick")}</span>
@@ -1673,11 +1713,14 @@ function VerificationFileDialog({
                 autoComplete="off"
                 autoFocus
                 onChange={(event) => setFileName(event.target.value)}
-                placeholder="MP_verify_xxxxxxxxxx.txt / google123.html"
+                placeholder={spec?.fixedFileName ?? "MP_verify_xxxxxxxxxx.txt / google123.html"}
                 required
                 type="text"
                 value={fileName}
               />
+              <button className="secondary-button" disabled={busy} onClick={deriveName} type="button">
+                {t("resource.domains.verificationFileDeriveName")}
+              </button>
             </label>
             <label>
               <span>{t("resource.domains.verificationFileContent")}</span>
