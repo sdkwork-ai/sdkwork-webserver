@@ -27,6 +27,7 @@ Specs: ARCHITECTURE_DECISION_SPEC.md, DOCUMENTATION_SPEC.md, RUST_CODE_SPEC.md, 
 - [TECH-resolution-cache.md](TECH-resolution-cache.md) - multi-layer DNS/IP resolution cache layers, TTL policy, and negative caching.
 - [TECH-tunnel-frp-parity.md](TECH-tunnel-frp-parity.md) - tunnel/FRP feature-parity matrix against frp v0.68.0 (benchmark docs), covering `sdkwork-webserver-tunnel*` and the webserver integration surface.
 - [TECH-app-domain-publishing-fallback.md](TECH-app-domain-publishing-fallback.md) - app publishing default-domain and custom-domain fallback behavior on the data plane.
+- [TECH-deployment-self-provisioning.md](TECH-deployment-self-provisioning.md) - startup provisioning of the deploy application, enabled IAM installation, credential-entry Access-Token reuse/rotation, and static runtime identity.
 - [TECH-standards-alignment.md](TECH-standards-alignment.md) - pointer to the repository standards-alignment matrix.
 - [ADR-20260715-rust-webserver-data-plane.md](../decisions/ADR-20260715-rust-webserver-data-plane.md) - accepted data-plane component and technology decision.
 - [PRD.md](../../product/prd/PRD.md) - product behavior and commercial release authority.

@@ -153,3 +153,33 @@ test('standalone runner injects owner runtime roots and keeps real auth enabled'
   assert.match(devRunner, /IAM_APPLICATION_BOOTSTRAP_ENV/u);
   assert.doesNotMatch(devRunner, /SDKWORK_WEBSERVER_DEV_AUTH_BYPASS/u);
 });
+
+test('startup deployment bootstrap owns installation provisioning and token reuse', () => {
+  const module = read(
+    'crates/sdkwork-api-webserver-standalone-gateway/src/deployment_bootstrap.rs',
+  );
+  const gatewayBootstrap = read(
+    'crates/sdkwork-api-webserver-standalone-gateway/src/bootstrap.rs',
+  );
+  const main = read('crates/sdkwork-api-webserver-standalone-gateway/src/main.rs');
+  const entrypoint = read('bin/container/entrypoint-standalone.sh');
+
+  // One sequence: deploy application -> enabled installation -> reusable token.
+  assert.match(module, /pub async fn bootstrap_deployment/u);
+  assert.match(module, /fn bootstrap_idempotency_key/u);
+  assert.match(module, /fn token_is_reusable/u);
+  assert.match(module, /relink_tenant_application_deploy_application_id/u);
+  assert.match(module, /pg_try_advisory_lock/u);
+  assert.match(module, /materialize_static_runtime_identity/u);
+
+  // Both management startup and the installer entrypoint run it.
+  assert.match(main, /bootstrap_deployment\(&options\)/u);
+  assert.match(main, /bootstrap_iam_database_without_manifest_auto_provision/u);
+  assert.match(gatewayBootstrap, /bootstrap_iam_database_without_manifest_auto_provision/u);
+  assert.match(entrypoint, /issue-credential-entry-bootstrap-token/u);
+  assert.match(entrypoint, /--regenerate-access-token/u);
+
+  // IAM's manifest pass would compete for the same installation row.
+  assert.match(module, /manifest_to_ensure_command/u);
+  assert.match(module, /provision_tenant_application/u);
+});

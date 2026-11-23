@@ -34,6 +34,8 @@ mod deploy_fallback;
 #[cfg(feature = "management")]
 mod deploy_nginx_sink;
 #[cfg(feature = "management")]
+mod deployment_bootstrap;
+#[cfg(feature = "management")]
 mod iam_module_bootstrap;
 mod metric_dimensions;
 #[cfg(feature = "management")]
@@ -66,7 +68,9 @@ pub use application_registry::{
     ObservedHost, APPLICATION_REGISTRY_RECONCILE_ENV,
 };
 #[cfg(feature = "management")]
-pub use bootstrap::{build_router, run_database_migrate_only};
+pub use bootstrap::{
+    bootstrap_iam_database_without_manifest_auto_provision, build_router, run_database_migrate_only,
+};
 #[cfg(feature = "management")]
 pub use credential_entry_bootstrap::issue_credential_entry_bootstrap_token_to_file;
 pub use data_plane::certificates_metrics::record_certificate_expiry;
@@ -87,6 +91,12 @@ pub use deploy_fallback::{
 };
 #[cfg(feature = "management")]
 pub use deploy_nginx_sink::EdgeNginxSiteSink;
+#[cfg(feature = "management")]
+pub use deployment_bootstrap::{
+    bootstrap_deployment, browser_injection_allowed_from_env, DeploymentBootstrapOptions,
+    DeploymentBootstrapOutcome, CREDENTIAL_ENTRY_BOOTSTRAP_TOKEN_PATH,
+    DEPLOYMENT_BOOTSTRAP_MODE_ENV, REGENERATE_ACCESS_TOKEN_ENV,
+};
 #[cfg(feature = "management")]
 pub use packaged_runtime::configure_packaged_runtime_roots_from_env;
 #[cfg(feature = "management")]

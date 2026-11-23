@@ -1,13 +1,13 @@
 use std::{error::Error, io, path::PathBuf, time::Duration};
 
 use sdkwork_api_webserver_standalone_gateway::{
-    build_router, configure_packaged_runtime_roots_from_env,
-    issue_credential_entry_bootstrap_token_to_file, reconcile_application_registry_at_startup,
-    reconcile_served_domains_at_startup, reset_admin_account_from_env,
-    run_data_plane_from_config_with_operations_until,
+    bootstrap_deployment, bootstrap_iam_database_without_manifest_auto_provision,
+    browser_injection_allowed_from_env, build_router, configure_packaged_runtime_roots_from_env,
+    reconcile_application_registry_at_startup, reconcile_served_domains_at_startup,
+    reset_admin_account_from_env, run_data_plane_from_config_with_operations_until,
     run_data_plane_from_source_with_operations_until, run_data_plane_with_operations_until,
     run_database_migrate_only, validate_adaptive_app_shell_from_env, AdminResetOptions,
-    DataPlaneOperationsConfig,
+    DataPlaneOperationsConfig, DeploymentBootstrapOptions, DEPLOYMENT_BOOTSTRAP_MODE_ENV,
 };
 use sdkwork_webserver_core::{
     compile_merged_imports_app, imported_certificate_names, resolve_nginx_sidecar_path,
@@ -93,22 +93,62 @@ async fn run() -> MainResult<()> {
                 )))?
             );
         }
-        Some("issue-credential-entry-bootstrap-token") => {
-            let output = arguments
-                .next()
-                .map(PathBuf::from)
-                .filter(|path| !path.as_os_str().is_empty())
-                .unwrap_or_else(default_credential_entry_bootstrap_token_path);
-            issue_credential_entry_bootstrap_token_to_file(&output)
-                .await
-                .map_err(|error| {
-                    io::Error::other(format!(
-                        "credential-entry bootstrap token issuance failed: {error}"
-                    ))
-                })?;
+        Some("bootstrap-deployment") => {
+            let mut options =
+                DeploymentBootstrapOptions::from_arguments(&arguments.collect::<Vec<_>>())
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+            // An explicit bootstrap command is also an explicit schema
+            // convergence request (DATABASE_FRAMEWORK_SPEC §4.4.1); the serve
+            // path keeps `migrate = false` and obeys auto-migrate policy.
+            options.migrate = true;
+            let outcome = bootstrap_deployment(&options).await.map_err(|error| {
+                io::Error::other(format!("deployment bootstrap failed: {error}"))
+            })?;
             println!(
-                "issued credential-entry bootstrap Access-Token to {}",
-                output.display()
+                "{}",
+                serde_json::to_string(&outcome).map_err(|error| io::Error::other(format!(
+                    "failed to render the deployment bootstrap result: {error}"
+                )))?
+            );
+        }
+        Some("issue-credential-entry-bootstrap-token") => {
+            let mut options = DeploymentBootstrapOptions::from_env();
+            let mut output = None;
+            for argument in arguments {
+                match argument.as_str() {
+                    "--regenerate-access-token" | "--refresh" => {
+                        options.regenerate_access_token = true;
+                    }
+                    other if other.starts_with('-') => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("unknown credential-entry bootstrap argument: {other}"),
+                        )
+                        .into());
+                    }
+                    other if !other.is_empty() => output = Some(PathBuf::from(other)),
+                    _ => {}
+                }
+            }
+            options.migrate = true;
+            options.token_path = Some(
+                output
+                    .or(options.token_path)
+                    .unwrap_or_else(default_credential_entry_bootstrap_token_path),
+            );
+            let outcome = bootstrap_deployment(&options).await.map_err(|error| {
+                io::Error::other(format!(
+                    "credential-entry bootstrap token issuance failed: {error}"
+                ))
+            })?;
+            println!(
+                "{} credential-entry bootstrap Access-Token at {}",
+                if outcome.token_reused {
+                    "reused"
+                } else {
+                    "issued"
+                },
+                outcome.token_path
             );
         }
         Some("validate") => validate_config(config_path(arguments.next())?, format_override)?,
@@ -541,6 +581,53 @@ async fn run_management_plane() -> MainResult<()> {
                 "serve-time database lifecycle bootstrap failed: {error}"
             ))
         })?;
+    // Startup self-provisioning needs the IAM schema and the bootstrap
+    // administrator before it can reconcile an installation or resolve a
+    // session. `build_router` converges IAM too, but that happens after this
+    // step; converge it here so a first boot lands the deployment identity in
+    // one pass (the lifecycle is idempotent).
+    let iam_pool = sdkwork_database_sqlx::process_shared_database_pool().ok_or_else(|| {
+        io::Error::other(
+            "serve-management requires the process-shared database pool for IAM bootstrap",
+        )
+    })?;
+    bootstrap_iam_database_without_manifest_auto_provision(iam_pool)
+        .await
+        .map_err(|error| io::Error::other(format!("IAM database bootstrap failed: {error}")))?;
+    // Startup self-provisioning: the deploy application, its enabled IAM
+    // installation, and the credential-entry bootstrap Access-Token must exist    // before the management listener accepts a login. `strict` fails the boot;
+    // the default `best-effort` records the failure and keeps the control plane
+    // diagnosable; `off` skips it for an externally provisioned deployment.
+    let bootstrap_mode = std::env::var(DEPLOYMENT_BOOTSTRAP_MODE_ENV)
+        .unwrap_or_else(|_| "best-effort".to_owned())
+        .trim()
+        .to_ascii_lowercase();
+    if bootstrap_mode != "off" {
+        let mut options = DeploymentBootstrapOptions::from_env();
+        // Automatic startup never recreates a browser handoff the environment
+        // policy forbids; the installer/private secret source owns that token.
+        options.persist_credential = browser_injection_allowed_from_env();
+        match bootstrap_deployment(&options).await {
+            Ok(outcome) => tracing::info!(
+                tenant_id = %outcome.tenant_id,
+                deploy_application_id = %outcome.deploy_application_id,
+                installation_id = %outcome.installation_id,
+                token_path = %outcome.token_path,
+                token_reused = outcome.token_reused,
+                "startup deployment identity is ready"
+            ),
+            Err(error) if bootstrap_mode == "strict" => {
+                return Err(io::Error::other(format!(
+                    "startup deployment bootstrap failed: {error}"
+                ))
+                .into());
+            }
+            Err(error) => tracing::warn!(
+                %error,
+                "startup deployment bootstrap did not complete; login may need `bootstrap-deployment`"
+            ),
+        }
+    }
     let app = build_router()
         .await
         .map_err(|error| io::Error::other(format!("management bootstrap failed: {error}")))?;
@@ -780,9 +867,14 @@ fn print_help() {
                                   Reads the new secret from SDKWORK_WEBSERVER_ADMIN_RESET_PASSWORD;\n\
                                   optional --username <username> / --tenant-id <tenant-id>.\n\
                                   Use the `pnpm admin:reset:*` scripts instead of calling it directly.\n\
-           issue-credential-entry-bootstrap-token [path]\n\
-                                  Issue an IAM-signed credential-entry bootstrap Access-Token\n\
+           issue-credential-entry-bootstrap-token [--regenerate-access-token] [path]\n\
+                                  Ensure the deploy application and its enabled IAM installation,\n\
+                                  then issue or reuse the credential-entry bootstrap Access-Token\n\
                                   for the login page (default secrets path).\n\
+           bootstrap-deployment [--regenerate-access-token] [--token <path>] [--tenant <id>]\n\
+                                  Idempotent startup provisioning: deploy application, IAM\n\
+                                  installation, credential-entry Access-Token, and static\n\
+                                  runtime identity. Prints a JSON outcome.\n\
            validate <config>      Validate and compile Web Server app config (JSON, TOML, or nginx conf; format auto-detected).\n\
            validate-module-imports  Validate imported sibling-module deployments/webserver/ configs.\n\
            serve-imports          Serve the merged module-imports data plane (module domains/servers/resources).\n\

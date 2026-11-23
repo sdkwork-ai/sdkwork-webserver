@@ -373,10 +373,19 @@ ensure_credential_entry_bootstrap_token() {
   fi
   export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_TENANT_ID:-100001}"
   export SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID="${SDKWORK_WEB_FRAMEWORK_JWT_BOOTSTRAP_APP_ID:-sdkwork-webserver}"
-  if run_as_service_user "${GATEWAY_BINARY}" issue-credential-entry-bootstrap-token "${file}"; then
+  local regenerate_flag=""
+  case "${SDKWORK_WEBSERVER_REGENERATE_ACCESS_TOKEN:-0}" in
+    1 | true | TRUE | yes | YES | on | ON) regenerate_flag="--regenerate-access-token" ;;
+  esac
+  # `issue-credential-entry-bootstrap-token` now runs the full startup
+  # provisioning sequence (deploy application + enabled IAM installation +
+  # reuse-or-issue token). The flag requests an explicit rotation; without it a
+  # reusable token is left byte-identical.
+  if run_as_service_user "${GATEWAY_BINARY}" issue-credential-entry-bootstrap-token \
+    ${regenerate_flag} "${file}"; then
     chown "${SERVICE_USER}:${SERVICE_USER}" "${file}" 2>/dev/null || true
     chmod 0600 "${file}" 2>/dev/null || true
-    log "issued IAM-signed credential-entry bootstrap Access-Token (${environment})"
+    log "issued or reused IAM-signed credential-entry bootstrap Access-Token (${environment})"
     return 0
   fi
   case "${environment}" in

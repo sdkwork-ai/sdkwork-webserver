@@ -1,5 +1,5 @@
 use axum::Router;
-use sdkwork_database_sqlx::process_shared_database_pool;
+use sdkwork_database_sqlx::{process_shared_database_pool, DatabasePool};
 use sdkwork_iam_web_adapter::{iam_web_request_context_resolver_from_env, IamAuthorizationPolicy};
 use sdkwork_web_bootstrap::{ComposedApiAssembly, CompositeReadinessCheck, WebFrameworkBuilder};
 use sdkwork_web_core::{
@@ -34,12 +34,21 @@ pub async fn build_router() -> Result<Router, String> {
     let iam_pool = process_shared_database_pool().ok_or_else(|| {
         "standalone gateway requires the process-shared database pool; bootstrap the database lifecycle first".to_string()
     })?;
-    sdkwork_api_iam_assembly::bootstrap_database_with_pool(iam_pool)
-        .await
-        .map_err(|error| format!("IAM database bootstrap failed: {error}"))?;
-    let metrics = HttpMetricsRegistry::new();
+    bootstrap_iam_database_without_manifest_auto_provision(iam_pool).await?;
+    let metrics = HttpMetricsRegistry::new(); // The startup deployment bootstrap (`deployment_bootstrap`) owns this
+                                              // deployment's installation and anchors it on the deploy application. IAM's
+                                              // manifest auto-provision would otherwise re-anchor the same row to the
+                                              // manifest's runtime app id on every boot, silently detaching the enabled
+                                              // installation from the credential-entry token. Skip the manifest pass here;
+                                              // the explicit bootstrap command is the single provisioning path.
+    let iam_app_root_override = std::env::var_os("SDKWORK_APP_ROOT");
+    std::env::remove_var("SDKWORK_APP_ROOT");
+    let iam_resolver = iam_web_request_context_resolver_from_env().await;
+    if let Some(root) = iam_app_root_override {
+        std::env::set_var("SDKWORK_APP_ROOT", root);
+    }
     let resolver = MachineCredentialResolverDecorator::new_standalone_iam(
-        iam_web_request_context_resolver_from_env().await,
+        iam_resolver,
         profile.machine_authenticator.clone(),
     );
     let (environment, security_policy) = web_framework_runtime_policy_from_env();
@@ -116,6 +125,28 @@ pub async fn build_router() -> Result<Router, String> {
     )))
 }
 
+/// Converges IAM's schema with the manifest auto-provision suppressed.
+///
+/// IAM's database lifecycle invokes
+/// `ensure_tenant_application_from_app_root_if_configured`, which anchors the
+/// installation on the manifest runtime `backend.appId`. This deployment's
+/// installation is anchored on the deploy application by
+/// [`crate::deployment_bootstrap`], so the manifest pass would create a second,
+/// competing row (and bind a token to an identity no deploy application owns).
+/// The deployment bootstrap is the single provisioning path; IAM's own catalog
+/// materialization still needs `SDKWORK_IAM_APP_ROOT`, which is untouched.
+pub async fn bootstrap_iam_database_without_manifest_auto_provision(
+    pool: DatabasePool,
+) -> Result<(), String> {
+    let app_root = std::env::var_os("SDKWORK_APP_ROOT");
+    std::env::remove_var("SDKWORK_APP_ROOT");
+    let result = sdkwork_api_iam_assembly::bootstrap_database_with_pool(pool).await;
+    if let Some(root) = app_root {
+        std::env::set_var("SDKWORK_APP_ROOT", root);
+    }
+    result.map_err(|error| format!("IAM database bootstrap failed: {error}"))
+}
+
 pub async fn run_database_migrate_only() -> Result<(), String> {
     // The owner assembly converges its own module and the same-origin
     // dependencies whose lifecycle it owns, forcing forward migrations on for
@@ -139,9 +170,7 @@ pub async fn run_database_migrate_only() -> Result<(), String> {
     let shared_pool = process_shared_database_pool().ok_or_else(|| {
         "standalone gateway requires the process-shared database pool; bootstrap the database lifecycle first".to_string()
     })?;
-    sdkwork_api_iam_assembly::bootstrap_database_with_pool(shared_pool.clone())
-        .await
-        .map_err(|error| format!("IAM database bootstrap failed: {error}"))?;
+    bootstrap_iam_database_without_manifest_auto_provision(shared_pool.clone()).await?;
     info!("IAM database migration completed");
     sdkwork_api_drive_assembly::ensure_database_lifecycle_with_pool(shared_pool)
         .await

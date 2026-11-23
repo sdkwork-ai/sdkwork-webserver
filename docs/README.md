@@ -11,6 +11,7 @@ those standards instead of copying normative text.
 | [product/prd/PRD-cloud-site-delivery-data-plane.md](product/prd/PRD-cloud-site-delivery-data-plane.md) | Live Drive/Wiki cloud delivery product contract |
 | [architecture/tech/TECH-cloud-site-delivery-data-plane.md](architecture/tech/TECH-cloud-site-delivery-data-plane.md) | Compiled descriptor and provider data-plane design |
 | [architecture/tech/TECH-app-domain-publishing-fallback.md](architecture/tech/TECH-app-domain-publishing-fallback.md) | User app publishing domains (default `<slug>.app.<suffix>` + custom) and the Deploy control-plane fallback for unmatched hosts |
+| [architecture/tech/TECH-deployment-self-provisioning.md](architecture/tech/TECH-deployment-self-provisioning.md) | Startup provisioning of the deploy application, enabled IAM installation, credential-entry Access-Token reuse/rotation, and static runtime identity |
 | [standards-alignment.md](standards-alignment.md) | Current SDKWork integration and verification evidence |
 | [operations/PRODUCTION-READINESS.md](operations/PRODUCTION-READINESS.md) | Capacity/soak harness and the current production-readiness evidence matrix |
 | [operations/SLO.md](operations/SLO.md) | Service level objectives, error-budget policy, and the support-bundle/incident inputs |
