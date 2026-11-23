@@ -123,6 +123,13 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     resolve: {
+      // Generated SDK workspaces keep the authored `.ts` sources next to
+      // stale compiled `.js`/`.d.ts` artifacts from earlier generations.
+      // Vite's default `.js`-before-`.ts` order then loads the old SDK surface
+      // (for example an OAuth client without `oauth.loginFollowQr`), while
+      // `tsc` resolves `.ts` and reports no error. Prefer TypeScript for the
+      // same reason TypeScript does.
+      extensions: [".mjs", ".mts", ".ts", ".tsx", ".js", ".jsx", ".json"],
       // Cross-repository workspace links (for example the SDKWork
       // Deployments and Appbase console packages) resolve their React and
       // router peers from their own node_modules; alias the runtime

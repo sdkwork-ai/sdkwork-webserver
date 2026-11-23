@@ -107,6 +107,12 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     cacheDir: path.resolve(APP_ROOT, "node_modules/.vite", VITE_CACHE_SURFACE_ID),
+    resolve: {
+      // Generated SDK workspaces keep authored `.ts` sources next to stale
+      // compiled `.js` from earlier generations; Vite's default `.js`-first
+      // order would load the old SDK surface while `tsc` resolves `.ts`.
+      extensions: [".mjs", ".mts", ".ts", ".tsx", ".js", ".jsx", ".json"],
+    },
     plugins: [
       react(),
       createSdkworkCredentialEntryBootstrapVitePlugin({
