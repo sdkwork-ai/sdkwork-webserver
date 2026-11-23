@@ -41,6 +41,7 @@ const EMBEDDED_MODULE_DATABASES = [
   { repo: 'sdkwork-skills', shareName: 'skills' },
   { repo: 'sdkwork-mcp', shareName: 'mcp' },
   { repo: 'sdkwork-deployments', shareName: 'deploy' },
+  { repo: 'sdkwork-sandbox', shareName: 'sandbox' },
 ];
 const SUPPORTED_ENVIRONMENTS = ['development', 'test', 'staging', 'demo', 'production'];
 

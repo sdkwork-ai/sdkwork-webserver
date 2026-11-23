@@ -129,6 +129,13 @@ const DEPENDENCY_RUNTIME_ASSETS = Object.freeze([
     requiredPaths: ['database/database.manifest.json'],
   },
   {
+    id: 'sandbox',
+    sourceRoot: path.resolve(REPO_ROOT, '..', 'sdkwork-sandbox'),
+    sourceDirectories: ['database'],
+    packagePrefix: 'share/sdkwork/sandbox',
+    requiredPaths: ['database/database.manifest.json'],
+  },
+  {
     id: 'webstore',
     sourceRoot: path.resolve(REPO_ROOT, '..', 'sdkwork-web-framework'),
     sourceDirectories: ['database'],

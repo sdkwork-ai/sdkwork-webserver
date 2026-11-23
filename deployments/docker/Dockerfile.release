@@ -63,6 +63,7 @@ ENV SDKWORK_WEBSERVER_APP_ROOT=/app \
     SDKWORK_WEB_STORE_APP_ROOT=/app/share/sdkwork/webstore \
     SDKWORK_SKILLS_APP_ROOT=/app/share/sdkwork/skills \
     SDKWORK_MCP_APP_ROOT=/app/share/sdkwork/mcp \
+    SDKWORK_SANDBOX_APP_ROOT=/app/share/sdkwork/sandbox \
     SDKWORK_WEBSERVER_PC_STATIC_ROOT=/app/share/sdkwork/webserver/web/pc \
     SDKWORK_WEBSERVER_H5_STATIC_ROOT=/app/share/sdkwork/webserver/web/h5 \
     SDKWORK_WEBSERVER_STATIC_FALLBACK_ROOT=/app/share/sdkwork/webserver/web/static \
