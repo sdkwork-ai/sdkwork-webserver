@@ -15,7 +15,7 @@ use crate::challenge_store::ChallengeStore;
 use crate::config::AcmeConfig;
 use crate::dns::{Dns01Presenter, DnsRecordChange, DnsZoneInventory, DnsZoneRecord};
 use crate::http_client::{AcmeHttpClientFactory, PlatformVerifierClientFactory};
-use crate::lets_encrypt::{issue_lets_encrypt, AcmeChallengeMode};
+use crate::lets_encrypt::{issue_lets_encrypt, AcmeChallengeMode, AcmePreparedOrder};
 use crate::model::IssuedCertificateMaterial;
 use crate::self_signed::{certificate_evidence_from_pem, issue_self_signed};
 use crate::{AcmeServiceError, AcmeServiceResult};
@@ -515,41 +515,13 @@ impl CertificateIssuer {
         key_algorithm: &str,
         dns01: Option<AcmeDns01Context<'_>>,
     ) -> AcmeServiceResult<IssuedCertificateMaterial> {
-        if hostnames.is_empty() || hostnames.len() > MAX_CERTIFICATE_IDENTIFIERS {
-            return Err(AcmeServiceError::validation(format!(
-                "certificate identifiers must contain 1..{MAX_CERTIFICATE_IDENTIFIERS} hostnames"
-            )));
-        }
-        let mut unique_hostnames = BTreeSet::new();
-        for hostname in hostnames {
-            validate_hostname(hostname)?;
-            if !unique_hostnames.insert(hostname.to_ascii_lowercase()) {
-                return Err(AcmeServiceError::validation(
-                    "certificate identifiers must be unique ignoring ASCII case",
-                ));
-            }
-        }
-        // Checked against the shared vocabulary, not a local list: the same set
-        // guards the DDL constraints and the control plane's own validation, and the
-        // key generation below is keyed by the same constants.
-        if let Err(reason) = validate_certificate_key_algorithm(key_algorithm) {
-            return Err(AcmeServiceError::validation(format!(
-                "keyAlgorithm {reason}"
-            )));
-        }
-        validate_certificate_name(cert_name)?;
+        validate_issuance_request(hostnames, cert_name, key_algorithm)?;
         let _permit = self.admission.try_acquire().map_err(|_| {
             AcmeServiceError::provider(format!(
                 "certificate issuance capacity exhausted; maximum concurrent operations: {MAX_CONCURRENT_CERTIFICATE_ISSUANCE}"
             ))
         })?;
-        let mode = match dns01 {
-            Some(context) => AcmeChallengeMode::Dns01 {
-                presenter: context.presenter,
-                zones: context.zones,
-            },
-            None => AcmeChallengeMode::Http01,
-        };
+        let mode = challenge_mode(dns01);
         let material = match cert_type {
             1 => {
                 issue_lets_encrypt(
@@ -600,6 +572,150 @@ impl CertificateIssuer {
         )
         .await
     }
+
+    /// Phase one of a resumable issuance: create the CA order and return every
+    /// challenge response as data.
+    ///
+    /// The single-shot [`Self::issue_with_challenge`] cannot yield control
+    /// between "challenge computed" and "CA asked to validate", which is exactly
+    /// the window an operator needs when the DNS zone has no integrated provider
+    /// account. This entry point is that window.
+    ///
+    /// `dns01` selects DNS-01; `None` selects HTTP-01 (exact identifiers only).
+    /// For a manual presentation the caller supplies
+    /// [`crate::ManualDns01Presenter`], which publishes nothing and lets the
+    /// operator act on the returned [`AcmePresentation`] list.
+    pub async fn prepare_order(
+        &self,
+        hostnames: &[String],
+        key_algorithm: &str,
+        dns01: Option<AcmeDns01Context<'_>>,
+    ) -> AcmeServiceResult<AcmePreparedOrder> {
+        validate_identifiers(hostnames, key_algorithm)?;
+        let _permit = self.admission.try_acquire().map_err(|_| {
+            AcmeServiceError::provider(format!(
+                "certificate issuance capacity exhausted; maximum concurrent operations: {MAX_CONCURRENT_CERTIFICATE_ISSUANCE}"
+            ))
+        })?;
+        crate::lets_encrypt::prepare_lets_encrypt(
+            &self.config,
+            self.challenge_store.as_ref(),
+            self.account_store.as_ref(),
+            self.client_factory.as_ref(),
+            crate::lets_encrypt::AcmePrepareParams {
+                hostnames,
+                key_algorithm,
+                mode: challenge_mode(dns01),
+            },
+            self.operation_timeout,
+        )
+        .await
+    }
+
+    /// Phase two: resume `order_url` and drive it to validated, sealed material.
+    ///
+    /// `managed_records` are the provider records the caller persisted from
+    /// [`AcmePreparedOrder::presentations`]. They are withdrawn after the
+    /// exchange; a manual presentation passes an empty slice because the
+    /// operator owns those records.
+    ///
+    /// The caller must pass the same `dns01` context as phase one: the challenge
+    /// type and the withdrawal presenter both come from it, so a resume can
+    /// never validate one proof and clean up another.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn complete_order(
+        &self,
+        order_url: &str,
+        hostnames: &[String],
+        cert_name: &str,
+        key_algorithm: &str,
+        dns01: Option<AcmeDns01Context<'_>>,
+        managed_records: &[crate::dns::Dns01RecordHandle],
+    ) -> AcmeServiceResult<IssuedCertificateMaterial> {
+        validate_issuance_request(hostnames, cert_name, key_algorithm)?;
+        if order_url.is_empty() || !order_url.starts_with("https://") {
+            return Err(AcmeServiceError::validation(
+                "orderUrl must be an https URL issued by the CA",
+            ));
+        }
+        let _permit = self.admission.try_acquire().map_err(|_| {
+            AcmeServiceError::provider(format!(
+                "certificate issuance capacity exhausted; maximum concurrent operations: {MAX_CONCURRENT_CERTIFICATE_ISSUANCE}"
+            ))
+        })?;
+        let material = crate::lets_encrypt::complete_lets_encrypt(
+            &self.config,
+            self.challenge_store.as_ref(),
+            self.account_store.as_ref(),
+            self.client_factory.as_ref(),
+            crate::lets_encrypt::AcmeCompleteParams {
+                order_url,
+                cert_name,
+                cert_root: &self.cert_root,
+                key_algorithm,
+                mode: challenge_mode(dns01),
+                managed_records,
+            },
+            self.operation_timeout,
+        )
+        .await?;
+        validate_issued_material(
+            material,
+            1,
+            hostnames.to_vec(),
+            cert_name.to_string(),
+            key_algorithm.to_string(),
+        )
+        .await
+    }
+}
+
+/// Maps the caller's optional DNS-01 context onto the engine's challenge mode.
+fn challenge_mode(dns01: Option<AcmeDns01Context<'_>>) -> AcmeChallengeMode<'_> {
+    match dns01 {
+        Some(context) => AcmeChallengeMode::Dns01 {
+            presenter: context.presenter,
+            zones: context.zones,
+        },
+        None => AcmeChallengeMode::Http01,
+    }
+}
+
+/// Shared request validation for every issuance entry point.
+///
+/// Checked against the shared vocabulary, not a local list: the same set guards
+/// the DDL constraints and the control plane's own validation, and the key
+/// generation is keyed by the same constants.
+fn validate_identifiers(hostnames: &[String], key_algorithm: &str) -> AcmeServiceResult<()> {
+    if hostnames.is_empty() || hostnames.len() > MAX_CERTIFICATE_IDENTIFIERS {
+        return Err(AcmeServiceError::validation(format!(
+            "certificate identifiers must contain 1..{MAX_CERTIFICATE_IDENTIFIERS} hostnames"
+        )));
+    }
+    let mut unique_hostnames = BTreeSet::new();
+    for hostname in hostnames {
+        validate_hostname(hostname)?;
+        if !unique_hostnames.insert(hostname.to_ascii_lowercase()) {
+            return Err(AcmeServiceError::validation(
+                "certificate identifiers must be unique ignoring ASCII case",
+            ));
+        }
+    }
+    if let Err(reason) = validate_certificate_key_algorithm(key_algorithm) {
+        return Err(AcmeServiceError::validation(format!(
+            "keyAlgorithm {reason}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_issuance_request(
+    hostnames: &[String],
+    cert_name: &str,
+    key_algorithm: &str,
+) -> AcmeServiceResult<()> {
+    validate_identifiers(hostnames, key_algorithm)?;
+    validate_certificate_name(cert_name)
 }
 
 /// DNS-01 presentation context for one issuance.
@@ -826,7 +942,7 @@ fn validate_hostname(hostname: &str) -> AcmeServiceResult<()> {
     Ok(())
 }
 
-fn validate_certificate_name(cert_name: &str) -> AcmeServiceResult<()> {
+pub(crate) fn validate_certificate_name(cert_name: &str) -> AcmeServiceResult<()> {
     if cert_name.is_empty()
         || cert_name.len() > 253
         || matches!(cert_name, "." | "..")

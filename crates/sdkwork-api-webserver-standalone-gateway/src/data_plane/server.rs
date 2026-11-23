@@ -877,6 +877,14 @@ where
         }
         None => (None, None),
     };
+    // The Drive certificate source refreshes independently of any listener
+    // configuration: its index is a live handle every resolver reads, so a
+    // Drive rotation applies to the next handshake without a generation rebuild.
+    let (drive_shutdown_tx, drive_refresh) = match super::drive_certificates::spawn_shared_refresh()
+    {
+        Some((stop_tx, handle)) => (Some(stop_tx), Some(handle)),
+        None => (None, None),
+    };
 
     // Process-fixed operations listener (loopback health/metrics/tunnel
     // control). Its death is fatal; it is not part of the handoff surface.
@@ -990,6 +998,15 @@ where
                 tracing::error!(error = %error, "TLS runtime watcher stopped unexpectedly")
             }
             Err(error) => tracing::error!(error = %error, "TLS runtime watcher task failed"),
+        }
+    }
+    if let Some(stop_tx) = drive_shutdown_tx {
+        let _ = stop_tx.send(true);
+    }
+    if let Some(handle) = drive_refresh {
+        match handle.await {
+            Ok(()) => {}
+            Err(error) => tracing::error!(error = %error, "Drive certificate refresh task failed"),
         }
     }
     let tunnel_drained = runtime

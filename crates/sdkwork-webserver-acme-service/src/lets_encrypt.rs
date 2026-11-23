@@ -7,6 +7,7 @@ use instant_acme::{
     OrderStatus, RetryPolicy,
 };
 use rcgen::{CertificateParams, DistinguishedName};
+use sdkwork_utils_rust::crypto::sha256_hash;
 
 use crate::account_store::AcmeAccountStore;
 use crate::challenge_store::ChallengeStore;
@@ -204,52 +205,8 @@ async fn issue_lets_encrypt_inner(
         return Err(error);
     }
 
-    let contact = format!("mailto:{}", config.contact_email);
-    // Restore the durable CA account when one exists; otherwise create one
-    // account and persist it. Reusing one account avoids the CA account
-    // creation rate limit and preserves account identity across renewals.
-    // A credentials set whose durable save keeps failing is kept in the
-    // process-lifetime fallback so a broken disk cannot burn the CA's
-    // account-creation quota (Let's Encrypt: 50 accounts per IP per 3h).
-    let account = if let Some(credentials) = account_store.load(&config.directory_url).await? {
-        Account::builder_with_http(client_factory.build()?)
-            .from_credentials(credentials)
-            .await
-            .map_err(|error| AcmeServiceError::provider(format!("restore ACME account: {error}")))?
-    } else if let Some(credentials) = fallback_account_credentials(&config.directory_url) {
-        tracing::warn!(
-            directory = %config.directory_url,
-            "durable ACME account store is unreadable or unwritable; reusing the account cached in this process"
-        );
-        Account::builder_with_http(client_factory.build()?)
-            .from_credentials(credentials)
-            .await
-            .map_err(|error| AcmeServiceError::provider(format!("restore ACME account: {error}")))?
-    } else {
-        let (account, credentials) = Account::builder_with_http(client_factory.build()?)
-            .create(
-                &NewAccount {
-                    contact: &[&contact],
-                    terms_of_service_agreed: true,
-                    only_return_existing: false,
-                },
-                config.directory_url.clone(),
-                None,
-            )
-            .await
-            .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
-        if let Err(error) =
-            best_effort_save_account(account_store, &config.directory_url, &credentials).await
-        {
-            tracing::warn!(
-                directory = %config.directory_url,
-                error = %error,
-                "durable ACME account save failed after retries; caching the credentials in this process to avoid burning the CA account quota"
-            );
-            cache_fallback_account_credentials(&config.directory_url, &credentials);
-        }
-        account
-    };
+    let account =
+        ensure_account(config, account_store, client_factory, true).await?;
 
     let identifiers = hostnames
         .iter()
@@ -406,70 +363,15 @@ async fn issue_lets_encrypt_inner(
         }
 
         drop(challenge_leases);
-        let mut params = CertificateParams::new(hostnames.to_vec())
-            .map_err(|error| AcmeServiceError::Internal(error.to_string()))?;
-        params.distinguished_name = DistinguishedName::new();
-        // RSA-2048 key generation is CPU-bound (100-500 ms); never run it on the
-        // async executor.
-        let key_algorithm_owned = key_algorithm.to_owned();
-        let key_pair = tokio::task::spawn_blocking(move || generate_key_pair(&key_algorithm_owned))
-            .await
-            .map_err(|error| {
-                AcmeServiceError::Internal(format!("join key generation: {error}"))
-            })??;
-        let csr = params
-            .serialize_request(&key_pair)
-            .map_err(|error| AcmeServiceError::Internal(error.to_string()))?;
-        order
-            .finalize_csr(csr.der())
-            .await
-            .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
-        let private_key_pem = key_pair.serialize_pem();
-        let cert_chain_pem = order
-            .poll_certificate(&policy)
-            .await
-            .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
-
-        let evidence = certificate_evidence_from_pem(&cert_chain_pem)?;
-        let cert_dir = format!("{cert_root}/{cert_name}");
-        let cert_path = format!("{cert_dir}/fullchain.pem");
-        let key_path = format!("{cert_dir}/privkey.pem");
-
-        let material = IssuedCertificateMaterial {
-            cert_name: cert_name.to_string(),
-            cert_type: 1,
-            issuer: evidence.issuer,
-            subject: evidence.subject,
-            san_list: evidence.san_list,
-            serial_sha256: evidence.serial_sha256,
-            fingerprint_sha256: evidence.fingerprint_sha256,
-            spki_sha256: evidence.spki_sha256,
-            chain_sha256: evidence.chain_sha256,
-            key_algorithm: evidence.key_algorithm,
-            cert_pem: cert_chain_pem.clone(),
-            private_key_pem: private_key_pem.clone(),
-            chain_pem: Some(cert_chain_pem),
-            not_before: evidence.not_before,
-            not_after: evidence.not_after,
-            cert_path: cert_path.clone(),
-            key_path: key_path.clone(),
-            chain_path: None,
-        };
-        // Make `cert_path`/`key_path` true on disk: single-host edges
-        // (deb/rpm) terminate TLS directly from these canonical paths, so a
-        // renewal is an in-place atomic replace the running edge picks up on
-        // its next reload - no manual material copy. A failed export is
-        // logged and does not fail the issuance (the material is durable in
-        // the database; the edge keeps serving its previous certificate).
-        if let Err(export_error) = crate::material_export::export_material_to_disk(&material).await
-        {
-            tracing::warn!(
-                cert_name = %material.cert_name,
-                error = %export_error,
-                "issued material disk export failed; the canonical certificate paths are stale"
-            );
-        }
-        Ok(material)
+        finalize_order_into_material(
+            &mut order,
+            &policy,
+            hostnames,
+            cert_root,
+            cert_name,
+            key_algorithm,
+        )
+        .await
     }
     .await;
 
@@ -696,6 +598,565 @@ fn challenge_type_label(mode: &AcmeChallengeMode<'_>) -> &'static str {
         AcmeChallengeMode::Http01 => "http-01",
         AcmeChallengeMode::Dns01 { .. } => "dns-01",
     }
+}
+
+/// One challenge response an operator (or a provider adapter) has to present
+/// before the CA will validate an authorization.
+///
+/// This is the engine's public description of a proof, not a protocol object:
+/// it is what a control plane persists and what a console renders. It is
+/// deliberately free of `instant_acme` types so a caller can store it without
+/// linking the ACME client.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcmePresentation {
+    /// Identifier this presentation proves, with its `*.` marker if wildcard.
+    pub identifier: String,
+    /// `dns-01` or `http-01`, the ACME wire vocabulary.
+    pub challenge_type: String,
+    /// Hosted zone apex that owns `record_name`, when the proof is a TXT record.
+    pub zone_apex: Option<String>,
+    /// Absolute TXT owner (`_acme-challenge.<base>`) for DNS-01.
+    pub record_name: Option<String>,
+    /// TXT content (base64url key-authorization digest) for DNS-01.
+    pub record_value: Option<String>,
+    /// Webroot file name (the ACME token) for HTTP-01.
+    pub challenge_token: Option<String>,
+    /// Hex SHA-256 of the key authorization, recorded for audit.
+    pub key_authorization_sha256: String,
+    /// Provider-assigned record identity, when the presenter returned one.
+    pub provider_record_ref: Option<String>,
+    /// `true` when the CA already considers this identifier authorized.
+    pub already_valid: bool,
+}
+
+/// What the first phase produced: the CA order identity and everything needed to
+/// present its challenges.
+#[derive(Clone, Debug)]
+pub struct AcmePreparedOrder {
+    /// The CA's order URL. This is the only thing needed to resume the order:
+    /// `instant_acme::Account::order(url)` re-fetches its state, so no order
+    /// object has to be serialized.
+    pub order_url: String,
+    /// Directory the order was created against, so a resume can refuse to
+    /// continue against a different CA than the one holding the order.
+    pub directory_url: String,
+    pub presentations: Vec<AcmePresentation>,
+}
+
+/// Parameters shared by the two-phase entry points.
+pub(crate) struct AcmePrepareParams<'a> {
+    pub hostnames: &'a [String],
+    pub key_algorithm: &'a str,
+    pub mode: AcmeChallengeMode<'a>,
+}
+
+pub(crate) struct AcmeCompleteParams<'a> {
+    pub order_url: &'a str,
+    pub cert_name: &'a str,
+    pub cert_root: &'a str,
+    pub key_algorithm: &'a str,
+    pub mode: AcmeChallengeMode<'a>,
+    /// Provider records the caller persisted from [`AcmePresentation`]. Only
+    /// these are withdrawn: a manual presentation owns its own records, and a
+    /// withdrawal without the provider identity would silently do nothing on
+    /// every adapter that deletes by record id.
+    pub managed_records: &'a [Dns01RecordHandle],
+}
+
+/// Restores or creates the CA account for `config.directory_url`.
+///
+/// `allow_create` is `false` on the resume path: resuming an order against a
+/// freshly created account would replace the identity that owns the order, so a
+/// missing account there is a configuration error rather than a reason to
+/// register again.
+async fn ensure_account(
+    config: &AcmeConfig,
+    account_store: &dyn AcmeAccountStore,
+    client_factory: &dyn AcmeHttpClientFactory,
+    allow_create: bool,
+) -> AcmeServiceResult<Account> {
+    let contact = format!("mailto:{}", config.contact_email);
+    // Restore the durable CA account when one exists; otherwise create one
+    // account and persist it. Reusing one account avoids the CA account
+    // creation rate limit and preserves account identity across renewals.
+    // A credentials set whose durable save keeps failing is kept in the
+    // process-lifetime fallback so a broken disk cannot burn the CA's
+    // account-creation quota (Let's Encrypt: 50 accounts per IP per 3h).
+    if let Some(credentials) = account_store.load(&config.directory_url).await? {
+        return Account::builder_with_http(client_factory.build()?)
+            .from_credentials(credentials)
+            .await
+            .map_err(|error| AcmeServiceError::provider(format!("restore ACME account: {error}")));
+    }
+    if let Some(credentials) = fallback_account_credentials(&config.directory_url) {
+        tracing::warn!(
+            directory = %config.directory_url,
+            "durable ACME account store is unreadable or unwritable; reusing the account cached in this process"
+        );
+        return Account::builder_with_http(client_factory.build()?)
+            .from_credentials(credentials)
+            .await
+            .map_err(|error| AcmeServiceError::provider(format!("restore ACME account: {error}")));
+    }
+    if !allow_create {
+        return Err(AcmeServiceError::config(format!(
+            "no ACME account exists for {}; it cannot be recreated while an order for it is in \
+             flight",
+            config.directory_url
+        )));
+    }
+    let (account, credentials) = Account::builder_with_http(client_factory.build()?)
+        .create(
+            &NewAccount {
+                contact: &[&contact],
+                terms_of_service_agreed: true,
+                only_return_existing: false,
+            },
+            config.directory_url.clone(),
+            None,
+        )
+        .await
+        .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+    if let Err(error) =
+        best_effort_save_account(account_store, &config.directory_url, &credentials).await
+    {
+        tracing::warn!(
+            directory = %config.directory_url,
+            error = %error,
+            "durable ACME account save failed after retries; caching the credentials in this process to avoid burning the CA account quota"
+        );
+        cache_fallback_account_credentials(&config.directory_url, &credentials);
+    }
+    Ok(account)
+}
+
+/// Phase one: create the CA order and produce every challenge response.
+///
+/// Nothing is told to the CA here — no `set_ready`. For a managed presentation
+/// the records are published so a later [`complete_lets_encrypt`] can validate
+/// them; for a manual presentation the caller gets the exact instructions and a
+/// human publishes them. This split is what makes operator-in-the-loop issuance
+/// possible at all: the single-shot [`issue_lets_encrypt`] cannot yield control
+/// between "challenge computed" and "CA asked to validate".
+pub(crate) async fn prepare_lets_encrypt(
+    config: &AcmeConfig,
+    challenge_store: &ChallengeStore,
+    account_store: &dyn AcmeAccountStore,
+    client_factory: &dyn AcmeHttpClientFactory,
+    params: AcmePrepareParams<'_>,
+    operation_timeout: Duration,
+) -> AcmeServiceResult<AcmePreparedOrder> {
+    match tokio::time::timeout(
+        operation_timeout,
+        prepare_lets_encrypt_inner(config, challenge_store, account_store, client_factory, params),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(AcmeServiceError::provider(format!(
+            "ACME order preparation timed out after {} ms",
+            operation_timeout.as_millis()
+        ))),
+    }
+}
+
+async fn prepare_lets_encrypt_inner(
+    config: &AcmeConfig,
+    challenge_store: &ChallengeStore,
+    account_store: &dyn AcmeAccountStore,
+    client_factory: &dyn AcmeHttpClientFactory,
+    params: AcmePrepareParams<'_>,
+) -> AcmeServiceResult<AcmePreparedOrder> {
+    let AcmePrepareParams {
+        hostnames,
+        key_algorithm,
+        mode,
+    } = params;
+    validate_prepared_request(config, hostnames, key_algorithm, &mode)?;
+    let webroot = webroot_for_mode(config, &mode)?;
+    directory_capability_guard(config, hostnames)?;
+
+    let account = ensure_account(config, account_store, client_factory, true).await?;
+    let identifiers = hostnames
+        .iter()
+        .cloned()
+        .map(Identifier::Dns)
+        .collect::<Vec<_>>();
+    let mut order = account
+        .new_order(&NewOrder::new(&identifiers))
+        .await
+        .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+    let order_url = order.url().to_string();
+
+    let mut presentations = Vec::with_capacity(hostnames.len());
+    let mut authorization_count = 0_usize;
+    let mut authorizations = order.authorizations();
+    while let Some(result) = authorizations.next().await {
+        authorization_count += 1;
+        if authorization_count > MAX_AUTHORIZATIONS_PER_ORDER {
+            return Err(AcmeServiceError::provider(format!(
+                "ACME order exceeds {MAX_AUTHORIZATIONS_PER_ORDER} authorizations"
+            )));
+        }
+        let mut authz = result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+        let identifier = authz.identifier().to_string();
+        if authz.status == AuthorizationStatus::Valid {
+            presentations.push(AcmePresentation {
+                identifier,
+                challenge_type: challenge_type_label(&mode).to_owned(),
+                zone_apex: None,
+                record_name: None,
+                record_value: None,
+                challenge_token: None,
+                key_authorization_sha256: String::new(),
+                provider_record_ref: None,
+                already_valid: true,
+            });
+            continue;
+        }
+        let challenge_type = match mode {
+            AcmeChallengeMode::Http01 => ChallengeType::Http01,
+            AcmeChallengeMode::Dns01 { .. } => ChallengeType::Dns01,
+        };
+        let challenge = authz.challenge(challenge_type).ok_or_else(|| {
+            AcmeServiceError::provider(format!(
+                "the CA offers no {} challenge for this authorization",
+                challenge_type_label(&mode)
+            ))
+        })?;
+        let key_authorization = challenge.key_authorization().as_str().to_string();
+        let key_authorization_sha256 = sha256_hash(key_authorization.as_bytes());
+        match &mode {
+            AcmeChallengeMode::Http01 => {
+                // Registered without a lease: the token must outlive this call
+                // until `complete_lets_encrypt` has told the CA it is ready, and
+                // a scoped lease would unlink the file as soon as this frame
+                // returns.
+                let token = challenge.token.clone();
+                challenge_store.register(webroot, &token, &key_authorization)?;
+                presentations.push(AcmePresentation {
+                    identifier,
+                    challenge_type: "http-01".to_owned(),
+                    zone_apex: None,
+                    record_name: None,
+                    record_value: None,
+                    challenge_token: Some(token),
+                    key_authorization_sha256,
+                    provider_record_ref: None,
+                    already_valid: false,
+                });
+            }
+            AcmeChallengeMode::Dns01 { presenter, zones } => {
+                let zone_apex = zones.zone_for(&identifier).ok_or_else(|| {
+                    AcmeServiceError::validation(format!(
+                        "no cloud account is associated with identifier {identifier}; \
+                         associate its zone with a DNS provider account to renew"
+                    ))
+                })?;
+                let record_name = dns01_record_name(&identifier)?;
+                let digest = challenge.key_authorization().digest();
+                let record_value = dns01_txt_value(digest.as_ref());
+                let request =
+                    Dns01RecordRequest::new(zone_apex, record_name.clone(), record_value.clone())?;
+                let handle = presenter.publish(&request).await?;
+                presentations.push(AcmePresentation {
+                    identifier,
+                    challenge_type: "dns-01".to_owned(),
+                    zone_apex: Some(request.zone_apex.clone()),
+                    record_name: Some(record_name),
+                    record_value: Some(record_value),
+                    challenge_token: None,
+                    key_authorization_sha256,
+                    provider_record_ref: handle.provider_record_ref,
+                    already_valid: false,
+                });
+            }
+        }
+    }
+
+    Ok(AcmePreparedOrder {
+        order_url,
+        directory_url: config.directory_url.clone(),
+        presentations,
+    })
+}
+
+/// Phase two: resume a prepared order and drive it to issued material.
+pub(crate) async fn complete_lets_encrypt(
+    config: &AcmeConfig,
+    challenge_store: &ChallengeStore,
+    account_store: &dyn AcmeAccountStore,
+    client_factory: &dyn AcmeHttpClientFactory,
+    params: AcmeCompleteParams<'_>,
+    operation_timeout: Duration,
+) -> AcmeServiceResult<IssuedCertificateMaterial> {
+    match tokio::time::timeout(
+        operation_timeout,
+        complete_lets_encrypt_inner(
+            config,
+            challenge_store,
+            account_store,
+            client_factory,
+            params,
+            operation_timeout,
+        ),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(AcmeServiceError::provider(format!(
+            "ACME order completion timed out after {} ms",
+            operation_timeout.as_millis()
+        ))),
+    }
+}
+
+async fn complete_lets_encrypt_inner(
+    config: &AcmeConfig,
+    challenge_store: &ChallengeStore,
+    account_store: &dyn AcmeAccountStore,
+    client_factory: &dyn AcmeHttpClientFactory,
+    params: AcmeCompleteParams<'_>,
+    operation_timeout: Duration,
+) -> AcmeServiceResult<IssuedCertificateMaterial> {
+    let AcmeCompleteParams {
+        order_url,
+        cert_name,
+        cert_root,
+        key_algorithm,
+        mode,
+        managed_records,
+    } = params;
+    crate::issue::validate_certificate_name(cert_name)?;
+    if let Err(reason) = sdkwork_deploy_core::validate_certificate_key_algorithm(key_algorithm) {
+        return Err(AcmeServiceError::validation(format!(
+            "keyAlgorithm {reason}"
+        )));
+    }
+    let webroot = webroot_for_mode(config, &mode)?;
+    let account = ensure_account(config, account_store, client_factory, false).await?;
+    let mut order = account
+        .order(order_url.to_owned())
+        .await
+        .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+
+    let mut tokens = Vec::new();
+    let mut authorization_count = 0_usize;
+    {
+        let mut authorizations = order.authorizations();
+        while let Some(result) = authorizations.next().await {
+            authorization_count += 1;
+            if authorization_count > MAX_AUTHORIZATIONS_PER_ORDER {
+                return Err(AcmeServiceError::provider(format!(
+                    "ACME order exceeds {MAX_AUTHORIZATIONS_PER_ORDER} authorizations"
+                )));
+            }
+            let mut authz =
+                result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+            if authz.status == AuthorizationStatus::Valid {
+                continue;
+            }
+            let challenge_type = match mode {
+                AcmeChallengeMode::Http01 => ChallengeType::Http01,
+                AcmeChallengeMode::Dns01 { .. } => ChallengeType::Dns01,
+            };
+            let mut challenge = authz.challenge(challenge_type).ok_or_else(|| {
+                AcmeServiceError::provider(format!(
+                    "the CA offers no {} challenge for this authorization",
+                    challenge_type_label(&mode)
+                ))
+            })?;
+            if matches!(mode, AcmeChallengeMode::Http01) {
+                tokens.push(challenge.token.clone());
+            }
+            challenge
+                .set_ready()
+                .await
+                .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+        }
+    }
+
+    let retry_timeout = operation_timeout;
+    let outcome = async {
+        let policy = RetryPolicy::default().timeout(retry_timeout);
+        let status = order
+            .poll_ready(&policy)
+            .await
+            .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+        if status != OrderStatus::Ready {
+            let diagnostics = authorization_failure_diagnostics(&mut order).await;
+            return Err(AcmeServiceError::provider(format!(
+                "ACME order not ready: {status:?}{diagnostics}"
+            )));
+        }
+        let hostnames = order_identifier_names(&mut order).await?;
+        finalize_order_into_material(&mut order, &policy, &hostnames, cert_root, cert_name, key_algorithm)
+            .await
+    }
+    .await;
+
+    // Clear the HTTP-01 tokens this exchange presented, on both exit paths: a
+    // leftover file is a live proof nobody owns any more.
+    for token in &tokens {
+        challenge_store.clear_token(webroot, token);
+    }
+    withdraw_records(&mode, managed_records).await;
+    outcome
+}
+
+/// Withdraws provider-published records through the same presenter that
+/// published them. A failure is logged, never surfaced: the certificate outcome
+/// is what the caller needs, and a stale-record report belongs in the log.
+async fn withdraw_records(mode: &AcmeChallengeMode<'_>, records: &[Dns01RecordHandle]) {
+    let AcmeChallengeMode::Dns01 { presenter, .. } = mode else {
+        return;
+    };
+    for handle in records {
+        if let Err(error) = presenter.withdraw(handle).await {
+            tracing::warn!(
+                record_name = %handle.record_name,
+                error = %error,
+                "failed to withdraw a DNS-01 challenge record"
+            );
+        }
+    }
+}
+
+/// Identifier names currently attached to a resumed order, in the same
+/// normalized form `finalize_order_into_material` needs for the CSR.
+async fn order_identifier_names(order: &mut Order) -> AcmeServiceResult<Vec<String>> {
+    let mut names = Vec::new();
+    let mut identifiers = order.identifiers();
+    while let Some(result) = identifiers.next().await {
+        let identifier = result.map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+        names.push(identifier.to_string());
+    }
+    Ok(names)
+}
+
+fn webroot_for_mode<'a>(
+    config: &'a AcmeConfig,
+    mode: &AcmeChallengeMode<'_>,
+) -> AcmeServiceResult<Option<&'a Path>> {
+    match mode {
+        AcmeChallengeMode::Http01 => {
+            let webroot = config.webroot.as_deref().map(Path::new).ok_or_else(|| {
+                AcmeServiceError::config(
+                    "SDKWORK_WEBSERVER_ACME_WEBROOT is required for Let's Encrypt HTTP-01 issuance",
+                )
+            })?;
+            Ok(Some(webroot))
+        }
+        AcmeChallengeMode::Dns01 { .. } => Ok(None),
+    }
+}
+
+fn directory_capability_guard(config: &AcmeConfig, hostnames: &[String]) -> AcmeServiceResult<()> {
+    match directory_capability_error(&config.directory_url, hostnames) {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+/// Request validation shared by both phases.
+fn validate_prepared_request(
+    config: &AcmeConfig,
+    hostnames: &[String],
+    key_algorithm: &str,
+    mode: &AcmeChallengeMode<'_>,
+) -> AcmeServiceResult<()> {
+    let _ = config;
+    if hostnames.is_empty() {
+        return Err(AcmeServiceError::validation(
+            "certificate identifiers must contain at least one hostname",
+        ));
+    }
+    if hostnames.iter().any(|hostname| is_wildcard_identifier(hostname))
+        && matches!(mode, AcmeChallengeMode::Http01)
+    {
+        return Err(AcmeServiceError::validation(
+            "wildcard identifiers require the DNS-01 validation method",
+        ));
+    }
+    if let Err(reason) = sdkwork_deploy_core::validate_certificate_key_algorithm(key_algorithm) {
+        return Err(AcmeServiceError::validation(format!(
+            "keyAlgorithm {reason}"
+        )));
+    }
+    Ok(())
+}
+
+/// Generates the key pair, finalizes the CSR, downloads the chain, and computes
+/// the X.509 evidence — the tail both issuance paths share.
+async fn finalize_order_into_material(
+    order: &mut Order,
+    policy: &RetryPolicy,
+    hostnames: &[String],
+    cert_root: &str,
+    cert_name: &str,
+    key_algorithm: &str,
+) -> AcmeServiceResult<IssuedCertificateMaterial> {
+    let mut params = CertificateParams::new(hostnames.to_vec())
+        .map_err(|error| AcmeServiceError::Internal(error.to_string()))?;
+    params.distinguished_name = DistinguishedName::new();
+    // RSA-2048 key generation is CPU-bound (100-500 ms); never run it on the
+    // async executor.
+    let key_algorithm_owned = key_algorithm.to_owned();
+    let key_pair = tokio::task::spawn_blocking(move || generate_key_pair(&key_algorithm_owned))
+        .await
+        .map_err(|error| AcmeServiceError::Internal(format!("join key generation: {error}")))??;
+    let csr = params
+        .serialize_request(&key_pair)
+        .map_err(|error| AcmeServiceError::Internal(error.to_string()))?;
+    order
+        .finalize_csr(csr.der())
+        .await
+        .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+    let private_key_pem = key_pair.serialize_pem();
+    let cert_chain_pem = order
+        .poll_certificate(policy)
+        .await
+        .map_err(|error| AcmeServiceError::provider(error.to_string()))?;
+
+    let evidence = certificate_evidence_from_pem(&cert_chain_pem)?;
+    let cert_dir = format!("{cert_root}/{cert_name}");
+    let cert_path = format!("{cert_dir}/fullchain.pem");
+    let key_path = format!("{cert_dir}/privkey.pem");
+
+    let material = IssuedCertificateMaterial {
+        cert_name: cert_name.to_string(),
+        cert_type: 1,
+        issuer: evidence.issuer,
+        subject: evidence.subject,
+        san_list: evidence.san_list,
+        serial_sha256: evidence.serial_sha256,
+        fingerprint_sha256: evidence.fingerprint_sha256,
+        spki_sha256: evidence.spki_sha256,
+        chain_sha256: evidence.chain_sha256,
+        key_algorithm: evidence.key_algorithm,
+        cert_pem: cert_chain_pem.clone(),
+        private_key_pem: private_key_pem.clone(),
+        chain_pem: Some(cert_chain_pem),
+        not_before: evidence.not_before,
+        not_after: evidence.not_after,
+        cert_path: cert_path.clone(),
+        key_path: key_path.clone(),
+        chain_path: None,
+    };
+    // Make `cert_path`/`key_path` true on disk: single-host edges
+    // (deb/rpm) terminate TLS directly from these canonical paths, so a
+    // renewal is an in-place atomic replace the running edge picks up on
+    // its next reload - no manual material copy. A failed export is
+    // logged and does not fail the issuance (the material is durable in
+    // the database; the edge keeps serving its previous certificate).
+    if let Err(export_error) = crate::material_export::export_material_to_disk(&material).await {
+        tracing::warn!(
+            cert_name = %material.cert_name,
+            error = %export_error,
+            "issued material disk export failed; the canonical certificate paths are stale"
+        );
+    }
+    Ok(material)
 }
 
 #[cfg(test)]

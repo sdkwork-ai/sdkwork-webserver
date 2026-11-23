@@ -30,6 +30,12 @@ use crate::WebService;
 const TLS_RUNTIME_SNAPSHOT_KIND: &str = "sdkwork.tls-runtime.snapshot";
 const TLS_DISTRIBUTOR_COMPILER_VERSION: &str = "sdkwork-web-tls-distributor/v1";
 const TLS_DISTRIBUTION_LOCK_FILE: &str = ".sdkwork-tls-distribution.lock";
+/// Owner marker inside each Drive bundle directory.
+///
+/// A Drive certificate root can be shared by several nodes. The marker lets a
+/// node prune only the bundles it wrote instead of deleting another node's
+/// certificates when the two assignment sets differ.
+const DRIVE_BUNDLE_OWNER_FILE: &str = ".sdkwork-owner";
 const DEFAULT_MATERIAL_ROOT: &str = ".sdkwork/secrets/tls-materials";
 const DEFAULT_SNAPSHOT_FILE_NAME: &str = "tls-runtime.json";
 const MAX_NODE_TLS_ASSIGNMENTS: usize = 256;
@@ -51,6 +57,13 @@ pub struct TlsMaterialDistributionConfig {
     pub snapshot_file: PathBuf,
     pub node_uuid: Option<String>,
     pub alpn: Vec<String>,
+    /// Host-shared SDKWork Drive certificate root.
+    ///
+    /// When set, every distributed bundle is also mirrored into this root as
+    /// `<version-uuid>/{fullchain.pem,privkey.pem}`, so the data plane's Drive
+    /// certificate source serves the freshly generated material with Drive
+    /// priority. Unset keeps the previous local-material-only behavior.
+    pub drive_certificate_root: Option<PathBuf>,
 }
 
 impl TlsMaterialDistributionConfig {
@@ -89,11 +102,37 @@ impl TlsMaterialDistributionConfig {
                 .unwrap_or_else(|_| "h2,http/1.1".to_string())
                 .as_str(),
         )?;
+        let drive_disabled = std::env::var("SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "0" | "false" | "no" | "off"
+                )
+            });
+        let drive_certificate_root = match std::env::var("SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT")
+        {
+            Ok(value) if !drive_disabled && !value.trim().is_empty() => {
+                let value = value.trim();
+                if value.len() > 4_096
+                    || value
+                        .bytes()
+                        .any(|byte| byte == 0 || byte.is_ascii_control())
+                {
+                    return Err(WebServiceError::validation(
+                        "SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT must contain 1..4096 safe path bytes",
+                    ));
+                }
+                Some(PathBuf::from(value))
+            }
+            _ => None,
+        };
         Ok(Self {
             material_root,
             snapshot_file,
             node_uuid,
             alpn,
+            drive_certificate_root,
         })
     }
 
@@ -207,6 +246,18 @@ fn publish_node_tls_material_with_lock(
     }
     for assignment in assignments {
         write_material_files(&config.material_root, assignment)?;
+        // The Drive mirror is an additional serving source, not the primary
+        // distribution target. A read-only or temporarily unavailable Drive
+        // root must not fail certificate distribution: the local material root
+        // and the snapshot remain authoritative and the data plane keeps
+        // serving them.
+        if let Err(error) = write_drive_certificate_bundle(config, assignment, node_uuid) {
+            tracing::warn!(
+                error = %error,
+                version_uuid = %assignment.version_uuid,
+                "Drive certificate mirror failed; the local TLS material remains authoritative for this assignment"
+            );
+        }
     }
     let generation = next_snapshot_generation(&config.snapshot_file)?;
     let snapshot = build_snapshot(node_uuid, &config.alpn, generation, assignments.to_vec())?;
@@ -219,6 +270,12 @@ fn publish_node_tls_material_with_lock(
         .map_err(|error| WebServiceError::Internal(format!("serialize TLS snapshot: {error}")))?;
     write_snapshot_atomically(&config.snapshot_file, &serialized)?;
     prune_stale_material_directories(&config.material_root, &snapshot)?;
+    if let Err(error) = prune_stale_drive_certificate_bundles(config, assignments) {
+        tracing::warn!(
+            error = %error,
+            "Drive certificate stale-bundle pruning failed; unreferenced bundles stay until the next publication"
+        );
+    }
     tracing::info!(
         node_uuid,
         assignments = snapshot.assignments.len(),
@@ -340,6 +397,60 @@ fn write_material_files(
         material.private_key_pem.as_bytes(),
     )?;
     Ok(())
+}
+
+/// Mirrors one assigned bundle into the host-shared Drive certificate root.
+///
+/// The Drive source reads this root on every refresh and prefers a usable
+/// bundle over the configured and assigned sources, so mirroring here is what
+/// makes a newly issued or renewed certificate reach the Drive layer without a
+/// second distribution step. When no root is configured the function is a
+/// no-op and the local material root remains the only copy.
+fn write_drive_certificate_bundle(
+    config: &TlsMaterialDistributionConfig,
+    material: &TlsCertificateAssignmentMaterial,
+    node_uuid: &str,
+) -> WebServiceResult<()> {
+    let Some(root) = config.drive_certificate_root.as_ref() else {
+        return Ok(());
+    };
+    let directory = root.join(&material.version_uuid);
+    create_private_directory(&directory).map_err(|error| {
+        WebServiceError::Internal(format!(
+            "create Drive certificate directory {}: {error}",
+            directory.display()
+        ))
+    })?;
+    // The marker is written before the material so a crashed mirror never
+    // leaves an ownerless bundle that this node refuses to prune.
+    let marker_path = directory.join(DRIVE_BUNDLE_OWNER_FILE);
+    let marker = drive_bundle_owner_marker(node_uuid);
+    if !file_matches(&marker_path, marker.as_bytes()) {
+        fs::write(&marker_path, marker.as_bytes()).map_err(|error| {
+            WebServiceError::Internal(format!(
+                "write Drive certificate owner marker {}: {error}",
+                marker_path.display()
+            ))
+        })?;
+    }
+    let certificate_path = directory.join("fullchain.pem");
+    let private_key_path = directory.join("privkey.pem");
+    if file_matches(&certificate_path, material.fullchain_pem.as_bytes())
+        && file_matches(&private_key_path, material.private_key_pem.as_bytes())
+    {
+        return Ok(());
+    }
+    write_bounded_file(&certificate_path, material.fullchain_pem.as_bytes())?;
+    write_bounded_file(&private_key_path, material.private_key_pem.as_bytes())?;
+    Ok(())
+}
+
+fn drive_bundle_owner_marker(node_uuid: &str) -> String {
+    format!("sdkwork-node:{node_uuid}\n")
+}
+
+fn file_matches(path: &Path, expected: &[u8]) -> bool {
+    fs::read(path).is_ok_and(|bytes| bytes == expected)
 }
 
 fn write_bounded_file(path: &Path, content: &[u8]) -> WebServiceResult<()> {
@@ -608,6 +719,90 @@ fn prune_stale_material_directories(
     Ok(())
 }
 
+/// Removes Drive certificate bundle directories this node owns that the current
+/// assignment set no longer references.
+///
+/// The Drive root is pruned immediately, unlike the local material root's grace
+/// period: the Drive source is an independent authority, and a superseded
+/// bundle that keeps claiming a renewed name would let an older certificate win
+/// a handshake until the grace period expired. The data plane's own disk cache
+/// remains the last-known-good mirror, so removing the superseded bundle here
+/// does not lose the ability to serve it while a mount is unavailable.
+///
+/// A shared root may carry bundles written by other nodes. Only directories
+/// whose owner marker names this node are pruned; an ownerless directory (for
+/// example one published by a future Drive-side writer) is left alone.
+fn prune_stale_drive_certificate_bundles(
+    config: &TlsMaterialDistributionConfig,
+    assignments: &[TlsCertificateAssignmentMaterial],
+) -> WebServiceResult<()> {
+    let Some(root) = config.drive_certificate_root.as_ref() else {
+        return Ok(());
+    };
+    let Some(node_uuid) = config.node_uuid.as_deref() else {
+        return Ok(());
+    };
+    let owned_marker = drive_bundle_owner_marker(node_uuid);
+    let referenced = assignments
+        .iter()
+        .map(|assignment| assignment.version_uuid.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(WebServiceError::Internal(format!(
+                "list Drive certificate root {}: {error}",
+                root.display()
+            )));
+        }
+    };
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            WebServiceError::Internal(format!("read Drive certificate directory entry: {error}"))
+        })?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if referenced.contains(name)
+            || name.is_empty()
+            || name.len() > 128
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        {
+            continue;
+        }
+        let file_type = entry.file_type().map_err(|error| {
+            WebServiceError::Internal(format!(
+                "inspect Drive certificate directory {}: {error}",
+                entry.path().display()
+            ))
+        })?;
+        if !file_type.is_dir() || file_type.is_symlink() {
+            continue;
+        }
+        if !file_matches(
+            &entry.path().join(DRIVE_BUNDLE_OWNER_FILE),
+            owned_marker.as_bytes(),
+        ) {
+            continue;
+        }
+        fs::remove_dir_all(entry.path()).map_err(|error| {
+            WebServiceError::Internal(format!(
+                "prune stale Drive certificate directory {}: {error}",
+                entry.path().display()
+            ))
+        })?;
+        tracing::info!(
+            pruned = %entry.path().display(),
+            "pruned stale Drive certificate directory"
+        );
+    }
+    Ok(())
+}
+
 fn parse_alpn(value: &str) -> WebServiceResult<Vec<String>> {
     let mut protocols = Vec::new();
     for protocol in value.split(',') {
@@ -811,6 +1006,7 @@ mod tests {
             material_root,
             node_uuid: Some("node-1".to_string()),
             alpn: vec!["h2".to_string()],
+            drive_certificate_root: None,
         }
     }
 
@@ -859,6 +1055,65 @@ mod tests {
                 );
             }
         }
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn publication_mirrors_bundles_into_the_drive_certificate_root() {
+        let directory = scratch_directory();
+        let mut config = scratch_config(&directory);
+        let drive_root = directory.join("drive-certificates");
+        config.drive_certificate_root = Some(drive_root.clone());
+        let assignments = [material("version-a", &["www.example.com", "example.com"])];
+
+        publish_node_tls_material_blocking(&config, &assignments).expect("publish");
+        let bundle_directory = drive_root.join("version-a");
+        assert_eq!(
+            fs::read_to_string(bundle_directory.join("fullchain.pem")).expect("read fullchain"),
+            "certificate"
+        );
+        assert_eq!(
+            fs::read_to_string(bundle_directory.join("privkey.pem")).expect("read private key"),
+            "private-key"
+        );
+
+        // A repeated publication of the same material rewrites the snapshot but
+        // leaves the Drive bundle byte-identical and no staging file behind.
+        publish_node_tls_material_blocking(&config, &assignments).expect("republish");
+        assert_eq!(
+            fs::read_to_string(bundle_directory.join("fullchain.pem")).expect("read fullchain"),
+            "certificate"
+        );
+        for entry in fs::read_dir(&bundle_directory).expect("list Drive bundle") {
+            let name = entry.expect("dir entry").file_name();
+            assert!(
+                !name.to_string_lossy().contains(".tmp-"),
+                "staging file left behind in {}",
+                bundle_directory.display()
+            );
+        }
+
+        // The Drive root is pruned immediately when the assignment moves to a
+        // new version: a superseded bundle must not keep claiming the renewed
+        // server name behind a retention grace period.
+        let replacement = [material("version-b", &["www.example.com", "example.com"])];
+        publish_node_tls_material_blocking(&config, &replacement).expect("publish replacement");
+        assert!(
+            !bundle_directory.exists(),
+            "the superseded Drive bundle must be removed immediately"
+        );
+        assert!(drive_root.join("version-b").join("fullchain.pem").is_file());
+
+        // A shared root may carry bundles another node wrote; this node must
+        // leave an ownerless directory alone.
+        let foreign = drive_root.join("foreign-node-bundle");
+        fs::create_dir_all(&foreign).expect("create foreign bundle");
+        fs::write(foreign.join("fullchain.pem"), b"foreign").expect("write foreign bundle");
+        publish_node_tls_material_blocking(&config, &replacement).expect("republish replacement");
+        assert!(
+            foreign.join("fullchain.pem").is_file(),
+            "a bundle this node does not own must survive pruning"
+        );
         let _ = fs::remove_dir_all(&directory);
     }
 

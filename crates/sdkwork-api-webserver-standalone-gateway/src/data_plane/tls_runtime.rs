@@ -387,6 +387,12 @@ impl FileTlsRuntimeController {
     ) -> Result<(), FileTlsRuntimeError> {
         let mut ticker = tokio::time::interval(self.config.poll_interval);
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        // The Drive layer applies to a live resolver without a config rebuild;
+        // this records the revision whose resolutions the served-certificate
+        // report describes, so a Drive refresh republishes the report too.
+        let mut drive_revision = super::drive_certificates::shared()
+            .map(|store| store.revision())
+            .unwrap_or(0);
         loop {
             tokio::select! {
                 changed = shutdown.changed() => {
@@ -395,6 +401,18 @@ impl FileTlsRuntimeController {
                     }
                 }
                 _ = ticker.tick() => {
+                    let current_drive_revision = super::drive_certificates::shared()
+                        .map(|store| store.revision())
+                        .unwrap_or(0);
+                    if current_drive_revision != drive_revision {
+                        match self.recompose_active() {
+                            Ok(()) => drive_revision = current_drive_revision,
+                            Err(error) => tracing::warn!(
+                                error = %error,
+                                "Drive certificate refresh could not be reflected in the served-certificate report; retaining the previous report until the next poll"
+                            ),
+                        }
+                    }
                     let controller = Arc::clone(&self);
                     let active_source_sha256 = {
                         let active = lock_unpoisoned(&self.active);
@@ -794,10 +812,13 @@ fn compile_candidate(
             server_names: assignment.server_names.clone(),
         });
     }
-    let assignment_layers = Arc::new(ResolverLayers::assignment_only(
-        build_source_index(certificates)
-            .map_err(|server_name| FileTlsRuntimeError::AmbiguousServerName { server_name })?,
-    ));
+    let assignment_layers = Arc::new(
+        ResolverLayers::assignment_only(
+            build_source_index(certificates)
+                .map_err(|server_name| FileTlsRuntimeError::AmbiguousServerName { server_name })?,
+        )
+        .with_drive(super::drive_certificates::shared()),
+    );
     let server_config = build_layered_server_config(
         Arc::clone(&assignment_layers),
         map_version(policy.minimum_version),
@@ -831,10 +852,10 @@ fn compose_layers(
     material: &CompiledPolicyTlsMaterial,
     assignment: &Arc<ResolverLayers>,
 ) -> Result<ComposedTls, FileTlsRuntimeError> {
-    let layers = Arc::new(ResolverLayers::new(
-        material.layers.clone(),
-        assignment.assignments().clone(),
-    ));
+    let layers = Arc::new(
+        ResolverLayers::new(material.layers.clone(), assignment.assignments().clone())
+            .with_drive(super::drive_certificates::shared()),
+    );
     let server_config = build_layered_server_config(
         Arc::clone(&layers),
         material.minimum_version,

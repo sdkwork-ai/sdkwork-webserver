@@ -12,6 +12,7 @@ mod connection_limit;
 pub(crate) mod credential_entry_injection;
 mod delivery_policy;
 mod dns;
+mod drive_certificates;
 mod error;
 mod fixed_histogram;
 mod forwarded_scheme;

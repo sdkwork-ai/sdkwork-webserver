@@ -337,4 +337,8 @@ entries:
     path: docs/product/requirements/REQ-2026-0073-nginx-commercial-compatibility-closure.md
     kind: req
     status: accepted
+  - id: REQ-2026-0074
+    path: docs/product/requirements/REQ-2026-0074-drive-certificate-source.md
+    kind: req
+    status: accepted
 domains: []

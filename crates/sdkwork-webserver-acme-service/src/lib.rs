@@ -59,6 +59,7 @@ pub use http_client::{
     AcmeHttpClientFactory, ExtraRootsClientFactory, PlatformVerifierClientFactory,
 };
 pub use issue::{AcmeDns01Context, CertificateIssuer, ChallengePlan, IssuerDns01Context};
+pub use lets_encrypt::{AcmePreparedOrder, AcmePresentation};
 pub use model::IssuedCertificateMaterial;
 pub use revoke::CertificateRevocationReason;
 

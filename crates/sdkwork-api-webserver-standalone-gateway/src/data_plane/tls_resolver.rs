@@ -1,18 +1,23 @@
 //! Layered SNI certificate resolution.
 //!
-//! A listener can serve two certificate sources at once: the operator's
-//! configured certificate files and the certificate set assigned by the
-//! control plane. Resolution happens per server name and is layered — the
-//! configured source wins for a name when it covers that name and is currently
-//! usable, and the assigned source covers every name the configured source
-//! does not. A name that neither source covers gets no certificate, so an
-//! unauthorized host still fails the handshake instead of silently being
+//! A listener can serve three certificate sources at once: the certificate
+//! bundles published by the SDKWork Drive certificate authority, the operator's
+//! configured certificate files, and the certificate set assigned by the
+//! control plane. Resolution happens per server name and is layered — a usable
+//! Drive bundle wins first, then a usable configured file, then a usable
+//! assigned certificate, and a name that no source covers gets no certificate,
+//! so an unauthorized host still fails the handshake instead of silently being
 //! served some other tenant's certificate.
 //!
 //! A certificate outside its own validity window never outranks a usable one,
 //! but it is still served when nothing else covers the name. That keeps a host
 //! reachable while its replacement certificate is still propagating, matching
 //! the tolerance the file loader already applies to expired leaves.
+//!
+//! The Drive layer is a live handle rather than a snapshot: the store swaps its
+//! index atomically when the shared Drive certificate root changes, so a
+//! refreshed certificate applies to the next handshake without rebuilding the
+//! listener's `ServerConfig`.
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -26,6 +31,8 @@ use sdkwork_webserver_core::{
     normalize_server_name, normalize_tls_server_name, tls_runtime::CertificateSource,
     wildcard_server_name_covers,
 };
+
+use super::drive_certificates::DriveCertificateStore;
 
 /// A certificate plus the validity window used to rank it against another
 /// source's certificate for the same server name.
@@ -122,12 +129,17 @@ impl CertificateSourceIndex {
                 }
                 self.wildcards
                     .push((suffix.to_owned(), Arc::clone(&certificate)));
-            } else if self
-                .exact
-                .insert(normalized.clone(), Arc::clone(&certificate))
-                .is_some()
-            {
-                return Err(normalized);
+            } else {
+                // Check before inserting: `HashMap::insert` replaces the
+                // existing value, and returning the conflict afterwards would
+                // leave the rejected certificate installed. Strict callers
+                // discard the index on an error, but a caller that tolerates a
+                // duplicate (the Drive bundle layer) must keep the first, newer
+                // claim instead of silently adopting the rejected one.
+                if self.exact.contains_key(&normalized) {
+                    return Err(normalized);
+                }
+                self.exact.insert(normalized, Arc::clone(&certificate));
             }
         }
         for pattern in server_name_regexes {
@@ -225,6 +237,10 @@ impl CertificateSourceIndex {
 /// The certificate sources a listener serves, in priority order.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverLayers {
+    /// The live Drive certificate authority. `None` when the deployment does
+    /// not configure it; the store itself may be empty until the shared Drive
+    /// certificate root publishes its first bundle.
+    drive: Option<Arc<DriveCertificateStore>>,
     policy: CertificateSourceIndex,
     assignment: CertificateSourceIndex,
 }
@@ -232,6 +248,7 @@ pub(crate) struct ResolverLayers {
 impl ResolverLayers {
     pub(crate) fn policy_only(policy: CertificateSourceIndex) -> Self {
         Self {
+            drive: None,
             policy,
             assignment: CertificateSourceIndex::default(),
         }
@@ -239,18 +256,31 @@ impl ResolverLayers {
 
     pub(crate) fn assignment_only(assignment: CertificateSourceIndex) -> Self {
         Self {
+            drive: None,
             policy: CertificateSourceIndex::default(),
             assignment,
         }
     }
 
     pub(crate) fn new(policy: CertificateSourceIndex, assignment: CertificateSourceIndex) -> Self {
-        Self { policy, assignment }
+        Self {
+            drive: None,
+            policy,
+            assignment,
+        }
+    }
+
+    /// Attaches the live Drive certificate layer above every other source.
+    pub(crate) fn with_drive(mut self, drive: Option<Arc<DriveCertificateStore>>) -> Self {
+        self.drive = drive;
+        self
     }
 
     #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
-        self.policy.is_empty() && self.assignment.is_empty()
+        self.drive.as_ref().is_none_or(|store| store.is_empty())
+            && self.policy.is_empty()
+            && self.assignment.is_empty()
     }
 
     /// Selects the certificate for one server name together with its source.
@@ -259,27 +289,38 @@ impl ResolverLayers {
     /// so a handshake and a served-certificate report can never disagree about
     /// which certificate a name receives.
     ///
-    /// Order: usable configured file, usable assigned certificate, then the
-    /// configured file or assigned certificate that merely covers the name.
-    /// The final two steps are what keep an expired host serving rather than
-    /// going dark while its replacement is still propagating.
+    /// Order: a usable Drive bundle, a usable configured file, a usable
+    /// assigned certificate, then the Drive bundle, configured file or assigned
+    /// certificate that merely covers the name. The final three steps are what
+    /// keep an expired host serving rather than going dark while its
+    /// replacement is still propagating.
     pub(crate) fn select_with_source(
         &self,
         server_name: &str,
         now_unix_seconds: i64,
-    ) -> Option<(CertificateSource, &Arc<ResolvableCertificate>)> {
+    ) -> Option<(CertificateSource, Arc<ResolvableCertificate>)> {
+        if let Some(store) = self.drive.as_ref() {
+            if let Some(certificate) = store.select_usable(server_name, now_unix_seconds) {
+                return Some((CertificateSource::Drive, certificate));
+            }
+        }
         if let Some(certificate) = self.policy.select_usable(server_name, now_unix_seconds) {
-            return Some((CertificateSource::Config, certificate));
+            return Some((CertificateSource::Config, Arc::clone(certificate)));
         }
         if let Some(certificate) = self.assignment.select_usable(server_name, now_unix_seconds) {
-            return Some((CertificateSource::Assignment, certificate));
+            return Some((CertificateSource::Assignment, Arc::clone(certificate)));
+        }
+        if let Some(store) = self.drive.as_ref() {
+            if let Some(certificate) = store.select_any(server_name) {
+                return Some((CertificateSource::Drive, certificate));
+            }
         }
         if let Some(certificate) = self.policy.select_any(server_name) {
-            return Some((CertificateSource::Config, certificate));
+            return Some((CertificateSource::Config, Arc::clone(certificate)));
         }
         self.assignment
             .select_any(server_name)
-            .map(|certificate| (CertificateSource::Assignment, certificate))
+            .map(|certificate| (CertificateSource::Assignment, Arc::clone(certificate)))
     }
 
     /// Selects the certificate for one server name.
@@ -287,7 +328,7 @@ impl ResolverLayers {
         &self,
         server_name: &str,
         now_unix_seconds: i64,
-    ) -> Option<&Arc<ResolvableCertificate>> {
+    ) -> Option<Arc<ResolvableCertificate>> {
         self.select_with_source(server_name, now_unix_seconds)
             .map(|(_, certificate)| certificate)
     }
@@ -536,12 +577,17 @@ mod tests {
         let second = certificate(VALID_FROM, VALID_UNTIL);
         let mut index = CertificateSourceIndex::default();
         index
-            .insert(&["site.example.test".to_owned()], first)
+            .insert(&["site.example.test".to_owned()], Arc::clone(&first))
             .expect("first claim");
         let conflict = index
             .insert(&["site.example.test".to_owned()], second)
             .expect_err("second claim must be rejected");
         assert_eq!(conflict, "site.example.test");
+        // A rejected claim must not replace the accepted one.
+        let selected = index
+            .select_any("site.example.test")
+            .expect("the first claim stays installed");
+        assert!(Arc::ptr_eq(&selected.certified_key, &first.certified_key));
     }
 
     #[test]
@@ -615,7 +661,11 @@ mod tests {
         assert!(both
             .select_with_source("uncovered.example.test", NOW)
             .is_none());
+        assert_eq!(CertificateSource::Drive.as_str(), "drive");
         assert_eq!(CertificateSource::Config.as_str(), "config");
         assert_eq!(CertificateSource::Assignment.as_str(), "assignment");
+        assert!(CertificateSource::Drive.satisfies_assignment());
+        assert!(CertificateSource::Config.satisfies_assignment());
+        assert!(!CertificateSource::Assignment.satisfies_assignment());
     }
 }

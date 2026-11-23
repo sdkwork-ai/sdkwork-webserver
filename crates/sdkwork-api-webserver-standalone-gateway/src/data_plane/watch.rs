@@ -382,6 +382,10 @@ async fn watch_config_source(
                 // fingerprint looks unchanged; the runtime's revision
                 // short-circuit makes the redundant attempt a no-op.
                 let _ = forced;
+                // nginx `nginx -s reload` also refreshes certificate material;
+                // the Drive certificate source has no config file to watch, so
+                // the hangup is its explicit refresh trigger.
+                super::drive_certificates::trigger_shared_refresh();
                 if !reload_source_once(
                     &runtime,
                     &config_path,
@@ -573,6 +577,10 @@ async fn watch_config(
                 // hash looks unchanged; the runtime's revision short-circuit
                 // makes the redundant attempt a no-op.
                 let _ = forced;
+                // nginx `nginx -s reload` also refreshes certificate material;
+                // the Drive certificate source has no config file to watch, so
+                // the hangup is its explicit refresh trigger.
+                super::drive_certificates::trigger_shared_refresh();
                 last_observed_revision = None;
                 if !reload_json_once(
                     &runtime,

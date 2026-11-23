@@ -274,6 +274,39 @@ degrades that name to the assigned set instead of failing the listener. `policy-
 implied when only one source is declared. Changing a configured certificate file's content is a
 restart-only change; assigned certificates rotate without a restart.
 
+`SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT` adds the SDKWork Drive certificate authority as the
+highest-priority SNI source. The root is the host-shared directory the Drive control plane publishes
+into; it holds one directory per bundle:
+
+```text
+<root>/<bundle-id>/fullchain.pem
+<root>/<bundle-id>/privkey.pem
+```
+
+`<bundle-id>` is a bounded ASCII path component. The bundle leaf's `subjectAltName` names decide the
+server names it serves, so a multi-name or wildcard certificate is indexed under every name it
+declares and a directory name has no resolution meaning. A usable Drive bundle wins its names before
+a configured file and before an assigned certificate; a Drive bundle outside its validity window
+yields to a usable lower source and is served only when nothing else covers the name.
+
+- `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED` explicitly disables (`0`/`false`/`no`/`off`) or
+  requires the source. An unset root leaves the source off.
+- `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_CACHE_ROOT` is the disk cache. It defaults to
+  `SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT`'s sibling `drive-certificate-cache` (or
+  `<root>/.sdkwork-certificate-cache` when the material root is unset) and must live on durable
+  node-local storage so it survives an unavailable Drive mount.
+- `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_REFRESH_INTERVAL_SECS` is bounded to 1..300 seconds (default
+  10). `SIGHUP` also triggers an immediate refresh.
+- `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_MAX_BUNDLES` bounds one scan (default 4096).
+
+The source keeps three cache levels: an atomically swapped in-memory SNI index, the parsed bundle for
+each unchanged file pair, and the disk cache above. A refresh parses only bundles whose two files
+changed, keeps the previous parsed bundle when a rotation is malformed, drops names removed from the
+root, and publishes source `drive` in the served-certificate report. The control-plane certificate
+distributor mirrors each assigned bundle into this root and removes a superseded bundle immediately,
+so a renewal cannot keep an older bundle authoritative behind a retention grace period; if the mirror
+write fails, distribution keeps the local material authoritative and logs the failure.
+
 `data-plane/website-provider-events.development.json.example` is the provider-event ingress
 instance selected by `SDKWORK_WEBSERVER_WEBSITE_PROVIDER_EVENT_CONFIG_FILE` and validated by
 `../specs/sdkwork.website-provider-event-ingress.schema.json`. It binds only to loopback, maps each

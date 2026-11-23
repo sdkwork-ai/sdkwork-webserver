@@ -39,6 +39,12 @@ pub const MAX_SERVED_CERTIFICATE_REPORT_BYTES: usize = 4 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CertificateSource {
+    /// The certificate bundle published by the SDKWork Drive certificate
+    /// authority into the edge's shared certificate root.
+    ///
+    /// Drive is the highest-priority source: a usable Drive bundle answers a
+    /// server name before a configured file or an assigned certificate.
+    Drive,
     /// The operator's configured certificate files.
     Config,
     /// The certificate set assigned by the control plane.
@@ -48,9 +54,21 @@ pub enum CertificateSource {
 impl CertificateSource {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Drive => "drive",
             Self::Config => "config",
             Self::Assignment => "assignment",
         }
+    }
+
+    /// Whether a certificate served from this source satisfies the control
+    /// plane's assignment for the same server name.
+    ///
+    /// Both Drive and the operator's configured files are deliberate authority
+    /// decisions, so a name answered by either is not a distribution failure.
+    /// Only an assigned certificate that is serving the wrong material (or no
+    /// certificate at all) is.
+    pub fn satisfies_assignment(self) -> bool {
+        matches!(self, Self::Drive | Self::Config)
     }
 }
 

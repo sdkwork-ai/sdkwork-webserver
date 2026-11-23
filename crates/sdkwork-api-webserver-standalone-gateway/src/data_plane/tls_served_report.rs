@@ -61,13 +61,18 @@ pub(crate) fn build_served_certificate_report(
     let mut entries = Vec::new();
     for certificate in assigned {
         for server_name in &certificate.server_names {
-            let resolved = layers.select_with_source(server_name, now_unix_seconds);
+            let (served_fingerprint_sha256, source) =
+                match layers.select_with_source(server_name, now_unix_seconds) {
+                    Some((source, certificate)) => {
+                        (Some(certificate.fingerprint_sha256.clone()), Some(source))
+                    }
+                    None => (None, None),
+                };
             entries.push(ServedCertificateEntry {
                 certificate_id: certificate.certificate_id.clone(),
                 server_name: server_name.clone(),
-                served_fingerprint_sha256: resolved
-                    .map(|(_, certificate)| certificate.fingerprint_sha256.clone()),
-                source: resolved.map(|(source, _)| source),
+                served_fingerprint_sha256,
+                source,
             });
         }
     }

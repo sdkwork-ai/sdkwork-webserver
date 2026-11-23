@@ -4,6 +4,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use sdkwork_webserver_core::{ClientAuthConfig, CompiledWebServerApp, ListenerConfig, TlsVersion};
 
 use super::{
+    drive_certificates::{self, DriveCertificateStore},
     tls_material::{
         build_layered_server_config, build_source_index, install_crypto_provider,
         load_certified_key,
@@ -15,9 +16,9 @@ use super::{
 /// The certificate files a listener's TLS policy references, together with the
 /// protocol parameters that policy owns.
 ///
-/// These form the upper layer of a `policy-first` listener: a configured file
-/// wins for a server name while it is usable, and the assigned certificate set
-/// covers every name the files do not.
+/// These form the configured layer of a listener: a configured file wins for a
+/// server name while it is usable and no usable Drive bundle covers the name,
+/// and the assigned certificate set covers every name the files do not.
 pub(crate) struct CompiledPolicyTlsMaterial {
     pub(crate) layers: CertificateSourceIndex,
     pub(crate) minimum_version: TlsVersion,
@@ -30,12 +31,20 @@ pub(crate) fn build_tls_config(
     app: &CompiledWebServerApp,
     listener: &ListenerConfig,
 ) -> Result<Option<RustlsConfig>, DataPlaneError> {
+    build_tls_config_with_drive(app, listener, drive_certificates::shared())
+}
+
+pub(crate) fn build_tls_config_with_drive(
+    app: &CompiledWebServerApp,
+    listener: &ListenerConfig,
+    drive: Option<Arc<DriveCertificateStore>>,
+) -> Result<Option<RustlsConfig>, DataPlaneError> {
     let Some(material) = compile_policy_tls_material(app, listener, false)? else {
         return Ok(None);
     };
     let policy_id = listener.tls_policy_ref.clone().unwrap_or_default();
     let server_config = build_layered_server_config(
-        Arc::new(ResolverLayers::policy_only(material.layers)),
+        Arc::new(ResolverLayers::policy_only(material.layers).with_drive(drive)),
         material.minimum_version,
         material.maximum_version,
         &material.alpn,

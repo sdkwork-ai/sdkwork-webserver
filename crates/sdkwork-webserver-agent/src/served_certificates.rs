@@ -285,11 +285,14 @@ fn certificate_verdict(
         }) else {
             return ServedVerdict::Failed(FAILURE_NAME_NOT_ASSIGNED);
         };
-        // A configured file that outranks the assigned certificate is the
-        // operator's declared resolution, not a defect, so the name counts as
-        // served. This is the case a fingerprint probe could only call a
-        // failure.
-        if entry.source == Some(CertificateSource::Config) {
+        // A Drive bundle or configured file that outranks the assigned
+        // certificate is the declared resolution, not a defect, so the name
+        // counts as served. This is the case a fingerprint probe could only
+        // call a failure.
+        if entry
+            .source
+            .is_some_and(CertificateSource::satisfies_assignment)
+        {
             continue;
         }
         match entry.served_fingerprint_sha256.as_deref() {

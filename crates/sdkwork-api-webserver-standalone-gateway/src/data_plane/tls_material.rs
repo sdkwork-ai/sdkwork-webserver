@@ -28,6 +28,18 @@ pub(crate) struct LoadedCertifiedKey {
     pub not_after_unix_seconds: i64,
 }
 
+/// A certificate bundle loaded from an origin that declares its own server
+/// names (the SDKWork Drive certificate authority), rather than from a
+/// configured file whose names the operator already stated.
+pub(crate) struct LoadedCertificateBundle {
+    pub(crate) certified_key: CertifiedKey,
+    pub(crate) leaf_fingerprint_sha256: String,
+    pub(crate) not_before_unix_seconds: i64,
+    pub(crate) not_after_unix_seconds: i64,
+    /// DNS names from the leaf's `subjectAltName` extension, in authored order.
+    pub(crate) server_names: Vec<String>,
+}
+
 impl LoadedCertifiedKey {
     /// Moves the key into the resolver's validity-aware wrapper.
     ///
@@ -209,8 +221,9 @@ pub(crate) fn load_certified_key(
             ));
         }
     }
-    let evidence = validate_leaf_certificate(certificate_chain[0].as_ref(), declared_server_names)
-        .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
+    let evidence =
+        validate_leaf_certificate(certificate_chain[0].as_ref(), declared_server_names, false)
+            .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
     let private_key = parse_single_private_key(&private_key_pem)
         .map_err(|source| tls_files_error(certificate_file, private_key_file, source))?;
     let mut certified_key = CertifiedKey::from_der(certificate_chain, private_key, provider)
@@ -315,11 +328,14 @@ struct LeafCertificateEvidence {
     fingerprint_sha256: String,
     not_before_unix_seconds: i64,
     not_after_unix_seconds: i64,
+    /// DNS names from `subjectAltName`, in the order the certificate authored.
+    server_names: Vec<String>,
 }
 
 fn validate_leaf_certificate(
     certificate_der: &[u8],
     declared_server_names: &[String],
+    allow_expired: bool,
 ) -> Result<LeafCertificateEvidence, io::Error> {
     let (remaining, certificate) =
         X509Certificate::from_der(certificate_der).map_err(|source| {
@@ -337,7 +353,15 @@ fn validate_leaf_certificate(
     // PRD §8.3/§9: an expired or not-yet-valid leaf must be rejected, not
     // served "just in case". Activating it would publish an invalid certificate
     // to every client while the control plane still reports the site healthy.
-    if !certificate.validity().is_valid() {
+    //
+    // The Drive certificate source opts out of the load-time rejection on
+    // purpose: it indexes the bundle's own validity window and the resolver
+    // ranks a usable certificate above it, so an expired Drive bundle only ever
+    // answers a name nothing usable covers. That is the same availability
+    // tolerance the issued-certificate rotation already gives a host while its
+    // replacement propagates, and it keeps a Drive-side expiry from silently
+    // taking a name dark.
+    if !allow_expired && !certificate.validity().is_valid() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
@@ -389,6 +413,37 @@ fn validate_leaf_certificate(
         ),
         not_before_unix_seconds: certificate.validity().not_before.timestamp(),
         not_after_unix_seconds: certificate.validity().not_after.timestamp(),
+        server_names: certificate_dns_names
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    })
+}
+
+/// Loads one certificate bundle whose own leaf declares the server names it
+/// covers.
+///
+/// This is the Drive certificate authority's entry point. Unlike
+/// [`load_certified_key`] it takes the bundle bytes directly (the Drive source
+/// reads them from its own root and writes them to its cache) and reports the
+/// leaf's DNS names so the resolver can index them without a second parse.
+pub(crate) fn load_certificate_bundle(
+    certificate_pem: &[u8],
+    private_key_pem: &[u8],
+    provider: &rustls::crypto::CryptoProvider,
+    allow_expired: bool,
+) -> Result<LoadedCertificateBundle, io::Error> {
+    let certificate_chain = parse_certificate_chain(certificate_pem)?;
+    let evidence = validate_leaf_certificate(certificate_chain[0].as_ref(), &[], allow_expired)?;
+    let private_key = parse_single_private_key(private_key_pem)?;
+    let certified_key = CertifiedKey::from_der(certificate_chain, private_key, provider)
+        .map_err(|source| io::Error::new(io::ErrorKind::InvalidData, source))?;
+    Ok(LoadedCertificateBundle {
+        certified_key,
+        leaf_fingerprint_sha256: evidence.fingerprint_sha256,
+        not_before_unix_seconds: evidence.not_before_unix_seconds,
+        not_after_unix_seconds: evidence.not_after_unix_seconds,
+        server_names: evidence.server_names,
     })
 }
 
@@ -472,11 +527,13 @@ mod tests {
         validate_leaf_certificate(
             certificate.der().as_ref(),
             &["alpha.example.test".to_owned()],
+            false,
         )
         .expect("matching SAN must validate");
         let error = validate_leaf_certificate(
             certificate.der().as_ref(),
             &["beta.example.test".to_owned()],
+            false,
         )
         .expect_err("mismatched SAN must fail");
         assert!(error.to_string().contains("does not cover"));
@@ -493,9 +550,22 @@ mod tests {
         let error = validate_leaf_certificate(
             certificate.der().as_ref(),
             &["expired.example.test".to_owned()],
+            false,
         )
         .expect_err("an expired leaf must never be activated");
         assert!(error.to_string().contains("expired or not yet valid"));
+        // The Drive source opts out of the load-time rejection: it records the
+        // window and lets the resolver rank a usable certificate above it.
+        let accepted = validate_leaf_certificate(
+            certificate.der().as_ref(),
+            &["expired.example.test".to_owned()],
+            true,
+        )
+        .expect("a Drive bundle may load an expired leaf for last-known-good service");
+        assert!(accepted
+            .server_names
+            .iter()
+            .any(|name| name == "expired.example.test"));
     }
 
     #[test]
