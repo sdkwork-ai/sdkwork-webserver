@@ -220,6 +220,8 @@ iam_app_root = "${DATA_ROOT}/iam"
 drive_app_root = "${DATA_ROOT}/drive"
 deploy_app_root = "${DATA_ROOT}/deploy"
 web_store_app_root = "${DATA_ROOT}/webstore"
+skills_app_root = "${DATA_ROOT}/skills"
+mcp_app_root = "${DATA_ROOT}/mcp"
 pc_static_root = "/usr/share/sdkwork/webserver/web/pc"
 h5_static_root = "/usr/share/sdkwork/webserver/web/h5"
 static_fallback_root = "/usr/share/sdkwork/webserver/web/static"
@@ -227,8 +229,8 @@ tablet_surface = "pc"
 # Installed packages bake one environment into web/{pc,h5}/; source checkouts
 # use [app_roots.*_by_environment] → dist/{dev,test,staging,prod} instead
 # (see deployments/webserver/app-roots.example.toml).
-# skills/mcp roots: set SDKWORK_SKILLS_APP_ROOT / SDKWORK_MCP_APP_ROOT (or
-# skills_app_root / mcp_app_root once the packaged gateway binary accepts them).
+# Skills and MCP runtime assets are installed below DATA_ROOT and resolved
+# through these typed app-root fields.
 
 [deploy]
 deployment_profile = "standalone"
@@ -261,11 +263,11 @@ password_file = "${DB_SECRET_FILE}"
 ssl_mode = "disable"
 max_connections = 10
 # Standalone installer: every module this edge composes (Web, IAM, Drive,
-# Skills, MCP, Deployments) converges on service start, and `db-migrate`
+# Skills, MCP, Deployments) converges on service start, and db-migrate
 # covers that same full set, so either path repairs a drifted schema.
 # Operators preferring strict manual migrations may set this to false after
 # the first start; startup then verifies and fails closed instead of applying
-# DDL, and `db-migrate` remains the only repair path.
+# DDL, and db-migrate remains the only repair path.
 auto_migrate = true
 
 [secrets]
@@ -297,7 +299,7 @@ region_code = "cn"
 seed_locale = "zh-CN"
 
 # Imported sibling-module deployments/webserver layout v3 configs
-# (nginx include style). Drop one `imports.d/<module-id>.toml` file per
+# (nginx include style). Drop one imports.d/<module-id>.toml file per
 # module to import its per-environment web server configuration; see
 # SDKWORK_WEBSERVER_SPEC.md §17.
 [webserver]

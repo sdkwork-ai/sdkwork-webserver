@@ -634,6 +634,21 @@ test('install bundle can attach to an external platform API gateway network', ()
   assert.match(installer, /docker-compose\.bundle-gateway-attach\.yml/u);
 });
 
+test('Debian postinst resolves packaged Skills and MCP runtime roots', () => {
+  const postinst = readFileSync(
+    path.join(appRoot, 'bin', 'packaging', 'deb', 'postinst.sh.template'),
+    'utf8',
+  );
+  const configStart = postinst.indexOf('cat > "${RUNTIME_CONFIG_FILE}" <<EOF');
+  const configEnd = postinst.indexOf('\nEOF\n', configStart);
+  assert.notEqual(configStart, -1, 'the installer must emit typed runtime config');
+  assert.notEqual(configEnd, -1, 'the installer runtime-config heredoc must terminate');
+  const runtimeConfig = postinst.slice(configStart, configEnd);
+  assert.match(runtimeConfig, /skills_app_root = "\$\{DATA_ROOT\}\/skills"/u);
+  assert.match(runtimeConfig, /mcp_app_root = "\$\{DATA_ROOT\}\/mcp"/u);
+  assert.doesNotMatch(runtimeConfig, /`|\$\(/u, 'heredoc content must not execute shell substitutions');
+});
+
 test('every environment CORS allowlist covers registered client origins (WEB_FRAMEWORK_SPEC §12)', () => {
   // Desktop WebView custom schemes and the mini program runtime are first-party
   // client origins: every environment's default SDKWORK_CORS_ALLOWED_ORIGINS
