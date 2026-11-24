@@ -218,6 +218,12 @@ impl DriveCertificateConfig {
                 None => root.join(".sdkwork-certificate-cache"),
             },
         };
+        if cache_root == root {
+            return Err(DriveCertificateError::Config(
+                "the Drive certificate cache root must differ from the Drive certificate root"
+                    .to_owned(),
+            ));
+        }
         let refresh_interval = parse_bounded_seconds(
             lookup(DRIVE_CERTIFICATE_REFRESH_SECONDS_ENV).as_deref(),
             DEFAULT_REFRESH_INTERVAL_SECS,
@@ -834,6 +840,12 @@ impl DriveCertificateStore {
                 continue;
             };
             if !file_type.is_dir() || file_type.is_symlink() {
+                continue;
+            }
+            // Only remove directories this source owns. A foreign directory
+            // that happens to use a valid bundle name (or a cache root pointed
+            // at the wrong place) is not ours to delete.
+            if read_cache_metadata(&path, bundle_id).is_none() {
                 continue;
             }
             if fs::remove_dir_all(&path).is_ok() {
@@ -1453,6 +1465,27 @@ mod tests {
     }
 
     #[test]
+    fn cache_pruning_leaves_unmanaged_directories_alone() {
+        let directory = TempDir::new().expect("tempdir");
+        let root = directory.path().join("drive");
+        fs::create_dir_all(&root).expect("create root");
+        write_bundle(&root, "site", &["site.example.test"]);
+        let store = store(directory.path());
+
+        // A directory without this source's cache metadata is not ours to
+        // delete, even when its name looks like a bundle id.
+        let foreign = directory.path().join("cache").join("foreign-bundle");
+        fs::create_dir_all(&foreign).expect("create foreign directory");
+        fs::write(foreign.join("note.txt"), b"not a certificate cache").expect("write note");
+
+        store.refresh().expect("refresh");
+        assert!(
+            foreign.join("note.txt").is_file(),
+            "pruning must not delete an unmanaged cache directory"
+        );
+    }
+
+    #[test]
     fn disk_cache_restores_bundles_when_the_drive_root_disappears() {
         let directory = TempDir::new().expect("tempdir");
         let root = directory.path().join("drive");
@@ -1609,6 +1642,12 @@ mod tests {
         .is_err());
         assert!(DriveCertificateConfig::from_lookup(|key| match key {
             DRIVE_CERTIFICATE_ENABLED_ENV => Some("true".to_owned()),
+            _ => None,
+        })
+        .is_err());
+        assert!(DriveCertificateConfig::from_lookup(|key| match key {
+            DRIVE_CERTIFICATE_ROOT_ENV => Some("/srv/drive-certificates".to_owned()),
+            DRIVE_CERTIFICATE_CACHE_ROOT_ENV => Some("/srv/drive-certificates".to_owned()),
             _ => None,
         })
         .is_err());
