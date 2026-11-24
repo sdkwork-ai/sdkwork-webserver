@@ -331,6 +331,50 @@ EOF
 chown root:sdkwork "${RUNTIME_CONFIG_FILE}"
 chmod 0640 "${RUNTIME_CONFIG_FILE}"
 
+# 6b. Standalone static delivery validates the packaged SPA runtime-env.json
+#     identity against the installed environment (app_shell.rs
+#     validate_runtime_env). The release archive ships one environment's
+#     browser build, so the installer rewrites the identity fields exactly
+#     like the container entrypoint (entrypoint-standalone.sh
+#     ensure_spa_static_root) — otherwise a production package carrying a
+#     test-built archive fails closed at bootstrap with no listener.
+render_spa_runtime_env() {
+  local static_root="$1"
+  local runtime_env_file="${static_root}/runtime-env.json"
+  local messaging_pc_url
+  [ -f "${runtime_env_file}" ] || return 0
+  case "${ENVIRONMENT}" in
+    production) messaging_pc_url="https://messaging.sdkwork.com/notifications" ;;
+    staging) messaging_pc_url="https://messaging-staging.sdkwork.com/notifications" ;;
+    demo) messaging_pc_url="https://messaging-demo.sdkwork.com/notifications" ;;
+    *) messaging_pc_url="http://127.0.0.1:5184/notifications" ;;
+  esac
+  cat > "${runtime_env_file}.postinst.tmp" <<EOF
+{
+  "environment": "${ENVIRONMENT}",
+  "deploymentProfile": "standalone",
+  "profileId": "standalone.${ENVIRONMENT}",
+  "runtimeTarget": "browser",
+  "browserOriginMode": "same-origin",
+  "defaultLocale": "zh-CN",
+  "fallbackLocale": "en-US",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "activeLocales": ["zh-CN", "en-US"],
+  "appApiBaseUrl": "/",
+  "backendApiBaseUrl": "/",
+  "driveAppApiBaseUrl": "/",
+  "appbaseAppApiBaseUrl": "/",
+  "messagingPcUrl": "${messaging_pc_url}",
+  "deployAppApiBaseUrl": "/"
+}
+EOF
+  chown root:root "${runtime_env_file}.postinst.tmp"
+  chmod 0644 "${runtime_env_file}.postinst.tmp"
+  mv -f "${runtime_env_file}.postinst.tmp" "${runtime_env_file}"
+}
+render_spa_runtime_env /usr/share/sdkwork/webserver/web/pc
+render_spa_runtime_env /usr/share/sdkwork/webserver/web/h5
+
 # 7. One-time database migration as the service identity (TOML loaded by the
 #    binary itself).
 if ! runuser -u sdkwork -- "${INSTALL_ROOT}/bin/${GATEWAY_BINARY}" db-migrate; then
