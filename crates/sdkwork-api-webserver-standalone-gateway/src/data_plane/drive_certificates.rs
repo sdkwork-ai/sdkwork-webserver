@@ -796,6 +796,8 @@ impl DriveCertificateStore {
         })?;
         if read_cache_metadata(&directory, &bundle.bundle_id)
             .is_some_and(|existing| existing.fingerprint_sha256 == bundle.fingerprint_sha256)
+            && directory.join(CERTIFICATE_FILE_NAME).is_file()
+            && directory.join(PRIVATE_KEY_FILE_NAME).is_file()
         {
             return Ok(());
         }
