@@ -349,7 +349,7 @@ async fn proxy_v1_http_and_v2_https_h2_preserve_payload_and_effective_identity()
 }
 
 #[tokio::test]
-async fn proxy_v2_tlv_crc32c_policy_is_bounded_strict_and_restart_only() {
+async fn proxy_v2_tlv_crc32c_policy_is_bounded_strict_and_hot_reload() {
     assert_eq!(CRC32C.checksum(b"123456789"), 0xe306_9283);
     let upstream = spawn_upstream().await;
     let directory = TempDir::new().unwrap();
@@ -424,14 +424,20 @@ async fn proxy_v2_tlv_crc32c_policy_is_bounded_strict_and_restart_only() {
 
     set_crc32c_policy(&mut value, "ignore");
     write_config(&path, &value);
-    tokio::time::sleep(Duration::from_millis(350)).await;
-    assert_header_rejected(http_port, &v2_ipv4("198.51.100.51".parse().unwrap(), &[])).await;
-    let still_required = raw_http(
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    // crc32cPolicy changes hot-apply through generation publication: under
+    // `ignore` the missing CRC TLV is tolerated and the proxied request flows.
+    let ignored = raw_http(http_port, &v2_ipv4("198.51.100.51".parse().unwrap(), &[])).await;
+    assert!(
+        ignored.ends_with("\r\n\r\n198.51.100.51"),
+        "crc32c ignore policy hot-applies"
+    );
+    let with_crc = raw_http(
         http_port,
         &with_crc32c(v2_ipv4("198.51.100.52".parse().unwrap(), &[])),
     )
     .await;
-    assert!(still_required.ends_with("\r\n\r\n198.51.100.52"));
+    assert!(with_crc.ends_with("\r\n\r\n198.51.100.52"));
 
     stop_gateway(shutdown, task).await;
     upstream.shutdown.send(()).unwrap();
@@ -439,7 +445,7 @@ async fn proxy_v2_tlv_crc32c_policy_is_bounded_strict_and_restart_only() {
 }
 
 #[tokio::test]
-async fn proxy_policy_rejects_missing_malformed_untrusted_and_restart_only_changes() {
+async fn proxy_policy_rejects_missing_malformed_untrusted_and_hot_applies_version_changes() {
     let upstream = spawn_upstream().await;
     let directory = TempDir::new().unwrap();
     write_certificate(directory.path());
@@ -493,11 +499,19 @@ async fn proxy_policy_rejects_missing_malformed_untrusted_and_restart_only_chang
 
     value["listeners"][0]["proxyProtocol"]["versions"] = json!(["v2"]);
     write_config(&path, &value);
-    tokio::time::sleep(Duration::from_millis(350)).await;
-    let response = raw_http(http_port, b"PROXY TCP4 198.51.100.9 127.0.0.1 1234 80\r\n").await;
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    // Proxy protocol version changes hot-apply through generation publication:
+    // the reloaded listener accepts v2 and rejects the no-longer-enabled v1.
+    let mut stale_v1 = TcpStream::connect(("127.0.0.1", http_port)).await.unwrap();
+    stale_v1
+        .write_all(b"PROXY TCP4 198.51.100.9 127.0.0.1 1234 80\r\n")
+        .await
+        .unwrap();
+    assert_connection_closed(stale_v1).await;
+    let response = raw_http(http_port, &v2_ipv4("198.51.100.9".parse().unwrap(), &[])).await;
     assert!(
         response.ends_with("\r\n\r\n198.51.100.9"),
-        "restart-only candidate must retain v1 policy"
+        "proxy protocol version change hot-applies"
     );
 
     stop_gateway(shutdown, task).await;
