@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     error::Error as StdError,
     future::Future,
     io,
@@ -25,7 +26,8 @@ use hyper_util::{
     },
     rt::{TokioExecutor, TokioIo, TokioTimer},
 };
-use sdkwork_webserver_core::UpstreamConfig;
+use rustls::ClientConfig;
+use sdkwork_webserver_core::{ProxyTimeoutsConfig, ResourceConfig, UpstreamConfig};
 use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -46,6 +48,8 @@ const MULTI_ADDRESS_FALLBACK_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub(crate) struct UpstreamClient {
     inner: InnerClient,
+    connect_timeout_clients: HashMap<u64, InnerClient>,
+    connect_timeout_ms: u64,
     request_timeout: Duration,
     max_response_header_bytes: usize,
     max_response_headers: usize,
@@ -64,39 +68,38 @@ impl UpstreamClient {
         let connection_permits = Arc::new(Semaphore::new(config.max_connections));
         let target_connection_capacities = build_target_connection_capacities(config)?;
         let connection_shutdown = Arc::new(ConnectionShutdown::default());
-        let tcp = BoundedConnector {
-            resolver,
-            permits: connection_permits.clone(),
-            target_capacities: target_connection_capacities.clone(),
-            shutdown: connection_shutdown.clone(),
-            address_attempt_timeout: Duration::from_millis(config.connect_timeout_ms)
-                .min(MULTI_ADDRESS_FALLBACK_TIMEOUT),
-        };
         let tls = build_upstream_tls_config(app, config)?;
-        let connector = HttpsConnectorBuilder::new()
-            .with_tls_config(tls)
-            .https_or_http()
-            .enable_http1()
-            .enable_http2()
-            .wrap_connector(tcp);
-        let connector = TimedConnector {
-            inner: connector,
-            timeout: Duration::from_millis(config.connect_timeout_ms),
-        };
-        let mut builder = Client::builder(TokioExecutor::new());
-        builder
-            .pool_timer(TokioTimer::new())
-            .timer(TokioTimer::new())
-            .pool_idle_timeout(Duration::from_millis(config.idle_connection_timeout_ms))
-            .pool_max_idle_per_host(config.max_idle_connections)
-            .http1_max_buf_size(config.max_response_header_bytes)
-            .http2_max_header_list_size(config.max_response_header_bytes as u32)
-            .http2_adaptive_window(false);
-        if config.max_response_headers != 100 {
-            builder.http1_max_headers(config.max_response_headers);
+        let configured_connect_timeouts = proxy_connect_timeout_overrides(app, config);
+        let inner = build_inner_client(
+            config,
+            resolver.clone(),
+            connection_permits.clone(),
+            target_connection_capacities.clone(),
+            connection_shutdown.clone(),
+            tls.clone(),
+            Duration::from_millis(config.connect_timeout_ms),
+        );
+        let mut connect_timeout_clients = HashMap::new();
+        for timeout_ms in configured_connect_timeouts {
+            if timeout_ms != config.connect_timeout_ms {
+                connect_timeout_clients.insert(
+                    timeout_ms,
+                    build_inner_client(
+                        config,
+                        resolver.clone(),
+                        connection_permits.clone(),
+                        target_connection_capacities.clone(),
+                        connection_shutdown.clone(),
+                        tls.clone(),
+                        Duration::from_millis(timeout_ms),
+                    ),
+                );
+            }
         }
         Ok(Self {
-            inner: builder.build(connector),
+            inner,
+            connect_timeout_clients,
+            connect_timeout_ms: config.connect_timeout_ms,
             request_timeout: Duration::from_millis(config.request_timeout_ms),
             max_response_header_bytes: config.max_response_header_bytes,
             max_response_headers: config.max_response_headers,
@@ -136,6 +139,13 @@ impl UpstreamClient {
             })
     }
 
+    fn inner_for_connect_timeout(&self, timeout_ms: Option<u64>) -> &InnerClient {
+        timeout_ms
+            .filter(|timeout| *timeout != self.connect_timeout_ms)
+            .and_then(|timeout| self.connect_timeout_clients.get(&timeout))
+            .unwrap_or(&self.inner)
+    }
+
     pub(crate) async fn execute(
         &self,
         request: Request<Body>,
@@ -162,9 +172,132 @@ impl UpstreamClient {
         let (parts, body) = response.into_parts();
         Ok(Response::from_parts(
             parts,
-            UpstreamResponseBody::new(body, deadline),
+            UpstreamResponseBody::new(body, None, Some(deadline)),
         ))
     }
+
+    pub(crate) async fn execute_with_proxy_timeouts(
+        &self,
+        mut request: Request<Body>,
+        timeouts: Option<&ProxyTimeoutsConfig>,
+        response_header_timeout: Option<Duration>,
+    ) -> Result<Response<UpstreamResponseBody>, UpstreamRequestError> {
+        let connect_timeout_ms = timeouts.and_then(|timeouts| timeouts.connect_timeout_ms);
+        let inner = self.inner_for_connect_timeout(connect_timeout_ms);
+        let read_timeout = timeouts
+            .and_then(|timeouts| timeouts.read_timeout_ms)
+            .map(Duration::from_millis);
+        let send_timeout = timeouts
+            .and_then(|timeouts| timeouts.send_timeout_ms)
+            .map(Duration::from_millis);
+        if let Some(timeout) = send_timeout {
+            let (parts, body) = request.into_parts();
+            request = Request::from_parts(
+                parts,
+                Body::new(ProgressTimeoutBody::new(
+                    body,
+                    Some(timeout),
+                    None,
+                    "upstream request send idle timeout",
+                )),
+            );
+        }
+        let header_timeout = response_header_timeout
+            .or(read_timeout)
+            .unwrap_or(self.request_timeout);
+        let deadline = Instant::now() + header_timeout;
+        let response = timeout_at(deadline, inner.request(request))
+            .await
+            .map_err(|_| UpstreamRequestError::Timeout)?
+            .map_err(UpstreamRequestError::Transport)?;
+        validate_response_headers(
+            response.headers(),
+            self.max_response_header_bytes,
+            self.max_response_headers,
+        )?;
+        let (parts, body) = response.into_parts();
+        let body_deadline = read_timeout.is_none().then_some(deadline);
+        Ok(Response::from_parts(
+            parts,
+            UpstreamResponseBody::new(body, read_timeout, body_deadline),
+        ))
+    }
+}
+
+fn proxy_connect_timeout_overrides(
+    app: &sdkwork_webserver_core::CompiledWebServerApp,
+    config: &UpstreamConfig,
+) -> HashSet<u64> {
+    let resource_ids = app
+        .config()
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            ResourceConfig::Proxy {
+                id,
+                upstream_ref,
+                dynamic_target,
+                ..
+            } if upstream_ref == &config.id
+                || (config.id == "dynamic" && dynamic_target.is_some()) =>
+            {
+                Some(id.as_str())
+            }
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+    app.config()
+        .virtual_hosts
+        .iter()
+        .flat_map(|host| &host.routes)
+        .filter(|route| resource_ids.contains(route.resource_ref.as_str()))
+        .filter_map(|route| {
+            route
+                .proxy_timeouts
+                .and_then(|timeouts| timeouts.connect_timeout_ms)
+        })
+        .collect()
+}
+
+fn build_inner_client(
+    config: &UpstreamConfig,
+    resolver: Arc<GuardedDnsResolver>,
+    connection_permits: Arc<Semaphore>,
+    target_connection_capacities: Arc<[TargetConnectionCapacity]>,
+    connection_shutdown: Arc<ConnectionShutdown>,
+    tls: ClientConfig,
+    connect_timeout: Duration,
+) -> InnerClient {
+    let tcp = BoundedConnector {
+        resolver,
+        permits: connection_permits,
+        target_capacities: target_connection_capacities,
+        shutdown: connection_shutdown,
+        address_attempt_timeout: connect_timeout.min(MULTI_ADDRESS_FALLBACK_TIMEOUT),
+    };
+    let connector = HttpsConnectorBuilder::new()
+        .with_tls_config(tls)
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .wrap_connector(tcp);
+    let connector = TimedConnector {
+        inner: connector,
+        timeout: connect_timeout,
+    };
+    let mut builder = Client::builder(TokioExecutor::new());
+    builder
+        .pool_timer(TokioTimer::new())
+        .timer(TokioTimer::new())
+        .pool_idle_timeout(Duration::from_millis(config.idle_connection_timeout_ms))
+        .pool_max_idle_per_host(config.max_idle_connections)
+        .http1_max_buf_size(config.max_response_header_bytes)
+        .http2_max_header_list_size(config.max_response_header_bytes as u32)
+        .http2_adaptive_window(false);
+    if config.max_response_headers != 100 {
+        builder.http1_max_headers(config.max_response_headers);
+    }
+    builder.build(connector)
 }
 
 fn build_target_connection_capacities(
@@ -280,10 +413,12 @@ impl UpstreamRequestError {
     pub(crate) fn is_timeout(&self) -> bool {
         match self {
             Self::Timeout => true,
-            Self::Transport(error) => find_connection_error(error).is_some_and(|error| {
-                matches!(error, UpstreamConnectError::Timeout)
-                    || matches!(error, UpstreamConnectError::Io(source) if source.kind() == io::ErrorKind::TimedOut)
-            }),
+            Self::Transport(error) => {
+                find_connection_error(error).is_some_and(|error| {
+                    matches!(error, UpstreamConnectError::Timeout)
+                        || matches!(error, UpstreamConnectError::Io(source) if source.kind() == io::ErrorKind::TimedOut)
+                }) || find_io_timeout(error)
+            }
             Self::ResponseHeaderBytesExceeded | Self::ResponseHeaderCountExceeded => false,
         }
     }
@@ -344,6 +479,20 @@ fn find_connection_error<'a>(
         current = error.source();
     }
     None
+}
+
+fn find_io_timeout(error: &(dyn StdError + 'static)) -> bool {
+    let mut current = Some(error);
+    while let Some(error) = current {
+        if error
+            .downcast_ref::<io::Error>()
+            .is_some_and(|source| source.kind() == io::ErrorKind::TimedOut)
+        {
+            return true;
+        }
+        current = error.source();
+    }
+    false
 }
 
 #[derive(Clone)]
@@ -608,27 +757,48 @@ impl Service<Uri> for TimedConnector {
     }
 }
 
-pub(crate) struct UpstreamResponseBody {
-    inner: Pin<Box<Incoming>>,
+struct ProgressTimeoutBody<B> {
+    inner: Pin<Box<B>>,
     remaining_hint: SizeHint,
-    deadline: Pin<Box<Sleep>>,
+    idle_timeout: Option<Duration>,
+    idle_deadline: Option<Pin<Box<Sleep>>>,
+    absolute_deadline: Option<Pin<Box<Sleep>>>,
+    timeout_message: &'static str,
     ended: bool,
 }
 
-impl UpstreamResponseBody {
-    fn new(inner: Incoming, deadline: Instant) -> Self {
+impl<B> ProgressTimeoutBody<B>
+where
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: StdError + Send + Sync + 'static,
+{
+    fn new(
+        inner: B,
+        idle_timeout: Option<Duration>,
+        absolute_deadline: Option<Instant>,
+        timeout_message: &'static str,
+    ) -> Self {
         let remaining_hint = inner.size_hint();
         let ended = inner.is_end_stream();
         Self {
             inner: Box::pin(inner),
             remaining_hint,
-            deadline: Box::pin(tokio::time::sleep_until(deadline)),
+            idle_timeout,
+            idle_deadline: idle_timeout
+                .map(|timeout| Box::pin(tokio::time::sleep(timeout))),
+            absolute_deadline: absolute_deadline
+                .map(|deadline| Box::pin(tokio::time::sleep_until(deadline))),
+            timeout_message,
             ended,
         }
     }
 }
 
-impl HttpBody for UpstreamResponseBody {
+impl<B> HttpBody for ProgressTimeoutBody<B>
+where
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: StdError + Send + Sync + 'static,
+{
     type Data = Bytes;
     type Error = io::Error;
 
@@ -636,32 +806,46 @@ impl HttpBody for UpstreamResponseBody {
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        if self.ended {
+        let this = self.as_mut().get_mut();
+        if this.ended {
             return Poll::Ready(None);
         }
-        if self.deadline.as_mut().poll(context).is_ready() {
-            self.ended = true;
-            self.remaining_hint = SizeHint::with_exact(0);
+        if this
+            .absolute_deadline
+            .as_mut()
+            .is_some_and(|deadline| deadline.as_mut().poll(context).is_ready())
+            || this
+                .idle_deadline
+                .as_mut()
+                .is_some_and(|deadline| deadline.as_mut().poll(context).is_ready())
+        {
+            this.ended = true;
+            this.remaining_hint = SizeHint::with_exact(0);
             return Poll::Ready(Some(Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "upstream whole-request timeout exceeded",
+                this.timeout_message,
             ))));
         }
-        match self.inner.as_mut().poll_frame(context) {
+        match this.inner.as_mut().poll_frame(context) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => {
-                self.ended = true;
-                self.remaining_hint = SizeHint::with_exact(0);
+                this.ended = true;
+                this.remaining_hint = SizeHint::with_exact(0);
                 Poll::Ready(None)
             }
             Poll::Ready(Some(Err(error))) => {
-                self.ended = true;
-                self.remaining_hint = SizeHint::with_exact(0);
+                this.ended = true;
+                this.remaining_hint = SizeHint::with_exact(0);
                 Poll::Ready(Some(Err(io::Error::other(error))))
             }
             Poll::Ready(Some(Ok(frame))) => {
-                self.remaining_hint = self.inner.as_ref().size_hint();
-                self.ended = self.inner.as_ref().is_end_stream();
+                this.remaining_hint = this.inner.as_ref().size_hint();
+                this.ended = this.inner.as_ref().is_end_stream();
+                if let (Some(timeout), Some(deadline)) =
+                    (this.idle_timeout, this.idle_deadline.as_mut())
+                {
+                    deadline.as_mut().reset(Instant::now() + timeout);
+                }
                 Poll::Ready(Some(Ok(frame)))
             }
         }
@@ -676,11 +860,56 @@ impl HttpBody for UpstreamResponseBody {
     }
 }
 
+pub(crate) struct UpstreamResponseBody(ProgressTimeoutBody<Incoming>);
+
+impl UpstreamResponseBody {
+    fn new(
+        inner: Incoming,
+        idle_timeout: Option<Duration>,
+        absolute_deadline: Option<Instant>,
+    ) -> Self {
+        Self(ProgressTimeoutBody::new(
+            inner,
+            idle_timeout,
+            absolute_deadline,
+            "upstream response body timeout exceeded",
+        ))
+    }
+}
+
+impl HttpBody for UpstreamResponseBody {
+    type Data = Bytes;
+    type Error = io::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        self.get_mut().0.poll_frame(context)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.0.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.0.size_hint()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use http::{header::HeaderValue, HeaderMap};
+    use std::time::Duration;
 
-    use super::{add_response_header_bytes, validate_response_headers, UpstreamRequestError};
+    use bytes::Bytes;
+    use http::{header::HeaderValue, HeaderMap};
+    use http_body::Frame;
+    use http_body_util::{channel::Channel, BodyExt};
+
+    use super::{
+        add_response_header_bytes, validate_response_headers, ProgressTimeoutBody,
+        UpstreamRequestError,
+    };
 
     #[test]
     fn response_header_budget_counts_every_field_and_wire_separator() {
@@ -709,5 +938,55 @@ mod tests {
             add_response_header_bytes(usize::MAX, 1, usize::MAX),
             Err(UpstreamRequestError::ResponseHeaderBytesExceeded)
         ));
+    }
+
+    #[tokio::test]
+    async fn body_idle_timeout_resets_while_a_stream_exceeds_its_idle_budget() {
+        let timeout = Duration::from_millis(200);
+        let (mut sender, body) = Channel::<Bytes>::new(1);
+        let mut body = ProgressTimeoutBody::new(
+            body,
+            Some(timeout),
+            None,
+            "test body idle timeout",
+        );
+
+        for chunk in [&b"first"[..], &b"second"[..], &b"third"[..]] {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            sender
+                .try_send(Frame::data(Bytes::copy_from_slice(chunk)))
+                .expect("queue stream progress");
+            tokio::time::timeout(Duration::from_secs(1), body.frame())
+                .await
+                .expect("body frame remains within the idle timeout")
+                .expect("frame exists")
+                .expect("frame is valid");
+        }
+        drop(sender);
+        assert!(body.frame().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn body_idle_timeout_ends_a_stalled_stream() {
+        let (mut sender, body) = Channel::<Bytes>::new(1);
+        let mut body = ProgressTimeoutBody::new(
+            body,
+            Some(Duration::from_millis(30)),
+            None,
+            "test body idle timeout",
+        );
+        sender
+            .try_send(Frame::data(Bytes::from_static(b"first")))
+            .expect("queue initial progress");
+        body.frame()
+            .await
+            .expect("initial frame exists")
+            .expect("initial frame is valid");
+        let error = tokio::time::timeout(Duration::from_secs(1), body.frame())
+            .await
+            .expect("idle timeout is bounded")
+            .expect("timeout produces an error frame")
+            .expect_err("stalled body must time out");
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
     }
 }

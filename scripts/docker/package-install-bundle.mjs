@@ -218,6 +218,10 @@ Quick start on any Docker host:
    postgres/redis containers instead.
 4. Management ports are base..base+N-1 -> 3800; load-balance across instances
    on those ports.
+5. To use an independently deployed API gateway, set
+   SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK in env/<environment>.env to its
+   Docker network. The network must expose the sdkwork-api-cloud-gateway alias
+   on port 8080; the bundle will not start a second gateway.
 
 Full guide: docs/guides/operator/docker-install.md (repo) / docker-install.en.md (English).
 `;
@@ -277,6 +281,10 @@ async function main() {
   copyFileSync(
     path.join(DOCKER_ROOT, 'docker-compose.bundle-gateway.yml'),
     path.join(bundleDir, 'compose', 'docker-compose.bundle-gateway.yml'),
+  );
+  copyFileSync(
+    path.join(DOCKER_ROOT, 'docker-compose.bundle-gateway-attach.yml'),
+    path.join(bundleDir, 'compose', 'docker-compose.bundle-gateway-attach.yml'),
   );
   for (const environment of DEFAULT_ENVIRONMENTS) {
     copyFileSync(

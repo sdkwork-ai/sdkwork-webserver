@@ -52,6 +52,7 @@ pub use config::{
     MailServerProtocol, MailStarttlsMode, MailTlsConfig, MailTlsProtocol, MapConfig,
     MapEntryConfig, MapVariables, MimeTypeConfig, MirrorConfig, ModernBrowserName,
     ModernBrowserRule, NginxConfConfigSource, NginxConfig, ProviderCachePolicy, ProxyCacheConfig,
+    ProxyTimeoutsConfig,
     ProxyProtocolConfig, ProxyProtocolCrc32cPolicy, ProxyProtocolVersion,
     ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRegexRuleConfig,
     ProxyRewriteRuleConfig, RedirectPolicyConfig, ReloadConfig, ReloadMode, ResolverConfig,

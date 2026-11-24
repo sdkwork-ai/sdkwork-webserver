@@ -2992,6 +2992,29 @@
           "description": "Effective nginx `proxy_cache` for this route: true when the route declares a cache zone, false for `proxy_cache off` or an nginx configuration that never declares the directive (one location's `proxy_cache_path` only creates the zone). Absent keeps the typed-config application-level `proxyCache.enabled` toggle.",
           "type": "boolean"
         },
+        "proxyTimeouts": {
+          "description": "Effective nginx HTTP proxy timeouts inherited over http → server → location. Read and send timeouts are idle intervals between body frames.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "connectTimeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400000
+            },
+            "readTimeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400000
+            },
+            "sendTimeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400000
+            }
+          }
+        },
         "id": {
           "$ref": "#/$defs/id"
         },

@@ -13,7 +13,7 @@ use super::{
     BrowserConfig, CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig,
     ExpiresMode, IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig,
     RewritePhaseOpConfig, RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm,
-    StreamTargetConfig, TlsCertificateResolution, TlsVersion, UpstreamConfig,
+    ProxyTimeoutsConfig, StreamTargetConfig, TlsCertificateResolution, TlsVersion, UpstreamConfig,
     UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel, UserIdConfig,
     UserIdExpires, WebServerAppConfig, WebServerConfigError, WebServerLimits,
     MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
@@ -1863,6 +1863,28 @@ impl SemanticValidator {
             self.push(
                 "/virtualHosts",
                 format!("configuration has {total_routes} routes; maximum is {MAX_TOTAL_ROUTES}"),
+            );
+        }
+        let connect_timeout_policies = config
+            .virtual_hosts
+            .iter()
+            .flat_map(|host| &host.routes)
+            .filter_map(|route| {
+                route
+                    .proxy_timeouts
+                    .and_then(|timeouts| timeouts.connect_timeout_ms)
+            })
+            .collect::<HashSet<_>>();
+        if connect_timeout_policies.len()
+            > ProxyTimeoutsConfig::MAXIMUM_CONNECT_TIMEOUT_POLICIES
+        {
+            self.push(
+                "/virtualHosts",
+                format!(
+                    "configuration declares {} distinct proxy connect timeouts; maximum is {}",
+                    connect_timeout_policies.len(),
+                    ProxyTimeoutsConfig::MAXIMUM_CONNECT_TIMEOUT_POLICIES
+                ),
             );
         }
 
@@ -4480,6 +4502,28 @@ fn validate_routes(
                 format!("{path}/http2ChunkSize"),
                 "http2ChunkSize must be greater than zero (nginx rejects a zero chunk size)",
             );
+        }
+        if let Some(timeouts) = route.proxy_timeouts {
+            for (field, value) in [
+                ("connectTimeoutMs", timeouts.connect_timeout_ms),
+                ("readTimeoutMs", timeouts.read_timeout_ms),
+                ("sendTimeoutMs", timeouts.send_timeout_ms),
+            ] {
+                if value.is_some_and(|milliseconds| {
+                    !(1..=ProxyTimeoutsConfig::MAXIMUM_TIMEOUT_MS).contains(&milliseconds)
+                }) {
+                    validator.push(
+                        format!("{path}/proxyTimeouts/{field}"),
+                        "proxy timeout must be between 1 ms and 24 hours",
+                    );
+                }
+            }
+            if timeouts.is_empty() {
+                validator.push(
+                    format!("{path}/proxyTimeouts"),
+                    "proxyTimeouts must declare at least one timeout",
+                );
+            }
         }
         let mut route_variables = server_variables.to_vec();
         validate_rewrite_phase(

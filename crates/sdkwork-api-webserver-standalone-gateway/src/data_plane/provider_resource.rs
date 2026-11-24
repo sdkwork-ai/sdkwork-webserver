@@ -437,6 +437,7 @@ mod tests {
             max_ranges: None,
             slice_size: None,
             proxy_cache: None,
+            proxy_timeouts: None,
             internal: false,
             charset: None,
             autoindex: None,

@@ -30,9 +30,9 @@
 //! - http/server/location `proxy_set_header` (validated supported `$vars`)
 //! - `stream { upstream …; server { listen; proxy_pass; ssl_preread; … } }`
 //!
-//! Safe nginx tuning directives are accepted and ignored (the runtime owns
-//! timeouts, buffering, and TLS defaults). Directives the runtime cannot
-//! execute in an active context are rejected with a source-located diagnostic.
+//! Safe nginx tuning directives are accepted and ignored when the runtime
+//! owns the behavior. Proxy connect/read/send timeouts are materialized per
+//! route; unsupported active directives fail with source-located diagnostics.
 
 use std::{
     collections::HashMap,
@@ -53,6 +53,7 @@ use crate::config::{
     GeoEntryConfig, GeoIpConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
     MapEntryConfig, MimeTypeConfig, ModernBrowserName, ModernBrowserRule,
     ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
+    ProxyTimeoutsConfig,
     RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
     SplitClientsPartConfig, StreamServerConfig, StreamSetVariableConfig, StreamTargetConfig,
     StreamTlsMode, TlsVersion, UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig,
@@ -91,9 +92,6 @@ const ACCEPTED_IGNORED: &[&str] = &[
     "proxy_buffering",
     "proxy_request_buffering",
     "proxy_next_upstream",
-    "proxy_connect_timeout",
-    "proxy_read_timeout",
-    "proxy_send_timeout",
     "proxy_buffer_size",
     "proxy_buffers",
     "ssl_prefer_server_ciphers",
@@ -592,6 +590,9 @@ pub fn materialize_nginx_app(
     }
     for (server_index, directive) in http_directives.iter().enumerate() {
         match directive.name.as_str() {
+            "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {
+                apply_proxy_timeout_directive(&mut mapper.http_proxy_timeouts, directive)?;
+            }
             "upstream" => mapper.materialize_upstream(directive)?,
             "server" => mapper.materialize_server(directive, server_index)?,
             "limit_req_zone" => mapper.materialize_limit_req_zone(directive)?,
@@ -1319,6 +1320,8 @@ struct LocationExtras {
     /// disables); the effective value is resolved over http → server →
     /// location in [`Mapper::attach_location_extras`].
     proxy_cache: Option<bool>,
+    /// Location-level proxy timeout declarations resolved over http/server.
+    proxy_timeouts: ProxyTimeoutsConfig,
     /// nginx `internal`: reachable only through an internal redirect.
     internal: bool,
     /// Location-level proxy response-header directives.
@@ -1670,6 +1673,9 @@ struct Mapper<'a> {
     /// replace-on-declare rule; an nginx route that never declares the
     /// directive does not cache, even though the app-level cache exists.
     http_proxy_cache: Option<bool>,
+    /// http-level proxy timeout declarations inherited by every server and
+    /// location, with each timeout merged independently.
+    http_proxy_timeouts: ProxyTimeoutsConfig,
     /// http-level proxy response-header directives (`proxy_hide_header`,
     /// `proxy_pass_header`, `proxy_redirect`, `proxy_cookie_path`,
     /// `proxy_cookie_domain`); each directive family inherits with nginx's
@@ -1686,6 +1692,8 @@ struct Mapper<'a> {
     /// materialized (http ⊕ server); locations inherit it unless they declare
     /// their own.
     server_proxy_cache: Option<bool>,
+    /// nginx http → server resolved proxy timeouts inherited by locations.
+    server_proxy_timeouts: ProxyTimeoutsConfig,
     /// http-level `merge_slashes` declaration (nginx default `on`).
     http_merge_slashes: Option<bool>,
     /// http-level `underscores_in_headers` declaration (nginx default `off`).
@@ -1852,10 +1860,12 @@ impl<'a> Mapper<'a> {
             http_max_ranges: None,
             http_slice_size: None,
             http_proxy_cache: None,
+            http_proxy_timeouts: ProxyTimeoutsConfig::default(),
             http_proxy_response: ProxyResponseDirectives::default(),
             server_proxy_response: ProxyResponseDirectives::default(),
             server_slice_size: None,
             server_proxy_cache: None,
+            server_proxy_timeouts: ProxyTimeoutsConfig::default(),
             http_merge_slashes: None,
             http_underscores_in_headers: None,
             http_ignore_invalid_headers: None,
@@ -2377,6 +2387,7 @@ impl<'a> Mapper<'a> {
         // value; an undeclared child keeps it (`slice 0` is a declaration).
         let mut server_slice_size: Option<u64> = None;
         let mut server_proxy_cache: Option<bool> = None;
+        let mut server_proxy_timeouts = ProxyTimeoutsConfig::default();
         // nginx http→server→location inheritance for the proxy
         // response-header policy and the request-boundary policies.
         let mut server_proxy_response = ProxyResponseDirectives::default();
@@ -2629,13 +2640,13 @@ impl<'a> Mapper<'a> {
                 "proxy_method" => {
                     server_proxy_method = Some(parse_proxy_method(child)?);
                 }
+                "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {
+                    apply_proxy_timeout_directive(&mut server_proxy_timeouts, child)?;
+                }
                 "access_log"
                 | "error_log"
                 | "proxy_http_version"
                 | "proxy_buffering"
-                | "proxy_read_timeout"
-                | "proxy_send_timeout"
-                | "proxy_connect_timeout"
                 | "ssl_prefer_server_ciphers"
                 | "ssl_session_cache"
                 | "ssl_trusted_certificate"
@@ -3136,6 +3147,7 @@ impl<'a> Mapper<'a> {
         // The default below is `false`: a location that never declares a cache
         // zone must not serve through the application-level cache.
         self.server_proxy_cache = server_proxy_cache.or(self.http_proxy_cache);
+        self.server_proxy_timeouts = self.http_proxy_timeouts.overlay(server_proxy_timeouts);
         // nginx http → server inheritance for the HTTP/2 DATA-frame chunk size;
         // locations inherit this value unless they declare their own.
         let effective_http2_chunk_size = server_http2_chunk_size.or(self.http_http2_chunk_size);
@@ -3781,6 +3793,13 @@ impl<'a> Mapper<'a> {
         // location's `proxy_cache_path` never turns caching on for the rest of
         // the configuration).
         route["proxyCache"] = json!(extras.proxy_cache.unwrap_or(false));
+        if !extras.proxy_timeouts.is_empty() {
+            route["proxyTimeouts"] = serde_json::to_value(extras.proxy_timeouts).map_err(|error| {
+                NginxConfigError::ValidationFailed(format!(
+                    "nginx materialization failed: {error}"
+                ))
+            })?;
+        }
         // nginx `addition` / `auth_request` / `mirror` inheritance: the
         // effective policy is the location declaration when present, else the
         // inherited http → server one.
@@ -4545,12 +4564,10 @@ impl<'a> Mapper<'a> {
                         json!({ "rules": [], "once": true, "types": ["text/html"], "lastModified": false })
                     })["lastModified"] = Value::Bool(enabled);
                 }
-                "proxy_http_version"
-                | "proxy_buffering"
-                | "proxy_read_timeout"
-                | "proxy_send_timeout"
-                | "proxy_connect_timeout"
-                | "proxy_request_buffering" => {}
+                "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {
+                    apply_proxy_timeout_directive(&mut extras.proxy_timeouts, child)?;
+                }
+                "proxy_http_version" | "proxy_buffering" | "proxy_request_buffering" => {}
                 "proxy_cache" => {
                     extras.proxy_cache = Some(self.materialize_proxy_cache(child)?);
                 }
@@ -5945,6 +5962,7 @@ impl<'a> Mapper<'a> {
         if extras.proxy_cache.is_none() {
             extras.proxy_cache = self.server_proxy_cache;
         }
+        extras.proxy_timeouts = self.server_proxy_timeouts.overlay(extras.proxy_timeouts);
         extras.rewrite_phase = location_rewrite_phase;
         // nginx `mirror_request_body` defaults to `on`; the runtime cannot tee
         // request bodies into fire-and-forget subrequests, so an effective
@@ -14838,6 +14856,20 @@ fn parse_fastcgi_timeout(directive: &NginxDirective) -> Result<u64, NginxConfigE
         })
 }
 
+fn apply_proxy_timeout_directive(
+    timeouts: &mut ProxyTimeoutsConfig,
+    directive: &NginxDirective,
+) -> Result<(), NginxConfigError> {
+    let timeout_ms = parse_fastcgi_timeout(directive)?;
+    match directive.name.as_str() {
+        "proxy_connect_timeout" => timeouts.connect_timeout_ms = Some(timeout_ms),
+        "proxy_read_timeout" => timeouts.read_timeout_ms = Some(timeout_ms),
+        "proxy_send_timeout" => timeouts.send_timeout_ms = Some(timeout_ms),
+        _ => unreachable!("only proxy timeout directives are passed here"),
+    }
+    Ok(())
+}
+
 /// Parse `fastcgi_next_upstream` flags into the runtime retry conditions.
 fn parse_fastcgi_next_upstream(
     directive: &NginxDirective,
@@ -19297,6 +19329,71 @@ server {
         ] {
             let error = materialize(source).expect_err("random_index outside location must fail");
             assert!(error.to_string().contains("random_index"), "{error}");
+        }
+    }
+
+    #[test]
+    fn materializes_proxy_timeouts_with_per_field_inheritance() {
+        let config = materialize(
+            r#"
+proxy_connect_timeout 4s;
+proxy_read_timeout 5s;
+proxy_send_timeout 6s;
+
+server {
+    listen 8080;
+    server_name timeout.example.test;
+    proxy_connect_timeout 7s;
+    proxy_read_timeout 8s;
+
+    location /inherited/ {
+        proxy_pass http://127.0.0.1:9001;
+    }
+
+    location /overridden/ {
+        proxy_pass http://127.0.0.1:9001;
+        proxy_read_timeout 9s;
+        proxy_send_timeout 10s;
+    }
+}
+"#,
+        )
+        .expect("materialize");
+        let routes = &config.virtual_hosts[0].routes;
+        let inherited = routes
+            .iter()
+            .find(|route| route.route_match.path == "/inherited/")
+            .and_then(|route| route.proxy_timeouts)
+            .expect("inherited timeouts");
+        assert_eq!(inherited.connect_timeout_ms, Some(7_000));
+        assert_eq!(inherited.read_timeout_ms, Some(8_000));
+        assert_eq!(inherited.send_timeout_ms, Some(6_000));
+
+        let overridden = routes
+            .iter()
+            .find(|route| route.route_match.path == "/overridden/")
+            .and_then(|route| route.proxy_timeouts)
+            .expect("overridden timeouts");
+        assert_eq!(overridden.connect_timeout_ms, Some(7_000));
+        assert_eq!(overridden.read_timeout_ms, Some(9_000));
+        assert_eq!(overridden.send_timeout_ms, Some(10_000));
+    }
+
+    #[test]
+    fn proxy_timeouts_reject_values_outside_runtime_bounds() {
+        for declaration in [
+            "proxy_connect_timeout 0s;",
+            "proxy_read_timeout 24h1s;",
+            "proxy_send_timeout 1s 2s;",
+        ] {
+            let config = format!(
+                "server {{ listen 8080; server_name timeout.example.test; location / {{ proxy_pass http://127.0.0.1:9001; {declaration} }} }}"
+            );
+            let error = materialize(&config).expect_err("invalid timeout must fail closed");
+            assert!(
+                error.to_string().contains("proxy_"),
+                "unexpected timeout diagnostic: {error}"
+            );
         }
     }
 

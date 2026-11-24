@@ -3948,6 +3948,11 @@ pub struct RouteConfig {
     /// location declares `proxy_cache_path`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_cache: Option<bool>,
+    /// Effective nginx `proxy_connect_timeout`, `proxy_read_timeout`, and
+    /// `proxy_send_timeout` values resolved over http → server → location.
+    /// Read and send values are idle timeouts between body frames.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_timeouts: Option<ProxyTimeoutsConfig>,
     /// nginx `internal`: the location is reachable only through an internal
     /// redirect (`rewrite … last`, `error_page`, a `try_files` named target,
     /// or `X-Accel-Redirect`). An external request that matches it is answered
@@ -3996,6 +4001,43 @@ pub struct RouteConfig {
     /// Effective nginx `mirror` subrequests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mirror: Option<MirrorConfig>,
+}
+
+/// Effective HTTP proxy timeouts for one route, in milliseconds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProxyTimeoutsConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connect_timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_timeout_ms: Option<u64>,
+}
+
+impl ProxyTimeoutsConfig {
+    /// Route timeout declarations are bounded to one day to limit resource
+    /// retention when a peer stops making progress.
+    pub const MAXIMUM_TIMEOUT_MS: u64 = 24 * 60 * 60 * 1_000;
+    /// Separate pooled clients are built for explicit connect-timeout values.
+    pub const MAXIMUM_CONNECT_TIMEOUT_POLICIES: usize = 16;
+
+    /// Overlay a more specific nginx level on the inherited values.
+    #[must_use]
+    pub fn overlay(self, inner: Self) -> Self {
+        Self {
+            connect_timeout_ms: inner.connect_timeout_ms.or(self.connect_timeout_ms),
+            read_timeout_ms: inner.read_timeout_ms.or(self.read_timeout_ms),
+            send_timeout_ms: inner.send_timeout_ms.or(self.send_timeout_ms),
+        }
+    }
+
+    #[must_use]
+    pub fn is_empty(self) -> bool {
+        self.connect_timeout_ms.is_none()
+            && self.read_timeout_ms.is_none()
+            && self.send_timeout_ms.is_none()
+    }
 }
 
 impl RouteConfig {

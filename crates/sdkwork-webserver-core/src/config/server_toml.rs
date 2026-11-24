@@ -380,18 +380,6 @@ const UNENFORCED_BEHAVIOR_TOML_KEYS: &[(&str, &str)] = &[
         "proxy responses are always streamed; buffering cannot be enabled by this key",
     ),
     (
-        "proxyConnectTimeout",
-        "upstream connect timeouts follow the resolved upstream policy, not this location key",
-    ),
-    (
-        "proxyReadTimeout",
-        "upstream response timeouts follow the resolved upstream policy, not this location key",
-    ),
-    (
-        "proxySendTimeout",
-        "upstream request timeouts follow the resolved upstream policy, not this location key",
-    ),
-    (
         "proxyRequestBuffering",
         "request bodies are streamed to the upstream, never buffered by this key",
     ),
@@ -721,6 +709,38 @@ fn materialize_duration_ms(value: &str) -> Option<u64> {
         return None;
     }
     parsed.checked_mul(multiplier)
+}
+
+fn materialize_proxy_timeouts(
+    location: &Map<String, Value>,
+    path: &str,
+) -> Result<Option<Value>, WebServerConfigError> {
+    let mut timeouts = Map::new();
+    for (source_key, runtime_key) in [
+        ("proxyConnectTimeout", "connectTimeoutMs"),
+        ("proxyReadTimeout", "readTimeoutMs"),
+        ("proxySendTimeout", "sendTimeoutMs"),
+    ] {
+        let Some(value) = location.get(source_key) else {
+            continue;
+        };
+        let Some(text) = value.as_str() else {
+            return Err(materialize_error(
+                &format!("{path}.{source_key}"),
+                "proxy timeout must be a duration string",
+            ));
+        };
+        let Some(milliseconds) = materialize_duration_ms(text).filter(|milliseconds| {
+            *milliseconds <= crate::config::ProxyTimeoutsConfig::MAXIMUM_TIMEOUT_MS
+        }) else {
+            return Err(materialize_error(
+                &format!("{path}.{source_key}"),
+                "proxy timeout must be between 1 ms and 24 hours",
+            ));
+        };
+        timeouts.insert(runtime_key.to_owned(), json!(milliseconds));
+    }
+    Ok((!timeouts.is_empty()).then_some(Value::Object(timeouts)))
 }
 
 /// Validate one `proxySetHeader = "Name value"` entry for runtime execution.
@@ -3019,6 +3039,9 @@ impl<'a> Materializer<'a> {
                 "limitConn": materialize_limit_conn_rules(location, &path, &self.limit_conn_zone_names)?,
                 "rewrite": materialize_rewrite_rules(location, &path)?,
             });
+            if let Some(timeouts) = materialize_proxy_timeouts(location, &path)? {
+                route["proxyTimeouts"] = timeouts;
+            }
             if let Some(auth_basic) = materialize_auth_basic(location, &path)? {
                 route["authBasic"] = auth_basic;
             }
@@ -5445,13 +5468,19 @@ fn apply_snippet_directive(
             };
             location.insert("proxyBuffering".to_owned(), Value::Bool(enabled));
         }
-        "proxy_read_timeout" => {
+        "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {
             let Some(timeout) = first_arg() else {
                 return Err(unsupported(
-                    "`proxy_read_timeout` requires a duration".to_owned(),
+                    format!("`{}` requires a duration", directive.name),
                 ));
             };
-            location.insert("proxyReadTimeout".to_owned(), Value::String(timeout));
+            let key = match directive.name.as_str() {
+                "proxy_connect_timeout" => "proxyConnectTimeout",
+                "proxy_read_timeout" => "proxyReadTimeout",
+                "proxy_send_timeout" => "proxySendTimeout",
+                _ => unreachable!("only proxy timeout directives are matched here"),
+            };
+            location.insert(key.to_owned(), Value::String(timeout));
         }
         "root" => {
             let Some(root) = first_arg() else {
@@ -7545,6 +7574,55 @@ proxyPass = "http://127.0.0.1:9001"
         );
         let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
         serde_json::to_value(&value).expect("converts")
+    }
+
+    fn proxy_timeout_document(location_block: &str) -> Value {
+        let toml_text = format!(
+            r#"
+[http]
+
+[[http.server]]
+listen = ["80"]
+serverName = ["proxy-timeout.example.com"]
+
+[[http.server.location]]
+match = "/"
+proxyPass = "http://127.0.0.1:9001"
+{location_block}
+"#
+        );
+        let value: toml::Value = toml::from_str(&toml_text).expect("toml parses");
+        serde_json::to_value(&value).expect("converts")
+    }
+
+    #[test]
+    fn toml_proxy_timeouts_materialize_and_validate_bounds() {
+        let config = materialize_app(
+            &proxy_timeout_document(
+                "proxyConnectTimeout = \"2s\"\nproxyReadTimeout = \"90s\"\nproxySendTimeout = \"3m\"",
+            ),
+            "test",
+        )
+        .expect("proxy timeout declarations materialize");
+        let timeouts = config.virtual_hosts[0].routes[0]
+            .proxy_timeouts
+            .expect("route timeouts");
+        assert_eq!(timeouts.connect_timeout_ms, Some(2_000));
+        assert_eq!(timeouts.read_timeout_ms, Some(90_000));
+        assert_eq!(timeouts.send_timeout_ms, Some(180_000));
+
+        for declaration in [
+            "proxyConnectTimeout = \"0s\"",
+            "proxyReadTimeout = \"24h1s\"",
+            "proxySendTimeout = 5",
+        ] {
+            let error = materialize_app(&proxy_timeout_document(declaration), "test")
+                .expect_err("invalid timeout declaration must fail closed");
+            assert!(
+                error.to_string().contains("proxy timeout"),
+                "unexpected timeout diagnostic: {error}"
+            );
+        }
     }
 
     #[test]

@@ -107,6 +107,7 @@ export POSTGRES_INIT_HOST_DIR
 COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.bundle.yml"
 COMPOSE_EDGE_FILE="${COMPOSE_DIR}/docker-compose.bundle-edge.yml"
 COMPOSE_GATEWAY_FILE="${COMPOSE_DIR}/docker-compose.bundle-gateway.yml"
+COMPOSE_GATEWAY_ATTACH_FILE="${COMPOSE_DIR}/docker-compose.bundle-gateway-attach.yml"
 
 # --- defaults ----------------------------------------------------------------
 ENVIRONMENT=""
@@ -207,6 +208,24 @@ fi
 # Read one KEY=value from the env file (no side effects; values are defaults).
 env_key() {
   sed -n "s/^${1}=//p" "${ENV_FILE}" | tail -1 | tr -d '\r'
+}
+
+GATEWAY_ATTACH_NETWORK="$(env_key SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK)"
+
+validate_gateway_attach_config() {
+  [ -z "${GATEWAY_ATTACH_NETWORK}" ] && return 0
+  [ -f "${COMPOSE_GATEWAY_ATTACH_FILE}" ] || die "gateway attach compose template missing: ${COMPOSE_GATEWAY_ATTACH_FILE}"
+  case "${GATEWAY_ATTACH_NETWORK}" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_.-]*) die "SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK must be a Docker network name" ;;
+  esac
+}
+
+validate_gateway_attach_network() {
+  validate_gateway_attach_config
+  [ -z "${GATEWAY_ATTACH_NETWORK}" ] && return 0
+  [ "${DRY_RUN}" = "1" ] && return 0
+  docker network inspect "${GATEWAY_ATTACH_NETWORK}" >/dev/null 2>&1 \
+    || die "external API gateway network does not exist: ${GATEWAY_ATTACH_NETWORK}"
 }
 
 # --- image tag resolution ------------------------------------------------------
@@ -357,6 +376,10 @@ ensure_deps() {
 # sdkwork-api-cloud-gateway:local); non-blocking when absent.
 ensure_gateway() {
   [ -f "${COMPOSE_GATEWAY_FILE}" ] || return 0
+  if [ -n "${GATEWAY_ATTACH_NETWORK}" ]; then
+    info "using external API gateway network ${GATEWAY_ATTACH_NETWORK}; skipping bundled gateway"
+    return 0
+  fi
   local deployment
   deployment="$(env_key SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT)"
   deployment="${deployment:-docker}"
@@ -442,6 +465,9 @@ start_instance() {
   export_instance_env "${index}"
   set_instance_env_file_args "${index}"
   local args=(-p "${project}" "${INSTANCE_ENV_FILE_ARGS[@]}" -f "${COMPOSE_FILE}")
+  if [ -n "${GATEWAY_ATTACH_NETWORK}" ]; then
+    args+=(-f "${COMPOSE_GATEWAY_ATTACH_FILE}")
+  fi
   if [ "${index}" = "1" ] && [ -f "${COMPOSE_EDGE_FILE}" ]; then
     args+=(-f "${COMPOSE_EDGE_FILE}")
     export SDKWORK_WEBSERVER_IMPORT_HTTP_HOST_PORT="${EDGE_HTTP}"
@@ -506,6 +532,7 @@ rollback_to_previous() {
 }
 
 apply() {
+  validate_gateway_attach_network
   # Persist CLI --host-port/--edge-*/--domain overrides first so the env file
   # (and thus compose interpolation and later doctor/config/status) agrees with
   # the ports this run composes on.
@@ -556,15 +583,19 @@ lifecycle() {
   for index in $(seq 1 "${REPLICAS}"); do
     export_instance_env "${index}"
     set_instance_env_file_args "${index}"
-    run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
-      -f "${COMPOSE_FILE}" --profile instance "${verb}"
+    local args=(-p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" -f "${COMPOSE_FILE}")
+    if [ -n "${GATEWAY_ATTACH_NETWORK}" ]; then
+      args+=(-f "${COMPOSE_GATEWAY_ATTACH_FILE}")
+    fi
+    args+=(--profile instance "${verb}")
+    run docker compose "${args[@]}"
   done
   if [ "${verb}" = "start" ]; then
     start_worker
   else
     run docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker "${verb}"
   fi
-  if [ -f "${COMPOSE_GATEWAY_FILE}" ]; then
+  if [ -f "${COMPOSE_GATEWAY_FILE}" ] && [ -z "${GATEWAY_ATTACH_NETWORK}" ]; then
     export_instance_env 1
     run docker compose -p "${GATEWAY_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_GATEWAY_FILE}" "${verb}" 2>/dev/null || true
   fi
@@ -575,15 +606,19 @@ down() {
   for index in $(seq 1 "${REPLICAS}"); do
     export_instance_env "${index}"
     set_instance_env_file_args "${index}"
-    run docker compose -p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" \
-      -f "${COMPOSE_FILE}" --profile instance down
+    local args=(-p "sdkwork-webserver-${ENVIRONMENT}-i${index}" "${INSTANCE_ENV_FILE_ARGS[@]}" -f "${COMPOSE_FILE}")
+    if [ -n "${GATEWAY_ATTACH_NETWORK}" ]; then
+      args+=(-f "${COMPOSE_GATEWAY_ATTACH_FILE}")
+    fi
+    args+=(--profile instance down)
+    run docker compose "${args[@]}"
   done
   run docker compose -p "${WORKER_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile worker down
   if [ "${EXTERNAL}" != "1" ]; then
     export_instance_env 1
     run docker compose -p "${DEPS_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" --profile deps down
   fi
-  if [ -f "${COMPOSE_GATEWAY_FILE}" ]; then
+  if [ -f "${COMPOSE_GATEWAY_FILE}" ] && [ -z "${GATEWAY_ATTACH_NETWORK}" ]; then
     export_instance_env 1
     run docker compose -p "${GATEWAY_PROJECT}" --env-file "${ENV_FILE}" -f "${COMPOSE_GATEWAY_FILE}" down 2>/dev/null || true
   fi
@@ -721,6 +756,7 @@ require_env_key() {  # $1=key $2=label $3=example value
 
 run_preflight() {
   PREFLIGHT_FAIL="0"
+  validate_gateway_attach_config
   if [ "${EXTERNAL}" = "1" ]; then
     info "env preflight: ${ENV_FILE} (dependency mode: external PostgreSQL/Redis)"
     # External database: every connection input is required up front. Keys that

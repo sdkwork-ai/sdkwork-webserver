@@ -356,21 +356,22 @@ test('product edge declares the ACME challenge webroot the certificate worker wr
   assert.match(entrypoint, /if \[ -n "\$\{SDKWORK_WEBSERVER_ACME_DNS_ACCOUNTS_FILE:-\}" \]; then/u);
   assert.match(entrypoint, /dns_accounts_file = /u);
 
-  // Both edge shapes must declare it. A development edge without TLS still has
-  // to answer the CA, so a branch losing its call is a silent issuance outage.
+  // The product edge uses one virtual host for both :80 and :443, so the
+  // shared location serves HTTP-01 on the plaintext listener as well.
   const start = entrypoint.indexOf('materialize_product_edge_nginx_conf() {');
   assert.notEqual(start, -1, 'the product edge materializer must exist');
   const body = entrypoint.slice(start);
-  const marker = 'if [ "${environment}" = "production" ]; then';
   const call = 'product_edge_acme_challenge_location "${acme_webroot}"';
-  const markerIndex = body.indexOf(marker);
+  const httpsListenIndex = body.indexOf('listen 443 ssl;');
+  const httpListenIndex = body.indexOf('listen 80;');
   const first = body.indexOf(call);
   const last = body.lastIndexOf(call);
-  assert.notEqual(markerIndex, -1, 'the production branch must stay explicit');
+  assert.notEqual(httpsListenIndex, -1, 'the product edge must listen for TLS');
+  assert.notEqual(httpListenIndex, -1, 'the product edge must listen for ACME HTTP-01');
   assert.notEqual(first, -1, 'the product edge must declare the challenge location');
   assert.ok(
-    markerIndex < first && first < last,
-    'both the TLS and the plaintext branches must declare the challenge location',
+    httpsListenIndex < first && httpListenIndex < first && first === last,
+    'the shared TLS/plaintext server block must declare the challenge location once',
   );
 });
 
@@ -597,6 +598,40 @@ test('unified install bundle ships every lifecycle environment (DEPLOYMENT_SPEC 
       `${environment}.env.example must exist for bundle shipping`,
     );
   }
+});
+
+test('install bundle can attach to an external platform API gateway network', () => {
+  const deployScript = readFileSync(
+    path.join(appRoot, 'bin', 'docker-bundle-deploy.sh'),
+    'utf8',
+  );
+  assert.match(deployScript, /docker-compose\.bundle-gateway-attach\.yml/u);
+  assert.match(deployScript, /SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK/u);
+  assert.match(deployScript, /using external API gateway network[\s\S]*skipping bundled gateway/u);
+
+  const bundleOverlay = parseYaml(
+    readFileSync(
+      path.join(appRoot, 'deployments', 'docker', 'docker-compose.bundle-gateway-attach.yml'),
+      'utf8',
+    ),
+  );
+  assert.equal(
+    bundleOverlay.services.webserver.environment.SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT,
+    'docker',
+  );
+  assert.equal(
+    bundleOverlay.services.webserver.environment.SDKWORK_MODULE_API_GATEWAY_HOST,
+    'sdkwork-api-cloud-gateway',
+  );
+  assert.equal(bundleOverlay.services.webserver.environment.SDKWORK_MODULE_API_GATEWAY_PORT, '8080');
+  assert.ok(bundleOverlay.services.webserver.networks.includes('module-api-gateway'));
+  assert.equal(bundleOverlay.networks['module-api-gateway'].external, true);
+
+  const installer = readFileSync(
+    path.join(appRoot, 'scripts', 'docker', 'package-install-bundle.mjs'),
+    'utf8',
+  );
+  assert.match(installer, /docker-compose\.bundle-gateway-attach\.yml/u);
 });
 
 test('every environment CORS allowlist covers registered client origins (WEB_FRAMEWORK_SPEC §12)', () => {

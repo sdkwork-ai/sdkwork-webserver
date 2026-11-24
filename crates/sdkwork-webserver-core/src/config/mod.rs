@@ -87,6 +87,7 @@ pub use model::{
     MailServerProtocol, MailStarttlsMode, MailTlsConfig, MailTlsProtocol, MapConfig,
     MapEntryConfig, MimeTypeConfig, MirrorConfig, NginxConfig, ObservabilityConfig,
     ProviderCachePolicy, ProxyCacheConfig, ProxyProtocolConfig, ProxyProtocolCrc32cPolicy,
+    ProxyTimeoutsConfig,
     ProxyProtocolVersion, ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig,
     ProxyRewriteRegexRuleConfig, ProxyRewriteRuleConfig, RedirectPolicyConfig, RefererConfig,
     RefererHostEntry, ReloadConfig, ReloadMode, ResolverConfig, ResourceConfig,

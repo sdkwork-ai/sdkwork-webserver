@@ -1274,13 +1274,21 @@ async fn proxy_http_request(
             }
             upstream
                 .client
-                .execute_with_timeout(
+                .execute_with_proxy_timeouts(
                     upstream_request,
-                    upstream.retry.attempt_timeout.min(remaining),
+                    context.route.proxy_timeouts.as_ref(),
+                    Some(upstream.retry.attempt_timeout.min(remaining)),
                 )
                 .await
         } else {
-            upstream.client.execute(upstream_request).await
+            upstream
+                .client
+                .execute_with_proxy_timeouts(
+                    upstream_request,
+                    context.route.proxy_timeouts.as_ref(),
+                    None,
+                )
+                .await
         };
         let response = match result {
             Ok(response) => response,
@@ -1609,7 +1617,15 @@ async fn proxy_websocket_request(
     *upstream_request.headers_mut() = headers;
 
     let attempt = context.metrics.begin_upstream_attempt();
-    let mut response = match upstream.client.execute(upstream_request).await {
+    let mut response = match upstream
+        .client
+        .execute_with_proxy_timeouts(
+            upstream_request,
+            context.route.proxy_timeouts.as_ref(),
+            None,
+        )
+        .await
+    {
         Ok(response) => response,
         Err(error) if error.is_connection_saturated() => {
             context

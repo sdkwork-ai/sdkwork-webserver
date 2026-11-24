@@ -106,7 +106,7 @@ curl --noproxy '*' -k -H 'Host: api-dev.sdkwork.com' https://127.0.0.1/healthz
 | Mode | Env | Compose |
 | --- | --- | --- |
 | **docker** (default) | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker` | add `-f docker-compose.platform-api-gateway.yml` (auto when using `bin/docker-deploy.sh` or `compose.mjs`) |
-| **docker + attach** | `SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=<gateway-network>` | add `-f docker-compose.platform-api-gateway-attach.yml` — join an already-running independent gateway stack (no second container) |
+| **docker + attach** | `SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=<gateway-network>` | source Compose adds `docker-compose.platform-api-gateway-attach.yml`; install bundles add `docker-compose.bundle-gateway-attach.yml` — join an already-running independent gateway stack (no second container) |
 | **bundled** | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=bundled` | webserver container starts `sdkwork-api-cloud-gateway` as a second process on `127.0.0.1:3900` |
 | **external** | `SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=external` + `SDKWORK_MODULE_API_GATEWAY_HOST` | operator-managed gateway endpoint |
 
@@ -138,6 +138,18 @@ SDKWORK_MODULE_API_GATEWAY_PORT=3900
 
 bash bin/docker-deploy.sh install --environment development
 ```
+
+For a unified install bundle attached to an independent gateway, set the
+external network in `env/<environment>.env`:
+
+```dotenv
+SDKWORK_MODULE_API_GATEWAY_DEPLOYMENT=docker
+SDKWORK_MODULE_API_GATEWAY_ATTACH_NETWORK=<gateway-network>
+```
+
+The network must expose `sdkwork-api-cloud-gateway` on port `8080`. The bundle
+attaches every webserver instance to that network and leaves the independent
+gateway stack running.
 
 Or compose directly:
 
