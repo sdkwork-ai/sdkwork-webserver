@@ -53,8 +53,7 @@ use crate::config::{
     GeoEntryConfig, GeoIpConfig, GzipProxiedConfig, GzipStaticMode, IfModifiedSinceMode, MapConfig,
     MapEntryConfig, MimeTypeConfig, ModernBrowserName, ModernBrowserRule,
     ProxyRedirectPolicyConfig, ProxyResponsePolicyConfig, ProxyRewriteRuleConfig,
-    ProxyTimeoutsConfig,
-    RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
+    ProxyTimeoutsConfig, RedirectPolicyConfig, RefererConfig, RefererHostEntry, SplitClientsConfig,
     SplitClientsPartConfig, StreamServerConfig, StreamSetVariableConfig, StreamTargetConfig,
     StreamTlsMode, TlsVersion, UpstreamRetryCondition, UpstreamRetryConfig, UserIdConfig,
     UserIdExpires, UserIdFlags, UserIdMode, UserIdSameSite, WebServerAppConfig,
@@ -3794,11 +3793,12 @@ impl<'a> Mapper<'a> {
         // the configuration).
         route["proxyCache"] = json!(extras.proxy_cache.unwrap_or(false));
         if !extras.proxy_timeouts.is_empty() {
-            route["proxyTimeouts"] = serde_json::to_value(extras.proxy_timeouts).map_err(|error| {
-                NginxConfigError::ValidationFailed(format!(
-                    "nginx materialization failed: {error}"
-                ))
-            })?;
+            route["proxyTimeouts"] =
+                serde_json::to_value(extras.proxy_timeouts).map_err(|error| {
+                    NginxConfigError::ValidationFailed(format!(
+                        "nginx materialization failed: {error}"
+                    ))
+                })?;
         }
         // nginx `addition` / `auth_request` / `mirror` inheritance: the
         // effective policy is the location declaration when present, else the

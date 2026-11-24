@@ -5470,9 +5470,10 @@ fn apply_snippet_directive(
         }
         "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {
             let Some(timeout) = first_arg() else {
-                return Err(unsupported(
-                    format!("`{}` requires a duration", directive.name),
-                ));
+                return Err(unsupported(format!(
+                    "`{}` requires a duration",
+                    directive.name
+                )));
             };
             let key = match directive.name.as_str() {
                 "proxy_connect_timeout" => "proxyConnectTimeout",

@@ -11,9 +11,9 @@ use super::{
     is_capture_variable, is_supported_upstream_allowed_cidr, parse_server_name,
     server_name_is_regex, template_variables, upstream_ip_is_allowed, AppDomainFallbackLookup,
     BrowserConfig, CachePolicyConfig, CertificateSource, ConfigDiagnostic, ErrorPageConfig,
-    ExpiresMode, IfConditionConfig, IfOperatorConfig, ListenerProtocol, ResourceConfig,
-    RewritePhaseOpConfig, RouteConfig, RoutePathType, SecurityHeadersConfig, ServerNameForm,
-    ProxyTimeoutsConfig, StreamTargetConfig, TlsCertificateResolution, TlsVersion, UpstreamConfig,
+    ExpiresMode, IfConditionConfig, IfOperatorConfig, ListenerProtocol, ProxyTimeoutsConfig,
+    ResourceConfig, RewritePhaseOpConfig, RouteConfig, RoutePathType, SecurityHeadersConfig,
+    ServerNameForm, StreamTargetConfig, TlsCertificateResolution, TlsVersion, UpstreamConfig,
     UpstreamLoadBalancingStrategy, UpstreamTlsTrustMode, UsageMeteringChannel, UserIdConfig,
     UserIdExpires, WebServerAppConfig, WebServerConfigError, WebServerLimits,
     MAX_REWRITE_PHASE_OPS, MAX_REWRITE_PHASE_VARIABLES,
@@ -1875,9 +1875,7 @@ impl SemanticValidator {
                     .and_then(|timeouts| timeouts.connect_timeout_ms)
             })
             .collect::<HashSet<_>>();
-        if connect_timeout_policies.len()
-            > ProxyTimeoutsConfig::MAXIMUM_CONNECT_TIMEOUT_POLICIES
-        {
+        if connect_timeout_policies.len() > ProxyTimeoutsConfig::MAXIMUM_CONNECT_TIMEOUT_POLICIES {
             self.push(
                 "/virtualHosts",
                 format!(

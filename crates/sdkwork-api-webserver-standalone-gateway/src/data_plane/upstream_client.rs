@@ -139,11 +139,11 @@ impl UpstreamClient {
             })
     }
 
-    fn inner_for_connect_timeout(&self, timeout_ms: Option<u64>) -> &InnerClient {
-        timeout_ms
-            .filter(|timeout| *timeout != self.connect_timeout_ms)
-            .and_then(|timeout| self.connect_timeout_clients.get(&timeout))
-            .unwrap_or(&self.inner)
+    fn inner_for_connect_timeout(&self, timeout_ms: Option<u64>) -> Option<&InnerClient> {
+        match timeout_ms.filter(|timeout| *timeout != self.connect_timeout_ms) {
+            Some(timeout) => self.connect_timeout_clients.get(&timeout),
+            None => Some(&self.inner),
+        }
     }
 
     pub(crate) async fn execute(
@@ -183,7 +183,9 @@ impl UpstreamClient {
         response_header_timeout: Option<Duration>,
     ) -> Result<Response<UpstreamResponseBody>, UpstreamRequestError> {
         let connect_timeout_ms = timeouts.and_then(|timeouts| timeouts.connect_timeout_ms);
-        let inner = self.inner_for_connect_timeout(connect_timeout_ms);
+        let inner = self
+            .inner_for_connect_timeout(connect_timeout_ms)
+            .ok_or(UpstreamRequestError::ConnectTimeoutPolicyUnavailable)?;
         let read_timeout = timeouts
             .and_then(|timeouts| timeouts.read_timeout_ms)
             .map(Duration::from_millis);
@@ -407,6 +409,8 @@ pub(crate) enum UpstreamRequestError {
     ResponseHeaderBytesExceeded,
     #[error("upstream response Header field limit exceeded")]
     ResponseHeaderCountExceeded,
+    #[error("proxy connect timeout policy was not materialized")]
+    ConnectTimeoutPolicyUnavailable,
 }
 
 impl UpstreamRequestError {
@@ -419,7 +423,9 @@ impl UpstreamRequestError {
                         || matches!(error, UpstreamConnectError::Io(source) if source.kind() == io::ErrorKind::TimedOut)
                 }) || find_io_timeout(error)
             }
-            Self::ResponseHeaderBytesExceeded | Self::ResponseHeaderCountExceeded => false,
+            Self::ResponseHeaderBytesExceeded
+            | Self::ResponseHeaderCountExceeded
+            | Self::ConnectTimeoutPolicyUnavailable => false,
         }
     }
 
@@ -784,8 +790,7 @@ where
             inner: Box::pin(inner),
             remaining_hint,
             idle_timeout,
-            idle_deadline: idle_timeout
-                .map(|timeout| Box::pin(tokio::time::sleep(timeout))),
+            idle_deadline: idle_timeout.map(|timeout| Box::pin(tokio::time::sleep(timeout))),
             absolute_deadline: absolute_deadline
                 .map(|deadline| Box::pin(tokio::time::sleep_until(deadline))),
             timeout_message,
@@ -944,12 +949,8 @@ mod tests {
     async fn body_idle_timeout_resets_while_a_stream_exceeds_its_idle_budget() {
         let timeout = Duration::from_millis(200);
         let (mut sender, body) = Channel::<Bytes>::new(1);
-        let mut body = ProgressTimeoutBody::new(
-            body,
-            Some(timeout),
-            None,
-            "test body idle timeout",
-        );
+        let mut body =
+            ProgressTimeoutBody::new(body, Some(timeout), None, "test body idle timeout");
 
         for chunk in [&b"first"[..], &b"second"[..], &b"third"[..]] {
             tokio::time::sleep(Duration::from_millis(100)).await;
