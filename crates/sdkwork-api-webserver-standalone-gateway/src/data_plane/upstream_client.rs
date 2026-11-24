@@ -239,9 +239,7 @@ fn proxy_connect_timeout_overrides(
         .iter()
         .filter_map(|resource| match resource {
             ResourceConfig::Proxy {
-                id,
-                upstream_ref,
-                ..
+                id, upstream_ref, ..
             } if upstream_ref == &config.id => Some(id.as_str()),
             _ => None,
         })
