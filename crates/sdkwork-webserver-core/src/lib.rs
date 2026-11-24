@@ -9,6 +9,7 @@ mod json_schema;
 
 pub mod config;
 pub mod config_paths;
+pub mod drive_certificates;
 pub mod module_imports;
 pub mod nginx;
 pub mod nginx_activation;

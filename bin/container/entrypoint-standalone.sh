@@ -88,6 +88,58 @@ ensure_drive_delivery_cache_root() {
   log "created drive delivery cache root: ${cache_root}"
 }
 
+# Prepare the SDKWork Drive certificate authority root and make the source
+# explicit for a standard container deployment. The data plane and the
+# certificate worker resolve the same root; exporting it here (when the deploy
+# root exists) means a delayed Drive mount cannot leave an already-built
+# listener without the Drive layer — the runtime starts with an empty store and
+# picks the mount up on its refresh loop. An explicit
+# SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED=false opts out.
+ensure_drive_certificate_root() {
+  local enabled="${SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED:-}"
+  enabled="$(printf '%s' "${enabled}" | tr '[:upper:]' '[:lower:]')"
+  case "${enabled}" in
+    0|false|no|off) return 0 ;;
+  esac
+  if [ -z "${SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT:-}" ] && [ -d /opt/deploy ]; then
+    export SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT="/opt/deploy/drive/certificates"
+    if [ -z "${SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_CACHE_ROOT:-}" ]; then
+      export SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_CACHE_ROOT="/var/lib/sdkwork/webserver/drive-certificate-cache"
+    fi
+    log "SDKWork Drive certificate source enabled at ${SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT}"
+  fi
+  local root="${SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT:-/opt/deploy/drive/certificates}"
+  case "${root}" in
+    /*) ;;
+    *)
+      log "warning: ${root} is not an absolute path; the SDKWork Drive certificate source stays disabled"
+      return 0
+      ;;
+  esac
+  case "/${root}/" in
+    *"/../"*)
+      log "warning: ${root} contains a parent path component; the SDKWork Drive certificate source stays disabled"
+      return 0
+      ;;
+  esac
+  local parent="${root%/*}"
+  if [ ! -d "${parent}" ]; then
+    log "SDKWork Drive mount ${parent} is absent; the Drive certificate source starts empty"
+    return 0
+  fi
+  if [ -d "${root}" ]; then
+    return 0
+  fi
+  if ! touch "${parent}/.sdkwork-drive-cert-write-test" 2>/dev/null; then
+    log "warning: ${parent} is not writable; the SDKWork Drive certificate root stays read-only"
+    return 0
+  fi
+  rm -f "${parent}/.sdkwork-drive-cert-write-test"
+  ensure_directory "${root}"
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${root}" 2>/dev/null || true
+  log "created SDKWork Drive certificate root: ${root}"
+}
+
 ensure_secret_file() {
   local name="$1"
   local file="${SECRETS_ROOT}/${name}"
@@ -2324,6 +2376,7 @@ main() {
     apply_primary_domain
     ensure_database_secret
     ensure_drive_delivery_cache_root
+    ensure_drive_certificate_root
     for secret_name in encryption-key deploy-encryption-key; do
       ensure_secret_file "${secret_name}"
     done
@@ -2342,6 +2395,7 @@ main() {
   done
   ensure_database_secret
   ensure_drive_delivery_cache_root
+  ensure_drive_certificate_root
   for secret_name in encryption-key deploy-encryption-key \
     drive-internal-api-ingress-token knowledgebase-internal-api-ingress-token \
     web-internal-api-ingress-token; do

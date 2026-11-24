@@ -129,6 +129,15 @@ impl CompiledWebServerApp {
         // that behavior; typed configurations still require their roots to
         // exist.
         let tolerate_missing_roots = config.nginx.native_compatibility;
+        // The Drive certificate authority is the preferred TLS source. When it
+        // is configured, a missing local certificate file must not stop the
+        // configuration from compiling: the data plane drops an unusable file
+        // when a usable Drive bundle covers every name it declared, and fails
+        // the handshake closed otherwise. This tolerance is deliberately
+        // narrower than `tolerate_missing_roots` — it never relaxes static
+        // roots, ACME webroots, or client-auth trust material.
+        let tolerate_missing_tls_material = tolerate_missing_roots
+            || crate::drive_certificates::resolve_drive_certificate_root().is_some();
         let mut static_roots = HashMap::new();
         let mut static_h5_roots = HashMap::new();
         for (index, resource) in config.resources.iter().enumerate() {
@@ -173,7 +182,7 @@ impl CompiledWebServerApp {
                     &base_directory,
                     chain_file,
                     &format!("/certificates/{index}/source/chainFile"),
-                    tolerate_missing_roots,
+                    tolerate_missing_tls_material,
                 )?;
                 certificate_chain_paths.insert(certificate.id.clone(), chain_path);
             }
@@ -182,7 +191,7 @@ impl CompiledWebServerApp {
                     &base_directory,
                     ocsp_file,
                     &format!("/certificates/{index}/source/ocspStaplingFile"),
-                    tolerate_missing_roots,
+                    tolerate_missing_tls_material,
                 )?;
                 certificate_ocsp_paths.insert(certificate.id.clone(), ocsp_path);
             }
@@ -190,13 +199,13 @@ impl CompiledWebServerApp {
                 &base_directory,
                 certificate_file,
                 &format!("/certificates/{index}/source/certificateFile"),
-                tolerate_missing_roots,
+                tolerate_missing_tls_material,
             )?;
             let private_key_path = resolve_material_file(
                 &base_directory,
                 private_key_file,
                 &format!("/certificates/{index}/source/privateKeyFile"),
-                tolerate_missing_roots,
+                tolerate_missing_tls_material,
             )?;
             certificate_paths.insert(certificate.id.clone(), (certificate_path, private_key_path));
         }

@@ -514,7 +514,8 @@ pub fn ensure_import_bootstrap_certificates(
 ) -> Result<(), String> {
     let production_like = crate::runtime_env::web_is_production_like_environment()
         || crate::runtime_env::web_environment_name() == "demo";
-    ensure_import_bootstrap_certificates_with_policy(app, base, production_like)
+    let drive_configured = crate::drive_certificates::resolve_drive_certificate_root().is_some();
+    ensure_import_bootstrap_certificates_with_policy(app, base, production_like, drive_configured)
 }
 
 /// [`ensure_import_bootstrap_certificates`] with the environment-derived
@@ -527,8 +528,14 @@ pub(crate) fn ensure_import_bootstrap_certificates_with_policy(
     app: &WebServerAppConfig,
     base: &Path,
     production_like: bool,
+    drive_configured: bool,
 ) -> Result<(), String> {
     use crate::config::CertificateSource;
+    // The Drive certificate authority is the preferred source. When it is
+    // configured (explicitly or through the canonical shared mount), missing
+    // local material must not fail startup: the data plane drops the unusable
+    // file when Drive covers every name it declared, and fails the handshake
+    // closed otherwise.
     for certificate in &app.certificates {
         let CertificateSource::ProtectedFile {
             certificate_file,
@@ -541,6 +548,13 @@ pub(crate) fn ensure_import_bootstrap_certificates_with_policy(
             continue;
         }
         if certificate_path.is_file() != private_key_path.is_file() {
+            if drive_configured {
+                tracing::warn!(
+                    certificate = %certificate.id,
+                    "only one of the configured certificate files exists; the SDKWork Drive certificate authority is configured and takes priority"
+                );
+                continue;
+            }
             return Err(format!(
                 "certificate `{}`: only one of {} / {} exists; supply both or remove both so a bootstrap placeholder can be generated",
                 certificate.id,
@@ -549,6 +563,14 @@ pub(crate) fn ensure_import_bootstrap_certificates_with_policy(
             ));
         }
         if production_like {
+            if drive_configured {
+                tracing::warn!(
+                    certificate = %certificate.id,
+                    certificate_file = %certificate_path.display(),
+                    "local TLS material is missing; the SDKWork Drive certificate authority is configured and is the preferred source"
+                );
+                continue;
+            }
             return Err(format!(
                 "certificate `{}`: TLS material is missing ({} / {}); a production-like \
                  deployment must never bind a self-signed bootstrap placeholder — provision the \
@@ -1819,15 +1841,10 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         }
     }
 
-    #[test]
-    fn bootstrap_certificates_are_generated_and_preserved() {
-        let temp = std::env::temp_dir().join(format!(
-            "sdkwork-webserver-bootstrap-cert-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&temp);
-        std::fs::create_dir_all(&temp).unwrap();
-        let app = crate::config::WebServerAppConfig {
+    fn app_with_certificate(
+        certificate: crate::config::CertificateConfig,
+    ) -> crate::config::WebServerAppConfig {
+        crate::config::WebServerAppConfig {
             tunnel: None,
             schema_version: 1,
             kind: "test".to_owned(),
@@ -1850,10 +1867,7 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             resolution_cache: None,
             limits: Default::default(),
             listeners: Vec::new(),
-            certificates: vec![certificate_fixture(
-                "sdkwork.com",
-                vec!["im.sdkwork.com".to_owned(), "im-dev.sdkwork.com".to_owned()],
-            )],
+            certificates: vec![certificate],
             tls_policies: Vec::new(),
             resolvers: Vec::new(),
             resources: Vec::new(),
@@ -1867,15 +1881,31 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
             observability: Default::default(),
             deployment: Default::default(),
             metadata: Default::default(),
-        };
-        ensure_import_bootstrap_certificates_with_policy(&app, &temp, false).expect("generate");
+        }
+    }
+
+    #[test]
+    fn bootstrap_certificates_are_generated_and_preserved() {
+        let temp = std::env::temp_dir().join(format!(
+            "sdkwork-webserver-bootstrap-cert-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+        let app = app_with_certificate(certificate_fixture(
+            "sdkwork.com",
+            vec!["im.sdkwork.com".to_owned(), "im-dev.sdkwork.com".to_owned()],
+        ));
+        ensure_import_bootstrap_certificates_with_policy(&app, &temp, false, false)
+            .expect("generate");
         let cert_path = temp.join("certs/sdkwork.com/fullchain.pem");
         let key_path = temp.join("certs/sdkwork.com/privkey.pem");
         assert!(cert_path.is_file());
         assert!(key_path.is_file());
         let first = std::fs::read_to_string(&cert_path).unwrap();
         // Idempotent: a second pass must not overwrite existing material.
-        ensure_import_bootstrap_certificates_with_policy(&app, &temp, false).expect("second pass");
+        ensure_import_bootstrap_certificates_with_policy(&app, &temp, false, false)
+            .expect("second pass");
         assert_eq!(std::fs::read_to_string(&cert_path).unwrap(), first);
         // The material is a valid PEM pair (the leaf SAN covers the declared
         // server names; end-to-end SNI coverage is exercised by the data
@@ -1897,54 +1927,47 @@ dns_accounts_file = "D:/sdkwork/dns-accounts.json"
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(temp.join("certs/example.com")).unwrap();
         std::fs::write(temp.join("certs/example.com/fullchain.pem"), "stale").unwrap();
-        let app = crate::config::WebServerAppConfig {
-            tunnel: None,
-            schema_version: 1,
-            kind: "test".to_owned(),
-            app_key: "test".to_owned(),
-            nginx: Default::default(),
-            maps: Vec::new(),
-            geo: Vec::new(),
-            geoip: None,
-            stream_geoip: None,
-            split_clients: Vec::new(),
-            stream_limit_conn_zones: Vec::new(),
-            cache_zone_names: Vec::new(),
-            stream_maps: Vec::new(),
-            stream_split_clients: Vec::new(),
-            mime_types: None,
-            default_type: None,
-            gzip: Default::default(),
-            limit_req_zones: Vec::new(),
-            limit_conn_zones: Vec::new(),
-            resolution_cache: None,
-            limits: Default::default(),
-            listeners: Vec::new(),
-            certificates: vec![certificate_fixture(
-                "example.com",
-                vec!["im.example.com".to_owned()],
-            )],
-            tls_policies: Vec::new(),
-            resolvers: Vec::new(),
-            resources: Vec::new(),
-            upstreams: Vec::new(),
-            virtual_hosts: Vec::new(),
-            streams: Vec::new(),
-            mail: Default::default(),
-            proxy_cache: Default::default(),
-            app_domain_fallback: None,
-            usage_metering: None,
-            observability: Default::default(),
-            deployment: Default::default(),
-            metadata: Default::default(),
-        };
-        let error = ensure_import_bootstrap_certificates_with_policy(&app, &temp, false)
+        let app = app_with_certificate(certificate_fixture(
+            "example.com",
+            vec!["im.example.com".to_owned()],
+        ));
+        let error = ensure_import_bootstrap_certificates_with_policy(&app, &temp, false, false)
             .expect_err("half-present pair must fail closed");
         assert!(error.contains("only one of"), "unexpected: {error}");
         assert_eq!(
             std::fs::read_to_string(temp.join("certs/example.com/fullchain.pem")).unwrap(),
             "stale"
         );
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn a_configured_drive_source_tolerates_missing_local_material_in_production() {
+        let temp = std::env::temp_dir().join(format!(
+            "sdkwork-webserver-bootstrap-drive-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+        let app = app_with_certificate(certificate_fixture(
+            "example.com",
+            vec!["im.example.com".to_owned()],
+        ));
+
+        // Without a Drive source the production-like policy still refuses to
+        // start on missing material.
+        assert!(
+            ensure_import_bootstrap_certificates_with_policy(&app, &temp, true, false).is_err()
+        );
+
+        // With the Drive source configured, the bootstrap check leaves the
+        // material absent instead of inventing a self-signed placeholder; the
+        // data plane either serves the covering Drive bundle or fails the
+        // handshake closed.
+        ensure_import_bootstrap_certificates_with_policy(&app, &temp, true, true)
+            .expect("Drive source tolerates absent local material");
+        assert!(!temp.join("certs/example.com/fullchain.pem").exists());
+        assert!(!temp.join("certs/example.com/privkey.pem").exists());
         let _ = std::fs::remove_dir_all(&temp);
     }
 }

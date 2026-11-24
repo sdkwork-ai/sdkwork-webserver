@@ -194,6 +194,26 @@ impl CertificateSourceIndex {
         self.regex_covering(server_name, None)
     }
 
+    /// Whether a *declared* server name has a usable certificate here.
+    ///
+    /// Unlike [`Self::select_usable`], `server_name` may itself be a wildcard
+    /// pattern (`*.suffix`). That form is a certificate declaration, not an SNI
+    /// lookup, so it is answered by the wildcard table rather than the exact
+    /// table. This is what lets the load path ask "would this source cover the
+    /// names the unusable local file declared?" without inventing a concrete
+    /// host.
+    pub(crate) fn covers_declared_name_at(&self, server_name: &str, now_unix_seconds: i64) -> bool {
+        let Some(normalized) = normalize_tls_server_name(server_name) else {
+            return false;
+        };
+        if let Some(suffix) = normalized.strip_prefix("*.") {
+            return self.wildcards.iter().any(|(existing, certificate)| {
+                existing == suffix && certificate.is_usable_at(now_unix_seconds)
+            });
+        }
+        self.select_usable(&normalized, now_unix_seconds).is_some()
+    }
+
     /// The first authored regex matching `server_name` (nginx server-name
     /// regex order), optionally restricted to certificates inside their
     /// validity window.

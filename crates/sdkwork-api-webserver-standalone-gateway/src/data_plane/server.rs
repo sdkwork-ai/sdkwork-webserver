@@ -805,6 +805,13 @@ where
 {
     let initial = runtime.current();
     let usage_meter = build_usage_meter(initial.app.config());
+    // The Drive certificate source only matters to a listener that terminates
+    // TLS. Avoid scanning and polling the Drive root in an HTTP-only or
+    // management-only data plane.
+    let has_tls_listener = initial
+        .app
+        .listeners()
+        .any(|listener| listener.tls_policy_ref.is_some() || listener.tls_runtime.is_some());
     if let Some(tls_runtime) = tls_runtime.as_ref() {
         let matching_listeners = initial
             .app
@@ -880,10 +887,13 @@ where
     // The Drive certificate source refreshes independently of any listener
     // configuration: its index is a live handle every resolver reads, so a
     // Drive rotation applies to the next handshake without a generation rebuild.
-    let (drive_shutdown_tx, drive_refresh) = match super::drive_certificates::spawn_shared_refresh()
-    {
-        Some((stop_tx, handle)) => (Some(stop_tx), Some(handle)),
-        None => (None, None),
+    let (drive_shutdown_tx, drive_refresh) = if has_tls_listener {
+        match super::drive_certificates::spawn_shared_refresh() {
+            Some((stop_tx, handle)) => (Some(stop_tx), Some(handle)),
+            None => (None, None),
+        }
+    } else {
+        (None, None)
     };
 
     // Process-fixed operations listener (loopback health/metrics/tunnel
@@ -1116,6 +1126,7 @@ async fn prepare_listener(
                             // underneath, so an unusable file degrades that
                             // server name instead of failing the listener.
                             true,
+                            None,
                         )?
                         .ok_or(DataPlaneError::MissingTlsPolicy {
                             listener_id: listener.id.clone(),

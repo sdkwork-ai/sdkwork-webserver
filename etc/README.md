@@ -274,9 +274,12 @@ degrades that name to the assigned set instead of failing the listener. `policy-
 implied when only one source is declared. Changing a configured certificate file's content is a
 restart-only change; assigned certificates rotate without a restart.
 
-`SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT` adds the SDKWork Drive certificate authority as the
-highest-priority SNI source. The root is the host-shared directory the Drive control plane publishes
-into; it holds one directory per bundle:
+`SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT` selects the root of the SDKWork Drive certificate
+authority, which is the highest-priority SNI source. It is enabled automatically when that variable is
+set **or** the canonical host-shared mount `/opt/deploy/drive` exists (the root then defaults to
+`/opt/deploy/drive/certificates`). The same core resolution is used by the data plane and the
+certificate distributor, so the two processes cannot disagree about the root. The root holds one
+directory per bundle:
 
 ```text
 <root>/<bundle-id>/fullchain.pem
@@ -289,8 +292,14 @@ declares and a directory name has no resolution meaning. A usable Drive bundle w
 a configured file and before an assigned certificate; a Drive bundle outside its validity window
 yields to a usable lower source and is served only when nothing else covers the name.
 
-- `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED` explicitly disables (`0`/`false`/`no`/`off`) or
-  requires the source. An unset root leaves the source off.
+If a configured certificate file (for example an imported nginx `ssl_certificate`) is unreadable,
+malformed or expired, it is dropped instead of failing the listener **when a usable Drive bundle
+covers every server name that file declared**. Drive then serves those names; if Drive does not cover
+all of them the original error is returned and the listener still fails closed. This is what makes
+"prefer Drive" true at load time, not only at handshake time.
+
+- `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED` explicitly disables (`0`/`false`/`no`/`off`) the
+  source in both the data plane and the certificate worker. An explicit root also enables it.
 - `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_CACHE_ROOT` is the disk cache. It defaults to
   `SDKWORK_WEBSERVER_TLS_MATERIAL_ROOT`'s sibling `drive-certificate-cache` (or
   `<root>/.sdkwork-certificate-cache` when the material root is unset) and must live on durable
@@ -302,10 +311,13 @@ yields to a usable lower source and is served only when nothing else covers the 
 The source keeps three cache levels: an atomically swapped in-memory SNI index, the parsed bundle for
 each unchanged file pair, and the disk cache above. A refresh parses only bundles whose two files
 changed, keeps the previous parsed bundle when a rotation is malformed, drops names removed from the
-root, and publishes source `drive` in the served-certificate report. The control-plane certificate
-distributor mirrors each assigned bundle into this root and removes a superseded bundle immediately,
-so a renewal cannot keep an older bundle authoritative behind a retention grace period; if the mirror
-write fails, distribution keeps the local material authoritative and logs the failure.
+root, and publishes source `drive` in the served-certificate report. The disk cache is restored only
+when the Drive root is unavailable; a readable but empty root clears the index, and a successful scan
+removes every cache entry the root no longer references, so a withdrawn certificate cannot reappear
+after a mount failure. The control-plane certificate distributor mirrors each assigned bundle into
+this root and removes a superseded bundle immediately, so a renewal cannot keep an older bundle
+authoritative behind a retention grace period; if the mirror write fails, distribution keeps the
+local material authoritative and logs the failure.
 
 `data-plane/website-provider-events.development.json.example` is the provider-event ingress
 instance selected by `SDKWORK_WEBSERVER_WEBSITE_PROVIDER_EVENT_CONFIG_FILE` and validated by

@@ -35,7 +35,9 @@
 //!   written atomically and with owner-only permissions. The cache is the
 //!   last-known-good source when the Drive root is unmounted or temporarily
 //!   unreadable, and it lets a restarted process serve before the Drive mount
-//!   is available.
+//!   is available. An authoritative empty root does not restore the cache:
+//!   entries the authority no longer references are pruned on every successful
+//!   scan, so a withdrawn certificate cannot reappear after a mount failure.
 //!
 //! # Refresh
 //!
@@ -101,9 +103,6 @@ const CERTIFICATE_FILE_NAME: &str = "fullchain.pem";
 const PRIVATE_KEY_FILE_NAME: &str = "privkey.pem";
 const CACHE_METADATA_FILE_NAME: &str = "drive-bundle.json";
 const CACHE_SCHEMA_VERSION: u32 = 1;
-/// Unreferenced cache directories younger than this are kept: a Drive mount
-/// that is briefly unavailable must not cost the last-known-good bundles.
-const STALE_CACHE_GRACE: Duration = Duration::from_secs(3_600);
 
 /// Why the Drive certificate source could not be used.
 #[derive(Debug, thiserror::Error)]
@@ -130,23 +129,50 @@ pub(crate) struct DriveCertificateConfig {
 impl DriveCertificateConfig {
     /// Resolves the source from the process environment.
     ///
-    /// Returns `Ok(None)` when the deployment does not configure a Drive
-    /// certificate root, which leaves the data plane's existing certificate
-    /// sources unchanged.
+    /// An explicit `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT` wins. Without
+    /// one, the canonical shared Drive mount (`/opt/deploy/drive/certificates`)
+    /// is used when it exists, so a standard SDKWork deployment prefers the
+    /// Drive authority without repeating the path in two processes.
+    /// `SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED=false` disables the source.
+    ///
+    /// Returns `Ok(None)` when neither an explicit root nor the canonical mount
+    /// is available, which leaves the data plane's existing certificate sources
+    /// unchanged.
     pub(crate) fn from_env() -> Result<Option<Self>, DriveCertificateError> {
-        Self::from_lookup(|key| std::env::var(key).ok())
+        let enabled = std::env::var(DRIVE_CERTIFICATE_ENABLED_ENV).ok();
+        if enabled.as_deref().is_some_and(is_disabled_value) {
+            return Ok(None);
+        }
+        let configured_root = std::env::var(DRIVE_CERTIFICATE_ROOT_ENV)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        let root = match configured_root {
+            Some(value) => {
+                validate_path_value(DRIVE_CERTIFICATE_ROOT_ENV, &value)?;
+                PathBuf::from(value)
+            }
+            None => {
+                match sdkwork_webserver_core::drive_certificates::resolve_drive_certificate_root() {
+                    Some(path) => path,
+                    None if enabled.is_some() => {
+                        return Err(DriveCertificateError::Config(format!(
+                            "{DRIVE_CERTIFICATE_ROOT_ENV} is required when {DRIVE_CERTIFICATE_ENABLED_ENV} is set and the canonical Drive mount is absent"
+                        )));
+                    }
+                    None => return Ok(None),
+                }
+            }
+        };
+        Self::from_root(root, |key| std::env::var(key).ok()).map(Some)
     }
 
+    #[cfg(test)]
     fn from_lookup(
         mut lookup: impl FnMut(&str) -> Option<String>,
     ) -> Result<Option<Self>, DriveCertificateError> {
         let enabled = lookup(DRIVE_CERTIFICATE_ENABLED_ENV);
-        if enabled.as_deref().is_some_and(|value| {
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "no" | "off"
-            )
-        }) {
+        if enabled.as_deref().is_some_and(is_disabled_value) {
             return Ok(None);
         }
         let Some(root) = lookup(DRIVE_CERTIFICATE_ROOT_ENV)
@@ -161,7 +187,13 @@ impl DriveCertificateConfig {
             return Ok(None);
         };
         validate_path_value(DRIVE_CERTIFICATE_ROOT_ENV, &root)?;
-        let root = PathBuf::from(root);
+        Self::from_root(PathBuf::from(root), lookup).map(Some)
+    }
+
+    fn from_root(
+        root: PathBuf,
+        mut lookup: impl FnMut(&str) -> Option<String>,
+    ) -> Result<Self, DriveCertificateError> {
         let cache_root = match lookup(DRIVE_CERTIFICATE_CACHE_ROOT_ENV)
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
@@ -199,26 +231,25 @@ impl DriveCertificateConfig {
             MAX_MAX_BUNDLES,
             DRIVE_CERTIFICATE_MAX_BUNDLES_ENV,
         )?;
-        Ok(Some(Self {
+        Ok(Self {
             root,
             cache_root,
             refresh_interval: Duration::from_secs(refresh_interval),
             max_bundles,
-        }))
+        })
     }
 }
 
+fn is_disabled_value(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "0" | "false" | "no" | "off"
+    )
+}
+
 fn validate_path_value(key: &str, value: &str) -> Result<(), DriveCertificateError> {
-    if value.len() > 4_096
-        || value
-            .bytes()
-            .any(|byte| byte == 0 || byte.is_ascii_control())
-    {
-        return Err(DriveCertificateError::Config(format!(
-            "{key} must contain 1..4096 safe path bytes"
-        )));
-    }
-    Ok(())
+    sdkwork_webserver_core::drive_certificates::validate_drive_certificate_path(key, value)
+        .map_err(DriveCertificateError::Config)
 }
 
 fn parse_bounded_seconds(
@@ -274,7 +305,7 @@ struct CachedBundle {
     private_key_stat: BundleFileStat,
     /// Newest modification time of the two files, used to let a freshly
     /// published bundle outrank an older one that still claims the same name
-    /// during its retention grace period.
+    /// during the publication window before the superseded bundle is pruned.
     newest_modified: Option<SystemTime>,
     fingerprint_sha256: String,
     server_names: Vec<String>,
@@ -344,6 +375,12 @@ impl DriveCertificateStore {
     /// tried next, and an empty source simply leaves the configured and
     /// assigned certificate layers in charge. A later refresh picks the Drive
     /// root up as soon as it appears.
+    ///
+    /// An *authoritative empty* root is different from an unavailable one: a
+    /// readable root with no bundles clears the index rather than restoring the
+    /// cache. Serving a stale certificate after the Drive authority removed it
+    /// would violate the file/data consistency contract; the cache is only the
+    /// last-known-good fallback for a root this process cannot read.
     pub(crate) fn load(config: DriveCertificateConfig) -> Result<Arc<Self>, DriveCertificateError> {
         install_crypto_provider()
             .map_err(|error| DriveCertificateError::Config(error.to_string()))?;
@@ -356,32 +393,19 @@ impl DriveCertificateStore {
             refresh_notify: Notify::new(),
         });
         match store.refresh() {
-            Ok(summary) if summary.bundles > 0 => {
-                info!(
-                    root = %store.config.root.display(),
-                    bundles = summary.bundles,
-                    revision = summary.revision,
-                    "Drive certificate source loaded"
-                );
-            }
             Ok(summary) => {
-                // An empty root is normal on a fresh deployment, but it is also
-                // what a temporarily unmounted Drive share looks like. Prefer
-                // the last-known-good cache over going dark.
-                info!(
-                    root = %store.config.root.display(),
-                    revision = summary.revision,
-                    "Drive certificate root contains no bundles; restoring the disk cache"
-                );
-                match store.restore_from_cache() {
-                    Ok(0) => warn!(
+                if summary.bundles > 0 {
+                    info!(
                         root = %store.config.root.display(),
-                        "Drive certificate source starts empty until the shared root publishes a bundle"
-                    ),
-                    Ok(count) => info!(bundles = count, "Drive certificate disk cache restored"),
-                    Err(error) => {
-                        warn!(error = %error, "Drive certificate disk cache could not be restored")
-                    }
+                        bundles = summary.bundles,
+                        revision = summary.revision,
+                        "Drive certificate source loaded"
+                    );
+                } else {
+                    info!(
+                        root = %store.config.root.display(),
+                        "Drive certificate root is empty; the Drive source serves no names until a bundle is published"
+                    );
                 }
             }
             Err(error) => {
@@ -433,6 +457,27 @@ impl DriveCertificateStore {
     /// The Drive certificate covering `server_name`, ignoring validity.
     pub(crate) fn select_any(&self, server_name: &str) -> Option<Arc<ResolvableCertificate>> {
         self.index.load().select_any(server_name).cloned()
+    }
+
+    /// Whether every declared server name has a usable Drive certificate.
+    ///
+    /// The load path uses this to decide whether an unusable local certificate
+    /// file can be dropped: Drive can take over exactly the names the local file
+    /// declared. A wildcard declaration (`*.suffix`) is answered by the Drive
+    /// wildcard table, and an expired Drive bundle does not count — the fallback
+    /// never prefers an unusable Drive certificate over failing closed.
+    pub(crate) fn covers_all_declared_names_at(
+        &self,
+        server_names: &[String],
+        now_unix_seconds: i64,
+    ) -> bool {
+        if server_names.is_empty() {
+            return false;
+        }
+        let index = self.index.load();
+        server_names
+            .iter()
+            .all(|name| index.covers_declared_name_at(name, now_unix_seconds))
     }
 
     /// Re-scans the Drive root and swaps the L1 index when the fingerprint set
@@ -776,9 +821,6 @@ impl DriveCertificateStore {
             Ok(entries) => entries,
             Err(_) => return,
         };
-        let deadline = SystemTime::now()
-            .checked_sub(STALE_CACHE_GRACE)
-            .unwrap_or(SystemTime::UNIX_EPOCH);
         for entry in entries.flatten() {
             let name = entry.file_name();
             let Some(bundle_id) = name.to_str() else {
@@ -792,15 +834,6 @@ impl DriveCertificateStore {
                 continue;
             };
             if !file_type.is_dir() || file_type.is_symlink() {
-                continue;
-            }
-            let Ok(metadata) = entry.metadata() else {
-                continue;
-            };
-            let Ok(modified) = metadata.modified() else {
-                continue;
-            };
-            if modified > deadline {
                 continue;
             }
             if fs::remove_dir_all(&path).is_ok() {
@@ -1059,31 +1092,71 @@ fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// the configuration is unusable), which leaves the existing certificate
 /// sources unchanged.
 pub(crate) fn shared() -> Option<Arc<DriveCertificateStore>> {
-    static SHARED: OnceLock<Option<Arc<DriveCertificateStore>>> = OnceLock::new();
-    SHARED
-        .get_or_init(|| match DriveCertificateConfig::from_env() {
-            Ok(Some(config)) => match DriveCertificateStore::load(config) {
-                Ok(store) => Some(store),
-                Err(error) => {
-                    warn!(error = %error, "Drive certificate source is unavailable; the configured and assigned sources stay authoritative");
-                    None
-                }
-            },
-            Ok(None) => None,
-            Err(error) => {
-                warn!(error = %error, "Drive certificate configuration is invalid; the configured and assigned sources stay authoritative");
-                None
+    static SHARED: OnceLock<Mutex<Option<Arc<DriveCertificateStore>>>> = OnceLock::new();
+    let slot = SHARED.get_or_init(|| Mutex::new(None));
+    if let Some(store) = lock_unpoisoned(slot).as_ref() {
+        return Some(Arc::clone(store));
+    }
+    // Resolve outside the lock: a scan can take a moment and another generation
+    // build or the refresh supervisor may initialize concurrently.
+    let config = match DriveCertificateConfig::from_env() {
+        Ok(Some(config)) => config,
+        Ok(None) => return None,
+        Err(error) => {
+            warn!(error = %error, "Drive certificate configuration is invalid; the configured and assigned sources stay authoritative");
+            return None;
+        }
+    };
+    match DriveCertificateStore::load(config) {
+        Ok(store) => {
+            let mut guard = lock_unpoisoned(slot);
+            if let Some(existing) = guard.as_ref() {
+                return Some(Arc::clone(existing));
             }
-        })
-        .clone()
+            *guard = Some(Arc::clone(&store));
+            Some(store)
+        }
+        Err(error) => {
+            warn!(error = %error, "Drive certificate source is unavailable; the configured and assigned sources stay authoritative");
+            None
+        }
+    }
 }
 
-/// Spawns the process-wide refresh loop. Returns `None` when the source is not
-/// configured.
+/// Spawns the process-wide refresh supervisor. Returns `None` when the source is
+/// explicitly disabled.
+///
+/// The supervisor also covers a mount or a bundle that appears after startup: it
+/// keeps checking [`shared`] until the Drive root becomes available, then runs
+/// the store's refresh loop. Server startup order is not a certificate
+/// dependency.
 pub(crate) fn spawn_shared_refresh() -> Option<(watch::Sender<bool>, JoinHandle<()>)> {
-    let store = shared()?;
+    if sdkwork_webserver_core::drive_certificates::drive_certificate_source_disabled() {
+        return None;
+    }
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
-    let handle = store.spawn_refresh(shutdown_rx);
+    let handle = tokio::spawn(async move {
+        let mut shutdown = shutdown_rx;
+        let mut ticker = tokio::time::interval(Duration::from_secs(30));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        // Consume the immediate first tick; the initial call below is immediate.
+        ticker.tick().await;
+        let store = loop {
+            if let Some(store) = shared() {
+                break store;
+            }
+            tokio::select! {
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        return;
+                    }
+                }
+                _ = ticker.tick() => {}
+            }
+        };
+        let refresher = store.spawn_refresh(shutdown);
+        let _ = refresher.await;
+    });
     Some((shutdown_tx, handle))
 }
 
@@ -1118,8 +1191,14 @@ mod tests {
     }
 
     fn store(directory: &Path) -> Arc<DriveCertificateStore> {
+        load_store(directory, true)
+    }
+
+    fn load_store(directory: &Path, create_root: bool) -> Arc<DriveCertificateStore> {
         let config = test_config(directory);
-        fs::create_dir_all(&config.root).expect("create Drive root");
+        if create_root {
+            fs::create_dir_all(&config.root).expect("create Drive root");
+        }
         DriveCertificateStore::load(config).expect("load Drive certificate store")
     }
 
@@ -1258,6 +1337,37 @@ mod tests {
     }
 
     #[test]
+    fn drive_coverage_matches_declared_exact_and_wildcard_names() {
+        let directory = TempDir::new().expect("tempdir");
+        let root = directory.path().join("drive");
+        fs::create_dir_all(&root).expect("create root");
+        write_bundle(&root, "site", &["site.example.test", "*.wild.test"]);
+        let store = store(directory.path());
+
+        assert!(store.covers_all_declared_names_at(&["site.example.test".to_owned()], NOW));
+        assert!(store.covers_all_declared_names_at(&["*.wild.test".to_owned()], NOW));
+        assert!(!store.covers_all_declared_names_at(
+            &["site.example.test".to_owned(), "other.test".to_owned()],
+            NOW
+        ));
+        assert!(!store.covers_all_declared_names_at(&[], NOW));
+    }
+
+    #[test]
+    fn an_expired_drive_bundle_does_not_authorize_dropping_local_material() {
+        let directory = TempDir::new().expect("tempdir");
+        let root = directory.path().join("drive");
+        fs::create_dir_all(&root).expect("create root");
+        write_bundle_with_validity(&root, "old", &["site.example.test"], 2000, 2001);
+        let store = store(directory.path());
+
+        assert!(
+            !store.covers_all_declared_names_at(&["site.example.test".to_owned()], NOW),
+            "an expired Drive bundle must not hide an unusable local certificate"
+        );
+    }
+
+    #[test]
     fn the_newer_validity_window_wins_a_duplicate_server_name() {
         let directory = TempDir::new().expect("tempdir");
         let root = directory.path().join("drive");
@@ -1325,6 +1435,24 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_drive_root_clears_the_index_instead_of_serving_the_stale_cache() {
+        let directory = TempDir::new().expect("tempdir");
+        let root = directory.path().join("drive");
+        fs::create_dir_all(&root).expect("create root");
+        write_bundle(&root, "site", &["site.example.test"]);
+        assert!(store(directory.path())
+            .select_usable("site.example.test", NOW)
+            .is_some());
+
+        // The authority removed the bundle but the mount is still readable: the
+        // next load must not resurrect the disk-cache copy.
+        fs::remove_dir_all(root.join("site")).expect("remove bundle");
+        let cleared = store(directory.path());
+        assert!(cleared.select_usable("site.example.test", NOW).is_none());
+        assert_eq!(cleared.bundle_count(), 0);
+    }
+
+    #[test]
     fn disk_cache_restores_bundles_when_the_drive_root_disappears() {
         let directory = TempDir::new().expect("tempdir");
         let root = directory.path().join("drive");
@@ -1333,7 +1461,7 @@ mod tests {
         drop(store(directory.path()));
 
         fs::remove_dir_all(&root).expect("unmount the Drive root");
-        let restored = store(directory.path());
+        let restored = load_store(directory.path(), false);
 
         assert_eq!(restored.bundle_count(), 1);
         assert_eq!(

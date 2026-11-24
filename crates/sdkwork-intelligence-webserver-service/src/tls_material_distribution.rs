@@ -102,31 +102,22 @@ impl TlsMaterialDistributionConfig {
                 .unwrap_or_else(|_| "h2,http/1.1".to_string())
                 .as_str(),
         )?;
-        let drive_disabled = std::env::var("SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ENABLED")
-            .ok()
-            .is_some_and(|value| {
-                matches!(
-                    value.trim().to_ascii_lowercase().as_str(),
-                    "0" | "false" | "no" | "off"
-                )
-            });
-        let drive_certificate_root = match std::env::var("SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT")
-        {
-            Ok(value) if !drive_disabled && !value.trim().is_empty() => {
-                let value = value.trim();
-                if value.len() > 4_096
-                    || value
-                        .bytes()
-                        .any(|byte| byte == 0 || byte.is_ascii_control())
-                {
-                    return Err(WebServiceError::validation(
-                        "SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT must contain 1..4096 safe path bytes",
-                    ));
+        // The distributor and the data plane resolve the Drive root through the
+        // same core helper, so an explicit root, the canonical shared mount, and
+        // the explicit disable can never disagree between the two processes.
+        let drive_certificate_root =
+            match sdkwork_webserver_core::drive_certificates::resolve_drive_certificate_root() {
+                Some(path) => {
+                    let value = path.to_string_lossy();
+                    sdkwork_webserver_core::drive_certificates::validate_drive_certificate_path(
+                        "SDKWORK_WEBSERVER_DRIVE_CERTIFICATE_ROOT",
+                        &value,
+                    )
+                    .map_err(WebServiceError::validation)?;
+                    Some(path)
                 }
-                Some(PathBuf::from(value))
-            }
-            _ => None,
-        };
+                None => None,
+            };
         Ok(Self {
             material_root,
             snapshot_file,

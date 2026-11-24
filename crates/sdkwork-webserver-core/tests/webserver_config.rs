@@ -1995,6 +1995,90 @@ fn compilation_rejects_missing_tls_files() {
         .any(|diagnostic| diagnostic.path.contains("certificateFile")));
 }
 
+/// The Drive certificate authority is the preferred TLS source. When it is
+/// configured, a typed (JSON/TOML) absolute certificate path that does not exist
+/// compiles: the data plane decides at load time whether a usable Drive bundle
+/// covers every declared name, and fails the handshake closed otherwise.
+#[test]
+fn compilation_tolerates_missing_absolute_tls_files_when_drive_is_configured() {
+    let _guard = sdkwork_webserver_core::runtime_env::env_test_lock();
+    struct DriveEnv {
+        root: Option<std::ffi::OsString>,
+        enabled: Option<std::ffi::OsString>,
+    }
+    impl Drop for DriveEnv {
+        fn drop(&mut self) {
+            match self.root.take() {
+                Some(value) => std::env::set_var(
+                    sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ROOT_ENV,
+                    value,
+                ),
+                None => std::env::remove_var(
+                    sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ROOT_ENV,
+                ),
+            }
+            match self.enabled.take() {
+                Some(value) => std::env::set_var(
+                    sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ENABLED_ENV,
+                    value,
+                ),
+                None => std::env::remove_var(
+                    sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ENABLED_ENV,
+                ),
+            }
+        }
+    }
+
+    let directory = TempDir::new().expect("create temp directory");
+    let mut config = base_config();
+    config["listeners"][0]["protocols"] = json!(["http1", "http2"]);
+    config["listeners"][0]["tlsPolicyRef"] = json!("public-tls");
+    config["certificates"] = json!([{
+        "id": "public-cert",
+        "serverNames": ["example.com", "*.example.net"],
+        "source": {
+            "type": "protected-file",
+            "certificateFile": directory.path().join("missing-cert.pem").display().to_string(),
+            "privateKeyFile": directory.path().join("missing-key.pem").display().to_string()
+        }
+    }]);
+    config["tlsPolicies"] = json!([{
+        "id": "public-tls",
+        "certificateRef": "public-cert",
+        "minimumVersion": "tls1.2",
+        "maximumVersion": "tls1.3",
+        "alpn": ["h2", "http/1.1"]
+    }]);
+    let path = write_config(directory.path(), &config);
+
+    let previous_root =
+        std::env::var_os(sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ROOT_ENV);
+    let previous_enabled =
+        std::env::var_os(sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ENABLED_ENV);
+    let _env = DriveEnv {
+        root: previous_root,
+        enabled: previous_enabled,
+    };
+    std::env::remove_var(sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ROOT_ENV);
+    std::env::set_var(
+        sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ENABLED_ENV,
+        "false",
+    );
+    assert!(
+        load_and_compile_webserver_config(&path).is_err(),
+        "without Drive, missing absolute TLS files still fail the compile"
+    );
+
+    std::env::remove_var(sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ENABLED_ENV);
+    std::env::set_var(
+        sdkwork_webserver_core::drive_certificates::DRIVE_CERTIFICATE_ROOT_ENV,
+        directory.path().join("drive"),
+    );
+    let compiled = load_and_compile_webserver_config(&path)
+        .expect("a configured Drive source tolerates missing absolute TLS files");
+    assert_eq!(compiled.config().certificates.len(), 1);
+}
+
 #[test]
 fn multiple_certificate_tls_policy_covers_all_listener_hosts() {
     let directory = TempDir::new().expect("create temp directory");
