@@ -171,9 +171,73 @@ lets_encrypt_certs_root() {
 
 certificate_covers() {
   # certificate_covers <cert> <name>: true when the certificate's SAN list
-  # contains DNS:<name> exactly (fixed-string match).
-  openssl x509 -in "$1" -noout -ext subjectAltName 2>/dev/null \
-    | tr -d ' ' | tr ',' '\n' | grep -Fqx "DNS:${2}"
+  # contains DNS:<name> exactly, or a leftmost-label wildcard DNS:*.<parent>
+  # covering it — the same semantics the gateway's TLS resolver applies.
+  local sans parent
+  sans="$(openssl x509 -in "$1" -noout -ext subjectAltName 2>/dev/null | tr -d ' ' | tr ',' '\n')"
+  [ -n "${sans}" ] || return 1
+  printf '%s\n' "${sans}" | grep -Fqx "DNS:${2}" && return 0
+  parent="${2#*.}"
+  [ "${parent}" != "${2}" ] || return 1
+  printf '%s\n' "${sans}" | grep -Fqx "DNS:*.${parent}"
+}
+
+# Windows Schannel refuses TLS handshake messages above its 32 KiB client
+# limit (MessageLimitClient 0x8000) with SEC_E_ILLEGAL_MESSAGE (0x80090326).
+# Keep the bootstrap certificate well below it: RSA-2048 leaf + SAN list.
+BOOTSTRAP_CERT_DER_BUDGET=24576
+# Distinct parent-label wildcards kept in one bootstrap certificate; every
+# entry beyond it is reported instead of silently widening the certificate.
+BOOTSTRAP_SAN_PARENT_BUDGET=100
+
+bootstrap_san_list() {
+  # bootstrap_san_list <domain> [extra_names]: the subjectAltName value of a
+  # self-signed bootstrap certificate.
+  #
+  # Every aggregated server_name the apex wildcard cannot cover is covered
+  # through the wildcard of its own parent label instead of as an explicit
+  # entry (`edge.aiot.sdkwork.com` -> `*.aiot.sdkwork.com`,
+  # `account.86offer.cn` -> `*.86offer.cn`); two-label apexes of other
+  # families stay explicit. Coverage is identical, but the list scales with
+  # distinct parent labels rather than with hosts: one explicit entry per
+  # aggregated host grew the sdkwork.com bootstrap certificate to 1,578
+  # SANs / 34 KiB, past the Schannel limit, so every Windows-native client
+  # (.NET, PowerShell, curl.exe) failed the TLS handshake against the whole
+  # *.sdkwork.com brand family while OpenSSL clients connected fine.
+  local domain="$1" extra_names="${2:-}" name parent
+  local san="DNS:${domain},DNS:*.${domain}"
+  local seen=" ${domain} " parents=0 dropped=0
+  [ -n "${extra_names}" ] || { printf '%s' "${san}"; return 0; }
+  local IFS=','
+  for name in ${extra_names}; do
+    [ -n "${name}" ] || continue
+    parent="${name#*.}"
+    if [ "${parent}" = "${name}" ]; then
+      continue
+    fi
+    case "${parent}" in
+      *.*)
+        case "${seen}" in *" ${parent} "*) continue ;; esac
+        if [ "${parents}" -ge "${BOOTSTRAP_SAN_PARENT_BUDGET}" ]; then
+          dropped=$((dropped + 1))
+          continue
+        fi
+        parents=$((parents + 1))
+        seen="${seen}${parent} "
+        san="${san},DNS:*.${parent}"
+        ;;
+      *)
+        # Two-label apex of another family: a wildcard would be a public
+        # suffix, so the name itself is listed.
+        case "${san}" in *"DNS:${name}"*) continue ;; esac
+        san="${san},DNS:${name}"
+        ;;
+    esac
+  done
+  if [ "${dropped}" -gt 0 ]; then
+    log "warning: bootstrap certificate for ${domain} keeps ${BOOTSTRAP_SAN_PARENT_BUDGET} parent-label wildcards; ${dropped} further parent labels are not covered by the bootstrap material"
+  fi
+  printf '%s' "${san}"
 }
 
 ensure_domain_certificate() {
@@ -182,24 +246,17 @@ ensure_domain_certificate() {
   local directory="${SDKWORK_CERTS_DIR:-/etc/sdkwork/certs}/${domain}"
   local cert="${directory}/cert.pem"
   local key="${directory}/key.pem"
-  local refresh_le=0
+  local refresh_le=0 der_bytes
   # Imported sidecars store certificates under the apex-domain directory
   # (letsencrypt/sdkwork.com/) while declaring subdomain server_name entries
   # (server.sdkwork.com, edge.aiot.sdkwork.com, ...). Bootstrap certificates
   # must therefore carry the apex, a single-label wildcard, and every
-  # aggregated server name; a leaf missing any of them fails the gateway's
+  # aggregated server name (through parent-label wildcards, see
+  # bootstrap_san_list); a leaf missing any of them fails the gateway's
   # SAN validation. Operator/ACME certificates are not self-signed and are
   # kept untouched.
-  local san="DNS:${domain},DNS:*.${domain}" name
-  if [ -n "${extra_names}" ]; then
-    local IFS=','
-    for name in ${extra_names}; do
-      case "${name}" in
-        "${domain}"|"*.${domain}") continue ;;
-      esac
-      san="${san},DNS:${name}"
-    done
-  fi
+  local san
+  san="$(bootstrap_san_list "${domain}" "${extra_names}")"
   if [ -s "${cert}" ] && [ -s "${key}" ]; then
     if [ "$(openssl x509 -in "${cert}" -noout -issuer 2>/dev/null)" = "$(openssl x509 -in "${cert}" -noout -subject 2>/dev/null)" ]; then
       local needs_regen=0
@@ -212,6 +269,16 @@ ensure_domain_certificate() {
           esac
           certificate_covers "${cert}" "${name}" || { needs_regen=1; break; }
         done
+      fi
+      if [ "${needs_regen}" = "0" ]; then
+        # A self-signed leaf above the handshake budget is regenerated even
+        # when its SAN coverage is complete: older bootstrap material listed
+        # every aggregated host explicitly and grew past the Schannel limit.
+        der_bytes="$(openssl x509 -in "${cert}" -outform DER 2>/dev/null | wc -c | tr -d ' ')"
+        if [ -n "${der_bytes}" ] && [ "${der_bytes}" -gt "${BOOTSTRAP_CERT_DER_BUDGET}" ]; then
+          log "regenerating self-signed bootstrap certificate for ${domain}: ${der_bytes} bytes exceeds the ${BOOTSTRAP_CERT_DER_BUDGET}-byte handshake budget"
+          needs_regen=1
+        fi
       fi
       if [ "${needs_regen}" = "1" ]; then
         log "regenerating self-signed bootstrap certificate for ${domain}: SAN coverage incomplete"
