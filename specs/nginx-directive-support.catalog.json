@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "kind": "sdkwork.webserver.nginx-directive-support.catalog",
   "profile": "http-core-v1",
-  "profileVersion": 1,
-  "evidenceRevision": "2026-10-29",
+  "profileVersion": 2,
+  "evidenceRevision": "2026-11-24",
   "authority": [
     "docs/product/prd/PRD-nginx-compatibility.md",
     "../sdkwork-specs/NGINX_SPEC.md",
@@ -78,10 +78,6 @@
         "consequence": "proxy responses are always streamed; buffering cannot be enabled by this key"
       },
       {
-        "key": "proxyConnectTimeout",
-        "consequence": "upstream connect timeouts follow the resolved upstream policy, not this location key"
-      },
-      {
         "key": "proxyHideHeader",
         "consequence": "upstream response headers are filtered by the runtime hop-by-hop policy, not this key"
       },
@@ -98,16 +94,8 @@
         "consequence": "retry eligibility follows the runtime bounded retry policy, not this key"
       },
       {
-        "key": "proxyReadTimeout",
-        "consequence": "upstream response timeouts follow the resolved upstream policy, not this location key"
-      },
-      {
         "key": "proxyRequestBuffering",
         "consequence": "request bodies are streamed to the upstream, never buffered by this key"
-      },
-      {
-        "key": "proxySendTimeout",
-        "consequence": "upstream request timeouts follow the resolved upstream policy, not this location key"
       },
       {
         "key": "proxyWebsocketUpgrade",
@@ -238,11 +226,6 @@
         "consequence": "proxy responses are always streamed; buffering cannot be enabled by this key"
       },
       {
-        "key": "proxyConnectTimeout",
-        "reason": "documented unenforced behavior key",
-        "consequence": "upstream connect timeouts follow the resolved upstream policy, not this location key"
-      },
-      {
         "key": "proxyHideHeader",
         "reason": "documented unenforced behavior key",
         "consequence": "upstream response headers are filtered by the runtime hop-by-hop policy, not this key"
@@ -263,19 +246,9 @@
         "consequence": "retry eligibility follows the runtime bounded retry policy, not this key"
       },
       {
-        "key": "proxyReadTimeout",
-        "reason": "documented unenforced behavior key",
-        "consequence": "upstream response timeouts follow the resolved upstream policy, not this location key"
-      },
-      {
         "key": "proxyRequestBuffering",
         "reason": "documented unenforced behavior key",
         "consequence": "request bodies are streamed to the upstream, never buffered by this key"
-      },
-      {
-        "key": "proxySendTimeout",
-        "reason": "documented unenforced behavior key",
-        "consequence": "upstream request timeouts follow the resolved upstream policy, not this location key"
       },
       {
         "key": "proxyWebsocketUpgrade",
@@ -11017,17 +10990,29 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
+      "classification": "executable",
       "risk": "medium",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the configured timeout is ignored; the runtime enforces its own bounded timeout",
+      "runtimeField": "route.proxyTimeouts.connectTimeoutMs (bounded upstream connector policy)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "materializes_proxy_timeouts_with_per_field_inheritance"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/server_toml.rs",
+          "case": "toml_proxy_timeouts_materialize_and_validate_bounds"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_client.rs",
+          "case": "route_connect_timeout_is_materialized_for_its_upstream"
+        }
+      ],
       "importer": {
         "mapped": true,
         "tomlPath": "http.server.location.proxyConnectTimeout",
         "tomlKey": "proxyConnectTimeout",
-        "tomlEnforced": false
-      },
-      "migrationAction": "No enforced typed equivalent: typed TOML key `http.server.location.proxyConnectTimeout` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:proxy_connect_timeout` (specs/nginx-gap.catalog.json)."
+        "tomlEnforced": true
+      }
     },
     {
       "id": "http:proxy_cookie_domain",
@@ -11556,17 +11541,29 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
+      "classification": "executable",
       "risk": "medium",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the configured timeout is ignored; the runtime enforces its own bounded timeout",
+      "runtimeField": "route.proxyTimeouts.readTimeoutMs (response-body idle deadline)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "materializes_proxy_timeouts_with_per_field_inheritance"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/server_toml.rs",
+          "case": "toml_proxy_timeouts_materialize_and_validate_bounds"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_client.rs",
+          "case": "body_idle_timeout_resets_while_a_stream_exceeds_its_idle_budget"
+        }
+      ],
       "importer": {
         "mapped": true,
         "tomlPath": "http.server.location.proxyReadTimeout",
         "tomlKey": "proxyReadTimeout",
-        "tomlEnforced": false
-      },
-      "migrationAction": "No enforced typed equivalent: typed TOML key `http.server.location.proxyReadTimeout` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:proxy_read_timeout` (specs/nginx-gap.catalog.json)."
+        "tomlEnforced": true
+      }
     },
     {
       "id": "http:proxy_redirect",
@@ -11669,17 +11666,29 @@
         "http-location",
         "http-server"
       ],
-      "classification": "accepted-unenforced",
+      "classification": "executable",
       "risk": "medium",
-      "diagnostics": "accepted for nginx compatibility but not enforced by the SDKWork runtime; one diagnostic is emitted per occurrence and the imported value has no effect",
-      "migrationImpact": "the configured timeout is ignored; the runtime enforces its own bounded timeout",
+      "runtimeField": "route.proxyTimeouts.sendTimeoutMs (request-body idle deadline)",
+      "evidence": [
+        {
+          "file": "crates/sdkwork-webserver-core/src/nginx/mapping.rs",
+          "case": "materializes_proxy_timeouts_with_per_field_inheritance"
+        },
+        {
+          "file": "crates/sdkwork-webserver-core/src/config/server_toml.rs",
+          "case": "toml_proxy_timeouts_materialize_and_validate_bounds"
+        },
+        {
+          "file": "crates/sdkwork-api-webserver-standalone-gateway/src/data_plane/upstream_client.rs",
+          "case": "body_idle_timeout_resets_while_a_stream_exceeds_its_idle_budget"
+        }
+      ],
       "importer": {
         "mapped": true,
         "tomlPath": "http.server.location.proxySendTimeout",
         "tomlKey": "proxySendTimeout",
-        "tomlEnforced": false
-      },
-      "migrationAction": "No enforced typed equivalent: typed TOML key `http.server.location.proxySendTimeout` is accepted-but-ignored by the runtime; see the migration risk list, remove the directive, or track capability `http:proxy_send_timeout` (specs/nginx-gap.catalog.json)."
+        "tomlEnforced": true
+      }
     },
     {
       "id": "http:proxy_set_body",
@@ -23152,7 +23161,6 @@
       ],
       "grammar": "1",
       "supportedContexts": [
-        "stream",
         "stream-server"
       ],
       "classification": "accepted-unenforced",

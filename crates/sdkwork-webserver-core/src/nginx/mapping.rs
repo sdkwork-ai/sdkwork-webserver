@@ -587,11 +587,17 @@ pub fn materialize_nginx_app(
                 .push(parse_add_header(directive, &map_variables)?);
         }
     }
+    for directive in &http_directives {
+        if matches!(
+            directive.name.as_str(),
+            "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout"
+        ) {
+            apply_proxy_timeout_directive(&mut mapper.http_proxy_timeouts, directive)?;
+        }
+    }
     for (server_index, directive) in http_directives.iter().enumerate() {
         match directive.name.as_str() {
-            "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {
-                apply_proxy_timeout_directive(&mut mapper.http_proxy_timeouts, directive)?;
-            }
+            "proxy_connect_timeout" | "proxy_read_timeout" | "proxy_send_timeout" => {}
             "upstream" => mapper.materialize_upstream(directive)?,
             "server" => mapper.materialize_server(directive, server_index)?,
             "limit_req_zone" => mapper.materialize_limit_req_zone(directive)?,
@@ -19381,17 +19387,20 @@ server {
 
     #[test]
     fn proxy_timeouts_reject_values_outside_runtime_bounds() {
-        for declaration in [
-            "proxy_connect_timeout 0s;",
-            "proxy_read_timeout 24h1s;",
-            "proxy_send_timeout 1s 2s;",
+        for (declaration, expected) in [
+            ("proxy_connect_timeout 0s;", "1ms..=24h"),
+            ("proxy_read_timeout 25h;", "1ms..=24h"),
+            (
+                "proxy_send_timeout 1s 2s;",
+                "proxy_send_timeout takes exactly one time value",
+            ),
         ] {
             let config = format!(
                 "server {{ listen 8080; server_name timeout.example.test; location / {{ proxy_pass http://127.0.0.1:9001; {declaration} }} }}"
             );
             let error = materialize(&config).expect_err("invalid timeout must fail closed");
             assert!(
-                error.to_string().contains("proxy_"),
+                error.to_string().contains(expected),
                 "unexpected timeout diagnostic: {error}"
             );
         }

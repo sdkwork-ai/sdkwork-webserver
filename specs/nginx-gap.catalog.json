@@ -8,6 +8,7 @@
     "docs/architecture/tech/TECH-runtime-data-plane.md"
   ],
   "notes": [
+    "HTTP proxy timeouts (2026-11-24): proxy_connect_timeout, proxy_read_timeout, and proxy_send_timeout now materialize over http→server→location with 1 ms–24 h bounds. Connect policies select a bounded per-upstream pooled client; read and send timers reset on each successful body frame, so active streams are not limited by a whole-request deadline. Focused Rust parser, TOML materialization, and data-plane body-progress tests cover the behavior. Catalog: 400 executable / 170 accepted-unenforced / 169 fail-closed / 5 excluded.",
     "Listener handoff (Wave 15, 2026-11-05): nginx SIGHUP equivalence — a socket-plane supervisor binds added sockets before a generation publishes and drains removed sockets after it, while every connection-plane knob (TLS material, protocol limits, admission capacity, proxy-protocol policy, request timeouts) hot-applies through per-connection generation resolution. Watch reload now covers TOML/nginx sources via a bounded source-tree fingerprint plus SIGHUP. Mail session profiles resolve per generation. The restart-required gate shrank to the socket set plus process-built subsystems (tunnel gateway, usage-metering channel, resource-pressure flag). Differential evidence unaffected (626 real-nginx cases stay green); behavioral evidence: 4 new integration tests + the rewritten flagship reload test.",
     "nginx slice module (Wave 14C, 2026-11-01): `slice` now executes end-to-end with per-slice caching and bounded assembly; differential-http 367 -> 384. Catalog: 397 executable / 173 accepted-unenforced / 169 fail-closed / 5 excluded. Remaining behavior gaps = 34, ALL blocked by pinned dependencies (32: hyper HTTP/1 close-delimited framing, rustls static-only OCSP, rustls/OpenSSL TLS knobs for gRPC/uWSGI/mail) or nginx Plus (degradation/degrade); out-of-profile 5 = Perl 4 + load_module 1 (embedded interpreter / nginx C ABI). No implementable directive remains.",
     "Mail client certificates (Wave 14B, 2026-11-01): 5 directives executable with 19 new real-nginx differential cases (client-cert fixture: verify modes, depth 0/1/2, trusted vs client bundle (CA hints), STARTTLS, POP3/IMAP/SMTP rejection lines, pass-cert gating). probe corrections: failures are application-level post-handshake lines; nginx 1.29.6 has no 8 KiB client-cert refusal. Slice remains fail-closed (multi-subrequest Range/$slice_range assembly needed). Catalog: 396 executable / 173 accepted-unenforced / 170 fail-closed / 5 excluded. Remaining behavior gaps: 32 pinned-dependency + slice + nginx Plus 2.",
@@ -414,10 +415,10 @@
       "summary": "Typed TOML [[http.maps]] materializes ordered map definitions (source/result/hostnames/default/entries) into WebServerAppConfig.maps with the same validation as the nginx-conf plane; the legacy string-array map key remains accepted-unenforced with a located diagnostic pointing at [[http.maps]] (REQ-2026-0073 wave 2)"
     },
     {
-      "id": "config.accepted-unenforced-timeouts",
-      "group": "operations",
+      "id": "http.proxy-timeouts",
+      "group": "proxying",
       "status": "implemented",
-      "summary": "proxyConnectTimeout / proxyReadTimeout / proxySendTimeout are advertised in the location supported-key list but not consumed; they now emit located accepted-unenforced diagnostics instead of being silently dropped (REQ-2026-0073 wave 2)"
+      "summary": "HTTP proxy connect/read/send timeouts materialize over http→server→location with 1 ms–24 h validation. Connect uses a route-selected bounded upstream client; read and send use idle deadlines reset by body-frame progress. The Nginx parser and server TOML materializer both preserve the values."
     },
     {
       "id": "http.proxy-response-headers",

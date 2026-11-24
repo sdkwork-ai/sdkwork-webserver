@@ -966,9 +966,9 @@ async fn proxy_request_dynamic(
             );
         }
     };
-    // Dynamic upstreams are cached per evaluated authority so repeated
-    // variable `proxy_pass` targets reuse one connection pool. The cache is
-    // LRU-bounded (an attacker-controlled Host header must not grow memory
+    // Dynamic upstreams are cached per evaluated authority and connect-timeout
+    // policy. Repeated variable `proxy_pass` requests reuse one connection pool.
+    // The cache is LRU-bounded (an attacker-controlled Host header must not grow memory
     // without limit), and the (synchronous) upstream build runs OUTSIDE the
     // lock so one slow build never serializes every dynamic-proxy request.
     // The shared upstream TLS policy cache (`data_plane::upstream_tls`)
@@ -976,28 +976,34 @@ async fn proxy_request_dynamic(
     let upstream = if let Some(declared) = declared_upstream.clone() {
         declared
     } else {
+        let connect_timeout_ms = context
+            .route
+            .proxy_timeouts
+            .and_then(|timeouts| timeouts.connect_timeout_ms);
+        let cache_key = (authority.clone(), connect_timeout_ms);
         let cached = {
             let mut cache = context
                 .generation
                 .dynamic_upstreams
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            cache.remove(&authority).inspect(|upstream| {
+            cache.remove(&cache_key).inspect(|upstream| {
                 // LRU touch: reinsertion moves the entry to the
                 // most-recently-used end in O(1).
-                cache.insert(authority.clone(), upstream.clone());
+                cache.insert(cache_key.clone(), upstream.clone());
             })
         };
         if let Some(upstream) = cached {
             upstream
         } else {
-            let synthetic = synthetic_dynamic_upstream_config(&target_url);
+            let synthetic = synthetic_dynamic_upstream_config(&target_url, connect_timeout_ms);
             let built = match ProxyUpstream::build(
                 &context.generation.app,
                 &synthetic,
                 context.generation.resolver.clone(),
                 context.metrics.clone(),
                 context.generation.resolution_chain.clone(),
+                Some(&[]),
             ) {
                 Ok(upstream) => Arc::new(upstream),
                 Err(_) => {
@@ -1016,13 +1022,13 @@ async fn proxy_request_dynamic(
                 .dynamic_upstreams
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if let Some(existing) = cache.get(&authority) {
+            if let Some(existing) = cache.get(&cache_key) {
                 existing.clone()
             } else {
                 if cache.len() >= DYNAMIC_UPSTREAM_CACHE_MAXIMUM {
                     cache.pop_front();
                 }
-                cache.insert(authority.clone(), built.clone());
+                cache.insert(cache_key, built.clone());
                 built
             }
         }
@@ -1107,7 +1113,10 @@ async fn proxy_request_dynamic(
     .await
 }
 
-fn synthetic_dynamic_upstream_config(target_url: &str) -> sdkwork_webserver_core::UpstreamConfig {
+fn synthetic_dynamic_upstream_config(
+    target_url: &str,
+    connect_timeout_ms: Option<u64>,
+) -> sdkwork_webserver_core::UpstreamConfig {
     // The `proxy_pass` template is the operator's authorization for
     // per-request hosts: authorize the standard restricted networks while
     // the hard-forbidden ranges (cloud metadata, documentation, multicast)
@@ -1115,6 +1124,7 @@ fn synthetic_dynamic_upstream_config(target_url: &str) -> sdkwork_webserver_core
     serde_json::from_value(serde_json::json!({
         "id": "dynamic",
         "targets": [{ "url": target_url }],
+        "connectTimeoutMs": connect_timeout_ms.unwrap_or(5_000),
         "addressPolicy": {
             "allowedCidrs": [
                 "10.0.0.0/8",

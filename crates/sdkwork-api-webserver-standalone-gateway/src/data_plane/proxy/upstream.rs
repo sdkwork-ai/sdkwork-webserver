@@ -8,6 +8,7 @@ impl ProxyUpstream<UpstreamClient> {
         resolver: Arc<BoundedSystemResolver>,
         metrics: Arc<DataPlaneMetrics>,
         resolution_chain: Option<Arc<ResolutionChain>>,
+        connect_timeout_overrides: Option<&[u64]>,
     ) -> Result<Self, DataPlaneError> {
         let resolver = Arc::new(match resolution_chain {
             Some(chain) => GuardedDnsResolver::with_chain(
@@ -20,7 +21,7 @@ impl ProxyUpstream<UpstreamClient> {
                 GuardedDnsResolver::new_observed(resolver, config.address_policy.clone(), metrics)
             }
         });
-        let client = UpstreamClient::build(app, config, resolver)?;
+        let client = UpstreamClient::build(app, config, resolver, connect_timeout_overrides)?;
         let targets = config
             .targets
             .iter()

@@ -11,8 +11,8 @@
 | Compatibility profile | `http-core-v1` |
 | Nginx reference | `nginx 1.29.6` (nginx.org official 1.29.6 Linux package) |
 | Directive inventory | `specs/nginx-directive-inventory.json` - 744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15` |
-| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `bf0ed0ceaf0b4380421b7212aa8d3423573ab69aaa80e903b683e093e0d73acf` |
-| Catalog evidence revision | 2026-10-29 |
+| Support catalog | `specs/nginx-directive-support.catalog.json` - sha256 `6fb71e55b5c7d241aae62b1691f9aa04f00d76ad828d0d4ca90c5f24af000140` |
+| Catalog evidence revision | 2026-11-24 |
 | Decision model | 6 decisions (see legend); every inventory row appears exactly once |
 | Rows | 744 |
 
@@ -36,7 +36,7 @@
   nginx slice-module wave (wave 14C, the final directive implementation wave).** The code, tests, generated operator matrix and the re-synced directive
   catalog were produced by those waves and are not committed at HEAD
   `9884570c`; the audit is regenerated against that post-wave catalog (evidence
-  revision 2026-10-29). Wave 1 (map, MIME types/default_type,
+  revision 2026-11-24). Wave 1 (map, MIME types/default_type,
   gzip_static, gzip_vary), Wave 2 (redirect policies, limit status codes, max_ranges,
   chain-file consumption, typed TOML maps), Wave 2b (proxy response-header/cookie
   policy, internal locations, merge_slashes, request-header acceptance), Wave 3a
@@ -94,15 +94,15 @@ Every row has exactly one **decision**: `enforced`, `runtime-owned`, `security-d
 
 | Decision | Count | Share | Meaning |
 | --- | ---: | ---: | --- |
-| `enforced` | 397 | 53.4% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
-| `runtime-owned` | 149 | 20.0% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
+| `enforced` | 400 | 53.8% | the Rust data plane executes the directive and committed evidence asserts the behavior it reaches |
+| `runtime-owned` | 146 | 19.6% | the nginx value has no client-visible effect because the Rust runtime owns that subsystem by design |
 | `security-difference` | 17 | 2.3% | intentional stricter/safer behavior than nginx, justified by the declared security posture |
 | `behavior-gap` | 34 | 4.6% | the value is client-visible behavior the runtime does not produce yet; it is scheduled in the remaining wave-3 backlog |
 | `out-of-profile` | 5 | 0.7% | excluded from the declared http-core-v1 product profile (PRD section 4) and rejected in an active context |
 | `fail-closed` | 142 | 19.1% | rejected at materialization and not planned, because the feature is outside the declared required surface or unsafe without separate requirements |
 | **total** | **744** | **100%** | every inventory row appears exactly once |
 
-**Sum proof:** 397 + 149 + 17 + 34 + 5 + 142 = **744**. The generator fails closed if the sum is not
+**Sum proof:** 400 + 146 + 17 + 34 + 5 + 142 = **744**. The generator fails closed if the sum is not
 744, if any row is duplicated, or if a (`module`, `name`) pair is repeated.
 
 ### 1.2 Catalog Classification x Audit Decision
@@ -114,11 +114,11 @@ wave-3 backlog entries that are currently rejected.
 
 | Catalog classification | Rows | `enforced` | `runtime-owned` | `security-difference` | `behavior-gap` | `out-of-profile` | `fail-closed` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `executable` | 397 | 397 | 0 | 0 | 0 | 0 | 0 |
-| `accepted-unenforced` | 173 | 0 | 149 | 17 | 7 | 0 | 0 |
+| `executable` | 400 | 400 | 0 | 0 | 0 | 0 | 0 |
+| `accepted-unenforced` | 170 | 0 | 146 | 17 | 7 | 0 | 0 |
 | `unsupported-fail-closed` | 169 | 0 | 0 | 0 | 27 | 0 | 142 |
 | `excluded` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
-| **total** | **744** | 397 | 149 | 17 | 34 | 5 | 142 |
+| **total** | **744** | 400 | 146 | 17 | 34 | 5 | 142 |
 
 ### 1.3 Wave Completion Status
 
@@ -162,15 +162,15 @@ them fails the gate.
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `core` | 21 | 1 | 16 | 0 | 0 | 1 | 3 |
 | `events` | 20 | 0 | 18 | 0 | 0 | 0 | 2 |
-| `http` | 547 | 311 | 90 | 9 | 19 | 4 | 114 |
+| `http` | 547 | 314 | 87 | 9 | 19 | 4 | 114 |
 | `mail` | 51 | 36 | 3 | 0 | 12 | 0 | 0 |
 | `stream` | 105 | 49 | 22 | 8 | 3 | 0 | 23 |
-| **total** | **744** | 397 | 149 | 17 | 34 | 5 | 142 |
+| **total** | **744** | 400 | 146 | 17 | 34 | 5 | 142 |
 
 ### 1.5 Headline Findings
 
-1. **397 of 744 directives (53.4%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
-   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave, the mail client-certificate wave and the slice-module wave landed 318 directives. 149 more are deliberately runtime-owned (20.0%) and 17 are intentional, spec-justified security differences.
+1. **400 of 744 directives (53.8%) are executed by the Rust data plane today**, up from 79 at the first audit snapshot:
+   Waves 1, 2, 2b, 3a, 3a-2, 3b, 4a, the upstream-protocol wave, the gRPC wave, the stream/OCSP wave, the CGI-transport wave, the rewrite/variable-engine wave, the mail waves, the uWSGI upstream-TLS wave, the CGI cache-family wave, the protocol response-policy wave, the bounded subrequest-engine wave, the stream-plane wave, the userid/browser-module wave, the HTTP/2 DATA-chunking + random_index wave, the GeoIP-module wave, the residual-closure wave, the temp-spool + connection-control wave, the mail client-certificate wave and the slice-module wave landed 318 directives. 146 more are deliberately runtime-owned (19.6%) and 17 are intentional, spec-justified security differences.
 2. **34 behavior-gap directives remain in the remaining backlog** (4.6% of the surface): HTTP/1 framing policy (1), OCSP dynamic fetch / refresh / verification (6), gRPC residual forms (6), uWSGI residual forms (7), mail rustls-unsupported TLS knobs (12), nginx Plus degradation/degrade modules (2).
 3. **147 of 744 directives (19.8%) are excluded or rejected, not silently emulated.** 5 are explicit PRD section 4 profile exclusions and 142 are fail-closed rejections outside the planned backlog.
 4. **The catalog's previously reported over-claims are resolved.** All 6
@@ -766,7 +766,7 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `proxy_cache_revalidate` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
 | `proxy_cache_use_stale` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `proxyCache.staleTtlSeconds`; evidence tests/nginx/full-surface/probe.py::case_proxy_cache. |
 | `proxy_cache_valid` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `proxyCache.defaultTtlSeconds`; evidence tests/nginx/full-surface/probe.py::case_proxy_cache. |
-| `proxy_connect_timeout` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured timeout is ignored; the runtime enforces its own bounded timeout. |
+| `proxy_connect_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `route.proxyTimeouts.connectTimeoutMs (bounded upstream connector policy)`; evidence crates/sdkwork-webserver-core/src/nginx/mapping.rs::materializes_proxy_timeouts_with_per_field_inheritance. |
 | `proxy_cookie_domain` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `route.resource.proxyResponsePolicy.cookieDomain`; evidence tests/nginx/differential-http/battery.py::proxy.cookie-domain. Known difference: regex forms fail closed. |
 | `proxy_cookie_flags` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
 | `proxy_cookie_path` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `route.resource.proxyResponsePolicy.cookiePath`; evidence tests/nginx/differential-http/battery.py::proxy.cookie-path. Known difference: regex forms fail closed. |
@@ -790,11 +790,11 @@ One row per inventory directive, grouped by nginx group and module (the same gro
 | `proxy_pass_request_body` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
 | `proxy_pass_request_headers` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `routes[].resource.proxyPassRequestHeaders`; evidence tests/nginx/full-surface/probe.py::case_proxy_pass_request_headers_off. |
 | `proxy_pass_trailers` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
-| `proxy_read_timeout` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured timeout is ignored; the runtime enforces its own bounded timeout. |
+| `proxy_read_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `route.proxyTimeouts.readTimeoutMs (response-body idle deadline)`; evidence crates/sdkwork-webserver-core/src/nginx/mapping.rs::materializes_proxy_timeouts_with_per_field_inheritance. |
 | `proxy_redirect` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `route.resource.proxyResponsePolicy.redirects (off\|default\|<from> <to>)`; evidence tests/nginx/differential-http/battery.py::proxy.redirect-default. Known difference: regex from/to forms and `$variable` from/to forms fail closed; `default` with a variable proxy_pass fails closed. |
 | `proxy_request_buffering` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the request buffering mode is not changed from nginx.conf. |
 | `proxy_send_lowat` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the nginx proxy tuning value is ignored; the runtime proxy policy applies. |
-| `proxy_send_timeout` | http, http-location, http-server | accepted-unenforced | **runtime-owned** | runtime-owned: the configured timeout is ignored; the runtime enforces its own bounded timeout. |
+| `proxy_send_timeout` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `route.proxyTimeouts.sendTimeoutMs (request-body idle deadline)`; evidence crates/sdkwork-webserver-core/src/nginx/mapping.rs::materializes_proxy_timeouts_with_per_field_inheritance. |
 | `proxy_set_body` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
 | `proxy_set_header` | http, http-location, http-server | executable | **enforced** | enforced: the value reaches `routes[].resource.proxySetHeader`; evidence tests/nginx/full-surface/probe.py::case_proxy_set_header_server_level. |
 | `proxy_socket_keepalive` | http, http-location, http-server | unsupported-fail-closed | **fail-closed** | fail-closed: outside the covered proxy subset (cache controls, body rewriting, upstream trust knobs); rejected rather than approximated under PRD section 8 bounded policy. |
@@ -2467,7 +2467,7 @@ One semantic caveat remains explicit rather than silently resolved:
 `importer.tomlSemantics` and the migration action says so.
 
 **C. Evidence grade (not an over-claim).** 29 of the
-397 executable rows cite only the generic
+400 executable rows cite only the generic
 `every_supported_directive_family_materializes` case. That case does assert the
 normalized fields per surface case, so it is mapping evidence, not end-to-end behavioral
 evidence. Behavioral proof for those directives rests on the
@@ -2478,7 +2478,7 @@ executable row has a behavioral test.
 
 ### 4.4 Decision Consistency Check
 
-Consistent: `executable` <=> `enforced` in both directions (397 <=> 397). Every completed-wave directive is executable and every executable directive is enforced.
+Consistent: `executable` <=> `enforced` in both directions (400 <=> 400). Every completed-wave directive is executable and every executable directive is enforced.
 
 ## 5. Why Full Nginx Parity Is Not A Coherent Target
 
@@ -2486,17 +2486,17 @@ Consistent: `executable` <=> `enforced` in both directions (397 <=> 397). Every 
 
 | Bucket | Directives | Share of 744 |
 | --- | ---: | ---: |
-| `enforced` (actually nginx-compatible behavior) | 397 | 53.4% |
+| `enforced` (actually nginx-compatible behavior) | 400 | 53.8% |
 | `security-difference` (intentionally not nginx) | 17 | 2.3% |
 | `behavior-gap` (planned toward compatibility) | 34 | 4.6% |
-| `runtime-owned` (deliberately not nginx value) | 149 | 20.0% |
+| `runtime-owned` (deliberately not nginx value) | 146 | 19.6% |
 | `out-of-profile` (PRD section 4 exclusion) | 5 | 0.7% |
 | `fail-closed` (rejected, not planned) | 142 | 19.1% |
 
-296 of 744 directives (39.8%) are
+293 of 744 directives (39.4%) are
 **not** nginx-behavior compatibility surface by design: the Rust runtime owns the value
 (process model, event loop, buffers, timeouts, TLS policy, logging, upstream policy) or the
-feature is explicitly rejected. The compatibility program is the 397 executed directives plus the 34 planned backlog; full parity would still have to add every rejected and excluded
+feature is explicitly rejected. The compatibility program is the 400 executed directives plus the 34 planned backlog; full parity would still have to add every rejected and excluded
 feature below.
 
 ### 5.2 Out-Of-Profile Groups (5 directives)

@@ -13,8 +13,8 @@ directive: **if I keep this line in my nginx.conf, what happens on SDKWork Web S
 | Reference build | nginx.org official 1.29.6 Linux package |
 | Directive inventory | `specs/nginx-directive-inventory.json` (744 directives, sha256 `28c70ea443c01288e876d912ab7bdfa8933a8a8ffa3bbc7e5c74de6584f29d15`) |
 | Support catalog | `specs/nginx-directive-support.catalog.json` |
-| Evidence revision | 2026-10-29 |
-| Catalog revision | schema 1, profile version 1 |
+| Evidence revision | 2026-11-24 |
+| Catalog revision | schema 1, profile version 2 |
 | Renderer paths | tools/import-nginx-conf.mjs (catalog importer.mapped entries render typed TOML); scripts/render-webserver-nginx-sidecars.mjs renders nginx.<profile>.<environment>.conf from typed TOML |
 
 ## How To Read This Matrix
@@ -35,8 +35,8 @@ equivalent explicit SDKWork setting.
 
 | Classification | Directives |
 | --- | ---: |
-| executable | 397 |
-| accepted, NOT enforced | 173 |
+| executable | 400 |
+| accepted, NOT enforced | 170 |
 | rejected (fail closed) | 169 |
 | excluded from profile | 5 |
 | **total** | **744** |
@@ -149,14 +149,11 @@ UNENFORCED_BEHAVIOR_TOML_KEYS + actual materializer reads).
 | `pid` | accepted-but-ignored by the typed TOML materializer |
 | `preferServerCiphers` | documented unenforced behavior key — server cipher preference is owned by the runtime TLS policy, not this key |
 | `proxyBuffering` | documented unenforced behavior key — proxy responses are always streamed; buffering cannot be enabled by this key |
-| `proxyConnectTimeout` | documented unenforced behavior key — upstream connect timeouts follow the resolved upstream policy, not this location key |
 | `proxyHideHeader` | documented unenforced behavior key — upstream response headers are filtered by the runtime hop-by-hop policy, not this key |
 | `proxyHttpVersion` | documented unenforced behavior key — the upstream protocol is negotiated by the runtime, not this key |
 | `proxyInterceptErrors` | documented unenforced behavior key — upstream error interception is not materialized from this key; the upstream status is relayed |
 | `proxyNextUpstream` | documented unenforced behavior key — retry eligibility follows the runtime bounded retry policy, not this key |
-| `proxyReadTimeout` | documented unenforced behavior key — upstream response timeouts follow the resolved upstream policy, not this location key |
 | `proxyRequestBuffering` | documented unenforced behavior key — request bodies are streamed to the upstream, never buffered by this key |
-| `proxySendTimeout` | documented unenforced behavior key — upstream request timeouts follow the resolved upstream policy, not this location key |
 | `proxyWebsocketUpgrade` | documented unenforced behavior key — WebSocket upgrades follow the runtime upgrade policy, not this key |
 | `resolve` | documented unenforced behavior key — upstream hostnames are resolved at connection time; this key adds no effect |
 | `sendfile` | accepted-but-ignored by the typed TOML materializer |
@@ -759,7 +756,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `proxy_cache_revalidate` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_cache_use_stale` | 1+ | http, http-location, http-server | executable | runtime: `proxyCache.staleTtlSeconds` |
 | `proxy_cache_valid` | 1+ | http, http-location, http-server | executable | runtime: `proxyCache.defaultTtlSeconds` |
-| `proxy_connect_timeout` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
+| `proxy_connect_timeout` | 1 | http, http-location, http-server | executable | runtime: `route.proxyTimeouts.connectTimeoutMs (bounded upstream connector policy)` |
 | `proxy_cookie_domain` | 1\|2 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.cookieDomain`. regex forms fail closed |
 | `proxy_cookie_flags` | 1\|2\|3\|4 | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_cookie_path` | 1\|2 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.cookiePath`. regex forms fail closed |
@@ -783,11 +780,11 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 | `proxy_pass_request_body` | flag | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_pass_request_headers` | flag | http, http-location, http-server | executable | runtime: `routes[].resource.proxyPassRequestHeaders` |
 | `proxy_pass_trailers` | flag | http, http-location, http-server | rejected (fail closed) |  |
-| `proxy_read_timeout` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
+| `proxy_read_timeout` | 1 | http, http-location, http-server | executable | runtime: `route.proxyTimeouts.readTimeoutMs (response-body idle deadline)` |
 | `proxy_redirect` | 1\|2 | http, http-location, http-server | executable | runtime: `route.resource.proxyResponsePolicy.redirects (off\|default\|<from> <to>)`. regex from/to forms and `$variable` from/to forms fail closed; `default` with a variable proxy_pass fails closed |
 | `proxy_request_buffering` | flag | http, http-location, http-server | accepted, NOT enforced | the request buffering mode is not changed from nginx.conf |
 | `proxy_send_lowat` | 1 | http, http-location, http-server | accepted, NOT enforced | the nginx proxy tuning value is ignored; the runtime proxy policy applies |
-| `proxy_send_timeout` | 1 | http, http-location, http-server | accepted, NOT enforced | the configured timeout is ignored; the runtime enforces its own bounded timeout |
+| `proxy_send_timeout` | 1 | http, http-location, http-server | executable | runtime: `route.proxyTimeouts.sendTimeoutMs (request-body idle deadline)` |
 | `proxy_set_body` | 1 | http, http-location, http-server | rejected (fail closed) |  |
 | `proxy_set_header` | 2 | http, http-location, http-server | executable | runtime: `routes[].resource.proxySetHeader` |
 | `proxy_socket_keepalive` | flag | http, http-location, http-server | rejected (fail closed) |  |
@@ -1466,7 +1463,7 @@ search on a directive name (`proxy_pass`, `expires`, ...) to jump to its row.
 
 ## Version Policy
 
-- The profile is `http-core-v1` version 1; a change to a directive classification is a profile change that must bump the catalog revision and update this page, the catalog, and the evidence together.
+- The profile is `http-core-v1` version 2; a change to a directive classification is a profile change that must bump the catalog revision and update this page, the catalog, and the evidence together.
 - The reference nginx version is `1.29.6`; a different nginx release requires re-running `node tools/gen-nginx-directive-inventory.mjs --write --source <dir>` and re-triaging the catalog diff, never a silent upgrade.
 - Deprecation is explicit: moving a directive from executable to accepted-unenforced is a documented downgrade with a migration note, and moving it to rejected is a breaking profile change.
 

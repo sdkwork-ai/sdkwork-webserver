@@ -79,7 +79,8 @@ pub(crate) struct RuntimeGeneration {
     pub resolver: Arc<BoundedSystemResolver>,
     /// Per-generation cache of synthesized dynamic `proxy_pass` upstreams,
     /// LRU-ordered so eviction targets the least recently used authority.
-    pub dynamic_upstreams: std::sync::Mutex<hashlink::LinkedHashMap<String, Arc<ProxyUpstream>>>,
+    pub dynamic_upstreams:
+        std::sync::Mutex<hashlink::LinkedHashMap<(String, Option<u64>), Arc<ProxyUpstream>>>,
     /// Multi-layer resolution cache chain shared by upstream resolvers.
     pub resolution_chain: Option<Arc<ResolutionChain>>,
     /// Admission tables for this exact generation. Keeping them inside the
@@ -162,6 +163,7 @@ impl RuntimeGeneration {
                     resolver,
                     metrics.clone(),
                     resolution_chain.clone(),
+                    None,
                 )
                 .map(|runtime| (upstream.id.clone(), Arc::new(runtime)))
             })

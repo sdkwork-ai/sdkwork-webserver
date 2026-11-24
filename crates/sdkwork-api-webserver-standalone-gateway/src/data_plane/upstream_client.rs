@@ -64,12 +64,15 @@ impl UpstreamClient {
         app: &sdkwork_webserver_core::CompiledWebServerApp,
         config: &UpstreamConfig,
         resolver: Arc<GuardedDnsResolver>,
+        connect_timeout_overrides: Option<&[u64]>,
     ) -> Result<Self, DataPlaneError> {
         let connection_permits = Arc::new(Semaphore::new(config.max_connections));
         let target_connection_capacities = build_target_connection_capacities(config)?;
         let connection_shutdown = Arc::new(ConnectionShutdown::default());
         let tls = build_upstream_tls_config(app, config)?;
-        let configured_connect_timeouts = proxy_connect_timeout_overrides(app, config);
+        let configured_connect_timeouts = connect_timeout_overrides
+            .map(|timeouts| timeouts.iter().copied().collect())
+            .unwrap_or_else(|| proxy_connect_timeout_overrides(app, config));
         let inner = build_inner_client(
             config,
             resolver.clone(),
@@ -238,13 +241,8 @@ fn proxy_connect_timeout_overrides(
             ResourceConfig::Proxy {
                 id,
                 upstream_ref,
-                dynamic_target,
                 ..
-            } if upstream_ref == &config.id
-                || (config.id == "dynamic" && dynamic_target.is_some()) =>
-            {
-                Some(id.as_str())
-            }
+            } if upstream_ref == &config.id => Some(id.as_str()),
             _ => None,
         })
         .collect::<HashSet<_>>();
@@ -882,7 +880,11 @@ impl UpstreamResponseBody {
     }
 }
 
-impl HttpBody for UpstreamResponseBody {
+impl HttpBody for UpstreamResponseBody
+where
+    Incoming: HttpBody<Data = Bytes> + Send + 'static,
+    Incoming::Error: StdError + Send + Sync + 'static,
+{
     type Data = Bytes;
     type Error = io::Error;
 
@@ -890,7 +892,7 @@ impl HttpBody for UpstreamResponseBody {
         self: Pin<&mut Self>,
         context: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-        self.get_mut().0.poll_frame(context)
+        Pin::new(&mut self.get_mut().0).poll_frame(context)
     }
 
     fn is_end_stream(&self) -> bool {
@@ -912,9 +914,59 @@ mod tests {
     use http_body_util::{channel::Channel, BodyExt};
 
     use super::{
-        add_response_header_bytes, validate_response_headers, ProgressTimeoutBody,
-        UpstreamRequestError,
+        add_response_header_bytes, proxy_connect_timeout_overrides, validate_response_headers,
+        ProgressTimeoutBody, UpstreamRequestError,
     };
+
+    #[test]
+    fn route_connect_timeout_is_materialized_for_its_upstream() {
+        let config: sdkwork_webserver_core::WebServerAppConfig =
+            serde_json::from_value(serde_json::json!({
+                "schemaVersion": 1,
+                "kind": "sdkwork.webserver.config",
+                "appKey": "proxy-timeout-test",
+                "listeners": [{
+                    "id": "http",
+                    "bind": "127.0.0.1",
+                    "port": 8080,
+                    "protocols": ["http1"],
+                    "allowPlaintextHttp": true
+                }],
+                "resources": [{
+                    "id": "proxy",
+                    "type": "proxy",
+                    "upstreamRef": "gateway"
+                }],
+                "upstreams": [{
+                    "id": "gateway",
+                    "targets": [{ "url": "http://127.0.0.1:9001" }]
+                }],
+                "virtualHosts": [{
+                    "id": "host",
+                    "listenerRefs": ["http"],
+                    "serverNames": ["timeout.example.test"],
+                    "routes": [{
+                        "id": "route",
+                        "match": { "pathType": "prefix", "path": "/" },
+                        "resourceRef": "proxy",
+                        "proxyTimeouts": { "connectTimeoutMs": 1234 }
+                    }]
+                }]
+            }))
+            .expect("model config parses");
+        let app = sdkwork_webserver_core::load_and_compile_webserver_config_json(&config)
+            .expect("timeout config compiles");
+        let gateway = app
+            .config()
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.id == "gateway")
+            .expect("gateway upstream");
+        assert_eq!(
+            proxy_connect_timeout_overrides(&app, gateway),
+            std::collections::HashSet::from([1_234])
+        );
+    }
 
     #[test]
     fn response_header_budget_counts_every_field_and_wire_separator() {
