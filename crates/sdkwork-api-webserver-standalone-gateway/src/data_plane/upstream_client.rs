@@ -921,7 +921,7 @@ mod tests {
         let config: sdkwork_webserver_core::WebServerAppConfig =
             serde_json::from_value(serde_json::json!({
                 "schemaVersion": 1,
-                "kind": "sdkwork.webserver.config",
+                "kind": "sdkwork.webserver.app",
                 "appKey": "proxy-timeout-test",
                 "listeners": [{
                     "id": "http",
@@ -937,7 +937,8 @@ mod tests {
                 }],
                 "upstreams": [{
                     "id": "gateway",
-                    "targets": [{ "url": "http://127.0.0.1:9001" }]
+                    "targets": [{ "url": "http://127.0.0.1:9001" }],
+                    "addressPolicy": { "allowedCidrs": ["127.0.0.0/8"] }
                 }],
                 "virtualHosts": [{
                     "id": "host",
