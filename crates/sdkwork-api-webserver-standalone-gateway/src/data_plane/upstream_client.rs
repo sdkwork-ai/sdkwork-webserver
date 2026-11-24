@@ -883,7 +883,7 @@ impl UpstreamResponseBody {
 impl HttpBody for UpstreamResponseBody
 where
     Incoming: HttpBody<Data = Bytes> + Send + 'static,
-    Incoming::Error: StdError + Send + Sync + 'static,
+    <Incoming as HttpBody>::Error: StdError + Send + Sync + 'static,
 {
     type Data = Bytes;
     type Error = io::Error;
