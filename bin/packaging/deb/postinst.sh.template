@@ -139,6 +139,7 @@ install -o root -g root -m 0640 /dev/null "${RUNTIME_ENV_FILE}"
   printf 'SDKWORK_WEBSERVER_CURSOR_HMAC_KEY=%s\n' "$(cat "${CURSOR_KEY_FILE}")"
   printf 'SDKWORK_DEPLOY_SECRET_ENCRYPTION_KEY=%s\n' "$(cat "${DEPLOY_ENCRYPTION_KEY_FILE}")"
   printf 'SDKWORK_DEPLOY_CERTIFICATE_MASTER_KEY_FILE=%s\n' "${CERT_MASTER_KEY_FILE}"
+  printf 'SDKWORK_SANDBOX_APP_ROOT=%s\n' "${DATA_ROOT}/webstore"
   printf 'SDKWORK_DEPLOY_RUNTIME_ASSIGNMENT_WORKER_ID=deploy-worker-0\n'
 } > "${RUNTIME_ENV_FILE}"
 
@@ -310,7 +311,8 @@ chmod 0640 "${RUNTIME_CONFIG_FILE}"
 
 # 7. Run the database migration once as the service identity. The binary
 #    loads the TOML runtime config and referenced secret files itself.
-if ! runuser -u sdkwork -- "${INSTALL_ROOT}/bin/${GATEWAY_BINARY}" db-migrate; then
+if ! runuser -u sdkwork -- env "SDKWORK_SANDBOX_APP_ROOT=${DATA_ROOT}/webstore" \
+  "${INSTALL_ROOT}/bin/${GATEWAY_BINARY}" db-migrate; then
   log "database migration failed; service is not started"
   exit 1
 fi

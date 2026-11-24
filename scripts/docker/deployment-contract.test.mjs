@@ -647,6 +647,8 @@ test('Debian postinst resolves packaged Skills and MCP runtime roots', () => {
   assert.match(runtimeConfig, /skills_app_root = "\$\{DATA_ROOT\}\/skills"/u);
   assert.match(runtimeConfig, /mcp_app_root = "\$\{DATA_ROOT\}\/mcp"/u);
   assert.doesNotMatch(runtimeConfig, /`|\$\(/u, 'heredoc content must not execute shell substitutions');
+  assert.match(postinst, /SDKWORK_SANDBOX_APP_ROOT=%s\\n' "\$\{DATA_ROOT\}\/webstore"/u);
+  assert.match(postinst, /runuser -u sdkwork -- env "SDKWORK_SANDBOX_APP_ROOT=\$\{DATA_ROOT\}\/webstore"/u);
 });
 
 test('every environment CORS allowlist covers registered client origins (WEB_FRAMEWORK_SPEC §12)', () => {
