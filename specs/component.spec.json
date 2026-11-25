@@ -284,7 +284,8 @@
       "pnpm api:check",
       "pnpm sdk:check",
       "cargo test --workspace --no-fail-fast",
-      "cargo test -p sdkwork-intelligence-webserver-repository-sqlx --test repository_parity -- --ignored"
+      "cargo test -p sdkwork-intelligence-webserver-repository-sqlx --test repository_parity -- --ignored",
+      "node ../sdkwork-specs/tools/check-body-read-contract.mjs --root ."
     ]
   },
   "metadata": {

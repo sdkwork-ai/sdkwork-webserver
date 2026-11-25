@@ -205,10 +205,22 @@ impl CgiCachePlan {
         let body_bytes = match http_body_util::BodyExt::collect(body).await {
             Ok(collected) => collected.to_bytes(),
             Err(_) => {
-                return Some(suppress_body_for_head(
-                    Response::from_parts(parts, Body::empty()),
-                    convert_client_head,
-                ))
+                // The declared size already fit the cache budget above, so this
+                // is a transport fault in the upstream stream. State it instead
+                // of serving an empty body: observation/caching must never erase
+                // the client's response.
+                let mut failure = Response::from_parts(
+                    parts,
+                    Body::from(
+                        r#"{"type":"about:blank","title":"Bad gateway","status":502,"detail":"the upstream response body could not be read for caching"}"#,
+                    ),
+                );
+                *failure.status_mut() = StatusCode::BAD_GATEWAY;
+                failure.headers_mut().insert(
+                    axum::http::header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/problem+json"),
+                );
+                return Some(suppress_body_for_head(failure, convert_client_head));
             }
         };
         let vary = parts
