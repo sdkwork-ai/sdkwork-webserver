@@ -361,7 +361,21 @@ pub(crate) async fn apply_addition(
     }
     let (mut parts, body) = response.into_parts();
     let Some(main) = read_bounded_body(body, env.max_body_bytes).await else {
-        return Response::from_parts(parts, Body::empty());
+        // The declared size already fit the budget above, so this branch is a
+        // transport fault in the upstream stream. State it explicitly instead of
+        // handing the client an empty document: body observation must never
+        // erase content.
+        let mut failure = Response::from_parts(
+            parts,
+            Body::from(
+                r#"{"type":"about:blank","title":"Bad gateway","status":502,"detail":"the upstream response body could not be read for subrequest composition"}"#,
+            ),
+        );
+        *failure.status_mut() = StatusCode::BAD_GATEWAY;
+        failure
+            .headers_mut()
+            .insert(CONTENT_TYPE, HeaderValue::from_static("application/problem+json"));
+        return failure;
     };
     let mut output = Vec::with_capacity(main.len());
     for uri in [config.before.as_deref(), Some("__main__")] {
