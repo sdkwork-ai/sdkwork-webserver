@@ -21,6 +21,9 @@ tmp-backup/
 # (and, in one past case, a database password), so they must never be committed.
 tmp_*.sh
 tmp-*.sh
+# Zero-byte file left at the root by a templating run that had no value for the
+# key; it is not source and must never be committed.
+/{{.Destination}}{{println}}{{end}}
 __pycache__/
 *.tsbuildinfo
 *.db
